@@ -30,9 +30,12 @@ plain_name() {
 }
 
 echo "Renaming files…"
-gh api "repos/$REPO/releases/$RID/assets" -q '.[] | "\(.id)\t\(.name)"' | while IFS=$'\t' read -r id name; do
+# tauri-action v1 also sets a display label (the original file name), and GitHub shows the
+# label instead of the name, so set both.
+gh api "repos/$REPO/releases/$RID/assets" -q '.[] | "\(.id)\t\(.name)\t\(.label // "")"' | while IFS=$'\t' read -r id name label; do
   new="$(plain_name "$name")"
-  [[ "$new" == "$name" ]] || gh api -X PATCH "repos/$REPO/releases/assets/$id" -f name="$new" -q '"  " + .name'
+  [[ "$new" == "$name" && ( -z "$label" || "$label" == "$new" ) ]] && continue
+  gh api -X PATCH "repos/$REPO/releases/assets/$id" -f name="$new" -f label="$new" -q '"  " + .name'
 done
 
 if [[ -f "$DMG" ]]; then
