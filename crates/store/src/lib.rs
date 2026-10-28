@@ -158,6 +158,35 @@ impl Store {
         Ok(())
     }
 
+    /// "From now on": marks every file this source has today as already read, so only messages
+    /// written after this moment count. Returns how many files were marked.
+    pub fn start_from_now(&mut self, src: &dyn sources::Source) -> Result<usize> {
+        let extra = self.source_state(src.id())?.map(|s| s.paths).unwrap_or_default();
+        let mut roots = src.roots();
+        roots.extend(extra.iter().map(std::path::PathBuf::from));
+        let tx = self.conn.transaction()?;
+        let mut marked = 0;
+        for root in roots {
+            let files = if root.is_file() { vec![root] } else { src.files(&root) };
+            for path in files {
+                let Ok(meta) = std::fs::metadata(&path) else { continue };
+                let mtime = meta
+                    .modified()
+                    .ok()
+                    .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map_or(0, |d| d.as_secs() as i64);
+                tx.execute(
+                    "INSERT INTO files (path, source, checkpoint, size, mtime) VALUES (?1,?2,?3,?3,?4)
+                     ON CONFLICT(path) DO UPDATE SET checkpoint = excluded.checkpoint, size = excluded.size, mtime = excluded.mtime",
+                    params![path.to_string_lossy(), src.id(), meta.len() as i64, mtime],
+                )?;
+                marked += 1;
+            }
+        }
+        tx.commit()?;
+        Ok(marked)
+    }
+
     pub fn add_path(&self, id: &str, path: &str) -> Result<()> {
         let mut st = self.source_state(id)?.unwrap_or(SourceState {
             id: id.into(),
@@ -207,7 +236,9 @@ impl Store {
         if stored.as_deref() == Some(current.as_str()) {
             return Ok(false);
         }
-        let had_scores: bool = self.conn.query_row("SELECT EXISTS(SELECT 1 FROM files)", [], |r| r.get(0))?;
+        // Only counted scores need rebuilding. A store with checkpoints but no counts yet (say,
+        // a source allowed "from now on") must keep its checkpoints.
+        let had_scores: bool = self.conn.query_row("SELECT EXISTS(SELECT 1 FROM daily)", [], |r| r.get(0))?;
         if had_scores {
             self.reset_scores()?;
         }

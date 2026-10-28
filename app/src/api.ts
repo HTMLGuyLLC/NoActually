@@ -74,7 +74,7 @@ export type SourceInfo = { id: string; name: string; kind: "live" | "import"; ro
 export const api = {
   stats: (filter: Filter) => invoke<Stats>("stats", { filter }),
   sources: () => invoke<SourceInfo[]>("list_sources"),
-  allow: (id: string, since: string | null) => invoke<void>("allow_source", { id, since }),
+  allow: (id: string, since: string | null, fromNow = false) => invoke<void>("allow_source", { id, since, fromNow }),
   revoke: (id: string) => invoke<void>("revoke_source", { id }),
   forget: (id: string) => invoke<void>("forget_source", { id }),
   pause: (id: string, paused: boolean) => invoke<void>("pause_source", { id, paused }),

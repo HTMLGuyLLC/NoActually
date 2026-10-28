@@ -71,8 +71,9 @@ nav { display: flex; gap: 6px }
 .side.you .n, .n.you { color: var(--pen) } .side.ai .n, .n.ai { color: var(--ai) }
 .vs { font: 400 22px/1 var(--hand); color: var(--muted) }
 .meter { display: grid; gap: 12px; align-content: start }
-.tier { justify-self: start; background: var(--pen); color: #fff; font: 600 12px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; padding: 9px 12px; border-radius: 999px }
-.tier.sm { font-size: 10px; padding: 6px 9px }
+/* A status, not a control: plain label text, no fill or border that would read as a button. */
+.tier-label { font: 600 10.5px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--pen); white-space: nowrap }
+.tier-label span { color: var(--muted); margin-right: 6px }
 .ladder { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px }
 .ladder li { display: grid; grid-template-columns: 1fr auto; padding: 9px 12px; border-radius: 10px; border: 1px dashed var(--rule); color: var(--muted); font-size: 14px }
 .ladder li span:last-child { font: 400 12px/1.6 var(--mono) }
@@ -232,3 +233,6 @@ button:disabled { opacity: .55; cursor: default }
 .share-guide kbd { font: 600 12px var(--mono); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--muted); background: var(--surface) }
 .sd-foot { display: flex; gap: 8px; justify-content: flex-end }
 @media (max-width: 520px) { .share-grid { grid-template-columns: repeat(2, 1fr) } }
+.empty .eyebrow { display: inline-flex; align-items: center; gap: 8px }
+.empty-glance { align-content: center; justify-items: start }
+.empty-glance .eyebrow { display: inline-flex; align-items: center; gap: 8px }

@@ -380,7 +380,7 @@ async function settingsView() {
 function glance(s: Stats) {
   const no = verdictIsNo(s);
   return `<div class="glance">
-    <div class="g-top"><span class="brand small">no, <em>actually.</em></span><span class="tier sm">${esc(s.tier)}</span></div>
+    <div class="g-top"><span class="brand small">no, <em>actually.</em></span><span class="tier-label"><span>Tier</span>${esc(s.tier)}</span></div>
     <div class="g-q">Could AI replace you?</div>
     <div class="g-row"><div class="no sm ${no ? "" : "maybe"}">${no ? "No." : "Hmm."}</div>
       <div class="because">You caught it <b>${s.catches_last_7d}×</b> this week.</div></div>
@@ -390,7 +390,20 @@ function glance(s: Stats) {
   </div>`;
 }
 
-function onboarding() {
+/** "Claude Code", "Claude Code and Codex", "Claude Code, Codex and ChatGPT". */
+const listNames = (names: string[]) => (names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`);
+
+/** Allowed, unpaused sources: what the app is reading right now. */
+const watchingNames = (list: SourceInfo[]) => list.filter((x) => x.state?.allowed && !x.state.paused).map((x) => x.name.replace(" (export)", ""));
+
+function onboarding(watching: string[]) {
+  if (watching.length) {
+    // Allowed, but nothing counted yet (picked "From now on", or the tool has no history yet).
+    return `<section class="empty"><span class="eyebrow"><i class="dot live"></i> Watching ${esc(listNames(watching))}</span>
+      <h1 class="q">You're all set.</h1>
+      <p>Your next chats will be counted as they happen. The first time you catch your AI being wrong, your scorecard shows up here.</p>
+      <button class="ghost" id="go-sources">Manage sources</button></section>`;
+  }
   return `<section class="empty"><h1 class="q">Let's see if AI could replace you.</h1>
     <p>No, Actually counts the times you caught your AI being wrong, privately, on this computer. Pick which tools it may read.</p>
     <button id="go-sources">Choose sources</button></section>`;
@@ -564,14 +577,19 @@ async function render() {
     current = s;
     if (!Object.keys(filter).length) allModels = s.models;
     if (isGlance) {
-      root.innerHTML = s.messages ? glance(s) : `<div class="glance"><p>No sources allowed yet.</p><button id="open-main">Set up</button></div>`;
+      const watching = s.messages ? [] : watchingNames(await api.sources());
+      root.innerHTML = s.messages
+        ? glance(s)
+        : watching.length
+          ? `<div class="glance empty-glance"><span class="eyebrow"><i class="dot live"></i> Watching ${esc(listNames(watching))}</span><div class="g-q">No catches yet.</div><p class="muted small">Your score shows up after your first catch.</p><button class="ghost" id="open-main">Open No, Actually</button></div>`
+          : `<div class="glance empty-glance"><div class="g-q">Could AI replace you?</div><p class="muted small">Pick which AI tools to count, then find out.</p><button id="open-main">Set up</button></div>`;
     } else {
       const titles: Record<Tab, string> = { score: "Scorecard", sources: "Sources", settings: "Settings" };
       const nav = `<header class="top"><div class="brand">no, <em>actually.</em></div><div class="top-right">${statusPill()}<nav>${(Object.keys(titles) as Tab[])
         .map((t) => `<button class="tab ${tab === t ? "on" : ""}" data-tab="${t}">${titles[t]}</button>`)
         .join("")}</nav></div></header>`;
       let body = "";
-      if (tab === "score") body = s.messages ? scorecard(s) : onboarding();
+      if (tab === "score") body = s.messages ? scorecard(s) : onboarding(watchingNames(await api.sources()));
       if (tab === "sources") body = sourcesView(await api.sources());
       if (tab === "settings") body = await settingsView();
       root.innerHTML = `<div class="wrap">${nav}${body}</div>`;
@@ -623,11 +641,12 @@ function wire(s: Stats) {
     b.addEventListener("click", async () => {
       const id = b.dataset.allow!;
       const choice = $<HTMLSelectElement>(`[data-since="${id}"]`)?.value ?? "all";
-      const days = choice === "all" ? null : choice === "none" ? 0 : Number(choice);
+      const fromNow = choice === "none";
+      const days = choice === "all" || fromNow ? null : Number(choice);
       const since = days == null ? null : new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
       b.disabled = true;
       b.textContent = "Allowing…";
-      await api.allow(id, since);
+      await api.allow(id, since, fromNow);
       render();
     }),
   );

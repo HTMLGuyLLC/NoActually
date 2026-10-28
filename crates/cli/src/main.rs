@@ -7,7 +7,7 @@ const HELP: &str = "noactually: count the times you caught your AI being wrong
 
 USAGE
   noactually sources                     List sources, where they read from, and whether they're allowed
-  noactually allow <source> [--since YYYY-MM-DD]
+  noactually allow <source> [--since YYYY-MM-DD | --from-now]
   noactually revoke <source>             Stop reading (keeps scores)
   noactually forget <source>             Stop reading and delete everything from it
   noactually import <source> <path>      Add an export file or folder (chatgpt-export, claude-ai-export)
@@ -69,7 +69,13 @@ fn main() -> Result<()> {
                 .transpose()
                 .context("--since wants YYYY-MM-DD")?;
             store.allow(&id, since)?;
-            println!("Allowed {id}. Run `noactually sync` to read it.");
+            if args.iter().any(|a| a == "--from-now") {
+                let src = all.iter().find(|s| s.id() == id).expect("checked above");
+                let n = store.start_from_now(src.as_ref())?;
+                println!("Allowed {id} from now on ({n} existing files skipped).");
+            } else {
+                println!("Allowed {id}. Run `noactually sync` to read it.");
+            }
         }
         "revoke" => {
             store.revoke(&arg(1, "source")?)?;

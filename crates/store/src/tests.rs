@@ -254,3 +254,32 @@ fn rule_changes_rebuild_scores_but_keep_consent() {
     );
     assert!(!sync(&mut s, &all).unwrap().rescored, "only once");
 }
+
+#[test]
+fn from_now_on_skips_existing_history_but_counts_new_messages() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("a.jsonl");
+    let ts = (Utc::now() - Duration::minutes(30)).to_rfc3339();
+    let line = |v: serde_json::Value| format!("{v}\n");
+    let turn = |id: &str| {
+        line(serde_json::json!({"type":"user","uuid":id,"timestamp":ts,"message":{"content":"no, that's wrong"}}))
+            + &line(
+                serde_json::json!({"type":"assistant","timestamp":ts,"message":{"model":"claude-opus-5-5","content":[{"type":"text","text":"You're right."}]}}),
+            )
+    };
+    // Written earlier today: must not count when the person picks "From now on".
+    std::fs::write(&path, turn("old")).unwrap();
+    let src = sources::claude_code_at(dir.path().to_path_buf());
+    let all = vec![sources::claude_code_at(dir.path().to_path_buf())];
+    let mut s = Store::open_in_memory().unwrap();
+    s.allow("claude-code", None).unwrap();
+    assert_eq!(s.start_from_now(src.as_ref()).unwrap(), 1);
+    assert_eq!(sync(&mut s, &all).unwrap().messages, 0);
+
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    let mut f = std::fs::OpenOptions::new().append(true).open(&path).unwrap();
+    f.write_all(turn("new").as_bytes()).unwrap();
+    drop(f);
+    let r = sync(&mut s, &all).unwrap();
+    assert_eq!((r.messages, r.catches), (1, 1), "only the new message counts");
+}

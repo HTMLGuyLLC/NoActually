@@ -55,8 +55,23 @@ pub fn list_sources(app: State<Arc<App>>) -> Res<Vec<SourceInfo>> {
 }
 
 #[tauri::command]
-pub fn allow_source(handle: AppHandle, app: State<Arc<App>>, id: String, since: Option<NaiveDate>) -> Res<()> {
-    lock(&app.writer).allow(&id, since).map_err(err)?;
+pub fn allow_source(
+    handle: AppHandle,
+    app: State<Arc<App>>,
+    id: String,
+    since: Option<NaiveDate>,
+    from_now: Option<bool>,
+) -> Res<()> {
+    {
+        let mut store = lock(&app.writer);
+        store.allow(&id, since).map_err(err)?;
+        // "From now on": everything already on disk is treated as read.
+        if from_now == Some(true) {
+            if let Some(src) = app.sources.iter().find(|s| s.id() == id) {
+                store.start_from_now(src.as_ref()).map_err(err)?;
+            }
+        }
+    }
     log::info!("allowed source {id} (since {since:?})");
     changed(&app);
     // Ask for notifications now, in context, rather than out of nowhere at the first milestone.
