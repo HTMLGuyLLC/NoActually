@@ -4,6 +4,8 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-28
+
 ### Added
 
 - In-app updates. The app checks GitHub releases for a newer version a minute after launch and every 6 hours, and offers "Restart to update" in the scorecard and the menu bar menu. It never restarts on its own, and only installs updates signed with the project's key. The check sends no identifiers; turn it off in Settings → Check for updates automatically.
@@ -69,5 +71,6 @@ First release.
 - Per-source consent: nothing is read until you allow it, and Forget deletes a source's data
 - `noactually` command-line tool (`sources`, `allow`, `sync`, `stats`)
 
-[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/HTMLGuyLLC/NoActually/releases/tag/v0.1.0
