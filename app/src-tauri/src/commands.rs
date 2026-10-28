@@ -298,4 +298,34 @@ mod tests {
         let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
         assert_eq!(conf["identifier"], store::APP_ID, "the CLI and app must open the same database");
     }
+
+    /// The browser demo (app/public/demo.json) stands in for these commands, so it must have
+    /// their exact shape. This fails if Rust's output changes and the demo isn't updated.
+    #[test]
+    fn demo_data_matches_what_rust_sends() {
+        let demo: serde_json::Value = serde_json::from_str(include_str!("../../public/demo.json")).unwrap();
+        let meta = serde_json::to_value(store::meta(&sources::all())).unwrap();
+        assert_eq!(demo["meta"], meta, "demo.json `meta` differs from the `meta` command");
+
+        let db = store::Store::open_in_memory().unwrap();
+        let stats = serde_json::to_value(db.stats(&Filter::default(), Local::now().date_naive()).unwrap()).unwrap();
+        let keys = |v: &serde_json::Value| -> Vec<String> {
+            let mut k: Vec<String> = v.as_object().unwrap().keys().cloned().collect();
+            k.sort();
+            k
+        };
+        assert_eq!(keys(&demo["stats"]), keys(&stats), "demo.json `stats` keys differ from `Stats`");
+        let rows = [
+            ("hall_of_fame", serde_json::to_value(store::HallEntry::default()).unwrap()),
+            ("models", serde_json::to_value(store::ModelRow::default()).unwrap()),
+            ("weekly", serde_json::to_value(store::WeekRow::default()).unwrap()),
+        ];
+        for (field, row) in rows {
+            let demo_rows = demo["stats"][field].as_array().unwrap();
+            assert!(!demo_rows.is_empty(), "demo.json `{field}` is empty, so nothing is checked");
+            for r in demo_rows {
+                assert_eq!(keys(r), keys(&row), "a demo.json `{field}` row has different keys");
+            }
+        }
+    }
 }

@@ -55,7 +55,7 @@ impl Filter {
 }
 
 /// One model's numbers.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 pub struct ModelRow {
     /// Provider.
     pub provider: String,
@@ -72,7 +72,7 @@ pub struct ModelRow {
 }
 
 /// One week's numbers.
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, Default, PartialEq, Eq, Serialize)]
 pub struct WeekRow {
     /// The week's Monday.
     pub week: NaiveDate,
@@ -83,7 +83,7 @@ pub struct WeekRow {
 }
 
 /// One catch (or humbled moment) shown in the hall of fame.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 pub struct HallEntry {
     /// Event id, for pinning.
     pub id: i64,
