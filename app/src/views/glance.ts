@@ -1,0 +1,26 @@
+// Quick glance: the small window under the menu bar icon.
+import type { Meta, Stats } from "../api";
+import { type Html, html, num } from "../html";
+import { tierName } from "../meta";
+import { wordmarkView } from "./chrome";
+
+export function glanceView(s: Stats, meta: Meta): Html {
+  const no = s.verdict === "no";
+  const progress = s.next_tier ? `${s.next_tier[1]} more for ${tierName(meta, s.next_tier[0])}` : "Top tier";
+  return html`<div class="glance">
+    <div class="g-top">${wordmarkView("brand small")}<span class="tier-label"><span>Tier</span>${tierName(meta, s.tier)}</span></div>
+    <div class="g-q">Could AI replace you?</div>
+    <div class="g-row"><div class="no sm${no ? "" : " maybe"}">${no ? "No." : "Hmm."}</div>
+      <div class="because">You caught it <b>${s.catches_last_7d}×</b> this week.</div></div>
+    <div class="g-score"><div><span class="n you">${num(s.catches)}</span><span class="eyebrow">you</span></div><div class="vs">vs</div><div><span class="n ai">${num(s.humbled)}</span><span class="eyebrow">AI</span></div></div>
+    <div class="g-meta muted small">${s.current_streak_days ? `${s.current_streak_days}-day streak · ` : ""}${progress}</div>
+    <div class="g-actions"><button data-action="open-main">Share or see more</button><button class="ghost" data-action="copy-share">Copy text</button><span class="sr-only" id="copy-status" role="status" aria-live="polite"></span></div>
+  </div>`;
+}
+
+/** Before the first catch. `watching` names the sources being read right now (empty: none allowed yet). */
+export function emptyGlanceView(watching: string): Html {
+  return watching
+    ? html`<div class="glance empty-glance"><span class="eyebrow"><i class="dot live"></i> Watching ${watching}</span><div class="g-q">No catches yet.</div><p class="muted small">Your score shows up after your first catch.</p><button class="ghost" data-action="open-main">Open No, Actually...</button></div>`
+    : html`<div class="glance empty-glance"><div class="g-q">Could AI replace you?</div><p class="muted small">Pick which AI tools to count, then find out.</p><button data-action="open-main">Set up</button></div>`;
+}
