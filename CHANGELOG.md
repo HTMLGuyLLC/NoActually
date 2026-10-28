@@ -4,6 +4,10 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+### Fixed
+
+- The "No." verdict no longer replays its animation every time a background check finishes. It plays once at launch, and again only when the verdict changes.
+
 ## [0.1.0]
 
 First release.
