@@ -59,7 +59,7 @@ jobs:
         run: pnpm --dir app test
 
       - name: Release script tests
-        run: node --test scripts/
+        run: node --test scripts/*.test.mjs
 
       # The app crate reads app/dist at compile time, so build the frontend first.
       - name: Build frontend

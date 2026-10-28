@@ -61,7 +61,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 pnpm --dir app check
 pnpm --dir app test
-node --test scripts/
+node --test scripts/*.test.mjs
 ```
 
 `.editorconfig` sets indentation: 4 spaces for Rust, 2 for everything else.
