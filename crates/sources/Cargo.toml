@@ -11,7 +11,7 @@ serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
 anyhow.workspace = true
-ruzstd = "0.7"
+ruzstd = "0.9"
 dirs.workspace = true
 
 [dev-dependencies]
