@@ -28,9 +28,9 @@ const SOURCE_TITLES: Record<string, string> = {
 };
 type Tab = "score" | "sources" | "settings";
 
-/** The app icon's underlined check, drawn in the theme's red pen and highlighter. */
-const MARK = `<svg class="mark" viewBox="0 0 44 44" aria-hidden="true"><path class="mark-check" d="M9 23 L17 31 L35 11"/><path class="mark-line" d="M8 38 Q22 35 36 38"/></svg>`;
-const WORDMARK = (cls = "brand") => `<span class="${cls}">${MARK}No, <em>Actually...</em></span>`;
+/** The app icon's check: the logo's only color. */
+const MARK = `<svg class="mark" viewBox="0 0 44 44" aria-hidden="true"><path class="mark-check" d="M9 24 L18 33 L36 12"/></svg>`;
+const WORDMARK = (cls = "brand") => `<span class="${cls}">${MARK}<span>No, Actually...</span></span>`;
 
 const root = document.getElementById("app")!;
 const isGlance = location.hash === "#glance";

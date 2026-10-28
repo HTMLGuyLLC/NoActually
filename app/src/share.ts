@@ -46,37 +46,26 @@ export function shareTargets(text: string, url = SHARE_URL): ShareTarget[] {
 /** Hosts the app may open. The Rust side checks the same list before opening anything. */
 export const SHARE_HOSTS = ["x.com", "www.linkedin.com", "www.facebook.com", "www.threads.net", "bsky.app", "www.reddit.com", "wa.me", "github.com"];
 
-/** The app icon's underlined check, then "No, Actually...", with the text baseline at `y`. */
+/** The logo: a red check, then "No, Actually..." in ink, with the text baseline at `y`. */
 function drawWordmark(g: CanvasRenderingContext2D, x: number, y: number, pen: string, ink: string) {
-  const size = 36;
+  const size = 30;
   const k = size / 44;
   g.save();
-  g.translate(x, y - size + 6);
+  g.translate(x, y - size + 4);
   g.scale(k, k);
   g.lineCap = "round";
   g.lineJoin = "round";
   g.strokeStyle = pen;
-  g.lineWidth = 5.5;
+  g.lineWidth = 4.5;
   g.beginPath();
-  g.moveTo(9, 23);
-  g.lineTo(17, 31);
-  g.lineTo(35, 11);
-  g.stroke();
-  g.strokeStyle = "#e2b600";
-  g.lineWidth = 3.2;
-  g.beginPath();
-  g.moveTo(8, 38);
-  g.quadraticCurveTo(22, 35, 36, 38);
+  g.moveTo(9, 24);
+  g.lineTo(18, 33);
+  g.lineTo(36, 12);
   g.stroke();
   g.restore();
-  const tx = x + size + 8;
   g.fillStyle = ink;
-  g.font = "800 30px 'Bricolage Grotesque Variable'";
-  g.fillText("No,", tx, y);
-  const gap = g.measureText("No, ").width; // measured in the wordmark's own font
-  g.fillStyle = pen;
-  g.font = "400 36px 'Gochi Hand'";
-  g.fillText("Actually...", tx + gap, y + 2);
+  g.font = "800 28px 'Bricolage Grotesque Variable'";
+  g.fillText("No, Actually...", x + size + 8, y);
 }
 
 /** Draws the 1200×630 card (the size social sites use for link previews) in the light theme. */

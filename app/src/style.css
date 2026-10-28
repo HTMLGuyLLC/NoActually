@@ -1,7 +1,7 @@
 /* Same visual system as docs/sample-scorecard.html: a proofread page, red pen on ruled paper. */
 :root {
   --paper: #fbfcfe; --surface: #ffffff; --ink: #141a2e; --muted: #5d6680; --rule: #dfe3ee;
-  --pen: #e0322b; --pen-soft: #fde8e6; --hl: #fff27a; --mark-line: #e2b600; --ai: #3b5bdb; --ai-soft: #e7ecfd;
+  --pen: #e0322b; --pen-soft: #fde8e6; --hl: #fff27a; --ai: #3b5bdb; --ai-soft: #e7ecfd;
   --display: "Bricolage Grotesque Variable", "Avenir Next", system-ui, sans-serif;
   --body: "Instrument Sans", "Helvetica Neue", system-ui, sans-serif;
   --hand: "Gochi Hand", "Bradley Hand", "Comic Sans MS", cursive;
@@ -11,7 +11,7 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --paper: #0f1320; --surface: #171c2c; --ink: #eef1f8; --muted: #9aa3bd; --rule: #2a3147;
-    --pen: #ff5a4f; --pen-soft: #3a1c1e; --hl: #6b5f12; --mark-line: #fff27a; --ai: #8ea6ff; --ai-soft: #1d2747; color-scheme: dark;
+    --pen: #ff5a4f; --pen-soft: #3a1c1e; --hl: #6b5f12; --ai: #8ea6ff; --ai-soft: #1d2747; color-scheme: dark;
   }
 }
 
@@ -43,14 +43,11 @@ select { appearance: none; -webkit-appearance: none; padding: 0 38px 0 14px; cur
 select:hover, input[type="number"]:hover { border-color: var(--muted) }
 
 .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap }
-.brand { font: 800 22px/1 var(--display); letter-spacing: -0.02em }
-.brand em { font: 400 26px/1 var(--hand); color: var(--pen); font-style: normal }
-.brand.small { font-size: 16px } .brand.small em { font-size: 19px }
-.brand { display: inline-flex; align-items: center; gap: .3em }
-.brand .mark { width: 1.15em; height: 1.15em; flex: none; margin-right: .05em }
-.mark path { fill: none; stroke-linecap: round; stroke-linejoin: round }
-.mark-check { stroke: var(--pen); stroke-width: 5.5 }
-.mark-line { stroke: var(--mark-line); stroke-width: 3.2 }
+/* Logo: one ink wordmark and one red check. The handwriting is kept for the verdict and quotes. */
+.brand { display: inline-flex; align-items: center; gap: .32em; font: 800 21px/1 var(--display); letter-spacing: -0.025em; color: var(--ink) }
+.brand.small { font-size: 15px }
+.brand .mark { width: 1.05em; height: 1.05em; flex: none }
+.mark path { fill: none; stroke: var(--pen); stroke-width: 4.5; stroke-linecap: round; stroke-linejoin: round }
 nav { display: flex; gap: 6px }
 .tab { background: transparent; color: var(--muted); border-color: transparent }
 .tab.on { color: var(--ink); border-color: var(--ink) }
