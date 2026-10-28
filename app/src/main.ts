@@ -193,15 +193,21 @@ function openShareDialog(post: Post) {
 
 // ---- views ---------------------------------------------------------------------------
 
+/** The verdict last drawn, so the scrawl only plays when it changes, not on every background redraw. */
+let lastVerdict: string | null = null;
+
 function verdictBlock(s: Stats) {
   const no = verdictIsNo(s);
+  const verdict = no ? "no" : "hmm";
+  const still = verdict === lastVerdict ? " still" : "";
+  lastVerdict = verdict;
   return `
     <div class="eyebrow">This week's verdict</div>
     <h1 class="q">Could <button id="model-trigger" class="subject" aria-haspopup="listbox" aria-expanded="false" title="Pick a model">${esc(
       subjectLabel(),
     )}<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg></button> replace you?</h1>
     <div class="verdict">
-      <div class="no ${no ? "" : "maybe"}" aria-hidden="true">${no ? "No." : "Hmm."}</div>
+      <div class="no ${no ? "" : "maybe"}${still}" aria-hidden="true">${no ? "No." : "Hmm."}</div>
       <div class="because">You caught it <b>${num(s.catches_last_7d)} ${s.catches_last_7d === 1 ? "time" : "times"}</b> in the last 7 days.${
         s.pct_real_chats_with_catch != null ? ` It slipped up in ${Math.round(s.pct_real_chats_with_catch)}% of your real chats.` : ""
       }</div>
@@ -741,7 +747,11 @@ if (isGlance) {
   document.documentElement.classList.add("is-glance");
   if (!demo) window.addEventListener("keydown", (e) => e.key === "Escape" && getCurrentWindow().hide());
 }
-api.syncStatus().then((s) => ((status = s), render()));
+// Draw once at launch, after the status is known, so the verdict's scrawl plays exactly once.
+api.syncStatus()
+  .then((s) => (status = s))
+  .catch(() => {})
+  .finally(() => render());
 if (!isGlance) api.updateStatus().then((u) => ((update = u), showUpdate()));
 if (!demo) {
   if (!isGlance) listen("update-changed", () => api.updateStatus().then((u) => ((update = u), showUpdate())));
@@ -755,4 +765,3 @@ setInterval(() => current && updateStatus(), 30_000);
 window.addEventListener("hashchange", () => location.reload());
 // Dev builds only: lets a test simulate a sync finishing in the background.
 if (import.meta.env.DEV) Object.assign(window, { __simulateSync: refresh });
-render();

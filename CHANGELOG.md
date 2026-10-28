@@ -8,6 +8,11 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 - In-app updates. The app checks GitHub releases for a newer version a minute after launch and every 6 hours, and offers "Restart to update" in the scorecard and the menu bar menu. It never restarts on its own, and only installs updates signed with the project's key. The check sends no identifiers; turn it off in Settings → Check for updates automatically.
 
+### Fixed
+
+- CI runs with a read-only GitHub token (code scanning: missing workflow permissions).
+- The "No." verdict no longer replays its animation every time a background check finishes. It plays once at launch, and again only when the verdict changes.
+
 ## [0.1.0]
 
 First release.
