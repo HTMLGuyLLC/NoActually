@@ -15,15 +15,24 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # Minimum supported Rust version. Keep in step with `rust-version` in Cargo.toml.
+  MSRV: '1.82'
 
+# Branch protection requires only the `ci-ok` job at the bottom, so renaming or adding a job
+# here never blocks merges.
 jobs:
-  check:
-    name: ${{ matrix.os }}
+  rust:
+    name: rust (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-22.04]
+        # Ubuntu 22.04 has the WebKitGTK 4.1 packages Tauri needs.
+        os: [ubuntu-22.04, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
 
@@ -38,10 +47,10 @@ jobs:
           components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - uses: pnpm/action-setup@v6
-        with:
-          version: 10
 
       - uses: actions/setup-node@v7
         with:
@@ -49,23 +58,14 @@ jobs:
           cache: pnpm
           cache-dependency-path: app/pnpm-lock.yaml
 
-      - name: Install frontend deps
-        run: pnpm --dir app install --frozen-lockfile
-
-      - name: Frontend type check
-        run: pnpm --dir app check
-
-      - name: Frontend tests
-        run: pnpm --dir app test
-
-      - name: Release script tests
-        run: node --test scripts/*.test.mjs
-
       # The app crate reads app/dist at compile time, so build the frontend first.
       - name: Build frontend
-        run: pnpm --dir app build
+        run: |
+          pnpm --dir app install --frozen-lockfile
+          pnpm --dir app build
 
       - name: Format
+        if: runner.os == 'Linux'
         run: cargo fmt --all --check
 
       - name: Clippy
@@ -74,12 +74,160 @@ jobs:
       - name: Test
         run: cargo test --workspace
 
-  crates-windows:
-    name: windows (crates only)
-    runs-on: windows-latest
+  frontend:
+    name: frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm --dir app install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm --dir app check
+
+      - name: Lint and format (Biome)
+        run: pnpm --dir app lint
+
+      - name: Tests with coverage
+        run: pnpm --dir app test:coverage
+
+      - name: Build
+        run: pnpm --dir app build
+
+      - name: Audit production dependencies
+        run: pnpm --dir app audit --prod
+
+  scripts:
+    name: scripts and workflows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Script tests
+        run: node --test scripts/*.test.mjs
+
+      - name: ShellCheck
+        run: shellcheck scripts/*.sh
+
+      - name: actionlint
+        uses: raven-actions/actionlint@v2
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  msrv:
+    name: msrv
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      # `cargo +<version>` overrides rust-toolchain.toml.
+      - name: Install MSRV toolchain
+        run: rustup toolchain install "$MSRV" --profile minimal
+
       - uses: Swatinem/rust-cache@v2
-      - name: Test core crates
-        run: cargo test -p engine -p sources -p store -p noactually-cli
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # The app crate needs the system WebKit libraries and may need a newer Rust, so it's excluded.
+      - name: Check
+        run: cargo "+$MSRV" check --workspace --exclude noactually-app
+
+  wasm:
+    name: engine builds for wasm32
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Check
+        run: cargo check -p noactually-engine --target wasm32-unknown-unknown
+
+  coverage:
+    name: rust coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Coverage summary
+        run: cargo llvm-cov --workspace --exclude noactually-app --summary-only >> "$GITHUB_STEP_SUMMARY"
+
+  version:
+    name: versions agree
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # The Cargo workspace version is the source of truth; scripts/bump-version.sh keeps the rest in step.
+      - name: Compare versions
+        run: |
+          cargo_v=$(awk '/^\[workspace\.package\]/{f=1;next} /^\[/{f=0} f && /^version *=/{gsub(/[" ]/,"",$0); sub(/^version=/,"",$0); print; exit}' Cargo.toml)
+          pkg_v=$(node -p "require('./app/package.json').version")
+          conf_v=$(node -p "require('./app/src-tauri/tauri.conf.json').version || ''")
+          echo "Cargo workspace: $cargo_v, app/package.json: $pkg_v, tauri.conf.json: ${conf_v:-<unset>}"
+          [ -n "$cargo_v" ] || { echo "Couldn't read the Cargo workspace version"; exit 1; }
+          [ "$cargo_v" = "$pkg_v" ] || { echo "app/package.json version differs"; exit 1; }
+          [ -z "$conf_v" ] || [ "$cargo_v" = "$conf_v" ] || { echo "tauri.conf.json version differs"; exit 1; }
+
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [rust, frontend, scripts, deny, msrv, wasm, coverage, version]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: All jobs passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Job results: $RESULTS"
+          case " $RESULTS " in
+            *" failure "* | *" cancelled "*) echo "A required job did not pass."; exit 1 ;;
+          esac
