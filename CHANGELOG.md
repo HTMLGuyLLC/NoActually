@@ -4,6 +4,10 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+### Fixed
+
+- The Instagram share card is now a tall 4:5 image (1080×1350) that fills the Instagram feed, instead of the wide link-preview card shrunk into a thin strip. Other networks keep the wide card.
+
 ## [0.2.0] - 2026-10-28
 
 ### Added
