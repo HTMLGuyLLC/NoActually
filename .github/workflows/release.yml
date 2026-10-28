@@ -41,7 +41,7 @@ jobs:
         if: matrix.mac && env.SIGN_MAC != 'true'
         run: echo "No Apple signing secrets; the macOS DMG is built and notarized locally."
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
 
       # tauri-action names the release after tauri.conf.json's version; a different tag would
@@ -67,12 +67,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
         with:
           node-version: 22
@@ -83,7 +83,7 @@ jobs:
         if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
         run: pnpm --dir app install --frozen-lockfile
 
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@v1
         if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
