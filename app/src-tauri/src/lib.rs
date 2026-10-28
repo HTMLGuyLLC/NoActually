@@ -39,7 +39,7 @@ pub struct SyncStatus {
 /// A panicked holder must not take the whole app down with it: the data behind the lock is
 /// SQLite, which is transactional, so carrying on is safe.
 pub fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|e| e.into_inner())
+    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 pub fn show_main(handle: &AppHandle) {
@@ -83,6 +83,79 @@ fn tray_icon() -> tauri::image::Image<'static> {
     }
 }
 
+/// The menu bar icon: left click toggles the quick glance, the menu does the rest.
+fn build_tray(tauri_app: &tauri::App, menu: &Menu<tauri::Wry>) -> tauri::Result<()> {
+    TrayIconBuilder::with_id("tray")
+        .icon(tray_icon())
+        .icon_as_template(cfg!(target_os = "macos"))
+        .tooltip("No, Actually...")
+        .menu(menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, e| match e.id.as_ref() {
+            "open" => show_main(app),
+            "sync" => {
+                let _ = app.state::<std::sync::Arc<App>>().tracker.send(tracker::Msg::SyncNow);
+            }
+            "update" => updater::on_menu(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                toggle_glance(tray.app_handle());
+            }
+        })
+        .build(tauri_app)?;
+    Ok(())
+}
+
+/// Opens the database, builds the tray, and starts the tracker and update threads.
+fn setup(tauri_app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let handle = tauri_app.handle().clone();
+    // The same file the CLI opens. NOACTUALLY_DB points at another one (development, demos).
+    let db = store::default_db_path()?;
+    if store::legacy_db_env_in_use() {
+        log::warn!("{} is deprecated; set {} instead", store::LEGACY_DB_ENV, store::DB_ENV);
+    }
+    log::info!("database: {}", db.display());
+    let writer = Store::open(&db)?;
+    let reader = Store::open(&db)?;
+    let (tx, rx) = mpsc::channel();
+    let app = std::sync::Arc::new(App {
+        writer: Mutex::new(writer),
+        reader: Mutex::new(reader),
+        sources: sources::all(),
+        tracker: tx.clone(),
+        status: Mutex::new(SyncStatus::default()),
+    });
+    tauri_app.manage(app.clone());
+
+    let open = MenuItem::with_id(tauri_app, "open", "Open scorecard", true, None::<&str>)?;
+    let sync = MenuItem::with_id(tauri_app, "sync", "Check now", true, None::<&str>)?;
+    let update = MenuItem::with_id(tauri_app, "update", updater::menu_text(None), true, None::<&str>)?;
+    let quit = MenuItem::with_id(tauri_app, "quit", "Quit No, Actually...", true, None::<&str>)?;
+    let menu = Menu::with_items(tauri_app, &[&open, &sync, &update, &quit])?;
+    let (update_tx, update_rx) = mpsc::channel();
+    tauri_app.manage(updater::Updates::new(&handle, update_tx, update));
+    build_tray(tauri_app, &menu)?;
+
+    // A launch at login stays in the menu bar; a launch by the user opens the scorecard.
+    if std::env::args().any(|a| a == HIDDEN_ARG) {
+        #[cfg(target_os = "macos")]
+        let _ = handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
+    } else {
+        show_main(&handle);
+    }
+    updater::spawn(handle.clone(), app.clone(), update_rx);
+    tracker::spawn(handle, app, tx, rx);
+    Ok(())
+}
+
+/// Starts the desktop app.
+///
+/// # Panics
+/// If Tauri can't start (no window system, a broken bundle).
 pub fn run() {
     tauri::Builder::default()
         // First: a second launch just brings the running app forward, so two trackers never
@@ -104,70 +177,7 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![HIDDEN_ARG]),
         ))
-        .setup(|tauri_app| {
-            let handle = tauri_app.handle().clone();
-            // WA_DB points at another database (development, demos); the CLI honors it too.
-            let db = match std::env::var_os("WA_DB") {
-                Some(p) => p.into(),
-                None => handle.path().app_data_dir()?.join("noactually.db"),
-            };
-            log::info!("database: {}", db.display());
-            let writer = Store::open(&db)?;
-            let reader = Store::open(&db)?;
-            let (tx, rx) = mpsc::channel();
-            let app = std::sync::Arc::new(App {
-                writer: Mutex::new(writer),
-                reader: Mutex::new(reader),
-                sources: sources::all(),
-                tracker: tx.clone(),
-                status: Mutex::new(SyncStatus::default()),
-            });
-            tauri_app.manage(app.clone());
-
-            let open = MenuItem::with_id(tauri_app, "open", "Open scorecard", true, None::<&str>)?;
-            let sync = MenuItem::with_id(tauri_app, "sync", "Check now", true, None::<&str>)?;
-            let update = MenuItem::with_id(tauri_app, "update", updater::menu_text(None), true, None::<&str>)?;
-            let quit = MenuItem::with_id(tauri_app, "quit", "Quit No, Actually...", true, None::<&str>)?;
-            let menu = Menu::with_items(tauri_app, &[&open, &sync, &update, &quit])?;
-            let (update_tx, update_rx) = mpsc::channel();
-            tauri_app.manage(updater::Updates::new(&handle, update_tx, update));
-            TrayIconBuilder::with_id("tray")
-                .icon(tray_icon())
-                .icon_as_template(cfg!(target_os = "macos"))
-                .tooltip("No, Actually...")
-                .menu(&menu)
-                .show_menu_on_left_click(false)
-                .on_menu_event(|app, e| match e.id.as_ref() {
-                    "open" => show_main(app),
-                    "sync" => {
-                        let _ = app.state::<std::sync::Arc<App>>().tracker.send(tracker::Msg::SyncNow);
-                    }
-                    "update" => updater::on_menu(app),
-                    "quit" => app.exit(0),
-                    _ => {}
-                })
-                .on_tray_icon_event(|tray, event| {
-                    tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left, button_state: MouseButtonState::Up, ..
-                    } = event
-                    {
-                        toggle_glance(tray.app_handle());
-                    }
-                })
-                .build(tauri_app)?;
-
-            // A launch at login stays in the menu bar; a launch by the user opens the scorecard.
-            if std::env::args().any(|a| a == HIDDEN_ARG) {
-                #[cfg(target_os = "macos")]
-                let _ = handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
-            } else {
-                show_main(&handle);
-            }
-            updater::spawn(handle.clone(), app.clone(), update_rx);
-            tracker::spawn(handle, app, tx, rx);
-            Ok(())
-        })
+        .setup(setup)
         .on_window_event(|window, event| match event {
             // Closing the scorecard hides it; tracking keeps running from the menu bar.
             WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
@@ -180,6 +190,7 @@ pub fn run() {
             _ => {}
         })
         .invoke_handler(tauri::generate_handler![
+            commands::meta,
             commands::stats,
             commands::list_sources,
             commands::allow_source,
