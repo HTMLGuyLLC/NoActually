@@ -10,8 +10,8 @@ default:
 install:
     pnpm --dir app install --frozen-lockfile
 
-# Everything CI runs, in CI order. Run this before pushing.
-ci: install build fmt-check clippy test-rust test-frontend test-scripts audit
+# The checks CI runs on every change. CI also checks the MSRV, coverage and workflows (actionlint).
+ci: install build fmt-check clippy test-rust test-frontend test-scripts wasm versions audit
 
 # Build the frontend. The app crate reads app/dist at compile time, so cargo needs this first.
 build: install
@@ -46,6 +46,14 @@ test-frontend:
 test-scripts:
     node --test scripts/*.test.mjs
     @if command -v shellcheck >/dev/null; then shellcheck scripts/*.sh; else echo "shellcheck not installed; skipped (brew install shellcheck)"; fi
+
+# The engine has no I/O, so it builds for the web too.
+wasm:
+    cargo check -p noactually-engine --target wasm32-unknown-unknown
+
+# Cargo.toml, app/package.json and tauri.conf.json must agree on the version.
+versions:
+    scripts/version.sh check
 
 # Dependency checks: cargo-deny (licenses, advisories, sources) and pnpm audit.
 audit:

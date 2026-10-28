@@ -16,7 +16,8 @@ concurrency:
 jobs:
   release:
     name: ${{ matrix.name }}
-    # Manual runs are only allowed on main (to test the pipeline); real releases come from tags.
+    # Manual runs are only allowed on main, and only build (to test the pipeline): they never
+    # create, upload to or rewrite a release. Real releases come from tags.
     if: github.ref_type == 'tag' || github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 60
@@ -51,7 +52,7 @@ jobs:
         if: matrix.mac && env.SIGN_MAC != 'true'
         run: echo "No Apple signing secrets; the macOS DMG is built and notarized locally."
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
 
       # tauri-action names the release after the app version; a different tag would silently
@@ -60,8 +61,7 @@ jobs:
         if: ${{ github.ref_type == 'tag' && (!matrix.mac || env.SIGN_MAC == 'true') }}
         shell: bash
         run: |
-          v=$(awk '/^\[workspace\.package\]/{f=1;next} /^\[/{f=0} f && /^version *=/{gsub(/[" ]/,"",$0); sub(/^version=/,"",$0); print; exit}' Cargo.toml)
-          [ -n "$v" ] || { echo "Couldn't read the Cargo workspace version"; exit 1; }
+          v=$(scripts/version.sh)
           [ "${GITHUB_REF_NAME}" = "v$v" ] || { echo "Tag ${GITHUB_REF_NAME} doesn't match app version v$v"; exit 1; }
 
       - name: Install Linux system deps
@@ -70,21 +70,29 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev build-essential
 
-      - uses: dtolnay/rust-toolchain@stable
+      # The toolchain pinned in rust-toolchain.toml, plus the macOS targets for the universal build.
+      - name: Rust toolchain
         if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
-        with:
-          targets: ${{ matrix.rust_targets }}
+        shell: bash
+        env:
+          TARGETS: ${{ matrix.rust_targets }}
+        run: |
+          rustup toolchain install
+          IFS=, read -ra targets <<< "$TARGETS"
+          [ "${#targets[@]}" -eq 0 ] || rustup target add "${targets[@]}"
 
       # Release builds read the cache but never write it, so a cache can't be poisoned into a signed build.
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
         with:
           save-if: false
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
         if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
+        with:
+          package_json_file: app/package.json
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
         with:
           node-version: 22
@@ -111,13 +119,14 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: app
-          tagName: v__VERSION__
-          releaseName: 'No, Actually... v__VERSION__'
+          # Empty on manual runs, so tauri-action builds without touching any release.
+          tagName: ${{ github.ref_type == 'tag' && 'v__VERSION__' || '' }}
+          releaseName: ${{ github.ref_type == 'tag' && 'No, Actually... v__VERSION__' || '' }}
           releaseBody: 'See the [changelog](https://github.com/HTMLGuyLLC/NoActually/blob/main/CHANGELOG.md).'
           releaseDraft: true
           # latest.json for in-app updates. scripts/finish-release.sh points it at the renamed files
           # and adds the Mac entries.
-          uploadUpdaterJson: true
+          uploadUpdaterJson: ${{ github.ref_type == 'tag' }}
           updaterJsonPreferNsis: true
           # The signatures are inside latest.json; the .sig files would only clutter the release page.
           uploadUpdaterSignatures: false

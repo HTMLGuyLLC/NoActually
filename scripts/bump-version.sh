@@ -19,8 +19,7 @@ TODAY="$(date +%Y-%m-%d)"
 TMP="$(mktemp)"
 trap 'rm -f "$TMP"' EXIT
 
-OLD="$(awk '/^\[workspace\.package\]/{f=1;next} /^\[/{f=0} f && /^version *=/{gsub(/[" ]/,"",$0); sub(/^version=/,"",$0); print; exit}' "$ROOT/Cargo.toml")"
-[[ -n "$OLD" ]] || { echo "Couldn't read the current version from Cargo.toml." >&2; exit 1; }
+OLD="$("$ROOT/scripts/version.sh")"
 [[ "$OLD" != "$NEW" ]] || { echo "Already at $NEW." >&2; exit 1; }
 grep -q "^## \[$NEW\]" "$ROOT/CHANGELOG.md" && { echo "CHANGELOG.md already has a $NEW entry." >&2; exit 1; }
 grep -q '^## \[Unreleased\]' "$ROOT/CHANGELOG.md" || { echo "CHANGELOG.md has no '## [Unreleased]' heading." >&2; exit 1; }

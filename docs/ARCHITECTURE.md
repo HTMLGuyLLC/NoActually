@@ -19,7 +19,7 @@ Rust owns every table the UI needs. The app asks for them once through the `meta
 ## Data flow
 
 ```
-source files ──adapter──▶ Turn { human, prev_ai, next_ai, model, ts, session }
+source files ──adapter──▶ SourceTurn { source, session, ts, key, turn: Turn { human, prev_ai, next_ai, chat_model } }
                               │
                        engine::classify  (fixed rules, no network, no LLM)
                               │
@@ -145,7 +145,7 @@ Adding a source means implementing the `Source` trait in `crates/sources`: `root
 | `frontend` | Type check, Biome, vitest with coverage, build, `pnpm audit --prod` |
 | `scripts` | Script tests, ShellCheck, actionlint |
 | `deny` | `cargo deny check` (licenses, advisories, sources) using `deny.toml` |
-| `msrv` | `cargo check` on the minimum supported Rust version, without the app crate |
+| `msrv` | `cargo check` of the whole workspace, app included, on the minimum supported Rust version |
 | `wasm` | `noactually-engine` builds for `wasm32-unknown-unknown` |
 | `coverage` | `cargo llvm-cov` summary in the job summary |
 | `version` | Cargo workspace, `app/package.json` and `tauri.conf.json` versions agree |

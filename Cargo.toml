@@ -5,7 +5,7 @@ members = ["crates/engine", "crates/sources", "crates/store", "crates/cli", "app
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-# Oldest Rust that builds the whole workspace, app included (checked with `cargo +<ver> check`).
+# Oldest Rust that builds the whole workspace, app included. CI's `msrv` job checks it.
 rust-version = "1.90"
 license = "MIT"
 authors = ["HTMLGuy LLC"]
@@ -18,7 +18,7 @@ categories = ["command-line-utilities", "development-tools"]
 publish = false
 
 [workspace.dependencies]
-# Library packages are published as noactually-*, but code imports them by their short names.
+# Library packages are named noactually-*, but code imports them by their short names.
 engine = { path = "crates/engine", package = "noactually-engine" }
 sources = { path = "crates/sources", package = "noactually-sources" }
 store = { path = "crates/store", package = "noactually-store" }
