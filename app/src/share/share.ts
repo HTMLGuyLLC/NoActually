@@ -1,7 +1,8 @@
 // Share text, network links and the dialog's guidance. All made on this machine from numbers only
 // (or, for a single catch, the stored and already redacted snippet the person can edit first).
-import type { Stats } from "../api";
+import type { Briefs, BriefTier, Stats } from "../api";
 import { type Html, html } from "../html";
+import { landedPct } from "../meta";
 
 export const SHARE_URL = "https://github.com/HTMLGuyLLC/NoActually";
 /** The link as printed on the cards: "github.com/HTMLGuyLLC/NoActually". */
@@ -13,6 +14,11 @@ export function shareText(s: ScoreLike, who: string) {
   const pct = s.pct_real_chats_with_catch != null ? `, and in ${Math.round(s.pct_real_chats_with_catch)}% of my chats` : "";
   const times = s.catches_last_7d === 1 ? "time" : "times";
   return `Could ${who} replace me? ${s.verdict === "no" ? "No." : "Maybe…"} I caught it ${s.catches_last_7d} ${times} this week${pct}. Me ${s.catches}, ${who} ${s.humbled}. What's your score? ${SHARE_URL}`;
+}
+
+/** The briefs score, ready to post: the tier's answer and how many tasks landed. Numbers only. */
+export function briefShareText(b: Pick<Briefs, "landed_last_7d" | "tasks_last_7d">, tier: BriefTier) {
+  return `Do I make my AI guess? ${tier.verdict} ${landedPct(b)}% of my tasks landed this week without me adding, clarifying or starting over. Brief tier: ${tier.name}. Do you make yours guess? ${SHARE_URL}`;
 }
 
 import type { CardShape } from "./cards";

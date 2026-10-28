@@ -14,6 +14,7 @@ macOS may show its own "access data from other apps" prompt for some sources. Sa
 |---|---|---|---|
 | Ordinary messages (not catches) | Counts only, per day, source and model | Never | Forever (just numbers) |
 | Sessions | Hashed id, source, day range, message and catch counts | Never | Forever |
+| Tasks (briefs) | Day, source, hashed chat id, model, which of 5 signals the brief carried, message and steering counts | Never | Forever |
 | Catch / humbled events | Time, source, model, label, category, matched rule ids | Per retention level | Per TTL |
 | File checkpoints | Path, byte offset, size, modified time | Never | Until you forget the source |
 | Message fingerprints | Short hashes of message ids, so copies are never counted twice | Never | Until you forget the source |

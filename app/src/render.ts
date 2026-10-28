@@ -5,7 +5,7 @@ import { ago, errorText, isFiltered, listNames } from "./format";
 import { type Html, html } from "./html";
 import { closePicker } from "./picker/popover";
 import { createScheduler, isUserBusy } from "./scheduler";
-import { isGlance, setAllModels, setCurrent, setLastVerdict, setMeta, state } from "./state";
+import { isGlance, setAllModels, setCurrent, setLastBriefTier, setLastVerdict, setMeta, state } from "./state";
 import { updateBanner, updateLine } from "./update";
 import { headerView, statusPillView } from "./views/chrome";
 import { emptyGlanceView, glanceView } from "./views/glance";
@@ -30,8 +30,14 @@ async function view(): Promise<Html> {
     const [retention, autostart] = await Promise.all([api.retention(), api.getAutostart().catch(() => false)]);
     body = settingsView({ retention, autostart, update: state.update, status: state.status, demo });
   } else if (s.messages) {
-    body = scorecardView(s, { meta, filter: state.filter, still: s.verdict === state.lastVerdict });
+    body = scorecardView(s, {
+      meta,
+      filter: state.filter,
+      still: s.verdict === state.lastVerdict,
+      briefsStill: s.briefs.tier === state.lastBriefTier,
+    });
     setLastVerdict(s.verdict);
+    setLastBriefTier(s.briefs.tier);
   } else body = onboardingView(await watching());
   const banner = state.update ? updateBanner(state.update, state.laterFor) : "";
   return html`<div class="wrap">${headerView(state.tab, state.status, demo)}<div id="update-slot">${banner}</div>${body}</div>`;

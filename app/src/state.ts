@@ -18,6 +18,8 @@ export type AppState = {
   laterFor: string | null;
   /** The verdict last drawn, so the scrawl only plays when it changes, not on every background redraw. */
   lastVerdict: Verdict | null;
+  /** The brief tier last drawn (undefined: none drawn yet), for the same reason. */
+  lastBriefTier: string | null | undefined;
   meta: Meta | null;
 };
 
@@ -30,6 +32,7 @@ const initial = (): AppState => ({
   update: null,
   laterFor: null,
   lastVerdict: null,
+  lastBriefTier: undefined,
   meta: null,
 });
 
@@ -69,6 +72,9 @@ export function setLaterFor(version: string | null): void {
 }
 export function setLastVerdict(verdict: Verdict): void {
   s.lastVerdict = verdict;
+}
+export function setLastBriefTier(tier: string | null): void {
+  s.lastBriefTier = tier;
 }
 export function setMeta(meta: Meta): Meta {
   s.meta = meta;

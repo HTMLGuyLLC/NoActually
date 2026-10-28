@@ -1,7 +1,7 @@
 // Quick glance: the small window under the menu bar icon.
 import type { Meta, Stats } from "../api";
 import { type Html, html, num } from "../html";
-import { tierName } from "../meta";
+import { briefTier, landedPct, tierName } from "../meta";
 import { wordmarkView } from "./chrome";
 
 export function glanceView(s: Stats, meta: Meta): Html {
@@ -14,8 +14,15 @@ export function glanceView(s: Stats, meta: Meta): Html {
       <div class="because">You caught it <b>${s.catches_last_7d}×</b> this week.</div></div>
     <div class="g-score"><div><span class="n you">${num(s.catches)}</span><span class="eyebrow">you</span></div><div class="vs">vs</div><div><span class="n ai">${num(s.humbled)}</span><span class="eyebrow">AI</span></div></div>
     <div class="g-meta muted small">${s.current_streak_days ? `${s.current_streak_days}-day streak · ` : ""}${progress}</div>
+    ${briefsLine(s, meta)}
     <div class="g-actions"><button data-action="open-main">Share or see more</button><button class="ghost" data-action="copy-share">Copy text</button><span class="sr-only" id="copy-status" role="status" aria-live="polite"></span></div>
   </div>`;
+}
+
+/** "Briefs: Tech lead · 92% landed", once this week has a brief tier. */
+function briefsLine(s: Stats, meta: Meta): Html | "" {
+  const tier = briefTier(meta, s.briefs.tier);
+  return tier ? html`<div class="g-meta muted small">Briefs: ${tier.name} · ${landedPct(s.briefs)}% landed</div>` : "";
 }
 
 /** Before the first catch. `watching` names the sources being read right now (empty: none allowed yet). */

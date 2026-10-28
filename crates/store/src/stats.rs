@@ -2,7 +2,7 @@
 
 use crate::{Result, Store};
 use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, Timelike};
-use engine::{Answer, Category, Label, Tier};
+use engine::{Answer, BriefTier, Category, Grade, Label, Signal, Signals, Steer, Tier, MIN_BRIEFS};
 use rusqlite::{params_from_iter, Connection};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
@@ -12,6 +12,12 @@ use std::sync::LazyLock;
 const REAL_CHAT: i64 = 10;
 /// Entries in the hall of fame.
 const HALL_SIZE: i64 = 12;
+/// A tip only quotes "with vs without" when both groups have this many tasks.
+const TIP_MIN_GROUP: i64 = 10;
+/// ...and briefs carrying the signal landed at least this many points more often.
+const TIP_MIN_LIFT: f64 = 10.0;
+/// No tip once even the least-carried signal is in at least this share of briefs.
+const TIP_MAX_PCT: f64 = 50.0;
 
 /// The labels that count as catches, as an SQL list: `('confirmed','admitted','claimed')`.
 static CATCH_KINDS: LazyLock<String> = LazyLock::new(|| {
@@ -152,6 +158,48 @@ pub struct Stats {
     pub models: Vec<ModelRow>,
     /// Pinned first, then confirmed catches, newest first.
     pub hall_of_fame: Vec<HallEntry>,
+    /// How you brief it.
+    pub briefs: Briefs,
+}
+
+/// How you brief the AI: your tasks, what their briefs carried, and what it took to land them.
+#[derive(Debug, Default, PartialEq, Serialize)]
+pub struct Briefs {
+    /// Tasks ever (questions and chatter aren't tasks).
+    pub tasks: i64,
+    /// Tasks you never had to add to, clarify or redo.
+    pub landed: i64,
+    /// Tasks in the 7 days ending today.
+    pub tasks_last_7d: i64,
+    /// Of those, how many landed.
+    pub landed_last_7d: i64,
+    /// This week's tier; `None` until the week has enough tasks.
+    pub tier: Option<BriefTier>,
+    /// The next tier and how many more tasks this week must land to reach it.
+    pub next_tier: Option<(BriefTier, i64)>,
+    /// More tasks this week before a tier is given (0 once ranked).
+    pub to_rank: i64,
+    /// Briefs per grade id.
+    pub grades: BTreeMap<String, i64>,
+    /// Briefs carrying each signal, by signal id.
+    pub signals: BTreeMap<String, i64>,
+    /// Steering messages per cause id.
+    pub steering: BTreeMap<String, i64>,
+    /// What to try next, once there are briefs.
+    pub tip: Option<Tip>,
+}
+
+/// The signal your briefs carry least, and (when your own history backs it up) how much more
+/// often briefs that carry it landed.
+#[derive(Debug, Default, PartialEq, Serialize)]
+pub struct Tip {
+    /// Signal id.
+    pub signal: String,
+    /// Percent of briefs carrying it, one decimal.
+    pub pct_of_briefs: f64,
+    /// Percent of briefs carrying it that landed, and of those that didn't; only when the gap
+    /// is real (see `TIP_MIN_GROUP`, `TIP_MIN_LIFT`).
+    pub landed_with_without: Option<(f64, f64)>,
 }
 
 /// The daily / events rows one filter selects.
@@ -348,6 +396,87 @@ fn hall_of_fame(v: &View) -> Result<Vec<HallEntry>> {
     })
 }
 
+/// One decimal percent of `n` in `total`.
+fn pct(n: i64, total: i64) -> f64 {
+    if total == 0 {
+        return 0.0;
+    }
+    (1000.0 * n as f64 / total as f64).round() / 10.0
+}
+
+/// `added + clarified + redo`: steering that was on you, not the AI.
+static ON_YOU: LazyLock<String> = LazyLock::new(|| {
+    let cols: Vec<&str> = Steer::ALL.iter().filter(|c| c.is_on_you()).map(|c| c.as_str()).collect();
+    format!("({})", cols.join(" + "))
+});
+
+fn briefs(v: &View, today: NaiveDate) -> Result<Briefs> {
+    let on_you = ON_YOU.as_str();
+    // At most 32 masks x 2 outcomes, so the per-signal math happens here, not in SQL.
+    let sql = format!("SELECT signals, {on_you} = 0, COUNT(*) FROM tasks WHERE 1=1 {} GROUP BY 1, 2", v.clause);
+    let groups: Vec<(Signals, bool, i64)> =
+        v.rows(&sql, &[], |r| Ok((Signals(r.get::<_, u8>(0)?), r.get(1)?, r.get(2)?)))?;
+    let mut b = Briefs::default();
+    for (signals, landed, n) in &groups {
+        b.tasks += n;
+        if *landed {
+            b.landed += n;
+        }
+        *b.grades.entry(Grade::of(*signals).as_str().to_string()).or_insert(0) += n;
+        for s in Signal::ALL.into_iter().filter(|s| signals.has(*s)) {
+            *b.signals.entry(s.as_str().to_string()).or_insert(0) += n;
+        }
+    }
+    let sums: Vec<String> = Steer::ALL.iter().map(|c| format!("COALESCE(SUM({}), 0)", c.as_str())).collect();
+    let sql = format!("SELECT {} FROM tasks WHERE 1=1 {}", sums.join(", "), v.clause);
+    let row =
+        v.rows(&sql, &[], |r| (0..Steer::ALL.len()).map(|i| r.get::<_, i64>(i)).collect::<rusqlite::Result<Vec<_>>>())?;
+    for (c, n) in Steer::ALL.iter().zip(row.into_iter().flatten()) {
+        b.steering.insert(c.as_str().to_string(), n);
+    }
+    let week_ago = (today - Duration::days(6)).to_string();
+    let sql = format!("SELECT COUNT(*), COALESCE(SUM({on_you} = 0), 0) FROM tasks WHERE 1=1 {} AND day >= ?", v.clause);
+    (b.tasks_last_7d, b.landed_last_7d) =
+        v.rows(&sql, &[&week_ago], |r| Ok((r.get(0)?, r.get(1)?)))?.pop().unwrap_or_default();
+    b.tier = BriefTier::for_tasks(b.landed_last_7d, b.tasks_last_7d);
+    b.next_tier = b.tier.and_then(BriefTier::next).map(|t| (t, t.landed_needed(b.landed_last_7d, b.tasks_last_7d)));
+    b.to_rank = (MIN_BRIEFS - b.tasks_last_7d).max(0);
+    b.tip = tip(&groups, b.tasks);
+    Ok(b)
+}
+
+/// The signal carried least (ties: display order), unless your briefs mostly carry it already.
+/// Quotes its lift only when it's real.
+fn tip(groups: &[(Signals, bool, i64)], tasks: i64) -> Option<Tip> {
+    if tasks == 0 {
+        return None;
+    }
+    let count = |s: Signal, has: bool| -> i64 {
+        groups.iter().filter(|(sig, _, _)| sig.has(s) == has).map(|(_, _, n)| n).sum()
+    };
+    let s = Signal::ALL.into_iter().min_by_key(|s| count(*s, true))?;
+    Some(tip_for(groups, s)).filter(|t| t.pct_of_briefs < TIP_MAX_PCT)
+}
+
+/// The tip for `s`, quoting how often briefs with and without it landed when the gap is real.
+pub(crate) fn tip_for(groups: &[(Signals, bool, i64)], s: Signal) -> Tip {
+    let count = |has: bool, landed: Option<bool>| -> i64 {
+        groups
+            .iter()
+            .filter(|(sig, l, _)| sig.has(s) == has && landed.is_none_or(|want| *l == want))
+            .map(|(_, _, n)| n)
+            .sum()
+    };
+    let (with, without) = (count(true, None), count(false, None));
+    let (rate_with, rate_without) = (pct(count(true, Some(true)), with), pct(count(false, Some(true)), without));
+    let real = with >= TIP_MIN_GROUP && without >= TIP_MIN_GROUP && rate_with - rate_without >= TIP_MIN_LIFT;
+    Tip {
+        signal: s.as_str().to_string(),
+        pct_of_briefs: pct(with, with + without),
+        landed_with_without: real.then_some((rate_with, rate_without)),
+    }
+}
+
 /// (id, display name) of every source, for labeling stored rows.
 static SOURCE_NAMES: LazyLock<Vec<(&'static str, &'static str)>> =
     LazyLock::new(|| sources::all().iter().map(|s| (s.id(), s.name())).collect());
@@ -382,8 +511,7 @@ impl Store {
             verdict: Answer::for_catches(t.catches_last_7d),
             messages_per_catch: (t.catches > 0).then(|| (t.messages as f64 / t.catches as f64).round() as i64),
             real_chats,
-            pct_real_chats_with_catch: (real_chats > 0)
-                .then(|| (1000.0 * real_with_catch as f64 / real_chats as f64).round() / 10.0),
+            pct_real_chats_with_catch: (real_chats > 0).then(|| pct(real_with_catch, real_chats)),
             best_streak_days,
             current_streak_days,
             peak_hour: if t.catches > 0 { peak_hour(&catch_hours(&v)?) } else { None },
@@ -391,6 +519,7 @@ impl Store {
             weekly: weekly(&v)?,
             models: models(&v)?,
             hall_of_fame: hall_of_fame(&v)?,
+            briefs: briefs(&v, today)?,
         })
     }
 }

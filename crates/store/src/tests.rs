@@ -1,9 +1,10 @@
 //! The store's behavior suite: ingest, sync, consent, retention and stats, end to end.
 
 use super::*;
-use engine::{Answer, Tier};
+use engine::{Answer, BriefTier, Signal, Signals, Tier};
 use sources::testing::{cc_ai, cc_catch, cc_user, set_mtime_ago};
 use sources::{FileScan, SourceTurn};
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::time::Duration as StdDuration;
 
@@ -551,4 +552,168 @@ fn flush_deleted_truncates_the_log() {
     s.flush_deleted().unwrap();
     let wal = std::fs::metadata(dir.path().join("t.db-wal")).map_or(0, |m| m.len());
     assert_eq!(wal, 0);
+}
+
+/// A chat's first message (no AI reply before it) in chat `session`.
+fn opener(human: &str, session: &str, ts: &str, key: &str) -> SourceTurn {
+    let mut t = turn(human, "On it.", "claude-opus-5-5", ts, key);
+    t.session = session.into();
+    t.turn.prev_ai = None;
+    t
+}
+
+fn reply(human: &str, session: &str, ts: &str, key: &str) -> SourceTurn {
+    SourceTurn { session: session.into(), ..turn(human, "Okay.", "claude-opus-5-5", ts, key) }
+}
+
+#[test]
+fn briefs_count_tasks_signals_and_steering() {
+    let mut s = Store::open_in_memory().unwrap();
+    let t = now_ts(0);
+    let sharp = "In src/app.ts the button should open settings. Don't touch the router.";
+    ingest(
+        &mut s,
+        "f",
+        vec![
+            opener("fix it", "a", &t, "1"),
+            reply("also, it needs to work offline", "a", &t, "2"),
+            reply("thanks", "a", &t, "3"),
+            opener(sharp, "b", &t, "4"),
+            reply("still not working", "b", &t, "5"),
+            reply("great, now add a CSV export", "b", &t, "6"),
+            opener("what does this do?", "c", &t, "7"),
+            reply("I meant the other file", "c", &t, "8"), // no task in this chat: not counted
+        ],
+    );
+    let b = stats(&s).briefs;
+    assert_eq!((b.tasks, b.landed), (3, 2), "only the added requirement counts against you");
+    assert_eq!(b.grades, BTreeMap::from([("thin".into(), 2), ("sharp".into(), 1)]));
+    assert_eq!(b.signals, BTreeMap::from([("spot".into(), 1), ("done".into(), 1), ("limits".into(), 1)]));
+    let steering: BTreeMap<String, i64> =
+        [("ai_wrong", 1), ("added", 1), ("clarified", 0), ("redo", 0)].map(|(k, n)| (k.into(), n)).into();
+    assert_eq!(b.steering, steering);
+    assert_eq!((b.tasks_last_7d, b.tier, b.to_rank), (3, None, 2), "too few tasks to rank");
+    let msgs: Vec<i64> = s
+        .conn()
+        .prepare("SELECT messages FROM tasks ORDER BY id")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(msgs, [3, 2, 1], "each chat's replies count toward its latest task");
+}
+
+#[test]
+fn brief_tiers_come_from_this_weeks_tasks() {
+    let mut s = Store::open_in_memory().unwrap();
+    let (now, old) = (now_ts(0), now_ts(10));
+    let mut turns: Vec<SourceTurn> =
+        (0..10).map(|i| opener("add a CSV export", &format!("n{i}"), &now, &format!("n{i}"))).collect();
+    turns.push(reply("I forgot to mention it should be gzipped", "n0", &now, "x"));
+    // Last month's steered tasks don't drag this week down.
+    for i in 0..5 {
+        turns.push(opener("add a CSV export", &format!("o{i}"), &old, &format!("o{i}")));
+        turns.push(reply("scrap that", &format!("o{i}"), &old, &format!("ox{i}")));
+    }
+    ingest(&mut s, "f", turns);
+    let b = stats(&s).briefs;
+    assert_eq!((b.tasks, b.landed, b.tasks_last_7d, b.landed_last_7d), (15, 9, 10, 9));
+    assert_eq!(b.tier, Some(BriefTier::TechLead));
+    assert_eq!(b.next_tier, Some((BriefTier::Architect, 10)));
+    assert_eq!(b.to_rank, 0);
+    let tip = b.tip.unwrap();
+    assert_eq!((tip.signal.as_str(), tip.pct_of_briefs, tip.landed_with_without), ("spot", 0.0, None));
+}
+
+#[test]
+fn a_tip_quotes_the_gap_only_when_history_backs_it() {
+    let mut s = Store::open_in_memory().unwrap();
+    let t = now_ts(0);
+    let mut turns = Vec::new();
+    // Briefs that say why always land; those that don't are steered half the time.
+    for i in 0..30 {
+        let why = i < 10;
+        let human = if why { "add a CSV export because finance needs it" } else { "add a CSV export" };
+        turns.push(opener(human, &format!("c{i}"), &t, &format!("c{i}")));
+        if !why && i % 2 == 0 {
+            turns.push(reply("oh and make it gzipped", &format!("c{i}"), &t, &format!("x{i}")));
+        }
+    }
+    ingest(&mut s, "f", turns);
+    let tip = stats(&s).briefs.tip.unwrap();
+    // "spot" is carried least (never), so it's the tip; "why" would be the one with a real gap.
+    assert_eq!(tip.signal, "spot");
+    assert_eq!(tip.landed_with_without, None, "no briefs carried it, so there's nothing to compare");
+    let groups = [(Signals(Signal::Why.bit()), true, 10), (Signals(0), true, 10), (Signals(0), false, 10)];
+    let why_tip = super::stats::tip_for(&groups, Signal::Why);
+    assert_eq!(why_tip.landed_with_without, Some((100.0, 50.0)));
+    let small = [(Signals(Signal::Why.bit()), true, 9), (Signals(0), false, 10)];
+    assert_eq!(super::stats::tip_for(&small, Signal::Why).landed_with_without, None, "too few to say");
+}
+
+#[test]
+fn briefs_follow_the_filter_and_are_forgotten_and_rebuilt() {
+    let mut s = Store::open_in_memory().unwrap();
+    let t = now_ts(0);
+    let mut gpt = opener("add a CSV export", "g", &t, "g");
+    gpt.turn.next_ai.as_mut().unwrap().model = Some("gpt-5.1".into());
+    ingest(&mut s, "f", vec![opener("add a CSV export", "a", &t, "a"), gpt]);
+    let only = |provider: &str| Filter { provider: Some(provider.into()), ..Default::default() };
+    assert_eq!(s.stats(&only("OpenAI"), today()).unwrap().briefs.tasks, 1);
+    assert_eq!(stats(&s).briefs.tasks, 2);
+    s.reset_scores().unwrap();
+    assert_eq!(stats(&s).briefs.tasks, 0, "a rules rebuild clears tasks with the other scores");
+    ingest(&mut s, "f", vec![opener("add a CSV export", "a", &t, "a")]);
+    s.forget("test").unwrap();
+    let b = stats(&s).briefs;
+    assert_eq!((b.tasks, b.to_rank, b.steering.values().sum::<i64>(), b.tip), (0, 5, 0, None));
+}
+
+#[test]
+fn every_steer_cause_is_a_tasks_column() {
+    let s = Store::open_in_memory().unwrap();
+    for c in engine::Steer::ALL {
+        s.conn().execute(&format!("UPDATE tasks SET {0} = {0} + 1", c.as_str()), []).unwrap();
+    }
+}
+
+#[test]
+fn live_tracking_reads_briefs_like_a_full_rebuild() {
+    // Synced after every reply, as the app does: each follow-up must still know what it answered.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("live.jsonl");
+    let ts = Utc::now().to_rfc3339();
+    let steps = [
+        cc_user("u1", &ts, "add a CSV export to src/report.ts") + &cc_ai("claude-opus-5-5", &ts, "Done."),
+        cc_user("u2", &ts, "still not working") + &cc_ai("claude-opus-5-5", &ts, "Fixed the header row."),
+        cc_user("u3", &ts, "also, it needs to work offline") + &cc_ai("claude-opus-5-5", &ts, "Added a cache."),
+        cc_user("u4", &ts, "thanks") + &cc_ai("claude-opus-5-5", &ts, "Anytime."),
+    ];
+    std::fs::write(&path, "").unwrap();
+    let mut live = Store::open_in_memory().unwrap();
+    let all = claude_code(&dir);
+    live.allow("claude-code", None).unwrap();
+    for step in &steps {
+        append(&path, step);
+        sync(&mut live, &all).unwrap();
+    }
+    let mut whole = Store::open_in_memory().unwrap();
+    whole.allow("claude-code", None).unwrap();
+    sync(&mut whole, &all).unwrap();
+    for b in [stats(&live).briefs, stats(&whole).briefs] {
+        assert_eq!((b.tasks, b.landed), (1, 0));
+        assert_eq!((b.steering["ai_wrong"], b.steering["added"]), (1, 1));
+    }
+}
+
+#[test]
+fn no_tip_once_every_signal_is_common() {
+    let mut s = Store::open_in_memory().unwrap();
+    let t = now_ts(0);
+    let all_five = "In `src/a.ts` it says \"Bad thing happened\" but should return 200. Don't touch the API because our users rely on it.";
+    ingest(&mut s, "f", (0..4).map(|i| opener(all_five, &format!("c{i}"), &t, &format!("c{i}"))).collect());
+    let b = stats(&s).briefs;
+    assert_eq!(b.grades.get("sharp"), Some(&4));
+    assert_eq!(b.tip, None);
 }

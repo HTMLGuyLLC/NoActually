@@ -20,7 +20,8 @@ export function isDemoData(x: unknown): x is DemoData {
     Array.isArray(stats.models) &&
     Array.isArray(stats.weekly) &&
     Array.isArray(stats.hall_of_fame) &&
-    isRecord(stats.categories)
+    isRecord(stats.categories) &&
+    isRecord(stats.briefs)
   );
 }
 

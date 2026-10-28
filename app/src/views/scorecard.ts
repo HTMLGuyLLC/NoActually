@@ -4,12 +4,15 @@ import { filterLabel, isFiltered, shortSourceName, subjectLabel } from "../forma
 import { type Html, html, num, raw } from "../html";
 import { categoryTitle, tierName, tierRanges, topTier } from "../meta";
 import { catchRate, modelName } from "../picker/picker";
+import { briefsView } from "./briefs";
 
 export type ScorecardContext = {
   meta: Meta;
   filter: Filter;
   /** The verdict is the same one already drawn, so its scrawl doesn't replay. */
   still: boolean;
+  /** The same, for the briefs verdict. */
+  briefsStill?: boolean;
 };
 
 const CHEVRON = raw(`<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>`);
@@ -24,6 +27,7 @@ function verdictView(s: Stats, ctx: ScorecardContext): Html {
     )}${CHEVRON}</button> replace you?</h1>
     <div class="verdict">
       <div class="no${no ? "" : " maybe"}${ctx.still ? " still" : ""}" aria-hidden="true">${no ? "No." : "Hmm."}</div>
+      <span class="sr-only">${no ? "No." : "Not yet."} Your tier is ${tierName(ctx.meta, s.tier)}.</span>
       <div class="because">You caught it <b>${num(s.catches_last_7d)} ${s.catches_last_7d === 1 ? "time" : "times"}</b> in the last 7 days.${
         s.pct_real_chats_with_catch != null ? ` It slipped up in ${Math.round(s.pct_real_chats_with_catch)}% of your real chats.` : ""
       }</div>
@@ -146,6 +150,7 @@ export function scorecardView(s: Stats, ctx: ScorecardContext): Html {
       <div class="stat"><span class="v">${s.best_streak_days} days</span><span class="l">best streak · now ${s.current_streak_days}</span></div>
       <div class="stat"><span class="v">${s.messages_per_catch ? `1 in ${s.messages_per_catch}` : "–"}</span><span class="l">messages is a catch · peak ${peak}</span></div>
     </section>
+    ${briefsView(s.briefs, meta, ctx.briefsStill ?? false)}
     <section><div class="head"><h2>Catches per week</h2></div><div class="chart">${chartView(s, meta)}</div></section>
     <section class="split">
       <div>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { HOSTILE, stats } from "../test/fixtures";
-import { catchShareText, clip, SHARE_HOSTS, SHARE_URL, SHARE_URL_SHORT, type ShareTarget, shareGuide, shareTargets, shareText } from "./share";
+import { briefs, HOSTILE, meta, stats } from "../test/fixtures";
+import { briefLines, gradeKey } from "./cards";
+import { briefShareText, catchShareText, clip, SHARE_HOSTS, SHARE_URL, SHARE_URL_SHORT, type ShareTarget, shareGuide, shareTargets, shareText } from "./share";
 
 describe("shareText", () => {
   it("brags with numbers only and links to the project", () => {
@@ -18,6 +19,21 @@ describe("shareText", () => {
   it("follows the verdict, never re-deriving it from the count", () => {
     expect(shareText(stats({ verdict: "hmm", catches_last_7d: 50 }), "AI")).toContain("Maybe…");
     expect(shareText(stats({ verdict: "no", catches_last_7d: 0 }), "AI")).toContain("No.");
+  });
+});
+
+describe("briefShareText", () => {
+  it("posts the tier's answer and the landed share, numbers only", () => {
+    const tier = meta.brief_tiers[2];
+    if (!tier) throw new Error("fixture");
+    expect(briefShareText(briefs(), tier)).toBe(
+      `Do I make my AI guess? Sometimes. 95% of my tasks landed this week without me adding, clarifying or starting over. Brief tier: Tech lead. Do you make yours guess? ${SHARE_URL}`,
+    );
+  });
+
+  it("matches the card's lines", () => {
+    expect(briefLines(briefs())).toEqual(["95% of my tasks landed without steering this week.", "20% of all my briefs were sharp."]);
+    expect(gradeKey(briefs())).toBe("SHARP 20%  ·  SOLID 30%  ·  THIN 50%");
   });
 });
 

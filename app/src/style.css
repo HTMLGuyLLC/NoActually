@@ -151,6 +151,23 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .bar-bg { height: 12px; border-radius: 3px; background: var(--rule); overflow: hidden }
 .bar-bg i { display: block; height: 100%; width: var(--w, 0); background: var(--pen) }
 
+/* Briefs: the verdict words are longer than "No.", so they're smaller and may wrap. */
+.briefs .verdict { flex-wrap: wrap; margin-top: 26px }
+.briefs .no { font-size: clamp(54px, 8vw, 84px) }
+.grades { display: grid; gap: 8px; margin-top: 18px; border-top: 2px solid var(--ink); padding-top: 14px }
+.grade-bar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; background: var(--rule) }
+.grade-bar i { width: var(--w, 0) }
+.g-sharp { background: var(--pen) } .g-solid { background: var(--ink); opacity: .7 } .g-thin { background: var(--rule) }
+.grade-key { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px }
+.grade-key li { display: inline-flex; align-items: center; gap: 6px }
+.grade-key i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; border: 1px solid var(--rule) }
+.cat.sig { grid-template-columns: minmax(9em, 15em) 1fr 3em }
+.cat.sig span:first-child { display: grid; gap: 2px }
+.cat.sig small { font-size: 12px }
+.cats .cat.ai .bar-bg i { background: var(--ai) }
+.tip { margin: 16px 0 0; padding: 12px 14px; border-radius: 10px; background: var(--pen-soft); font-size: 14px }
+.tip .hand { font: 400 19px/1 var(--hand); color: var(--pen-text) }
+
 .fame { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px }
 .catch { position: relative; background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 16px; display: grid; gap: 10px; align-content: start }
 .catch .meta { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap }

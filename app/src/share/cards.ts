@@ -1,5 +1,6 @@
 // The share card images, drawn on a canvas on this machine. Always the light theme.
-import type { Stats } from "../api";
+import type { Briefs, BriefTier, Stats } from "../api";
+import { landedPct, percent } from "../meta";
 import { clip, SHARE_URL_SHORT } from "./share";
 
 /** The light theme's colors (style.css :root), which the cards always use whatever the app's theme. */
@@ -136,16 +137,21 @@ const heading = (size: number) => `800 ${size}px 'Bricolage Grotesque Variable'`
 const timesLine = (s: ScoreCard) => `I caught it ${s.catches_last_7d} ${s.catches_last_7d === 1 ? "time" : "times"} this week.`;
 const pctLine = (s: ScoreCard) => (s.pct_real_chats_with_catch == null ? null : `It slipped up in ${Math.round(s.pct_real_chats_with_catch)}% of my chats.`);
 
-/** The big hand-written verdict, rotated like a red-pen mark, baseline at (x, y). */
-function drawVerdict(g: CanvasRenderingContext2D, s: ScoreCard, x: number, y: number, size: number) {
-  const no = s.verdict === "no";
+/** Hand-written `text`, rotated like a red-pen mark, baseline at (x, y). */
+function drawMark(g: CanvasRenderingContext2D, text: string, color: string, x: number, y: number, size: number) {
   g.save();
   g.translate(x, y);
   g.rotate((-6 * Math.PI) / 180);
-  g.fillStyle = no ? CARD_THEME.pen : CARD_THEME.muted;
+  g.fillStyle = color;
   g.font = `400 ${size}px 'Gochi Hand'`;
-  g.fillText(no ? "No." : "Hmm.", 0, 0);
+  g.fillText(text, 0, 0);
   g.restore();
+}
+
+/** The big hand-written verdict. */
+function drawVerdict(g: CanvasRenderingContext2D, s: ScoreCard, x: number, y: number, size: number) {
+  const no = s.verdict === "no";
+  drawMark(g, no ? "No." : "Hmm.", no ? CARD_THEME.pen : CARD_THEME.muted, x, y, size);
 }
 
 /** The score card. `tier` is the tier's display name. */
@@ -296,5 +302,85 @@ export async function drawCatchCard(e: CatchLike, shape: CardShape = "wide"): Pr
     });
   }
   drawFooter(g, `Could AI replace you?  ${SHARE_URL_SHORT}`, w, L.footerY, k);
+  return png(c);
+}
+
+type BriefsCard = Pick<Briefs, "landed_last_7d" | "tasks_last_7d" | "grades" | "tasks">;
+
+const BRIEF_QUESTION = "Do I make my AI guess?";
+export const briefLines = (b: BriefsCard): [string, string] => [
+  `${landedPct(b)}% of my tasks landed without steering this week.`,
+  `${percent(b.grades.sharp ?? 0, b.tasks)}% of all my briefs were sharp.`,
+];
+
+/** "SHARP 20% · SOLID 24% · THIN 56%": the bar's key. */
+export const gradeKey = (b: BriefsCard) => ["sharp", "solid", "thin"].map((id) => `${id.toUpperCase()} ${percent(b.grades[id] ?? 0, b.tasks)}%`).join("  ·  ");
+
+/** Sharp / solid / thin as one bar, sharp first, `w` wide with its top-left at (x, y). */
+function drawGradeBar(g: CanvasRenderingContext2D, b: BriefsCard, x: number, y: number, w: number, h: number) {
+  const parts: [string, string][] = [
+    ["sharp", CARD_THEME.pen],
+    ["solid", CARD_THEME.ink],
+    ["thin", "#dfe3ee"],
+  ];
+  g.save();
+  g.beginPath();
+  g.roundRect(x, y, w, h, h / 3);
+  g.clip();
+  g.fillStyle = "#dfe3ee";
+  g.fillRect(x, y, w, h);
+  let at = x;
+  for (const [id, color] of parts) {
+    const part = (w * (b.grades[id] ?? 0)) / Math.max(1, b.tasks);
+    g.fillStyle = color;
+    g.fillRect(at, y, part, h);
+    at += part;
+  }
+  g.restore();
+}
+
+/** The briefs card: "Do I make my AI guess?", the tier's answer, and what landed. */
+export async function drawBriefCard(b: BriefsCard, tier: BriefTier, shape: CardShape = "wide"): Promise<Blob> {
+  const { c, g } = await canvas(shape, SCORE_FONTS);
+  const { w } = CARD_SIZES[shape];
+  const { ink, muted, pen } = CARD_THEME;
+  const [landed, sharp] = briefLines(b);
+  const hand = (size: number) => `400 ${size}px 'Gochi Hand'`;
+  g.textBaseline = "alphabetic";
+
+  if (shape === "portrait") {
+    const x = 96;
+    const inner = w - 2 * x;
+    drawWordmark(g, x, 150, 1.4);
+    g.fillStyle = ink;
+    fitFont(g, BRIEF_QUESTION, heading, 84, inner, 48);
+    g.fillText(BRIEF_QUESTION, x, 300);
+    drawMark(g, tier.verdict, pen, x - 8, 620, fitFont(g, tier.verdict, hand, 240, inner - 40, 120));
+    g.fillStyle = ink;
+    g.font = "500 40px 'Instrument Sans'";
+    for (const [i, l] of wrap(g, landed, inner, 2).entries()) g.fillText(l, x, 760 + i * 52);
+    g.fillStyle = muted;
+    g.fillText(sharp, x, 890);
+    drawPill(g, tier.name, x, 940, 1.5);
+    drawGradeBar(g, b, x, 1060, inner, 26);
+    g.font = "600 24px 'JetBrains Mono'";
+    g.fillStyle = muted;
+    g.fillText(gradeKey(b), x, 1136);
+    drawFooter(g, `Do you make yours guess?  ${SHARE_URL_SHORT}`, w, 1290, 1.4);
+    return png(c);
+  }
+
+  drawWordmark(g, 140, 78);
+  g.fillStyle = ink;
+  fitFont(g, BRIEF_QUESTION, heading, 64, w - 280, 36);
+  g.fillText(BRIEF_QUESTION, 140, 190);
+  drawMark(g, tier.verdict, pen, 140, 350, fitFont(g, tier.verdict, hand, 170, w - 320, 90));
+  g.fillStyle = ink;
+  g.font = "500 30px 'Instrument Sans'";
+  g.fillText(landed, 140, 440, w - 280);
+  g.fillStyle = muted;
+  g.fillText(sharp, 140, 484, w - 280);
+  drawPill(g, tier.name, 140, 512);
+  drawFooter(g, `Do you make yours guess?  ${SHARE_URL_SHORT}`, w, 612);
   return png(c);
 }

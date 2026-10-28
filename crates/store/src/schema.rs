@@ -65,6 +65,23 @@ ALTER TABLE sources ADD COLUMN start_after TEXT;
     r"
 CREATE INDEX events_seen_key ON events (seen_key);
 ",
+    // 4: Briefs. One row per task (a chat's opening request, or a "next, ..."): which signals its
+    // brief carried and how often it was steered, per cause. Numbers only, never text.
+    r"
+CREATE TABLE tasks (
+    id INTEGER PRIMARY KEY,
+    day TEXT NOT NULL, source TEXT NOT NULL, session TEXT NOT NULL,
+    provider TEXT NOT NULL, family TEXT NOT NULL, version TEXT NOT NULL,
+    signals INTEGER NOT NULL,
+    messages INTEGER NOT NULL DEFAULT 1,
+    ai_wrong INTEGER NOT NULL DEFAULT 0,
+    added INTEGER NOT NULL DEFAULT 0,
+    clarified INTEGER NOT NULL DEFAULT 0,
+    redo INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX tasks_session ON tasks (session);
+CREATE INDEX tasks_day ON tasks (day);
+",
 ];
 
 /// Sets connection pragmas and applies any migrations the database hasn't had. Each migration
