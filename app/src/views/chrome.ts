@@ -13,6 +13,19 @@ export const wordmarkView = (cls = "brand"): Html => html`<span class="${cls}">$
 
 const TAB_TITLES: Record<Tab, string> = { score: "Scorecard", sources: "Sources", settings: "Settings" };
 
+/** Small line icons beside each tab's name (decoration: the name is the label). */
+const svg = (d: string) => raw(`<svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`);
+const TAB_ICONS: Record<Tab, ReturnType<typeof raw>> = {
+  // Bar chart.
+  score: svg("M4 20V10M10 20V4M16 20v-7M22 20H2"),
+  // Folders stacked: where the history comes from.
+  sources: svg("M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"),
+  // Cog.
+  settings: svg(
+    "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z",
+  ),
+};
+
 export function statusPillView(status: SyncStatus, demo: boolean): Html {
   if (status.last_error)
     return html`<button class="sync-pill bad" data-action="sync-now" data-id="top" title="${status.last_error}">Couldn't check. Retry</button>`;
@@ -24,7 +37,9 @@ export function statusPillView(status: SyncStatus, demo: boolean): Html {
 export function headerView(tab: Tab, status: SyncStatus, demo: boolean): Html {
   const tabs = TABS.map(
     (t) =>
-      html`<button class="tab${tab === t ? " on" : ""}" data-action="tab" data-id="${t}"${tab === t ? raw(' aria-current="page"') : ""}>${TAB_TITLES[t]}</button>`,
+      html`<button class="tab${tab === t ? " on" : ""}" data-action="tab" data-id="${t}"${tab === t ? raw(' aria-current="page"') : ""}>${TAB_ICONS[t]}${TAB_TITLES[t]}</button>`,
   );
-  return html`<header class="top">${wordmarkView()}<div class="top-right">${statusPillView(status, demo)}<nav aria-label="Main">${tabs}</nav></div></header>`;
+  // The logo goes home: the scorecard's overview.
+  const home = html`<button class="home" data-action="home" title="Go to the scorecard">${wordmarkView()}<span class="sr-only">, go to the scorecard</span></button>`;
+  return html`<header class="top">${home}<div class="top-right">${statusPillView(status, demo)}<nav aria-label="Main">${tabs}</nav></div></header>`;
 }

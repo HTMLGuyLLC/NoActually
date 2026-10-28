@@ -72,6 +72,10 @@ select:hover, input[type="number"]:hover { border-color: var(--muted) }
 nav { display: flex; gap: 6px }
 .tab { background: transparent; color: var(--muted); border-color: transparent }
 .tab.on { color: var(--ink); border-color: var(--ink) }
+.tab { display: inline-flex; align-items: center; gap: 6px }
+.tab-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.home { background: none; border: 0; padding: 0; border-radius: 8px; cursor: pointer }
+.home:hover { filter: none; opacity: .85 }
 .sync-pill { display: inline-flex; align-items: center; gap: 7px; font: 500 12px var(--body); color: var(--muted); background: transparent; border: 0; padding: 0 }
 .sync-pill.bad { color: var(--pen); text-decoration: underline; cursor: pointer }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok) }
@@ -86,8 +90,6 @@ nav { display: flex; gap: 6px }
 
 .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 18px; padding: clamp(20px, 4vw, 36px);
   display: grid; grid-template-columns: 1.25fr 1fr; gap: 28px; position: relative; overflow: hidden }
-.card::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
-  background: repeating-linear-gradient(to bottom, transparent 0 31px, var(--rule) 31px 32px) }
 .card > * { position: relative; min-width: 0 }
 .q { font: 800 clamp(26px, 4vw, 38px)/1.08 var(--display); letter-spacing: -0.02em; margin-top: 10px }
 .verdict { display: flex; align-items: flex-end; gap: 14px; margin: 12px 0 6px }
@@ -150,6 +152,35 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 /* The width comes from JS through a custom property (CSSOM), so the CSP needs no inline styles. */
 .bar-bg { height: 12px; border-radius: 3px; background: var(--rule); overflow: hidden }
 .bar-bg i { display: block; height: 100%; width: var(--w, 0); background: var(--pen) }
+
+/* Scorecard sections: one row of sub-tabs that scrolls sideways rather than wrapping on narrow windows. */
+.views { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--rule); padding-bottom: 8px }
+.views::-webkit-scrollbar { display: none }
+.views .tab { white-space: nowrap; flex: none }
+.view-body { display: grid; gap: inherit }
+.duo { display: grid; grid-template-columns: 1fr 1fr; gap: 20px }
+.card.mini { grid-template-columns: 1fr; gap: 10px; align-content: start }
+.card.mini .no { font-size: clamp(64px, 8vw, 96px) }
+.card.mini.briefs .no { font-size: clamp(48px, 6vw, 72px) }
+.card.mini .verdict { margin-top: 22px }
+.tier-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin: 4px 0 0 }
+
+/* Briefs: the verdict words are longer than "No.", so they're smaller and may wrap. */
+.briefs .verdict { flex-wrap: wrap; margin-top: 26px }
+.briefs .no { font-size: clamp(54px, 8vw, 84px) }
+.grades { display: grid; gap: 8px; margin-top: 18px; border-top: 2px solid var(--ink); padding-top: 14px }
+.grade-bar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; background: var(--rule) }
+.grade-bar i { width: var(--w, 0) }
+.g-sharp { background: var(--pen) } .g-solid { background: var(--ink); opacity: .7 } .g-thin { background: var(--rule) }
+.grade-key { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px }
+.grade-key li { display: inline-flex; align-items: center; gap: 6px }
+.grade-key i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; border: 1px solid var(--rule) }
+.cat.sig { grid-template-columns: minmax(9em, 15em) 1fr 3em }
+.cat.sig span:first-child { display: grid; gap: 2px }
+.cat.sig small { font-size: 12px }
+.cats .cat.ai .bar-bg i { background: var(--ai) }
+.tip { margin: 16px 0 0; padding: 12px 14px; border-radius: 10px; background: var(--pen-soft); font-size: 14px }
+.tip .hand { font: 400 19px/1 var(--hand); color: var(--pen-text) }
 
 .fame { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px }
 .catch { position: relative; background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 16px; display: grid; gap: 10px; align-content: start }
@@ -242,7 +273,7 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .sd-foot { display: flex; gap: 8px; justify-content: flex-end }
 
 @media (max-width: 760px) {
-  .card, .split, .fame { grid-template-columns: 1fr }
+  .card, .split, .fame, .duo { grid-template-columns: 1fr }
   .stats { grid-template-columns: repeat(2, 1fr) }
   .stat:nth-child(3) { border-left: 0; padding-left: 0 }
 }

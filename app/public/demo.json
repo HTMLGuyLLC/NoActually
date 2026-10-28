@@ -69,6 +69,94 @@
     "id": "claude-ai-export",
     "name": "Claude.ai (export)"
    }
+  ],
+  "brief_tiers": [
+   {
+    "id": "vibes_only",
+    "name": "Vibes only",
+    "floor": 0,
+    "verdict": "Constantly."
+   },
+   {
+    "id": "ticket_writer",
+    "name": "Ticket writer",
+    "floor": 70,
+    "verdict": "Often."
+   },
+   {
+    "id": "tech_lead",
+    "name": "Tech lead",
+    "floor": 80,
+    "verdict": "Sometimes."
+   },
+   {
+    "id": "architect",
+    "name": "Architect",
+    "floor": 90,
+    "verdict": "Rarely."
+   }
+  ],
+  "min_briefs": 10,
+  "brief_window_days": 28,
+  "signals": [
+   {
+    "id": "spot",
+    "title": "Points at it",
+    "hint": "a file, function, link or code"
+   },
+   {
+    "id": "proof",
+    "title": "Shows it",
+    "hint": "an error, the output or an example"
+   },
+   {
+    "id": "done",
+    "title": "Says what done is",
+    "hint": "the expected result, a test or a format"
+   },
+   {
+    "id": "limits",
+    "title": "Sets limits",
+    "hint": "don't, only, keep, without"
+   },
+   {
+    "id": "why",
+    "title": "Says why",
+    "hint": "the goal or the context"
+   }
+  ],
+  "sharp_signals": 3,
+  "grades": [
+   {
+    "id": "thin",
+    "title": "Thin"
+   },
+   {
+    "id": "solid",
+    "title": "Solid"
+   },
+   {
+    "id": "sharp",
+    "title": "Sharp"
+   }
+  ],
+  "steers": [
+   {
+    "id": "ai_wrong",
+    "title": "It got it wrong"
+   },
+   {
+    "id": "added",
+    "title": "You added more"
+   },
+   {
+    "id": "clarified",
+    "title": "You clarified"
+   },
+   {
+    "id": "redo",
+    "title": "You started over"
+   }
   ]
  },
  "stats": {
@@ -380,6 +468,42 @@
     "ai": "You're right, I duplicated it.",
     "pinned": false
    }
-  ]
+  ],
+  "briefs": {
+   "tasks": 214,
+   "continued": 140,
+   "landed": 120,
+   "tasks_last_28d": 42,
+   "landed_last_28d": 36,
+   "tier": "tech_lead",
+   "next_tier": "architect",
+   "to_rank": 0,
+   "grades": {
+    "sharp": 42,
+    "solid": 52,
+    "thin": 120
+   },
+   "signals": {
+    "done": 77,
+    "limits": 30,
+    "proof": 48,
+    "spot": 61,
+    "why": 44
+   },
+   "steering": {
+    "added": 19,
+    "ai_wrong": 31,
+    "clarified": 5,
+    "redo": 2
+   },
+   "tip": {
+    "signal": "limits",
+    "pct_of_briefs": 14.0,
+    "landed_with_without": [
+     96.7,
+     82.7
+    ]
+   }
+  }
  }
 }

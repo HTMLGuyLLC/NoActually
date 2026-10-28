@@ -8,17 +8,16 @@ use std::sync::LazyLock;
 pub struct Rule {
     pub id: &'static str,
     re: Regex,
-    /// Checked from the start of the match: when it also matches, the rule doesn't fire.
-    /// The regex crate has no lookahead, so this is how a rule says "but not when ...".
+    /// Checked from the start of each match: when it also matches, that match doesn't count and
+    /// the next one is tried. The regex crate has no lookahead, so this is how a rule says "but
+    /// not when ...".
     unless: Option<Regex>,
 }
 
 impl Rule {
     pub fn find(&self, text: &str) -> Option<Match> {
-        let m = self.re.find(text)?;
-        if self.unless.as_ref().is_some_and(|u| u.is_match(&text[m.start()..])) {
-            return None;
-        }
+        let vetoed = |start: usize| self.unless.as_ref().is_some_and(|u| u.is_match(&text[start..]));
+        let m = self.re.find_iter(text).find(|m| !vetoed(m.start()))?;
         Some(Match { rule: self.id, span: (m.start(), m.end()) })
     }
 }
@@ -33,12 +32,12 @@ fn re(id: &str, pattern: &str) -> Regex {
     Regex::new(&format!("(?i){pattern}")).expect(id)
 }
 
-fn rule(id: &'static str, pattern: &str) -> Rule {
+pub(crate) fn rule(id: &'static str, pattern: &str) -> Rule {
     Rule { id, re: re(id, pattern), unless: None }
 }
 
 /// A rule that doesn't fire when `unless` (anchored at the match start) also matches.
-fn rule_unless(id: &'static str, pattern: &str, unless: &str) -> Rule {
+pub(crate) fn rule_unless(id: &'static str, pattern: &str, unless: &str) -> Rule {
     Rule { id, re: re(id, pattern), unless: Some(re(id, &format!("^(?:{unless})"))) }
 }
 

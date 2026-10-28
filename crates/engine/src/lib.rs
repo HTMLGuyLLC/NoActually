@@ -3,18 +3,21 @@
 //!
 //! [`classify`] labels one [`Turn`]; [`normalize_model`] splits a raw model id into
 //! provider / family / version; [`redact`] and [`snippet`] decide what text may be kept;
-//! [`Tier`] and [`Answer`] turn a week's catches into the headline.
+//! [`Tier`] and [`Answer`] turn a week's catches into the headline. [`read_prompt`] reads the
+//! same turn for how you brief: a new task, steering, or neither, and a brief's [`Signals`].
 //!
 //! Tests: each module keeps its unit tests inline in `mod tests`; the rule book's behavior
 //! suite lives in `src/tests.rs` because it exercises the whole crate.
 
 #![warn(missing_docs)]
 
+mod brief;
 mod model;
 mod redact;
 mod rules;
 mod tier;
 
+pub use brief::{read_prompt, BriefTier, Grade, Prompt, Signal, Signals, Steer, MIN_BRIEFS, WINDOW_DAYS};
 pub use model::{normalize_model, Model};
 pub use redact::{redact, snippet, SNIPPET_CHARS};
 pub use tier::{Answer, Tier, UnknownTier};
@@ -172,7 +175,8 @@ impl Verdict {
 /// rebuild their scores from the history files when it changes.
 /// 2: placeholder replies are skipped and messages fall back to the chat's model.
 /// 3: approvals ("No, that's fine") aren't pushback; the AI's admission no longer picks the category.
-pub const RULES_VERSION: u32 = 3;
+/// 4: briefs and steering are counted (see [`read_prompt`]), so history is re-read to fill them in.
+pub const RULES_VERSION: u32 = 4;
 
 /// Tools write placeholder ids for replies no model wrote (Claude Code's "<synthetic>" for errors,
 /// interruptions and "No response requested").

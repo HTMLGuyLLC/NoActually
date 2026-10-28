@@ -270,6 +270,52 @@ fn print_card(s: &store::Stats) {
             println!("    {:<24} {n}", c.title());
         }
     }
+    for line in brief_lines(&s.briefs) {
+        println!("{line}");
+    }
+}
+
+/// The "Do you make it guess?" half of the card.
+fn brief_lines(b: &store::Briefs) -> Vec<String> {
+    if b.tasks == 0 {
+        return Vec::new();
+    }
+    let pct = |n: i64, of: i64| if of > 0 { 100 * n / of } else { 0 };
+    let recent = pct(b.landed_last_28d, b.tasks_last_28d);
+    let tier = match b.tier {
+        Some(t) => format!(
+            "{} {}  ({recent}% landed in {} days{})",
+            t.verdict(),
+            t.name(),
+            engine::WINDOW_DAYS,
+            b.next_tier.map_or(String::new(), |n| format!("; {} at {}%", n.name(), n.floor()))
+        ),
+        None => format!("Hmm. {} more tasks with a follow-up to get ranked", b.to_rank),
+    };
+    let mut out = vec![
+        String::new(),
+        format!("Do you make it guess? {tier}"),
+        format!(
+            "  Landed           {}% of {} tasks with a follow-up needed no adding, clarifying or redoing",
+            pct(b.landed, b.continued),
+            b.continued
+        ),
+        format!(
+            "  Sharp briefs     {}%  ({}+ of the 5 signals)",
+            pct(b.grades.get("sharp").copied().unwrap_or(0), b.tasks),
+            engine::Grade::SHARP
+        ),
+        "\n  Your briefs".into(),
+    ];
+    for sig in engine::Signal::ALL {
+        let n = b.signals.get(sig.as_str()).copied().unwrap_or(0);
+        out.push(format!("    {:<20} {:>3}%  {}", sig.title(), pct(n, b.tasks), sig.hint()));
+    }
+    out.push("\n  Steering".into());
+    for c in engine::Steer::ALL {
+        out.push(format!("    {:<20} {}", c.title(), b.steering.get(c.as_str()).copied().unwrap_or(0)));
+    }
+    out
 }
 
 #[cfg(test)]
@@ -330,6 +376,25 @@ mod tests {
             err("retention full --full-days soon"),
             "--full-days wants a whole number of days: invalid digit found in string"
         );
+    }
+
+    #[test]
+    fn brief_lines_say_the_tier_or_how_far_off_it_is() {
+        assert!(brief_lines(&store::Briefs::default()).is_empty(), "nothing before the first task");
+        let mut b = store::Briefs { tasks: 10, continued: 8, landed: 6, to_rank: 2, ..Default::default() };
+        b.grades.insert("sharp".into(), 3);
+        b.signals.insert("why".into(), 5);
+        b.steering.insert("added".into(), 1);
+        let text = brief_lines(&b).join("\n");
+        assert!(text.contains("Do you make it guess? Hmm. 2 more tasks with a follow-up to get ranked"), "{text}");
+        assert!(text.contains("Landed           75% of 8 tasks with a follow-up"), "{text}");
+        assert!(text.contains("Sharp briefs     30%"), "{text}");
+        assert!(text.contains("Says why              50%"), "{text}");
+        assert!(text.contains("You added more       1"), "{text}");
+        b.tier = Some(engine::BriefTier::TechLead);
+        b.next_tier = Some(engine::BriefTier::Architect);
+        (b.tasks_last_28d, b.landed_last_28d) = (40, 34);
+        assert!(brief_lines(&b)[1].ends_with("Sometimes. Tech lead  (85% landed in 28 days; Architect at 90%)"));
     }
 
     #[test]

@@ -33,8 +33,9 @@ You correct your AI all day: the function that doesn't exist, the instruction it
 ## Features
 
 - **A verdict, every week.** "Could Claude replace you? No. You caught it 17 times." Tiers run from Rubber stamp up to Irreplaceable.
+- **How you brief it.** A second verdict, "Do you make it guess?", from how many of your tasks landed without you adding to, clarifying or redoing them. It shows what your briefs carry (a file, an error, what done looks like, limits, the why), where steering went, and one tip. Tiers run from Vibes only up to Architect.
 - **Every model, side by side.** See catches for all AI, one provider, one family, or one exact version (say, Claude Opus 5.5), with a searchable picker.
-- **Lives in your menu bar.** A quick glance on click, a full scorecard window, and a popup when you hit your 10th catch, a new tier, or a streak.
+- **Lives in your menu bar.** A quick glance on click, a full scorecard window, and a popup when you hit your 10th catch, a new tier (catches or briefs), or a streak.
 - **A Hall of Fame.** Your best catches, kept as redacted snippets. Pin the ones you want to keep forever.
 - **Made to share.** One dialog for X, LinkedIn, Facebook, Threads, Bluesky, Reddit, WhatsApp and Instagram, plus share card images. You always see exactly what will be posted.
 - **History and live tracking.** It backfills what's already on disk (files are read in parallel), then follows new chats as they happen.
@@ -66,6 +67,22 @@ No AI judges your chats. The same history always gives the same score, and every
 | **Humbled** | The AI corrects *you* ("Actually…", "Not quite") |
 
 Adding context ("also", "fyi", "I forgot to mention") never counts against the AI. Each catch is charged to the model that wrote the reply you corrected.
+
+## How a brief is graded
+
+Same rules: no AI, deterministic, readable in [`crates/engine/src/brief.rs`](crates/engine/src/brief.rs).
+
+- **A task** starts with a chat's first message, or a later one that opens with "now…", "next:", "new task". Hellos, "continue" and questions ("what does this do?") aren't tasks.
+- **A brief's grade** counts what it carries, never its length: **points at it** (a file, function, link, `code`), **shows it** (an error, output, an example, anything pasted), **says what done is** (expected result, tests, a format), **sets limits** (don't, only, keep, without), **says why** (the goal or context). Three or more is **sharp**, two is **solid**, fewer is **thin**. Pasted blocks count as showing it, but their words aren't graded as yours.
+- **Steering** is a later message that redirects the task: a catch (the AI got it wrong), or one that's on you: **added more** ("also…", "I forgot to mention"), **clarified** ("I meant…", "to be clear"), or **started over** ("scrap that", "revert it").
+- **A task landed** when nothing on you followed it. Only tasks with a follow-up count: a one-shot task can't need steering. The tier is the share that landed over the last 28 days (at least 10 such tasks): Vibes only, Ticket writer 70%+, Tech lead 80%+, Architect 90%+. The AI being wrong never counts against you; that's a catch.
+
+The tip names the thing your briefs carry least. It only quotes "briefs that do landed X% vs Y%" when your own history shows a real gap. On the author's history, longer briefs didn't steer less: bigger tasks get both longer briefs and more back-and-forth. Published studies don't show that link either.
+
+**Where the numbers come from.** There's no public benchmark for weekly per-person scores, so every threshold was checked three ways: the author's history (8,600 messages), a random sample of 3,400 English chats from [WildChat-1M](https://huggingface.co/datasets/allenai/WildChat-1M) run through these exact rules, and published figures (Claude Code users interrupt in 5–9% of turns; in multi-turn developer chats, 14–17% of prompts refine the request).
+- The catch rate per message agrees across sources (1 in 47 for the author, 1 in 41 in WildChat).
+- Public chats are short and almost never steer, so the brief floors come from one heavy user. A typical month there was 86% (Tech lead).
+- Expect the brief floors to move once more people's numbers exist.
 
 ## Supported tools
 

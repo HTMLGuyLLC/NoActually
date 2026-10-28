@@ -1,17 +1,17 @@
 // What every control does. Views mark controls with data-action="…" (and data-id for the thing
 // acted on); one delegated listener per event type on the root dispatches through the maps below,
 // so nothing is re-bound on each redraw.
-import { api, type HallEntry, type Meta, type Stats } from "./api";
+import { api, type BriefTier, type HallEntry, type Meta, type Stats } from "./api";
 import { data, say } from "./dom";
 import { errorText, filterLabel } from "./format";
-import { tierName } from "./meta";
+import { briefTier, tierName } from "./meta";
 import { buildPickItems, sameFilter } from "./picker/picker";
 import { closePicker, openPicker, pickerOpen } from "./picker/popover";
 import { paintUpdate, render, scheduler } from "./render";
-import { drawCatchCard, drawShareCard } from "./share/cards";
+import { drawBriefCard, drawCatchCard, drawShareCard } from "./share/cards";
 import { openShareDialog, type Post } from "./share/dialog";
-import { catchShareText, shareText } from "./share/share";
-import { isTab, setAutoUpdate, setFilter, setLaterFor, setTab, state } from "./state";
+import { briefShareText, catchShareText, shareText } from "./share/share";
+import { isScoreView, isTab, setAutoUpdate, setFilter, setLaterFor, setTab, setView, state } from "./state";
 import { parseRetention } from "./views/settings";
 import { allowArgs } from "./views/sources";
 
@@ -50,6 +50,12 @@ const scorePost = (s: Stats, meta: Meta): Post => {
   const who = filterLabel(state.filter, meta);
   return { title: "Share your score", text: shareText(s, who), image: (shape) => drawShareCard(s, who, tierName(meta, s.tier), shape) };
 };
+
+const briefsPost = (s: Stats, tier: BriefTier): Post => ({
+  title: "Share your briefs",
+  text: briefShareText(s.briefs, tier),
+  image: (shape) => drawBriefCard(s.briefs, tier, shape),
+});
 
 const catchPost = (e: HallEntry): Post => ({
   title: "Share this catch",
@@ -100,12 +106,22 @@ export const clickActions = {
     const { s, meta } = drawn();
     openShareDialog(scorePost(s, meta), b, scheduler.flush);
   },
+  "share-briefs": (b) => {
+    const { s, meta } = drawn();
+    const tier = briefTier(meta, s.briefs.tier);
+    if (tier) openShareDialog(briefsPost(s, tier), b, scheduler.flush);
+  },
   "share-catch": (b) => {
     const id = Number(data(b, "id"));
     const e = drawn().s.hall_of_fame.find((h) => h.id === id);
     if (e) openShareDialog(catchPost(e), b, scheduler.flush);
   },
   "open-main": () => api.openMain(),
+  home: () => {
+    setTab("score");
+    setView("overview");
+    return render();
+  },
   "go-sources": () => {
     setTab("sources");
     return render();
@@ -117,6 +133,12 @@ export const clickActions = {
     return render();
   },
   "model-picker": (b) => togglePicker(b),
+  view: (b) => {
+    const view = data(b, "id");
+    if (!isScoreView(view)) throw new Error(`Unknown view: ${view}`);
+    setView(view);
+    return render();
+  },
   "clear-filter": () => {
     setFilter({});
     return render();

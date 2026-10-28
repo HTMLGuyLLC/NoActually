@@ -90,8 +90,13 @@ fn text_of(content: &Content) -> Option<String> {
             if blocks.iter().any(|b| b.kind == "tool_result") {
                 return None;
             }
-            let parts: Vec<&str> =
-                blocks.iter().filter(|b| b.kind == "text").filter_map(|b| b.text.as_deref()).collect();
+            // IDEs add the open file or selection as its own block: context, not something typed.
+            let parts: Vec<&str> = blocks
+                .iter()
+                .filter(|b| b.kind == "text")
+                .filter_map(|b| b.text.as_deref())
+                .filter(|t| !t.trim_start().starts_with("<ide_"))
+                .collect();
             (!parts.is_empty()).then(|| parts.join("\n"))
         }
     }
@@ -204,6 +209,8 @@ mod tests {
                 &json!({"type":"user","timestamp":TS,"message":{"content":[{"type":"tool_result","content":"x"}]}}),
             )
             + &cc_user("u2", TS, "<system-reminder>hi</system-reminder>")
+            + &line(&json!({"type":"user","timestamp":TS,"message":{"content":[
+                {"type":"text","text":"<ide_opened_file>The user opened src/a.ts</ide_opened_file>"}]}}))
             + &line(&json!({"type":"user","timestamp":TS,"isSidechain":true,"message":{"content":"subagent prompt"}}))
             + &cc_ai("claude-opus-5-5", TS, "You're right.")
             + "{\"type\":\"user\",\"partial"; // half-written line
@@ -213,7 +220,9 @@ mod tests {
         assert_eq!(t.human, "that's not a real page");
         assert_eq!(t.next_ai.as_ref().unwrap().text, "You're right.");
         assert_eq!(engine::classify(t).label, Some(engine::Label::Confirmed));
-        assert_eq!(scan.checkpoint as usize, body.rfind('\n').unwrap() + 1, "must not skip the partial line");
+        // It resumes at the last reply (re-read as context), never past the partial line.
+        let last_reply = body.rfind(&cc_ai("claude-opus-5-5", TS, "You're right.")).unwrap();
+        assert_eq!(scan.checkpoint as usize, last_reply, "must not skip the partial line");
     }
 
     #[test]

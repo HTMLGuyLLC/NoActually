@@ -325,6 +325,10 @@ mod tests {
             ("models", serde_json::to_value(store::ModelRow::default()).unwrap()),
             ("weekly", serde_json::to_value(store::WeekRow::default()).unwrap()),
         ];
+        let briefs =
+            serde_json::to_value(store::Briefs { tip: Some(store::Tip::default()), ..Default::default() }).unwrap();
+        assert_eq!(keys(&demo["stats"]["briefs"]), keys(&briefs), "demo.json `briefs` keys differ from `Briefs`");
+        assert_eq!(keys(&demo["stats"]["briefs"]["tip"]), keys(&briefs["tip"]), "demo.json `briefs.tip` keys differ");
         for (field, row) in rows {
             let demo_rows = demo["stats"][field].as_array().unwrap();
             assert!(!demo_rows.is_empty(), "demo.json `{field}` is empty, so nothing is checked");

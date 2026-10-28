@@ -14,8 +14,27 @@ const safe = (markup: string) => {
 };
 
 describe("scorecardView", () => {
-  it("draws the verdict, ladder and breakdowns from Rust's data", () => {
+  it("opens on an overview with both verdicts and the section tabs", () => {
     const m = scorecardView(stats(), ctx).value;
+    expect(m).toContain('aria-label="Scorecard sections"');
+    expect(m).toContain('data-id="overview" aria-current="page">Overview</button>');
+    expect(m).toContain("Could ");
+    expect(m).toContain("Do you make it guess?");
+    expect(m).toContain('data-action="view" data-id="catches"');
+    expect(m).not.toContain("Hall of fame ·");
+  });
+
+  it("puts exactly one model picker in every section", () => {
+    for (const view of ["overview", "catches", "briefs", "hall"] as const) {
+      const m = scorecardView(stats(), { ...ctx, view }).value;
+      expect(m.split('id="model-trigger"').length - 1, view).toBe(1);
+    }
+    expect(scorecardView(stats(), { ...ctx, view: "briefs" }).value).toContain("Where steering went");
+    expect(scorecardView(stats(), { ...ctx, view: "hall" }).value).toContain('data-action="pin"');
+  });
+
+  it("draws the verdict, ladder and breakdowns from Rust's data", () => {
+    const m = scorecardView(stats(), { ...ctx, view: "catches" }).value;
     expect(m).toContain(">No.</div>");
     expect(m).toContain('<li class="on" aria-current="true"><span>Irreplaceable</span><span>15+ catches/wk</span></li>');
     expect(m).toContain("Flat-out wrong"); // category title from meta
@@ -115,6 +134,12 @@ describe("chrome", () => {
     const m = headerView("sources", { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 }, false).value;
     expect(m).toContain('data-id="sources" aria-current="page"');
     expect(m.match(/aria-current/g)).toHaveLength(1);
+  });
+
+  it("gives every tab an icon and makes the logo a way home", () => {
+    const m = headerView("settings", { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 }, false).value;
+    expect(m.match(/class="tab-icon"/g)).toHaveLength(3);
+    expect(m).toContain('<button class="home" data-action="home"');
   });
 
   it("escapes a sync error in the retry pill", () => {

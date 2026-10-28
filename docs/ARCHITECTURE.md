@@ -71,6 +71,7 @@ The `noactually` binary shares the engine and database with the app:
 |---|---|---|---|
 | Ordinary messages (not catches) | Counts only, per day × source × model | Never | Forever (just numbers) |
 | Sessions | Hashed id, source, day range, message and catch counts | Never | Forever |
+| Tasks (briefs) | Day, source, hashed chat id, model, a 5-bit mask of the signals the brief carried, message and steering counts | Never | Forever |
 | Catch / humbled events | Time, source, model, label, category, matched rule ids | Per retention level | Per TTL |
 | File checkpoints | Path, byte offset, size, modified time | Never | Until the source is forgotten |
 | Message fingerprints | Short hashes of message ids (dedupe) | Never | Until the source is forgotten |

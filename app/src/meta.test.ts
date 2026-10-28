@@ -1,6 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { categoryTitle, sourceName, tierName, tierRanges, topTier } from "./meta";
+import { briefTier, briefTierRanges, categoryTitle, landedPct, percent, sourceName, steerTitle, tierName, tierRanges, topTier } from "./meta";
 import { meta } from "./test/fixtures";
+
+describe("briefTierRanges", () => {
+  it("shows percent ranges, top tier first", () => {
+    expect(briefTierRanges(meta).map((t) => [t.name, t.range])).toEqual([
+      ["Architect", "90%+ landed"],
+      ["Tech lead", "80–89%"],
+      ["Ticket writer", "70–79%"],
+      ["Vibes only", "0–69%"],
+    ]);
+  });
+});
+
+describe("percents", () => {
+  it("rounds, and never divides by zero", () => {
+    expect([percent(1, 3), percent(2, 3), percent(5, 0)]).toEqual([33, 67, 0]);
+    expect(landedPct({ landed_last_28d: 19, tasks_last_28d: 20 })).toBe(95);
+    expect(landedPct({ landed_last_28d: 26, tasks_last_28d: 29 })).toBe(89); // 89.7%: never shows 90% for a Tech lead
+  });
+});
 
 describe("tierRanges", () => {
   it("derives the ladder's ranges from the floors, top tier first", () => {
@@ -26,6 +45,10 @@ describe("lookups", () => {
     expect(tierName(meta, "sharp_eyed")).toBe("Sharp-eyed");
     expect(categoryTitle(meta, "just_wrong")).toBe("Flat-out wrong");
     expect(sourceName(meta, "claude-code")).toBe("Claude Code");
+    expect(briefTier(meta, "tech_lead")?.verdict).toBe("Sometimes.");
+    expect(briefTier(meta, null)).toBeUndefined();
+    expect(steerTitle(meta, "redo")).toBe("You started over");
+    expect(steerTitle(meta, "unknown")).toBe("unknown");
   });
 
   it("falls back to the id for anything unknown (a newer Rust side)", () => {

@@ -45,7 +45,8 @@ impl Event {
 ///
 /// A human message is complete once anything follows it. If the last one isn't, the checkpoint
 /// rewinds to the AI reply before it, so the next pass re-reads that reply as context and emits
-/// the turn exactly once. `end` is the byte offset after the last whole line read.
+/// the turn exactly once. A pass that ends on a reply also resumes at that reply, so the next
+/// message still knows what it answered. `end` is the byte offset after the last whole line read.
 pub fn pair(source: &'static str, session: &str, events: Vec<Event>, end: u64, finalize: bool) -> FileScan {
     let mut scan = FileScan { turns: Vec::new(), checkpoint: end };
     // The chat's model near each message: the last real one before it, else the first after it.
@@ -68,6 +69,10 @@ pub fn pair(source: &'static str, session: &str, events: Vec<Event>, end: u64, f
     };
     let mut last_real: Option<String> = None;
     let mut last_ai: Option<(usize, &Event)> = None;
+    // Re-reading a reply emits nothing (only human messages become turns).
+    if let Some(Event::Ai { pos, .. }) = events.last() {
+        scan.checkpoint = *pos;
+    }
     for (i, ev) in events.iter().enumerate() {
         match ev {
             Event::Ai { .. } => {
@@ -127,7 +132,17 @@ mod tests {
         assert_eq!(next.turns[0].turn.human, "two");
         assert_eq!(next.turns[0].turn.prev_ai.as_ref().unwrap().text, "r1");
         assert_eq!(next.turns[0].turn.next_ai.as_ref().unwrap().text, "r2");
-        assert_eq!(next.checkpoint, 40);
+        assert_eq!(next.checkpoint, 30, "and resumes at r2 next time");
+    }
+
+    #[test]
+    fn a_pass_ending_on_a_reply_resumes_at_it() {
+        let scan = pair("t", "s", vec![h("one", 0), a("r1", 10)], 20, false);
+        assert_eq!(scan.checkpoint, 10, "the reply is re-read next time");
+        // So the next message, written after this pass, still has its context.
+        let next = pair("t", "s", vec![a("r1", 10), h("still broken", 20), a("r2", 30)], 40, false);
+        assert_eq!(next.turns.len(), 1);
+        assert_eq!(next.turns[0].turn.prev_ai.as_ref().unwrap().text, "r1");
     }
 
     #[test]

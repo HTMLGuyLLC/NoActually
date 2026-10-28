@@ -1,6 +1,6 @@
 //! Static tables the UI needs (tiers, categories, sources), so it never hard-codes them.
 
-use engine::{Category, Tier};
+use engine::{BriefTier, Category, Grade, Signal, Steer, Tier, MIN_BRIEFS, WINDOW_DAYS};
 use serde::Serialize;
 use sources::Source;
 
@@ -13,6 +13,53 @@ pub struct Meta {
     pub categories: Vec<CategoryInfo>,
     /// In display order.
     pub sources: Vec<SourceInfo>,
+    /// Brief tiers, ascending by floor.
+    pub brief_tiers: Vec<BriefTierInfo>,
+    /// Continued tasks in the window before a brief tier is given.
+    pub min_briefs: i64,
+    /// Days of tasks a brief tier looks at.
+    pub brief_window_days: i64,
+    /// What a brief can carry, in display order.
+    pub signals: Vec<SignalInfo>,
+    /// Signals a brief needs to be sharp.
+    pub sharp_signals: u32,
+    /// Brief grades, lowest first.
+    pub grades: Vec<Titled>,
+    /// Why a task was steered, in display order.
+    pub steers: Vec<Titled>,
+}
+
+/// One brief tier.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct BriefTierInfo {
+    /// Stable id (`tech_lead`).
+    pub id: &'static str,
+    /// Display name.
+    pub name: &'static str,
+    /// Percent of the window's continued tasks that must land.
+    pub floor: i64,
+    /// The answer to "Do you make it guess?".
+    pub verdict: &'static str,
+}
+
+/// One brief signal.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SignalInfo {
+    /// Stable id (`spot`).
+    pub id: &'static str,
+    /// Display title.
+    pub title: &'static str,
+    /// What counts, in a few words.
+    pub hint: &'static str,
+}
+
+/// An id and its display title.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Titled {
+    /// Stable id.
+    pub id: &'static str,
+    /// Display title.
+    pub title: &'static str,
 }
 
 /// One tier.
@@ -50,6 +97,16 @@ pub fn meta(sources: &[Box<dyn Source>]) -> Meta {
         tiers: Tier::ALL.iter().map(|t| TierInfo { id: t.id(), name: t.name(), floor: t.floor() }).collect(),
         categories: Category::ALL.iter().map(|c| CategoryInfo { id: c.as_str(), title: c.title() }).collect(),
         sources: sources.iter().map(|s| SourceInfo { id: s.id(), name: s.name() }).collect(),
+        brief_tiers: BriefTier::ALL
+            .iter()
+            .map(|t| BriefTierInfo { id: t.id(), name: t.name(), floor: t.floor(), verdict: t.verdict() })
+            .collect(),
+        min_briefs: MIN_BRIEFS,
+        brief_window_days: WINDOW_DAYS,
+        signals: Signal::ALL.iter().map(|s| SignalInfo { id: s.as_str(), title: s.title(), hint: s.hint() }).collect(),
+        sharp_signals: Grade::SHARP,
+        grades: Grade::ALL.iter().map(|g| Titled { id: g.as_str(), title: g.title() }).collect(),
+        steers: Steer::ALL.iter().map(|c| Titled { id: c.as_str(), title: c.title() }).collect(),
     }
 }
 
@@ -65,5 +122,14 @@ mod tests {
         assert_eq!(m["categories"][0], serde_json::json!({"id":"made_it_up","title":"Made it up"}));
         assert_eq!(m["categories"].as_array().unwrap().len(), Category::ALL.len());
         assert_eq!(m["sources"][0], serde_json::json!({"id":"claude-code","name":"Claude Code"}));
+        assert_eq!(
+            m["brief_tiers"][2],
+            serde_json::json!({"id":"tech_lead","name":"Tech lead","floor":80,"verdict":"Sometimes."})
+        );
+        assert_eq!(m["signals"][0]["id"], "spot");
+        assert_eq!(m["grades"][2], serde_json::json!({"id":"sharp","title":"Sharp"}));
+        assert_eq!(m["steers"][0], serde_json::json!({"id":"ai_wrong","title":"It got it wrong"}));
+        assert_eq!((m["min_briefs"].as_i64(), m["sharp_signals"].as_u64()), (Some(10), Some(3)));
+        assert_eq!(m["brief_window_days"], 28);
     }
 }

@@ -4,6 +4,21 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+### Added
+
+- How you brief it: a second scorecard, "Do you make it guess?". Each chat's first message (or a "now…" / "next:" later on) is a task. Its brief is graded on what it carries (points at it, shows it, says what done is, sets limits, says why), and later messages that redirect it count as steering: the AI got it wrong, you added more, you clarified, or you started over. The tier (Vibes only 0%, Ticket writer 70%, Tech lead 80%, Architect 90%) is the share of tasks that landed without steering that was on you. It counts tasks with a follow-up over the last 28 days, and needs at least 10 of them. Includes a tip, a share card, a quick-glance line, a tier-up popup, and the same numbers in `noactually stats`. Only counts are stored, never text.
+
+### Changed
+
+- The scorecard is split into sections: Overview (both verdicts side by side, plus the headline stats), Catches, Briefs and Hall of fame. The tab row scrolls sideways instead of wrapping on narrow windows.
+- Rules version 4: existing history is re-read once to fill in briefs. Pinned catches are kept; other catches are re-counted from history files that still exist.
+- A rule's "but not when…" exception now skips just that match, so a later match in the same message can still count.
+
+### Fixed
+
+- Live tracking now keeps each message's context. A read that ended on an AI reply used to start the next read after it, so the next message lost the reply it answered. That made "No, wait until tomorrow" in answer to a question look like pushback. Full rebuilds were never affected.
+- Claude Code IDE context (the open file or selection) is no longer read as part of what you typed.
+
 ## [0.2.1] - 2026-10-28
 
 ### Fixed

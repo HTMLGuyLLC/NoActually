@@ -18,12 +18,12 @@ mod stats;
 mod sync;
 
 pub use error::{Error, Result};
-pub use meta::{meta, CategoryInfo, Meta, SourceInfo, TierInfo};
-pub use stats::{Filter, HallEntry, ModelRow, Stats, WeekRow};
+pub use meta::{meta, BriefTierInfo, CategoryInfo, Meta, SignalInfo, SourceInfo, TierInfo, Titled};
+pub use stats::{Briefs, Filter, HallEntry, ModelRow, Stats, Tip, WeekRow};
 pub use sync::{sync, SyncReport};
 
 use chrono::{DateTime, Duration, Local, NaiveDate, Utc};
-use engine::{classify, normalize_model, snippet, Label};
+use engine::{classify, normalize_model, read_prompt, snippet, Label, Prompt};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -209,7 +209,7 @@ const CHECKPOINT_TRIES: u32 = 5;
 const CHECKPOINT_WAIT: std::time::Duration = std::time::Duration::from_millis(100);
 
 /// Tables that hold scores (everything but consent and settings). Each has a `source` column.
-const SCORE_TABLES: [&str; 5] = ["events", "daily", "sessions", "files", "seen"];
+const SCORE_TABLES: [&str; 6] = ["events", "daily", "sessions", "tasks", "files", "seen"];
 
 /// Shown when a message's chat never recorded a model (a session with no real reply).
 pub const NO_MODEL: &str = "No model recorded";
@@ -492,6 +492,21 @@ impl Store {
                    first_day = min(first_day, excluded.first_day), last_day = max(last_day, excluded.last_day)",
                 params![session, source, day, i64::from(is_catch)],
             )?;
+            // Briefs: a new task gets a row; steering and other replies count toward the chat's latest.
+            let latest = "id = (SELECT MAX(id) FROM tasks WHERE session = ?1)";
+            let has_task: bool =
+                tx.query_row("SELECT EXISTS(SELECT 1 FROM tasks WHERE session = ?1)", [&session], |r| r.get(0))?;
+            match read_prompt(&st.turn, &v, has_task) {
+                Prompt::Brief { signals, .. } => tx.execute(
+                    "INSERT INTO tasks (day, source, session, provider, family, version, signals) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+                    params![day, source, session, provider, family, version, signals.0],
+                )?,
+                Prompt::Steer { cause, .. } => tx.execute(
+                    &format!("UPDATE tasks SET messages = messages + 1, {c} = {c} + 1 WHERE {latest}", c = cause.as_str()),
+                    [&session],
+                )?,
+                Prompt::Other => tx.execute(&format!("UPDATE tasks SET messages = messages + 1 WHERE {latest}"), [&session])?,
+            };
             let Some(label) = v.label else { continue };
             let category = v.category.map_or("", engine::Category::as_str);
             bump(label.as_str(), category)?;

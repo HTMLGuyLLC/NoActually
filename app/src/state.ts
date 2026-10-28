@@ -5,8 +5,15 @@ export const TABS = ["score", "sources", "settings"] as const;
 export type Tab = (typeof TABS)[number];
 export const isTab = (x: unknown): x is Tab => TABS.some((t) => t === x);
 
+/** The scorecard's sections, each its own sub-tab. */
+export const SCORE_VIEWS = ["overview", "catches", "briefs", "hall"] as const;
+export type ScoreView = (typeof SCORE_VIEWS)[number];
+export const isScoreView = (x: unknown): x is ScoreView => SCORE_VIEWS.some((v) => v === x);
+
 export type AppState = {
   tab: Tab;
+  /** Which scorecard section is showing. */
+  view: ScoreView;
   filter: Filter;
   /** Every model, from the last unfiltered stats; the picker lists these even while narrowed. */
   allModels: ModelRow[];
@@ -18,11 +25,14 @@ export type AppState = {
   laterFor: string | null;
   /** The verdict last drawn, so the scrawl only plays when it changes, not on every background redraw. */
   lastVerdict: Verdict | null;
+  /** The brief tier last drawn (undefined: none drawn yet), for the same reason. */
+  lastBriefTier: string | null | undefined;
   meta: Meta | null;
 };
 
 const initial = (): AppState => ({
   tab: "score",
+  view: "overview",
   filter: {},
   allModels: [],
   status: { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 },
@@ -30,6 +40,7 @@ const initial = (): AppState => ({
   update: null,
   laterFor: null,
   lastVerdict: null,
+  lastBriefTier: undefined,
   meta: null,
 });
 
@@ -41,6 +52,9 @@ export const isGlance = typeof location !== "undefined" && location.hash === "#g
 
 export function setTab(tab: Tab): void {
   s.tab = tab;
+}
+export function setView(view: ScoreView): void {
+  s.view = view;
 }
 export function setFilter(filter: Filter): void {
   s.filter = filter;
@@ -69,6 +83,9 @@ export function setLaterFor(version: string | null): void {
 }
 export function setLastVerdict(verdict: Verdict): void {
   s.lastVerdict = verdict;
+}
+export function setLastBriefTier(tier: string | null): void {
+  s.lastBriefTier = tier;
 }
 export function setMeta(meta: Meta): Meta {
   s.meta = meta;
