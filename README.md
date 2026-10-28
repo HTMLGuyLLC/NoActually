@@ -18,6 +18,11 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/HTMLGuyLLC/NoActually/releases/latest"><img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8E_Download-Mac_%C2%B7_Windows_%C2%B7_Linux-e0322b?style=for-the-badge" alt="Download for Mac, Windows or Linux"></a><br>
+  <sub>Free and open source · <a href="#download-and-install">How to install</a></sub>
+</p>
+
+<p align="center">
   <img src="docs/screenshot-scorecard.png" alt="The No, Actually... scorecard: a verdict, your catch count versus the AI's, a tier ladder and weekly chart" width="820">
 </p>
 
@@ -74,9 +79,30 @@ Adding context ("also", "fyi", "I forgot to mention") never counts against the A
 
 Coming: Gemini CLI, Ollama, Open WebUI, LM Studio, VS Code Copilot, Cursor and Aider, plus a browser extension for live ChatGPT, Claude.ai and Gemini. Want one sooner? [Request it](https://github.com/HTMLGuyLLC/NoActually/issues/new/choose), or add it yourself: an adapter is about 100 lines plus a test (see [CONTRIBUTING.md](CONTRIBUTING.md#add-a-source-adapter)).
 
-## Install
+## Download and install
 
-Signed downloads will be on the [Releases](https://github.com/HTMLGuyLLC/NoActually/releases) page. Until then, build it yourself (needs Rust stable, Node 20+ and pnpm):
+1. Open the **[latest release](https://github.com/HTMLGuyLLC/NoActually/releases/latest)**.
+2. Scroll to **Assets** at the bottom of that page. If you only see a few items, click **Assets** (or "Show all assets") to expand the list.
+3. Download the one file for your computer:
+
+| Your computer | Download | Install |
+|---|---|---|
+| **Mac** (macOS 12 or newer, Apple silicon or Intel) | `No-Actually-<version>-Mac.dmg` | Open it, drag **No, Actually...** into **Applications**, then open it from there. It's signed and notarized by Apple, so it opens with no warnings. |
+| **Windows** | `No-Actually-<version>-Windows-Setup.exe` | Run it. If you see "Windows protected your PC", click **More info → Run anyway** (the Windows build isn't code-signed yet). |
+| **Linux** | `No-Actually-<version>-Linux.AppImage` | Right-click → Properties → allow it to run as a program (or `chmod +x`), then open it. |
+
+Not sure which Mac you have? It doesn't matter: the Mac download works on every Mac that runs macOS 12 or newer.
+
+The other files are for special cases:
+- `-Windows-IT-Installer.msi` is for IT teams deploying to many PCs.
+- `-Linux-Ubuntu-Debian.deb` and `-Linux-Fedora.rpm` install through your Linux package manager.
+- `SHA256SUMS.txt` lets you verify a download.
+
+**On first launch,** click **Choose sources**, then **Allow** the AI tools you want counted. Nothing is read until you do. After that the app lives in your menu bar (Mac) or system tray (Windows and Linux).
+
+### Build from source
+
+For developers. Needs Rust stable, Node 20+ and pnpm:
 
 ```bash
 git clone https://github.com/HTMLGuyLLC/NoActually.git

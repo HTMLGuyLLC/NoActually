@@ -74,7 +74,8 @@ pnpm --dir app test
 
 1. Bump the version in `Cargo.toml` (workspace), `app/package.json` and `app/src-tauri/tauri.conf.json`, and add a `CHANGELOG.md` entry.
 2. Tag and push: `git tag v0.1.0 && git push origin v0.1.0`. The Release workflow builds Windows and Linux into a draft release.
-3. On a Mac with the Developer ID certificate, run `scripts/release-macos.sh`. It builds a universal app, signs it, notarizes the DMG with Apple, and staples the ticket. Upload the DMG to the draft release.
-4. Check the draft and publish it.
+3. On a Mac with the Developer ID certificate, run `scripts/release-macos.sh`. It builds a universal app, signs it, notarizes and staples both the app and the DMG.
+4. Run `scripts/finish-release.sh v0.1.0`. It renames the files to plain names people can pick from ("No-Actually-0.1.0-Mac.dmg", "-Windows-Setup.exe", "-Linux.AppImage"…), uploads the Mac DMG, and writes `SHA256SUMS.txt`.
+5. Check the draft and publish it.
 
 If the `APPLE_*` secrets are set in the repo, the Release workflow also signs and notarizes macOS, and step 3 isn't needed.
