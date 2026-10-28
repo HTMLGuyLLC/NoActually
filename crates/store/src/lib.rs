@@ -204,7 +204,11 @@ pub(crate) fn source_files(src: &dyn Source, extra: &[String]) -> Vec<PathBuf> {
     roots.into_iter().flat_map(|root| if root.is_file() { vec![root] } else { src.files(&root) }).collect()
 }
 
-/// Tables that hold scores (everything but consent and settings). Each has a `source` column.
+/// How often to retry a busy log truncation, and how long to wait between tries.
+const CHECKPOINT_TRIES: u32 = 5;
+const CHECKPOINT_WAIT: std::time::Duration = std::time::Duration::from_millis(100);
+
+/// Tables that hold scores (everything but consent, settings and pins). Each has a `source` column.
 const SCORE_TABLES: [&str; 5] = ["events", "daily", "sessions", "files", "seen"];
 
 /// Shown when a message's chat never recorded a model (a session with no real reply).
@@ -258,9 +262,20 @@ impl Store {
 
     // ---- settings ----------------------------------------------------------------------
 
-    /// The retention settings, or the defaults if never set.
+    /// The retention settings, or the defaults if never set. A saved value that can't be read
+    /// falls back to the most private choice (category only, no text), never to a default that
+    /// might keep more than the user chose.
     pub fn retention(&self) -> Result<Retention> {
-        Ok(self.get_setting("retention")?.and_then(|v| serde_json::from_str(&v).ok()).unwrap_or_default())
+        let Some(raw) = self.get_setting("retention")? else { return Ok(Retention::default()) };
+        match serde_json::from_str::<Retention>(&raw).map_err(Error::from).and_then(|r| r.validate().map(|()| r)) {
+            Ok(r) => Ok(r),
+            Err(e) => {
+                log::error!(
+                    "the saved retention setting is unreadable ({e}); keeping category only until it is set again"
+                );
+                Ok(Retention { level: Level::Category, ..Retention::default() })
+            }
+        }
     }
 
     /// Saves retention settings and applies them to what's already stored.
@@ -372,8 +387,9 @@ impl Store {
         Ok(())
     }
 
-    /// Clears every score and checkpoint so history is re-read under new rules. Consent and
-    /// settings stay. Scores only come back for history files that still exist.
+    /// Clears every score and checkpoint so history is re-read under new rules. Consent,
+    /// settings and pins stay (a pin comes back when its catch is read again). Scores only come
+    /// back for history files that still exist.
     pub fn reset_scores(&mut self) -> Result<()> {
         let tx = self.conn.transaction()?;
         for table in SCORE_TABLES {
@@ -406,6 +422,7 @@ impl Store {
         for table in SCORE_TABLES {
             tx.execute(&format!("DELETE FROM {table} WHERE source = ?1"), [id])?;
         }
+        tx.execute("DELETE FROM pins WHERE source = ?1", [id])?;
         tx.execute("DELETE FROM sources WHERE id = ?1", [id])?;
         tx.commit()?;
         self.flush_deleted()
@@ -478,8 +495,9 @@ impl Store {
             let text = EventText::new(&st.turn, &v, retention.level);
             tx.execute(
                 "INSERT INTO events (ts, day, source, session, provider, family, version, model_raw, label, category, rules,
-                    level, human_full, ai_full, human_snip, ai_snip, seen_key)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
+                    level, human_full, ai_full, human_snip, ai_snip, seen_key, pinned)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,
+                    EXISTS(SELECT 1 FROM pins WHERE key = ?17))",
                 params![
                     st.ts.to_rfc3339(),
                     day,
@@ -532,13 +550,36 @@ impl Store {
     /// Folds the write-ahead log back into the database and truncates it, so text that was just
     /// deleted doesn't linger in `noactually.db-wal`.
     pub fn flush_deleted(&self) -> Result<()> {
-        self.conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
+        // Returns (busy, log frames, checkpointed frames). busy = 1 means a reader blocked it.
+        for attempt in 0..CHECKPOINT_TRIES {
+            let busy: i64 = self.conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(0))?;
+            if busy == 0 {
+                return Ok(());
+            }
+            if attempt + 1 < CHECKPOINT_TRIES {
+                std::thread::sleep(CHECKPOINT_WAIT);
+            }
+        }
+        log::warn!(
+            "couldn't truncate the write-ahead log (database busy); deleted text may linger until the next checkpoint"
+        );
         Ok(())
     }
 
     /// Pins (or unpins) a catch, keeping its text past the retention period.
     pub fn pin(&self, event_id: i64, pinned: bool) -> Result<()> {
-        self.conn.execute("UPDATE events SET pinned = ?2 WHERE id = ?1", params![event_id, pinned])?;
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute("UPDATE events SET pinned = ?2 WHERE id = ?1", params![event_id, pinned])?;
+        // Remembered by hashed key, so the pin outlives a rebuild of scores.
+        if pinned {
+            tx.execute(
+                "INSERT OR IGNORE INTO pins (key, source) SELECT seen_key, source FROM events WHERE id = ?1",
+                [event_id],
+            )?;
+        } else {
+            tx.execute("DELETE FROM pins WHERE key = (SELECT seen_key FROM events WHERE id = ?1)", [event_id])?;
+        }
+        tx.commit()?;
         Ok(())
     }
 

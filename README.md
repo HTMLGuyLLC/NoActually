@@ -137,7 +137,7 @@ app/             Tauri 2 desktop app: menu bar, scorecard window, notifications
 Highlights:
 - **Crash-safe checkpoints.** A turn is only counted once its reply exists, and every file's writes commit in a single transaction.
 - **Hashed message keys.** Resumed sessions, forks and re-imports are never counted twice.
-- **Rules versioning.** When the rules change, scores are rebuilt from history.
+- **Rules versioning.** When the rules change, scores are rebuilt from history. Pins are kept, but history whose files were deleted can't be read again.
 
 The full design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

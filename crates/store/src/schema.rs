@@ -61,6 +61,11 @@ CREATE INDEX daily_day ON daily (day);
     r"
 ALTER TABLE sources ADD COLUMN start_after TEXT;
 ",
+    // 3: Pins are remembered by the event's hashed key, so they survive a rules rebuild.
+    r"
+CREATE TABLE pins (key TEXT PRIMARY KEY, source TEXT NOT NULL) WITHOUT ROWID;
+INSERT OR IGNORE INTO pins (key, source) SELECT seen_key, source FROM events WHERE pinned = 1;
+",
 ];
 
 /// Sets connection pragmas and applies any migrations the database hasn't had. Each migration

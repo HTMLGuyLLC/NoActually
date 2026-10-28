@@ -478,3 +478,63 @@ fn db_path_prefers_the_new_variable() {
     assert!(matches!(resolve_db_path(env(&[]), None), Err(Error::NoDataDir)));
     assert!(matches!(resolve_db_path(env(&[]), Some("relative".into())), Err(Error::NoDataDir)), "never relative");
 }
+
+#[test]
+fn pins_survive_a_rules_rebuild() {
+    let dir = tempfile::tempdir().unwrap();
+    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    std::fs::write(dir.path().join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_catch("u", &ts)).unwrap();
+    let all = claude_code(&dir);
+    let mut s = Store::open_in_memory().unwrap();
+    s.allow("claude-code", None).unwrap();
+    sync(&mut s, &all).unwrap();
+    let id: i64 = s.conn.query_row("SELECT id FROM events", [], |r| r.get(0)).unwrap();
+    s.pin(id, true).unwrap();
+
+    s.set_setting("rules_version", "1").unwrap(); // pretend older rules
+    assert!(sync(&mut s, &all).unwrap().rescored);
+    let pinned: Vec<bool> = s
+        .conn
+        .prepare("SELECT pinned FROM events")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(pinned, vec![true], "the re-read catch is pinned again");
+
+    let id: i64 = s.conn.query_row("SELECT id FROM events", [], |r| r.get(0)).unwrap();
+    s.pin(id, false).unwrap();
+    s.reset_scores().unwrap();
+    sync(&mut s, &all).unwrap();
+    let pinned: bool = s.conn.query_row("SELECT pinned FROM events", [], |r| r.get(0)).unwrap();
+    assert!(!pinned, "unpinning forgets the pin");
+
+    s.pin(s.conn.query_row("SELECT id FROM events", [], |r| r.get(0)).unwrap(), true).unwrap();
+    s.forget("claude-code").unwrap();
+    let n: i64 = s.conn.query_row("SELECT count(*) FROM pins", [], |r| r.get(0)).unwrap();
+    assert_eq!(n, 0, "forgetting a source drops its pins");
+}
+
+#[test]
+fn an_unreadable_retention_setting_keeps_no_text() {
+    let mut s = Store::open_in_memory().unwrap();
+    assert_eq!(s.retention().unwrap(), Retention::default());
+    for bad in ["not json", r#"{"level":"full","full_days":0,"snippet_days":9}"#, r#"{"level":"everything"}"#] {
+        s.set_setting("retention", bad).unwrap();
+        assert_eq!(s.retention().unwrap().level, Level::Category, "{bad}");
+    }
+    ingest(&mut s, "f", vec![turn("no, that's wrong", "You're right.", "m", &now_ts(1), "k")]);
+    let text: Option<String> = s.conn.query_row("SELECT human_snip FROM events", [], |r| r.get(0)).unwrap();
+    assert!(text.is_none(), "new catches keep no text while the setting is unreadable");
+}
+
+#[test]
+fn flush_deleted_truncates_the_log() {
+    let dir = tempfile::tempdir().unwrap();
+    let s = Store::open(&dir.path().join("t.db")).unwrap();
+    s.set_setting("a", "b").unwrap();
+    s.flush_deleted().unwrap();
+    let wal = std::fs::metadata(dir.path().join("t.db-wal")).map_or(0, |m| m.len());
+    assert_eq!(wal, 0);
+}

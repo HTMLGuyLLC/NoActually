@@ -144,7 +144,12 @@ pub async fn import_export(handle: AppHandle, app: State<'_, Arc<App>>, id: Stri
     let dialog = handle.dialog().file().set_title("Choose your conversations.json").add_filter("Export", &["json"]);
     let Some(file) = pick(dialog, false).await else { return Ok(None) };
     let path = file.into_path().map_err(err)?.to_string_lossy().to_string();
-    lock(&app.writer).import(&id, &path).map_err(err)?;
+    // The writer may be held by a sync for a while; wait for it off the async runtime.
+    let (writer, import_path) = (Arc::clone(&app), path.clone());
+    tauri::async_runtime::spawn_blocking(move || lock(&writer.writer).import(&id, &import_path))
+        .await
+        .map_err(err)?
+        .map_err(err)?;
     changed(&app);
     Ok(Some(path))
 }
@@ -217,7 +222,7 @@ pub async fn save_share_card(handle: AppHandle, png: Vec<u8>) -> Res<Option<Stri
     Ok(Some(path.to_string_lossy().to_string()))
 }
 
-/// Sites a share button may open. Keep in sync with `SHARE_HOSTS` in app/src/share.ts.
+/// Sites a share button may open. Keep in sync with `SHARE_HOSTS` in app/src/share/share.ts.
 const SHARE_HOSTS: &[&str] = &[
     "x.com",
     "www.linkedin.com",
