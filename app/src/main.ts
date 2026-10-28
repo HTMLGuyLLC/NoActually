@@ -28,8 +28,8 @@ const SOURCE_TITLES: Record<string, string> = {
 };
 type Tab = "score" | "sources" | "settings";
 
-/** The app icon's check: the logo's only color. */
-const MARK = `<svg class="mark" viewBox="0 0 44 44" aria-hidden="true"><path class="mark-check" d="M9 24 L18 33 L36 12"/></svg>`;
+/** The app icon's mark: a check in the text color over a red underline (same geometry as the icon). */
+const MARK = `<svg class="mark" viewBox="9 10.5 27 27" aria-hidden="true"><path class="mark-check" d="M12.9 24.1 L18.9 30.1 L31.8 13.8" transform="rotate(-4 22 22)"/><path class="mark-line" d="M10.7 35.2 Q22 32.7 34 35"/></svg>`;
 const WORDMARK = (cls = "brand") => `<span class="${cls}">${MARK}<span>No, Actually...</span></span>`;
 
 const root = document.getElementById("app")!;

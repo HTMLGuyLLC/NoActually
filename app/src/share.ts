@@ -46,21 +46,32 @@ export function shareTargets(text: string, url = SHARE_URL): ShareTarget[] {
 /** Hosts the app may open. The Rust side checks the same list before opening anything. */
 export const SHARE_HOSTS = ["x.com", "www.linkedin.com", "www.facebook.com", "www.threads.net", "bsky.app", "www.reddit.com", "wa.me", "github.com"];
 
-/** The logo: a red check, then "No, Actually..." in ink, with the text baseline at `y`. */
+/** The logo: the icon's mark, then "No, Actually..." in ink, with the text baseline at `y`. */
 function drawWordmark(g: CanvasRenderingContext2D, x: number, y: number, pen: string, ink: string) {
-  const size = 30;
-  const k = size / 44;
+  const size = 32;
+  const k = size / 27; // the mark's own box inside the icon's 44-unit grid (x 9–36, y 10.5–37.5)
   g.save();
-  g.translate(x, y - size + 4);
+  g.translate(x, y - size + 6);
   g.scale(k, k);
+  g.translate(-9, -10.5);
   g.lineCap = "round";
   g.lineJoin = "round";
+  // Same mark as the app icon: check in ink, underline in red.
   g.strokeStyle = pen;
-  g.lineWidth = 4.5;
+  g.lineWidth = 2.6;
   g.beginPath();
-  g.moveTo(9, 24);
-  g.lineTo(18, 33);
-  g.lineTo(36, 12);
+  g.moveTo(10.7, 35.2);
+  g.quadraticCurveTo(22, 32.7, 34, 35);
+  g.stroke();
+  g.translate(22, 22);
+  g.rotate((-4 * Math.PI) / 180);
+  g.translate(-22, -22);
+  g.strokeStyle = ink;
+  g.lineWidth = 4.4;
+  g.beginPath();
+  g.moveTo(12.9, 24.1);
+  g.lineTo(18.9, 30.1);
+  g.lineTo(31.8, 13.8);
   g.stroke();
   g.restore();
   g.fillStyle = ink;

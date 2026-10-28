@@ -43,11 +43,13 @@ select { appearance: none; -webkit-appearance: none; padding: 0 38px 0 14px; cur
 select:hover, input[type="number"]:hover { border-color: var(--muted) }
 
 .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap }
-/* Logo: one ink wordmark and one red check. The handwriting is kept for the verdict and quotes. */
+/* Logo: the icon's mark (check in the text color, red underline) and an ink wordmark. */
 .brand { display: inline-flex; align-items: center; gap: .32em; font: 800 21px/1 var(--display); letter-spacing: -0.025em; color: var(--ink) }
 .brand.small { font-size: 15px }
-.brand .mark { width: 1.05em; height: 1.05em; flex: none }
-.mark path { fill: none; stroke: var(--pen); stroke-width: 4.5; stroke-linecap: round; stroke-linejoin: round }
+.brand .mark { width: 1.1em; height: 1.1em; flex: none; overflow: visible }
+.mark path { fill: none; stroke-linecap: round; stroke-linejoin: round }
+.mark-check { stroke: var(--ink); stroke-width: 4.4 }
+.mark-line { stroke: var(--pen); stroke-width: 2.6 }
 nav { display: flex; gap: 6px }
 .tab { background: transparent; color: var(--muted); border-color: transparent }
 .tab.on { color: var(--ink); border-color: var(--ink) }
