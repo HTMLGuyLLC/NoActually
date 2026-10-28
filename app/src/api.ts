@@ -39,6 +39,7 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
   if (cmd === "sync_status") return { syncing: false, last_sync: new Date().toISOString(), last_error: null, files_with_errors: 0 } as T;
   if (cmd === "get_autostart") return false as T;
   if (cmd === "list_sources") return demoSources as T;
+  if (cmd === "update_status") return { current: "0.1.0", auto: true, checking: false, installing: false, available: null, last_check: null, last_error: null } as T;
   if (cmd === "get_retention") return { level: "snippet", full_days: 30, snippet_days: 365 } as T;
   return undefined as T;
 }
@@ -69,6 +70,10 @@ export type SourceState = {
   id: string; allowed: boolean; paused: boolean; backfill_since: string | null; granted_at: string | null; paths: string[];
 };
 export type SyncStatus = { syncing: boolean; last_sync: string | null; last_error: string | null; files_with_errors: number };
+export type UpdateStatus = {
+  current: string; auto: boolean; checking: boolean; installing: boolean;
+  available: string | null; last_check: string | null; last_error: string | null;
+};
 export type SourceInfo = { id: string; name: string; kind: "live" | "import"; roots: [string, boolean][]; state: SourceState | null };
 
 export const api = {
@@ -89,4 +94,8 @@ export const api = {
   saveShareCard: (png: number[]) => invoke<string | null>("save_share_card", { png }),
   openShare: (url: string) => (demo ? Promise.resolve(void window.open(url, "_blank", "noopener")) : invoke<void>("open_share", { url })),
   openMain: () => invoke<void>("open_main"),
+  updateStatus: () => invoke<UpdateStatus>("update_status"),
+  setAutoUpdate: (enabled: boolean) => invoke<void>("set_auto_update", { enabled }),
+  checkForUpdates: () => invoke<void>("check_for_updates"),
+  installUpdate: () => invoke<void>("install_update"),
 };

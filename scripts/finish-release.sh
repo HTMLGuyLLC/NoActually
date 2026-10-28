@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Finishes a draft GitHub release made by the Release workflow:
 #   1. renames the CI-built files to plain names ("No-Actually-0.1.0-Windows-Setup.exe")
-#   2. uploads the notarized Mac DMG from scripts/release-macos.sh
-#   3. regenerates SHA256SUMS.txt from the exact files on the release
+#   2. uploads the notarized Mac DMG and the Mac update file from scripts/release-macos.sh
+#   3. writes latest.json for in-app updates: the CI's Windows and Linux entries, pointed at the
+#      renamed files, plus the Mac entries (see scripts/latest-json.mjs)
+#   4. regenerates SHA256SUMS.txt from the exact files on the release
 #
 # Usage: scripts/finish-release.sh v0.1.0
 set -euo pipefail
@@ -12,22 +14,13 @@ VERSION="${TAG#v}"
 REPO="HTMLGuyLLC/NoActually"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DMG="$ROOT/target/universal-apple-darwin/release/bundle/dmg/No-Actually-${VERSION}-Mac.dmg"
+UPDATE="$ROOT/target/universal-apple-darwin/release/bundle/macos/No-Actually-${VERSION}-Mac-Update.app.tar.gz"
 P="No-Actually-${VERSION}"
 
 RID="$(gh api "repos/$REPO/releases" -q ".[] | select(.tag_name==\"$TAG\") | .id" | head -1)"
 [[ -n "$RID" ]] || { echo "No release for $TAG yet. Push the tag and let the Release workflow finish." >&2; exit 1; }
 
-plain_name() {
-  case "$1" in
-    *x64-setup.exe) echo "$P-Windows-Setup.exe" ;;
-    *x64_en-US.msi) echo "$P-Windows-IT-Installer.msi" ;;
-    *amd64.AppImage) echo "$P-Linux.AppImage" ;;
-    *amd64.deb) echo "$P-Linux-Ubuntu-Debian.deb" ;;
-    *x86_64.rpm) echo "$P-Linux-Fedora.rpm" ;;
-    *universal.dmg) echo "$P-Mac.dmg" ;;
-    *) echo "$1" ;;
-  esac
-}
+plain_name() { node "$ROOT/scripts/latest-json.mjs" plain-name "$1" "$VERSION"; }
 
 echo "Renaming files…"
 # tauri-action v1 also sets a display label (the original file name), and GitHub shows the
@@ -45,6 +38,27 @@ if [[ -f "$DMG" ]]; then
 else
   echo "No Mac DMG at $DMG; run scripts/release-macos.sh to add one." >&2
 fi
+MAC_ARGS=()
+if [[ -f "$UPDATE" && -f "$UPDATE.sig" ]]; then
+  echo "Uploading $(basename "$UPDATE")…"
+  gh release upload "$TAG" -R "$REPO" "$UPDATE" --clobber
+  MAC_ARGS=(--mac-file "$UPDATE" --mac-sig "$UPDATE.sig")
+else
+  echo "No Mac update file at $UPDATE; installed Mac apps won't be offered this version." >&2
+fi
+
+echo "Writing latest.json…"
+WORK="$(mktemp -d)"
+IN_ARGS=()
+if gh release download "$TAG" -R "$REPO" --pattern latest.json --dir "$WORK" 2>/dev/null; then
+  IN_ARGS=(--in "$WORK/latest.json")
+fi
+gh api "repos/$REPO/releases/$RID/assets" --paginate -q '.[].name' > "$WORK/assets.txt"
+node "$ROOT/scripts/latest-json.mjs" finish --version "$VERSION" --tag "$TAG" --repo "$REPO" \
+  --assets "$WORK/assets.txt" "${IN_ARGS[@]+"${IN_ARGS[@]}"}" "${MAC_ARGS[@]+"${MAC_ARGS[@]}"}" > "$WORK/latest.out.json"
+mv "$WORK/latest.out.json" "$WORK/latest.json"
+gh release upload "$TAG" -R "$REPO" "$WORK/latest.json" --clobber
+rm -rf "$WORK"
 
 echo "Writing checksums…"
 WORK="$(mktemp -d)"

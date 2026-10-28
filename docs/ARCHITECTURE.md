@@ -7,7 +7,7 @@ crates/engine    Pure rules: classify a turn, normalize model ids, redact, build
 crates/sources   One adapter per AI tool: detect, backfill, tail. Turns files into `Turn`s.
 crates/store     SQLite: consent + settings, file checkpoints, daily aggregates, catch events, retention sweeps.
 crates/cli       `noactually` binary: scan, stats, purge. Same code path as the app.
-app/             Tauri 2: tray quick-glance, full window, notifications. Thin shell over the crates.
+app/             Tauri 2: tray quick-glance, full window, notifications, update checks. Thin shell over the crates.
 ```
 
 ## Data flow
@@ -30,8 +30,17 @@ Nothing is read until the user allows it.
 - First launch lists every **detected** source with the exact path it would read and what it reads ("your messages and the AI's replies, to count catches"). Each is off until the user taps **Allow**.
 - Per source: allow/revoke, backfill window (everything, since a date, or none), pause.
 - **Revoke** stops reading. **Forget** also deletes that source's events, aggregates and checkpoints.
-- Nothing leaves the machine. Share cards render locally, and the only network call is opening a share URL the user taps. A future global board is a separate opt-in that sends numbers only.
+- Nothing leaves the machine. Share cards render locally. The only network use is the update check (see [Updates](#updates)) and opening a share URL the user taps. A future global board is a separate opt-in that sends numbers only.
 - macOS may show its own "access data from other apps" prompt for some sources. Declining it only means that source can't be read.
+
+## Updates
+
+`app/src-tauri/src/updater.rs` uses `tauri-plugin-updater`. One thread fetches `https://github.com/HTMLGuyLLC/NoActually/releases/latest/download/latest.json` a minute after launch and every 6 hours, while **Check for updates automatically** is on (setting `updates.auto`, default on). Development builds never check on their own.
+
+- The request is a plain GET with the plugin's user agent. No identifiers, stats or chat data are sent.
+- `latest.json` (written by `scripts/finish-release.sh`) holds the version, release date, and per platform a download URL on the same release plus a minisign signature.
+- A newer version shows a "Restart to update" banner in the scorecard window and a tray menu item. Nothing is downloaded until the user clicks one; then the plugin downloads the file, checks it against the public key in `tauri.conf.json` (`plugins.updater.pubkey`), installs it and restarts. It never restarts on its own.
+- macOS installs the `.app.tar.gz` in place; Windows runs the NSIS (or MSI) installer in passive mode; Linux replaces the AppImage.
 
 ## What is stored
 

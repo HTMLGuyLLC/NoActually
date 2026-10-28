@@ -93,11 +93,20 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Signs the updater files and latest.json entries (see CONTRIBUTING.md, "Releasing").
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: app
           tagName: v__VERSION__
           releaseName: 'No, Actually... v__VERSION__'
           releaseBody: 'See the [changelog](https://github.com/HTMLGuyLLC/NoActually/blob/main/CHANGELOG.md).'
           releaseDraft: true
+          # latest.json for in-app updates. scripts/finish-release.sh points it at the renamed files
+          # and adds the Mac entries.
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
+          # The signatures are inside latest.json; the .sig files would only clutter the release page.
+          uploadUpdaterSignatures: false
           prerelease: false
           args: ${{ matrix.args }}

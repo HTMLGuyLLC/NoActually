@@ -11,7 +11,8 @@ Please do not open a public issue for security problems. Include steps to reprod
 In scope:
 
 - Anything that makes the app read a source the user has not allowed
-- Any network call other than opening a share link the user clicks
+- Any network call other than the update check described in PRIVACY.md and opening a share link the user clicks
+- Ways to make the app install an update not signed with the project's updater key
 - Catch text kept longer, or at a higher level, than the retention setting allows
 - Redaction bypasses (secrets, emails, URLs, home paths surviving in stored text)
 - Bugs in the SQLite store, source adapters or the Tauri shell that could expose or corrupt local data

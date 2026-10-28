@@ -37,11 +37,20 @@ Stored text has emails, URLs, keys, numbers and home paths removed. This is done
 ## What never leaves your machine
 
 - No telemetry, analytics or crash reporting
-- No network calls, except opening a share link when you click it
+- The only network use is checking for app updates (below) and opening a share link when you click it
 - Share cards are rendered locally
 - Fonts are bundled, not fetched
 
 A future global board would be a separate opt-in that sends numbers only.
+
+## Update checks
+
+To offer new versions, the app downloads one small public file, `latest.json`, from this project's GitHub releases (`https://github.com/HTMLGuyLLC/NoActually/releases/latest/download/latest.json`). It does this a minute after launch and then every 6 hours.
+
+- The request carries no identifiers: no account, install id, stats or chat data. It's a plain HTTPS GET with the updater's standard user agent (`tauri-plugin-updater/<version>`). Like any download, GitHub sees your IP address.
+- `latest.json` only lists the newest version number and where to download it. If it's newer than yours, you see "Restart to update" in the scorecard and the menu bar menu.
+- Nothing is downloaded or installed until you click it. The update file comes from the same GitHub release, and the app installs it only if its signature matches the project's key built into the app.
+- Turn it off in **Settings → Check for updates automatically**. With it off, the app only checks when you click **Check for updates**.
 
 ## How to delete your data
 

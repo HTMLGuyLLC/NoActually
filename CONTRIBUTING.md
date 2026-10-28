@@ -61,6 +61,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 pnpm --dir app check
 pnpm --dir app test
+node --test scripts/
 ```
 
 `.editorconfig` sets indentation: 4 spaces for Rust, 2 for everything else.
@@ -68,14 +69,32 @@ pnpm --dir app test
 ## Privacy rules for contributors
 
 - No raw chat data in commits, issues, tests or screenshots.
-- No new network calls or telemetry. See [PRIVACY.md](PRIVACY.md).
+- No new network calls or telemetry. The update check is the one exception, and it sends nothing about the user. See [PRIVACY.md](PRIVACY.md).
 
 ## Releasing (maintainers)
 
+### One-time setup: the updater key
+
+In-app updates are signed with a Tauri updater key. Its public half is in `app/src-tauri/tauri.conf.json` (`plugins.updater.pubkey`); the private half never goes in the repo.
+
+- The private key lives at `~/.tauri/noactually.key` (mode 600) on the release Mac, and its password in the login keychain as `noactually-updater-key`. `scripts/release-macos.sh` reads both.
+- Add both to the repo's Actions secrets so CI can sign Windows and Linux updates:
+
+  ```bash
+  gh secret set TAURI_SIGNING_PRIVATE_KEY -R HTMLGuyLLC/NoActually < ~/.tauri/noactually.key
+  security find-generic-password -s noactually-updater-key -w | gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD -R HTMLGuyLLC/NoActually
+  ```
+
+- Back up the key and password somewhere safe (a password manager). If the key is lost, installed copies can't be updated in-app anymore; people would have to download the next version by hand.
+
+`pnpm tauri build` fails without the key because `bundle.createUpdaterArtifacts` is on. To build locally without it, add `-c '{"bundle":{"createUpdaterArtifacts":false}}'`.
+
+### Each release
+
 1. Bump the version in `Cargo.toml` (workspace), `app/package.json` and `app/src-tauri/tauri.conf.json`, and add a `CHANGELOG.md` entry.
-2. Tag and push: `git tag v0.1.0 && git push origin v0.1.0`. The Release workflow builds Windows and Linux into a draft release.
-3. On a Mac with the Developer ID certificate, run `scripts/release-macos.sh`. It builds a universal app, signs it, notarizes and staples both the app and the DMG.
-4. Run `scripts/finish-release.sh v0.1.0`. It renames the files to plain names people can pick from ("No-Actually-0.1.0-Mac.dmg", "-Windows-Setup.exe", "-Linux.AppImage"…), uploads the Mac DMG, and writes `SHA256SUMS.txt`.
-5. Check the draft and publish it.
+2. Tag and push: `git tag v0.1.0 && git push origin v0.1.0`. The Release workflow builds Windows and Linux into a draft release, with signed update files and a `latest.json` for them.
+3. On a Mac with the Developer ID certificate and the updater key, run `scripts/release-macos.sh`. It builds a universal app, signs it, notarizes and staples both the app and the DMG, and makes the signed update file (`No-Actually-0.1.0-Mac-Update.app.tar.gz` + `.sig`).
+4. Run `scripts/finish-release.sh v0.1.0`. It renames the files to plain names people can pick from ("No-Actually-0.1.0-Mac.dmg", "-Windows-Setup.exe", "-Linux.AppImage"…), setting both the asset name and the label tauri-action v1 adds; uploads the Mac DMG and update file; rewrites `latest.json` so every entry points at the renamed files and adds the Mac entries (`darwin-universal`, `darwin-aarch64`, `darwin-x86_64`); and writes `SHA256SUMS.txt`. It refuses to write a `latest.json` that points at a file missing from the release.
+5. Check the draft and publish it. Installed apps see the update only once it's published, because they read `releases/latest/download/latest.json`.
 
 If the `APPLE_*` secrets are set in the repo, the Release workflow also signs and notarizes macOS, and step 3 isn't needed.
