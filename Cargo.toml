@@ -21,7 +21,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 sha2 = "0.10"
 anyhow = "1"
 tempfile = "3"
-dirs = "6"
+dirs = "7"
 log = "0.4"
 
 [profile.release]
