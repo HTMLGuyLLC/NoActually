@@ -8,6 +8,19 @@ use std::sync::LazyLock;
 pub struct Rule {
     pub id: &'static str,
     re: Regex,
+    /// Checked from the start of the match: when it also matches, the rule doesn't fire.
+    /// The regex crate has no lookahead, so this is how a rule says "but not when ...".
+    unless: Option<Regex>,
+}
+
+impl Rule {
+    pub fn find(&self, text: &str) -> Option<Match> {
+        let m = self.re.find(text)?;
+        if self.unless.as_ref().is_some_and(|u| u.is_match(&text[m.start()..])) {
+            return None;
+        }
+        Some(Match { rule: self.id, span: (m.start(), m.end()) })
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -16,13 +29,26 @@ pub struct Match {
     pub span: (usize, usize),
 }
 
+fn re(id: &str, pattern: &str) -> Regex {
+    Regex::new(&format!("(?i){pattern}")).expect(id)
+}
+
 fn rule(id: &'static str, pattern: &str) -> Rule {
-    Rule { id, re: Regex::new(&format!("(?i){pattern}")).expect(id) }
+    Rule { id, re: re(id, pattern), unless: None }
+}
+
+/// A rule that doesn't fire when `unless` (anchored at the match start) also matches.
+fn rule_unless(id: &'static str, pattern: &str, unless: &str) -> Rule {
+    Rule { id, re: re(id, pattern), unless: Some(re(id, &format!("^(?:{unless})"))) }
 }
 
 pub fn first(rules: &[Rule], text: &str) -> Option<Match> {
-    rules.iter().find_map(|r| r.re.find(text).map(|m| Match { rule: r.id, span: (m.start(), m.end()) }))
+    rules.iter().find_map(|r| r.find(text))
 }
+
+/// "that's fine", "it works", "you're right": a subject plus an approval word. Appended to an
+/// opener like "no, " it marks approval ("No, that's fine, ship it"), not pushback.
+const APPROVAL: &str = r"(that|this|it|you)('s|'re|s|re|\s+is|\s+are|\s+was|\s+looks?|\s+sounds?|\s+seems?)?(\s+(all|also|actually|just|totally|perfectly|pretty|really|now))?\s+(fine|good|great|ok|okay|perfect|right|correct|works?|worked|working)\b";
 
 /// The AI admits it was wrong (checked at the start of its next reply).
 pub static AI_ADMIT: LazyLock<Vec<Rule>> = LazyLock::new(|| {
@@ -48,11 +74,17 @@ pub static AI_ADMIT: LazyLock<Vec<Rule>> = LazyLock::new(|| {
 /// You open your message by pushing back.
 pub static USER_OPEN: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![
-        rule("you.no_that", r"^(no|nope|nah)\s*[,.!—–-]+\s*(that|this|it|you|not|the|we|i said|still|wrong)\b"),
+        rule_unless(
+            "you.no_that",
+            r"^(no|nope|nah)\s*[,.!—–-]+\s*(that|this|it|you|not|the|we|i said|still|wrong)\b",
+            &format!(r"(no|nope|nah)\s*[,.!—–-]+\s*{APPROVAL}"),
+        ),
         rule("you.no", r"^(no|nope|nah|wrong)[.!]*$"),
-        rule(
+        rule_unless(
             "you.wrong",
             r"^(wrong|incorrect|not quite|not true|that'?s not|that is not|that isn'?t|this is not|this isn'?t)\b",
+            // "that's not a problem", "this isn't bad": a negated complaint is approval.
+            r"(that'?s not|that is not|that isn'?t|this is not|this isn'?t)\s+(a (big )?deal|a problem|an issue|bad|wrong)(\s+at all)?\s*([,.!;:\n]|$)",
         ),
         rule(
             "you.its_wrong",
@@ -68,7 +100,11 @@ pub static USER_OPEN: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         rule("you.why_did_you", r"^(why did you|why would you|what\??$|wtf|huh\??$)"),
         rule("you.doesnt_work", r"^(doesn'?t|didn'?t|does not|did not|isn'?t|not) work"),
         rule("you.same_error", r"^(same|still the same) (error|issue|problem|thing)"),
-        rule("you.actually", r"^actually,? (it|that|this|you|the|no)\b"),
+        rule_unless(
+            "you.actually",
+            r"^actually,? (it|that|this|you|the|no)\b",
+            &format!(r"actually,?\s+({APPROVAL}|no\s+(worries|problem)\b|no\s*[,.!—–-]+\s*{APPROVAL})"),
+        ),
     ]
 });
 
@@ -127,11 +163,11 @@ static CATEGORIES: LazyLock<Vec<(Category, Regex)>> = LazyLock::new(|| {
         ),
         c(
             Category::IgnoredInstructions,
-            r"\bi (said|told you|asked|already)\b|\blike i said\b|\bnot what i\b|\byou ignored\b|\bre-?read\b|\bi meant\b",
+            r"\bi (said|told you|asked|already)\b|\blike i said\b|\bnot what i (asked|said)\b|\byou ignored\b|\bre-?read\b",
         ),
         c(
             Category::Misread,
-            r"\bi (misread|misunderstood|misinterpreted)\b|\bi (read|took) .{0,40} as\b|\bnot what i (meant|wanted)\b",
+            r"\bi (misread|misunderstood|misinterpreted)\b|\bi (read|took) .{0,40} as\b|\bnot what i (meant|wanted)\b|\bi meant\b",
         ),
         c(
             Category::MissedSomething,
@@ -144,7 +180,14 @@ static CATEGORIES: LazyLock<Vec<(Category, Regex)>> = LazyLock::new(|| {
     ]
 });
 
-/// First matching category wins; anything else is plain wrong.
-pub fn category(text: &str) -> Category {
-    CATEGORIES.iter().find(|(_, re)| re.is_match(text)).map_or(Category::JustWrong, |(c, _)| *c)
+/// First matching category wins; anything else is plain wrong. `human` is your message, `ai` the
+/// AI's reply, and `admit` the span of the AI's admission phrase: it is cut out first, because
+/// "My error" or "I was wrong" says that a mistake happened, not what kind.
+pub fn category(human: &str, ai: &str, admit: Option<(usize, usize)>) -> Category {
+    let ai = match admit {
+        Some((s, e)) => format!("{} {}", &ai[..s], &ai[e..]),
+        None => ai.to_string(),
+    };
+    let text = format!("{human}\n{ai}");
+    CATEGORIES.iter().find(|(_, re)| re.is_match(&text)).map_or(Category::JustWrong, |(c, _)| *c)
 }

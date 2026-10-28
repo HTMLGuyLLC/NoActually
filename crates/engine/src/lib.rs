@@ -171,7 +171,8 @@ impl Verdict {
 /// Bump whenever a change would label or attribute existing history differently; stores
 /// rebuild their scores from the history files when it changes.
 /// 2: placeholder replies are skipped and messages fall back to the chat's model.
-pub const RULES_VERSION: u32 = 2;
+/// 3: approvals ("No, that's fine") aren't pushback; the AI's admission no longer picks the category.
+pub const RULES_VERSION: u32 = 3;
 
 /// Tools write placeholder ids for replies no model wrote (Claude Code's "<synthetic>" for errors,
 /// interruptions and "No response requested").
@@ -224,9 +225,8 @@ pub fn classify(turn: &Turn) -> Verdict {
             v.rules.push(m.rule);
             v.human_span = Some(m.span);
         }
-        // The AI's admission often names the mistake, so categories look at both sides.
-        let both = format!("{body}\n{next}");
-        v.category = Some(rules::category(&both));
+        // The rest of the AI's reply often names the mistake, so categories look at both sides.
+        v.category = Some(rules::category(body, next, ai_admit.map(|m| m.span)));
         return v;
     }
 
