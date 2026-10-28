@@ -1,0 +1,302 @@
+{
+ "first_day": "2026-04-01",
+ "last_day": "2026-10-27",
+ "messages": 8282,
+ "catches": 177,
+ "humbled": 3,
+ "labels": {
+  "admitted": 146,
+  "claimed": 23,
+  "confirmed": 8,
+  "humbled": 3
+ },
+ "catches_last_7d": 17,
+ "tier": "Irreplaceable",
+ "next_tier": null,
+ "messages_per_catch": 47,
+ "real_chats": 152,
+ "pct_real_chats_with_catch": 37.5,
+ "best_streak_days": 14,
+ "current_streak_days": 3,
+ "peak_hour": 21,
+ "categories": {
+  "ignored_instructions": 15,
+  "just_wrong": 121,
+  "made_it_up": 1,
+  "misread": 3,
+  "missed_something": 6,
+  "still_broken": 31
+ },
+ "weekly": [
+  {
+   "week": "2026-03-30",
+   "messages": 4,
+   "catches": 0
+  },
+  {
+   "week": "2026-06-01",
+   "messages": 1,
+   "catches": 0
+  },
+  {
+   "week": "2026-06-08",
+   "messages": 1,
+   "catches": 0
+  },
+  {
+   "week": "2026-06-22",
+   "messages": 86,
+   "catches": 7
+  },
+  {
+   "week": "2026-06-29",
+   "messages": 38,
+   "catches": 0
+  },
+  {
+   "week": "2026-07-06",
+   "messages": 29,
+   "catches": 0
+  },
+  {
+   "week": "2026-07-13",
+   "messages": 84,
+   "catches": 7
+  },
+  {
+   "week": "2026-07-20",
+   "messages": 303,
+   "catches": 5
+  },
+  {
+   "week": "2026-07-27",
+   "messages": 748,
+   "catches": 19
+  },
+  {
+   "week": "2026-08-03",
+   "messages": 279,
+   "catches": 10
+  },
+  {
+   "week": "2026-08-10",
+   "messages": 636,
+   "catches": 16
+  },
+  {
+   "week": "2026-08-17",
+   "messages": 178,
+   "catches": 12
+  },
+  {
+   "week": "2026-08-24",
+   "messages": 189,
+   "catches": 6
+  },
+  {
+   "week": "2026-08-31",
+   "messages": 245,
+   "catches": 1
+  },
+  {
+   "week": "2026-09-07",
+   "messages": 405,
+   "catches": 8
+  },
+  {
+   "week": "2026-09-14",
+   "messages": 782,
+   "catches": 24
+  },
+  {
+   "week": "2026-09-21",
+   "messages": 2014,
+   "catches": 19
+  },
+  {
+   "week": "2026-09-28",
+   "messages": 681,
+   "catches": 15
+  },
+  {
+   "week": "2026-10-05",
+   "messages": 351,
+   "catches": 5
+  },
+  {
+   "week": "2026-10-12",
+   "messages": 742,
+   "catches": 6
+  },
+  {
+   "week": "2026-10-19",
+   "messages": 262,
+   "catches": 9
+  },
+  {
+   "week": "2026-10-26",
+   "messages": 224,
+   "catches": 8
+  }
+ ],
+ "models": [
+  {
+   "provider": "Anthropic",
+   "family": "Claude Opus",
+   "version": "5",
+   "messages": 2214,
+   "catches": 62,
+   "humbled": 1
+  },
+  {
+   "provider": "Anthropic",
+   "family": "Claude Opus",
+   "version": "5.5",
+   "messages": 3279,
+   "catches": 39,
+   "humbled": 1
+  },
+  {
+   "provider": "OpenAI",
+   "family": "GPT Astra",
+   "version": "6",
+   "messages": 1353,
+   "catches": 34,
+   "humbled": 0
+  },
+  {
+   "provider": "Anthropic",
+   "family": "Claude Opus",
+   "version": "4.8",
+   "messages": 362,
+   "catches": 17,
+   "humbled": 0
+  },
+  {
+   "provider": "Anthropic",
+   "family": "Claude Fable",
+   "version": "5",
+   "messages": 431,
+   "catches": 11,
+   "humbled": 0
+  },
+  {
+   "provider": "OpenAI",
+   "family": "GPT Terra",
+   "version": "5.6",
+   "messages": 75,
+   "catches": 8,
+   "humbled": 0
+  },
+  {
+   "provider": "Anthropic",
+   "family": "Claude Sonnet",
+   "version": "5",
+   "messages": 157,
+   "catches": 3,
+   "humbled": 1
+  },
+  {
+   "provider": "Anthropic",
+   "family": "Claude Fable",
+   "version": "5.1",
+   "messages": 293,
+   "catches": 1,
+   "humbled": 0
+  },
+  {
+   "provider": "OpenAI",
+   "family": "GPT Sol",
+   "version": "6.1",
+   "messages": 48,
+   "catches": 1,
+   "humbled": 0
+  },
+  {
+   "provider": "OpenAI",
+   "family": "GPT Luna",
+   "version": "6",
+   "messages": 35,
+   "catches": 1,
+   "humbled": 0
+  },
+  {
+   "provider": "No model recorded",
+   "family": "No model recorded",
+   "version": "",
+   "messages": 18,
+   "catches": 0,
+   "humbled": 0
+  },
+  {
+   "provider": "OpenAI",
+   "family": "GPT Luna",
+   "version": "5.6",
+   "messages": 7,
+   "catches": 0,
+   "humbled": 0
+  },
+  {
+   "provider": "Anthropic",
+   "family": "Claude Opus",
+   "version": "4.6",
+   "messages": 5,
+   "catches": 0,
+   "humbled": 0
+  },
+  {
+   "provider": "Anthropic",
+   "family": "Claude Sonnet",
+   "version": "5.5",
+   "messages": 5,
+   "catches": 0,
+   "humbled": 0
+  }
+ ],
+ "hall_of_fame": [
+  {
+   "id": 1,
+   "day": "2026-09-21",
+   "source": "claude-code",
+   "model": "Claude Opus 5",
+   "label": "confirmed",
+   "category": "made_it_up",
+   "human": "that's not a real page",
+   "ai": "You're right, I said that carelessly. That route doesn't exist.",
+   "pinned": true
+  },
+  {
+   "id": 2,
+   "day": "2026-08-24",
+   "source": "claude-code",
+   "model": "Claude Opus 5",
+   "label": "confirmed",
+   "category": "missed_something",
+   "human": "you missed a simple feature many spreadsheet apps have: resize columns",
+   "ai": "Fair. You're right that it's table stakes.",
+   "pinned": false
+  },
+  {
+   "id": 3,
+   "day": "2026-10-12",
+   "source": "claude-code",
+   "model": "Claude Opus 5.5",
+   "label": "admitted",
+   "category": "just_wrong",
+   "human": "look it up, i think there's a trick for this on mac",
+   "ai": "Found it. I was wrong earlier when I said it has no lock.",
+   "pinned": false
+  },
+  {
+   "id": 4,
+   "day": "2026-10-20",
+   "source": "codex",
+   "model": "GPT Astra 6",
+   "label": "admitted",
+   "category": "ignored_instructions",
+   "human": "don't create a brand new component. We have it in other places",
+   "ai": "You're right, I duplicated it.",
+   "pinned": false
+  }
+ ]
+}

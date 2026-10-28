@@ -1,0 +1,20 @@
+[package]
+name = "store"
+description = "Local SQLite store: consent, checkpoints, daily aggregates, catch events, retention."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+engine.workspace = true
+sources.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+rayon.workspace = true
+sha2.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

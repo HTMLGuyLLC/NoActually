@@ -1,0 +1,19 @@
+# Raw chat data and local databases: never commit
+*.jsonl
+*.jsonl.zst
+*.db
+*.db-wal
+*.db-shm
+scorecard.json
+
+# Build output
+target/
+node_modules/
+dist/
+app/src-tauri/gen/
+
+# Local tooling and OS files
+.impeccable/
+*.log
+.DS_Store
+__pycache__/
