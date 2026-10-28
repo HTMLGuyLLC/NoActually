@@ -5,9 +5,12 @@ use regex::Regex;
 use serde::Serialize;
 use std::sync::LazyLock;
 
+/// A model id split into the levels views filter by.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Model {
+    /// Who makes it: Anthropic, OpenAI, Meta, …
     pub provider: String,
+    /// The product line ("Claude Opus", "GPT Mini", …).
     pub family: String,
     /// Human version like "5.5". Empty when the id carries none.
     pub version: String,
@@ -38,6 +41,8 @@ static LOCAL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^(llama|qwen|mistral|mixtral|gemma|phi|deepseek|codellama|gpt-oss|granite|command-r|olmo|smollm|kimi|glm)[-_ ]?(\d+(?:\.\d+)?)?").unwrap()
 });
 
+/// Splits a raw model id into provider / family / version. `None` for placeholders and blanks;
+/// ids it doesn't recognize come back under provider "Other".
 pub fn normalize_model(raw: &str) -> Option<Model> {
     let raw = raw.trim();
     if raw.is_empty() || raw.starts_with('<') {

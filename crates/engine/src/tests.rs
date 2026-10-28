@@ -156,3 +156,21 @@ fn falls_back_to_the_chats_model() {
     let none = Turn { human: "x".into(), chat_model: Some("<synthetic>".into()), ..Default::default() };
     assert_eq!(classify(&none).blamed_model(&none), None);
 }
+
+#[test]
+fn head_and_tail_count_chars() {
+    assert_eq!(head_chars("héllo", 2), "hé");
+    assert_eq!(head_chars("hi", 5), "hi");
+    assert_eq!(tail_chars("héllo", 4), "éllo");
+    assert_eq!(tail_chars("hi", 5), "hi");
+    assert_eq!(tail_chars("", 0), "");
+}
+
+#[test]
+fn ids_round_trip() {
+    for c in Category::ALL {
+        assert_eq!(Category::from_id(c.as_str()), Some(c));
+    }
+    assert_eq!(Category::from_id("nope"), None);
+    assert_eq!(Label::ALL.iter().filter(|l| l.is_catch()).count(), 3);
+}
