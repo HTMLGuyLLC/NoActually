@@ -1,4 +1,4 @@
-/* Same visual system as docs/sample-scorecard.html: a proofread page, red pen on ruled paper. */
+/* A proofread page: ink on paper, the AI's mistakes marked in red pen. */
 :root {
   --paper: #fbfcfe; --surface: #ffffff; --ink: #141a2e; --muted: #5d6680; --rule: #dfe3ee;
   --pen: #e0322b; --pen-soft: #fde8e6; --hl: #fff27a; --ai: #3b5bdb; --ai-soft: #e7ecfd;
