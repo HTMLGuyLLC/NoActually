@@ -25,10 +25,9 @@ fn watched_roots(app: &App) -> Vec<PathBuf> {
     let Ok(states) = lock(&app.reader).source_states() else { return vec![] };
     let mut roots = Vec::new();
     for st in states.iter().filter(|s| s.allowed && !s.paused) {
-        if let Some(src) = app.sources.iter().find(|s| s.id() == st.id) {
-            if src.kind() == Kind::Live {
-                roots.extend(src.roots().into_iter().filter(|r| r.exists()));
-            }
+        match sources::find(&app.sources, &st.id) {
+            Ok(src) if src.kind() == Kind::Live => roots.extend(src.roots().into_iter().filter(|r| r.exists())),
+            _ => {}
         }
     }
     roots
@@ -97,9 +96,9 @@ fn sync_once(handle: &AppHandle, app: &App, quiet: bool) {
 
 /// Hovering the menu bar icon shows the score without opening anything.
 fn update_tray(handle: &AppHandle, app: &App) {
-    let Ok(s) = lock(&app.reader).stats(&Default::default(), chrono::Local::now().date_naive()) else { return };
+    let Ok(s) = lock(&app.reader).stats(&store::Filter::default(), chrono::Local::now().date_naive()) else { return };
     if let Some(tray) = handle.tray_by_id("tray") {
-        let tip = format!("No, Actually... · {} catches this week · {}", s.catches_last_7d, s.tier);
+        let tip = format!("No, Actually... · {} catches this week · {}", s.catches_last_7d, s.tier.name());
         let _ = tray.set_tooltip(Some(tip));
     }
 }

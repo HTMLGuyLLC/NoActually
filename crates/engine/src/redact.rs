@@ -4,6 +4,7 @@ use crate::head_chars;
 use regex::Regex;
 use std::sync::LazyLock;
 
+/// The longest snippet kept, in chars.
 pub const SNIPPET_CHARS: usize = 140;
 
 static REDACTIONS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
