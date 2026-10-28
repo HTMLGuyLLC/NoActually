@@ -17,6 +17,9 @@ DMG="$ROOT/target/universal-apple-darwin/release/bundle/dmg/No-Actually-${VERSIO
 UPDATE="$ROOT/target/universal-apple-darwin/release/bundle/macos/No-Actually-${VERSION}-Mac-Update.app.tar.gz"
 P="No-Actually-${VERSION}"
 
+WORK=""
+trap '[[ -z "$WORK" ]] || rm -rf "$WORK"' EXIT
+
 RID="$(gh api "repos/$REPO/releases" -q ".[] | select(.tag_name==\"$TAG\") | .id" | head -1)"
 [[ -n "$RID" ]] || { echo "No release for $TAG yet. Push the tag and let the Release workflow finish." >&2; exit 1; }
 
@@ -25,7 +28,7 @@ plain_name() { node "$ROOT/scripts/latest-json.mjs" plain-name "$1" "$VERSION"; 
 echo "Renaming files…"
 # tauri-action v1 also sets a display label (the original file name), and GitHub shows the
 # label instead of the name, so set both.
-gh api "repos/$REPO/releases/$RID/assets" -q '.[] | "\(.id)\t\(.name)\t\(.label // "")"' | while IFS=$'\t' read -r id name label; do
+gh api "repos/$REPO/releases/$RID/assets" --paginate -q '.[] | "\(.id)\t\(.name)\t\(.label // "")"' | while IFS=$'\t' read -r id name label; do
   new="$(plain_name "$name")"
   [[ "$new" == "$name" && ( -z "$label" || "$label" == "$new" ) ]] && continue
   gh api -X PATCH "repos/$REPO/releases/assets/$id" -f name="$new" -f label="$new" -q '"  " + .name'
@@ -50,8 +53,14 @@ fi
 echo "Writing latest.json…"
 WORK="$(mktemp -d)"
 IN_ARGS=()
-if gh release download "$TAG" -R "$REPO" --pattern latest.json --dir "$WORK" 2>/dev/null; then
+# No latest.json yet is fine (Mac-only release, or CI didn't make one); any other failure isn't.
+if dl_err="$(gh release download "$TAG" -R "$REPO" --pattern latest.json --dir "$WORK" 2>&1)"; then
   IN_ARGS=(--in "$WORK/latest.json")
+elif [[ "$dl_err" == *"no assets match"* || "$dl_err" == *"not found"* ]]; then
+  echo "No latest.json on the release yet; starting a new one." >&2
+else
+  echo "Couldn't download latest.json: $dl_err" >&2
+  exit 1
 fi
 gh api "repos/$REPO/releases/$RID/assets" --paginate -q '.[].name' > "$WORK/assets.txt"
 node "$ROOT/scripts/latest-json.mjs" finish --version "$VERSION" --tag "$TAG" --repo "$REPO" \

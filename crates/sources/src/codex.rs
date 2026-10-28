@@ -1,10 +1,9 @@
 //! Codex (CLI and desktop) rollouts: JSONL, older days compressed as `.jsonl.zst`.
 
-use crate::claude_code::memfind;
-use crate::{home, pair, parse_ts, walk, Event, FileScan, Kind, Source};
-use anyhow::Result;
+use crate::jsonl::{for_each_line, open_at};
+use crate::{contains, file_name, home, pair, parse_ts, walk, Error, Event, FileScan, Kind, Result, Source};
 use serde_json::Value;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::io::{BufRead, Read};
 use std::path::{Path, PathBuf};
 
 pub struct Codex;
@@ -89,11 +88,12 @@ impl Source for Codex {
         Kind::Live
     }
     fn roots(&self) -> Vec<PathBuf> {
-        vec![home().join(".codex").join("sessions"), home().join(".codex").join("archived_sessions")]
+        let Some(codex) = home().map(|h| h.join(".codex")) else { return Vec::new() };
+        vec![codex.join("sessions"), codex.join("archived_sessions")]
     }
     fn files(&self, root: &Path) -> Vec<PathBuf> {
         walk(root, &|p| {
-            let n = p.file_name().map(|n| n.to_string_lossy()).unwrap_or_default();
+            let n = file_name(p);
             n.starts_with("rollout-") && (n.ends_with(".jsonl") || n.ends_with(".jsonl.zst"))
         })
     }
@@ -102,83 +102,85 @@ impl Source for Codex {
     }
 
     fn scan(&self, path: &Path, from: u64, finalize: bool) -> Result<FileScan> {
-        let file = std::fs::File::open(path)?;
-        let (mut reader, from): (Box<dyn BufRead>, u64) = if is_zst(path) {
+        // Rollouts are always read from the top: the lines before `from` were already emitted,
+        // but they carry the session's metadata and current model.
+        let reader: Box<dyn BufRead> = if is_zst(path) {
+            let file = std::fs::File::open(path).map_err(Error::io(path))?;
             let mut raw = Vec::new();
-            ruzstd::StreamingDecoder::new(file)?.read_to_end(&mut raw)?;
-            (Box::new(std::io::Cursor::new(raw)), 0)
+            ruzstd::decoding::StreamingDecoder::new(file)
+                .map_err(|source| Error::Zstd { path: path.to_path_buf(), source })?
+                .read_to_end(&mut raw)
+                .map_err(Error::io(path))?;
+            Box::new(std::io::Cursor::new(raw))
         } else {
-            let mut f = file;
-            f.seek(SeekFrom::Start(0))?;
-            (Box::new(BufReader::with_capacity(1 << 16, f)), from)
+            Box::new(open_at(path, 0)?)
         };
         // Compressed files are finished sessions: read whole, always final.
-        let finalize = finalize || is_zst(path);
+        let (from, finalize) = if is_zst(path) { (0, true) } else { (from, finalize) };
         // The filename's uuid is the session id; it's stable no matter where a pass resumes.
-        let session = path
-            .file_name()
-            .map(|s| s.to_string_lossy().trim_end_matches(".zst").trim_end_matches(".jsonl").to_string())
-            .unwrap_or_default();
-        let mut model: Option<String> = None;
-        let mut human = true;
-        let mut events = Vec::new();
-        let mut pos = 0u64;
-        let mut buf = Vec::new();
-        loop {
-            buf.clear();
-            let n = reader.read_until(b'\n', &mut buf)?;
-            if n == 0 || buf.last() != Some(&b'\n') {
-                break;
+        let session = file_name(path).trim_end_matches(".zst").trim_end_matches(".jsonl").to_string();
+        let mut rollout = Rollout { session: &session, from, model: None, human: true, events: Vec::new() };
+        let end = for_each_line(reader, 0, |pos, buf| rollout.line(pos, buf)).map_err(Error::io(path))?;
+        Ok(pair(self.id(), &session, rollout.events, end, finalize))
+    }
+}
+
+/// State carried down one rollout as it's read.
+struct Rollout<'a> {
+    session: &'a str,
+    /// Lines before this were already emitted; they're read only for metadata and the model.
+    from: u64,
+    model: Option<String>,
+    /// False for guardian / subagent threads.
+    human: bool,
+    events: Vec<Event>,
+}
+
+impl Rollout<'_> {
+    fn line(&mut self, pos: u64, buf: &[u8]) {
+        let fresh = pos >= self.from;
+        let meta = contains(buf, b"session_meta") || contains(buf, b"turn_context");
+        if !(meta || (fresh && contains(buf, b"\"message\""))) {
+            return;
+        }
+        let Ok(v) = serde_json::from_slice::<Value>(buf) else { return };
+        let payload = &v["payload"];
+        match v["type"].as_str() {
+            Some("session_meta") => self.human = human_thread(payload),
+            Some("turn_context") => {
+                if let Some(m) = payload["model"].as_str() {
+                    self.model = Some(m.to_string());
+                }
             }
-            let line_pos = pos;
-            pos += n as u64;
-            // Lines before the checkpoint were already emitted; read them only for session
-            // metadata and the current model.
-            let meta = memfind(&buf, b"session_meta") || memfind(&buf, b"turn_context");
-            if !(meta || (line_pos >= from && memfind(&buf, b"\"message\""))) {
-                continue;
-            }
-            let Ok(v) = serde_json::from_slice::<Value>(&buf) else { continue };
-            let payload = &v["payload"];
-            match v["type"].as_str() {
-                Some("session_meta") => human = human_thread(payload),
-                Some("turn_context") => {
-                    if let Some(m) = payload["model"].as_str() {
-                        model = Some(m.to_string());
+            Some("response_item") if payload["type"] == "message" && fresh => match payload["role"].as_str() {
+                Some("user") if self.human => {
+                    let Some(text) = text_items(&payload["content"], "input_text") else { return };
+                    let text = strip_images(strip_preamble(&text));
+                    if text.is_empty() || NOISE.iter().any(|n| text.starts_with(n)) {
+                        return;
+                    }
+                    if let Some(ts) = v["timestamp"].as_str().and_then(parse_ts) {
+                        let key = payload["id"].as_str().map(|id| format!("{}:{id}", self.session));
+                        self.events.push(Event::Human { text, ts, key, pos });
                     }
                 }
-                Some("response_item") if payload["type"] == "message" && line_pos >= from => {
-                    let ts = v["timestamp"].as_str().and_then(parse_ts);
-                    match payload["role"].as_str() {
-                        Some("user") if human => {
-                            let Some(text) = text_items(&payload["content"], "input_text") else { continue };
-                            let text = strip_images(strip_preamble(&text));
-                            if text.is_empty() || NOISE.iter().any(|n| text.starts_with(n)) {
-                                continue;
-                            }
-                            if let Some(ts) = ts {
-                                let key = payload["id"].as_str().map(|id| format!("{session}:{id}"));
-                                events.push(Event::Human { text: text.to_string(), ts, key, pos: line_pos });
-                            }
-                        }
-                        Some("assistant") => {
-                            if let Some(text) = text_items(&payload["content"], "output_text") {
-                                events.push(Event::Ai { text, model: model.clone(), pos: line_pos });
-                            }
-                        }
-                        _ => {}
+                Some("assistant") => {
+                    if let Some(text) = text_items(&payload["content"], "output_text") {
+                        self.events.push(Event::Ai { text, model: self.model.clone(), pos });
                     }
                 }
                 _ => {}
-            }
+            },
+            _ => {}
         }
-        Ok(pair("codex", &session, events, pos, finalize))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::{line, zstd};
+    use serde_json::json;
 
     #[test]
     fn strips_attachment_preamble() {
@@ -203,38 +205,30 @@ mod tests {
         assert!(human_thread(&serde_json::json!({"source":"vscode","thread_source":"user"})));
         assert!(!human_thread(&serde_json::json!({"thread_source":"agent"})));
     }
-}
-
-#[cfg(test)]
-mod file_tests {
-    use super::*;
-    use std::io::Write;
-
-    fn line(v: serde_json::Value) -> String {
-        format!("{v}\n")
-    }
 
     fn msg(role: &str, kind: &str, text: &str, id: &str) -> String {
-        line(serde_json::json!({"timestamp":"2026-10-20T10:00:00Z","type":"response_item",
+        line(&json!({"timestamp":"2026-10-20T10:00:00Z","type":"response_item",
             "payload":{"type":"message","role":role,"id":id,"content":[{"type":kind,"text":text}]}}))
+    }
+
+    fn opening() -> String {
+        line(&json!({"type":"session_meta","payload":{"id":"abc","source":"vscode","thread_source":"user"}}))
+            + &line(&json!({"type":"turn_context","payload":{"model":"gpt-6-astra"}}))
+            + &msg("user", "input_text", "<environment_context>cwd</environment_context>", "e")
+            + &msg("assistant", "output_text", "Use read_xlsx.", "a1")
+            + &msg("user", "input_text", "that function doesn't exist", "u1")
     }
 
     #[test]
     fn resuming_mid_file_keeps_the_model_and_emits_once() {
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("rollout-2026-10-20-abc.jsonl");
-        let mut f = std::fs::File::create(&p).unwrap();
-        f.write_all(line(serde_json::json!({"type":"session_meta","payload":{"id":"abc","source":"vscode","thread_source":"user"}})).as_bytes()).unwrap();
-        f.write_all(line(serde_json::json!({"type":"turn_context","payload":{"model":"gpt-6-astra"}})).as_bytes())
-            .unwrap();
-        f.write_all(msg("user", "input_text", "<environment_context>cwd</environment_context>", "e").as_bytes())
-            .unwrap();
-        f.write_all(msg("assistant", "output_text", "Use read_xlsx.", "a1").as_bytes()).unwrap();
-        f.write_all(msg("user", "input_text", "that function doesn't exist", "u1").as_bytes()).unwrap();
+        std::fs::write(&p, opening()).unwrap();
         let first = Codex.scan(&p, 0, false).unwrap();
         assert!(first.turns.is_empty(), "waits for the reply");
 
-        f.write_all(msg("assistant", "output_text", "You're right, it's read_excel.", "a2").as_bytes()).unwrap();
+        std::fs::write(&p, opening() + &msg("assistant", "output_text", "You're right, it's read_excel.", "a2"))
+            .unwrap();
         let second = Codex.scan(&p, first.checkpoint, false).unwrap();
         assert_eq!(second.turns.len(), 1);
         let t = &second.turns[0];
@@ -248,12 +242,43 @@ mod file_tests {
     fn guardian_threads_are_ignored() {
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("rollout-x.jsonl");
-        let body = line(
-            serde_json::json!({"type":"session_meta","payload":{"id":"x","source":{"subagent":{"other":"guardian"}}}}),
-        ) + &msg("assistant", "output_text", "Plan.", "a")
-            + &msg("user", "input_text", "no, that's wrong", "u")
-            + &msg("assistant", "output_text", "You're right.", "b");
+        let body =
+            line(&json!({"type":"session_meta","payload":{"id":"x","source":{"subagent":{"other":"guardian"}}}}))
+                + &msg("assistant", "output_text", "Plan.", "a")
+                + &msg("user", "input_text", "no, that's wrong", "u")
+                + &msg("assistant", "output_text", "You're right.", "b");
         std::fs::write(&p, body).unwrap();
         assert!(Codex.scan(&p, 0, true).unwrap().turns.is_empty());
+    }
+
+    #[test]
+    fn compressed_rollouts_are_read_whole_and_final() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("rollout-2026-09-01-old.jsonl.zst");
+        // Ends on an unanswered message: a finished session still counts it.
+        let body = opening()
+            + &msg("assistant", "output_text", "You're right.", "a2")
+            + &msg("user", "input_text", "thanks", "u2");
+        std::fs::write(&p, zstd(body.as_bytes())).unwrap();
+        assert!(!Codex.append_only(&p));
+        let scan = Codex.scan(&p, 12_345, false).unwrap(); // an offset is ignored for .zst
+        assert_eq!(scan.turns.len(), 2);
+        assert_eq!(scan.turns[0].session, "rollout-2026-09-01-old");
+        assert_eq!(scan.turns[0].key.as_deref(), Some("rollout-2026-09-01-old:u1"));
+        assert_eq!(scan.checkpoint as usize, body.len());
+
+        std::fs::write(&p, b"not zstd").unwrap();
+        let err = Codex.scan(&p, 0, false).err().unwrap().to_string();
+        assert!(err.contains("rollout-2026-09-01-old.jsonl.zst"), "{err}");
+    }
+
+    #[test]
+    fn lists_only_rollouts() {
+        let dir = tempfile::tempdir().unwrap();
+        for n in ["rollout-a.jsonl", "rollout-b.jsonl.zst", "other.jsonl", "rollout-c.json"] {
+            std::fs::write(dir.path().join(n), "").unwrap();
+        }
+        let names: Vec<_> = Codex.files(dir.path()).iter().map(|p| file_name(p).into_owned()).collect();
+        assert_eq!(names, ["rollout-a.jsonl", "rollout-b.jsonl.zst"]);
     }
 }

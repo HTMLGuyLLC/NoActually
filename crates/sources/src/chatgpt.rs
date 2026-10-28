@@ -1,8 +1,8 @@
 //! ChatGPT data export (Settings → Data controls → Export): `conversations.json`.
 //! Each conversation is a tree; the visible thread runs from `current_node` up to the root.
 
-use crate::{epoch_ts, pair, Event, FileScan, Kind, Source};
-use anyhow::Result;
+use crate::export::scan_export;
+use crate::{epoch_ts, file_name, walk, Event, FileScan, Kind, Result, Source};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -18,7 +18,14 @@ fn text_parts(msg: &Value) -> Option<String> {
     (!text.trim().is_empty()).then_some(text)
 }
 
-pub(crate) fn events(conv: &Value) -> Vec<Event> {
+/// Longest thread walked; a malformed export with a parent cycle stops here.
+const MAX_CHAIN: usize = 100_000;
+
+fn session(conv: &Value) -> &str {
+    conv["conversation_id"].as_str().or(conv["id"].as_str()).unwrap_or_default()
+}
+
+fn events(conv: &Value) -> Vec<Event> {
     let mapping = &conv["mapping"];
     let mut chain = Vec::new();
     let mut node = conv["current_node"].as_str();
@@ -26,8 +33,8 @@ pub(crate) fn events(conv: &Value) -> Vec<Event> {
         let n = &mapping[id];
         chain.push(n);
         node = n["parent"].as_str();
-        if chain.len() > 100_000 {
-            break; // malformed cycle
+        if chain.len() > MAX_CHAIN {
+            break;
         }
     }
     chain.reverse();
@@ -70,8 +77,8 @@ impl Source for ChatGptExport {
         Vec::new() // the user picks the file
     }
     fn files(&self, root: &Path) -> Vec<PathBuf> {
-        crate::walk(root, &|p| {
-            let n = p.file_name().map(|n| n.to_string_lossy()).unwrap_or_default();
+        walk(root, &|p| {
+            let n = file_name(p);
             n.starts_with("conversations") && n.ends_with(".json")
         })
     }
@@ -79,20 +86,56 @@ impl Source for ChatGptExport {
         false
     }
     fn scan(&self, path: &Path, _from: u64, _finalize: bool) -> Result<FileScan> {
-        let convs: Vec<Value> = serde_json::from_slice(&std::fs::read(path)?)?;
-        let mut scan = FileScan::default();
-        for c in &convs {
-            let id = c["conversation_id"].as_str().or(c["id"].as_str()).unwrap_or_default();
-            scan.turns.extend(pair("chatgpt-export", id, events(c), 0, true).turns);
-        }
-        scan.checkpoint = std::fs::metadata(path)?.len();
-        Ok(scan)
+        scan_export(self.id(), path, session, events)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pair;
+    use serde_json::json;
+
+    fn msg(id: &str, role: &str, text: &str, hidden: bool) -> Value {
+        json!({"id":id,"author":{"role":role},"create_time":1.0,"content":{"content_type":"text","parts":[text]},
+            "metadata":{"model_slug":"gpt-5.1","is_visually_hidden_from_conversation":hidden}})
+    }
+
+    #[test]
+    fn scans_an_export_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let conv = json!({"conversation_id":"c1","current_node":"c","mapping":{
+            "a": {"parent": null, "message": msg("a","assistant","Use pandas.read_xlsx",false)},
+            "h": {"parent": "a", "message": msg("h","system","hidden context",true)},
+            "b": {"parent": "h", "message": msg("b","user","that function doesn't exist",false)},
+            "c": {"parent": "b", "message": msg("c","assistant","You're right.",false)}
+        }});
+        let p = dir.path().join("conversations.json");
+        let body = serde_json::to_vec(&json!([conv])).unwrap();
+        std::fs::write(&p, &body).unwrap();
+        let scan = ChatGptExport.scan(&p, 0, false).unwrap();
+        assert_eq!(scan.turns.len(), 1);
+        assert_eq!((scan.turns[0].session.as_str(), scan.turns[0].key.as_deref()), ("c1", Some("chatgpt:b")));
+        assert_eq!(scan.checkpoint as usize, body.len());
+
+        std::fs::write(dir.path().join("conversations-002.json"), "[]").unwrap();
+        std::fs::write(dir.path().join("user.json"), "{}").unwrap();
+        assert_eq!(ChatGptExport.files(dir.path()).len(), 2);
+
+        std::fs::write(&p, "{not json").unwrap();
+        assert!(ChatGptExport.scan(&p, 0, false).err().unwrap().to_string().contains("not a valid export"));
+    }
+
+    #[test]
+    fn hidden_messages_are_skipped_and_cycles_end() {
+        let conv = json!({"current_node":"b","mapping":{
+            "a": {"parent": "b", "message": msg("a","user","no, that's wrong",true)},
+            "b": {"parent": "a", "message": msg("b","assistant","Sure.",false)}
+        }});
+        let ev = events(&conv);
+        assert_eq!(ev.len(), MAX_CHAIN / 2 + 1, "walk stops at the cap, keeping only visible replies");
+        assert!(ev.iter().all(|e| matches!(e, Event::Ai { .. })));
+    }
 
     #[test]
     fn walks_the_visible_branch() {

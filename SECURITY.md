@@ -6,6 +6,8 @@ Report privately through GitHub Security Advisories: go to the **Security** tab 
 
 Please do not open a public issue for security problems. Include steps to reproduce, the affected version and your OS. Do not attach real chat data.
 
+We aim to acknowledge reports within 7 days, and will keep you updated until the issue is fixed or ruled out.
+
 ## Scope
 
 In scope:
@@ -26,4 +28,7 @@ Out of scope:
 
 ## Supported versions
 
-Only the latest release gets fixes.
+| Version | Supported |
+|---|---|
+| Latest release | Yes |
+| Older releases | No. Please update. |

@@ -1,15 +1,19 @@
 //! Everything the windows can ask the Rust side to do.
+//!
+//! Commands marked `#[tauri::command(async)]` write through `App::writer`, which a sync pass
+//! holds for its whole length. They run off the main thread so waiting for it never freezes
+//! the window. Commands that only read use `App::reader` and return at once.
 
 use crate::updater::{self, UpdateStatus, Updates};
 use crate::{lock, tracker::Msg, App, SyncStatus};
 use chrono::{Local, NaiveDate};
 use serde::Serialize;
-use sources::Kind;
+use sources::{Kind, Source};
 use std::sync::Arc;
-use store::{Filter, Retention, SourceState, Stats};
+use store::{Filter, Meta, Retention, SourceState, Stats};
 use tauri::{AppHandle, State};
 use tauri_plugin_autostart::ManagerExt as _;
-use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_dialog::{DialogExt, FileDialogBuilder, FilePath};
 use tauri_plugin_notification::{NotificationExt, PermissionState};
 use tauri_plugin_opener::OpenerExt;
 
@@ -24,8 +28,14 @@ fn changed(app: &App) {
     let _ = app.tracker.send(Msg::SourcesChanged);
 }
 
+/// The adapter for `id`, or an error the window can show.
+fn source<'a>(app: &'a App, id: &str) -> Res<&'a dyn Source> {
+    sources::find(&app.sources, id).map_err(err)
+}
+
+/// What the consent screen shows for one source.
 #[derive(Serialize)]
-pub struct SourceInfo {
+pub struct SourceListing {
     id: &'static str,
     name: &'static str,
     kind: &'static str,
@@ -34,18 +44,24 @@ pub struct SourceInfo {
     state: Option<SourceState>,
 }
 
+/// Tiers, categories and sources, so the UI never hard-codes Rust's tables.
+#[tauri::command]
+pub fn meta(app: State<Arc<App>>) -> Meta {
+    store::meta(&app.sources)
+}
+
 #[tauri::command]
 pub fn stats(app: State<Arc<App>>, filter: Filter) -> Res<Stats> {
     lock(&app.reader).stats(&filter, Local::now().date_naive()).map_err(err)
 }
 
 #[tauri::command]
-pub fn list_sources(app: State<Arc<App>>) -> Res<Vec<SourceInfo>> {
+pub fn list_sources(app: State<Arc<App>>) -> Res<Vec<SourceListing>> {
     let states = lock(&app.reader).source_states().map_err(err)?;
     Ok(app
         .sources
         .iter()
-        .map(|s| SourceInfo {
+        .map(|s| SourceListing {
             id: s.id(),
             name: s.name(),
             kind: if s.kind() == Kind::Live { "live" } else { "import" },
@@ -55,7 +71,6 @@ pub fn list_sources(app: State<Arc<App>>) -> Res<Vec<SourceInfo>> {
         .collect())
 }
 
-/// Async: it may wait for a sync to finish, and must not freeze the window meanwhile.
 #[tauri::command(async)]
 pub fn allow_source(
     handle: AppHandle,
@@ -64,14 +79,13 @@ pub fn allow_source(
     since: Option<NaiveDate>,
     from_now: Option<bool>,
 ) -> Res<()> {
+    let src = source(&app, &id)?;
     {
         let mut store = lock(&app.writer);
         store.allow(&id, since).map_err(err)?;
         // "From now on": everything already on disk is treated as read.
         if from_now == Some(true) {
-            if let Some(src) = app.sources.iter().find(|s| s.id() == id) {
-                store.start_from_now(src.as_ref()).map_err(err)?;
-            }
+            store.start_from_now(src).map_err(err)?;
         }
     }
     log::info!("allowed source {id} (since {since:?})");
@@ -83,49 +97,59 @@ pub fn allow_source(
     Ok(())
 }
 
-/// Async: it may wait for a sync to finish, and must not freeze the window meanwhile.
 #[tauri::command(async)]
 pub fn revoke_source(app: State<Arc<App>>, id: String) -> Res<()> {
+    source(&app, &id)?;
     lock(&app.writer).revoke(&id).map_err(err)?;
     changed(&app);
     Ok(())
 }
 
-/// Async: it may wait for a sync to finish, and must not freeze the window meanwhile.
 #[tauri::command(async)]
 pub fn forget_source(app: State<Arc<App>>, id: String) -> Res<()> {
+    source(&app, &id)?;
     lock(&app.writer).forget(&id).map_err(err)?;
     log::info!("forgot source {id}");
     changed(&app);
     Ok(())
 }
 
-/// Async: it may wait for a sync to finish, and must not freeze the window meanwhile.
 #[tauri::command(async)]
 pub fn pause_source(app: State<Arc<App>>, id: String, paused: bool) -> Res<()> {
+    source(&app, &id)?;
     lock(&app.writer).set_paused(&id, paused).map_err(err)?;
     changed(&app);
     Ok(())
 }
 
-/// Opens a native file picker for an export (ChatGPT / Claude.ai `conversations.json`).
+/// Shows a native file dialog without blocking the async runtime; `None` if it was cancelled.
+async fn pick(dialog: FileDialogBuilder<tauri::Wry>, save: bool) -> Option<FilePath> {
+    let (tx, mut rx) = tauri::async_runtime::channel(1);
+    let done = move |p: Option<FilePath>| {
+        let _ = tx.try_send(p);
+    };
+    if save {
+        dialog.save_file(done);
+    } else {
+        dialog.pick_file(done);
+    }
+    rx.recv().await.flatten()
+}
+
+/// Opens a native file picker for an export (ChatGPT / Claude.ai `conversations.json`), then
+/// imports it: the path is added and the source allowed, same as `noactually import`.
 #[tauri::command]
 pub async fn import_export(handle: AppHandle, app: State<'_, Arc<App>>, id: String) -> Res<Option<String>> {
-    let Some(file) = handle
-        .dialog()
-        .file()
-        .set_title("Choose your conversations.json")
-        .add_filter("Export", &["json"])
-        .blocking_pick_file()
-    else {
-        return Ok(None);
-    };
+    source(&app, &id)?;
+    let dialog = handle.dialog().file().set_title("Choose your conversations.json").add_filter("Export", &["json"]);
+    let Some(file) = pick(dialog, false).await else { return Ok(None) };
     let path = file.into_path().map_err(err)?.to_string_lossy().to_string();
-    {
-        let store = lock(&app.writer);
-        store.add_path(&id, &path).map_err(err)?;
-        store.allow(&id, None).map_err(err)?;
-    }
+    // The writer may be held by a sync for a while; wait for it off the async runtime.
+    let (writer, import_path) = (Arc::clone(&app), path.clone());
+    tauri::async_runtime::spawn_blocking(move || lock(&writer.writer).import(&id, &import_path))
+        .await
+        .map_err(err)?
+        .map_err(err)?;
     changed(&app);
     Ok(Some(path))
 }
@@ -135,16 +159,12 @@ pub fn get_retention(app: State<Arc<App>>) -> Res<Retention> {
     lock(&app.reader).retention().map_err(err)
 }
 
-/// Async: it may wait for a sync to finish, and must not freeze the window meanwhile.
 #[tauri::command(async)]
 pub fn set_retention(app: State<Arc<App>>, retention: Retention) -> Res<()> {
-    if retention.full_days == 0 || retention.snippet_days == 0 {
-        return Err("Keep text for at least 1 day.".into());
-    }
+    retention.validate().map_err(|e| e.to_string())?;
     lock(&app.writer).set_retention(retention).map_err(err)
 }
 
-/// Async: it may wait for a sync to finish, and must not freeze the window meanwhile.
 #[tauri::command(async)]
 pub fn pin(app: State<Arc<App>>, id: i64, pinned: bool) -> Res<()> {
     lock(&app.writer).pin(id, pinned).map_err(err)
@@ -176,28 +196,33 @@ pub fn set_autostart(handle: AppHandle, enabled: bool) -> Res<()> {
     if enabled { al.enable() } else { al.disable() }.map_err(err)
 }
 
+/// Every PNG file starts with these 8 bytes.
+const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1A, b'\n'];
+
+/// True if `bytes` start like a PNG file.
+pub fn is_png(bytes: &[u8]) -> bool {
+    bytes.starts_with(&PNG_SIGNATURE)
+}
+
 /// Saves the share card the window drew. The user picks where; nothing is uploaded.
 #[tauri::command]
 pub async fn save_share_card(handle: AppHandle, png: Vec<u8>) -> Res<Option<String>> {
-    if png.len() < 8 || &png[1..4] != b"PNG" {
+    if !is_png(&png) {
         return Err("That isn't a PNG image.".into());
     }
-    let Some(dest) = handle
+    let dialog = handle
         .dialog()
         .file()
         .set_title("Save your scorecard")
         .set_file_name("no-actually-scorecard.png")
-        .add_filter("PNG image", &["png"])
-        .blocking_save_file()
-    else {
-        return Ok(None);
-    };
+        .add_filter("PNG image", &["png"]);
+    let Some(dest) = pick(dialog, true).await else { return Ok(None) };
     let path = dest.into_path().map_err(err)?;
     std::fs::write(&path, png).map_err(err)?;
     Ok(Some(path.to_string_lossy().to_string()))
 }
 
-/// Sites a share button may open. Keep in sync with SHARE_HOSTS in app/src/share.ts.
+/// Sites a share button may open. Keep in sync with `SHARE_HOSTS` in app/src/share/share.ts.
 const SHARE_HOSTS: &[&str] = &[
     "x.com",
     "www.linkedin.com",
@@ -231,7 +256,6 @@ pub fn update_status(app: State<Arc<App>>, updates: State<Updates>) -> UpdateSta
     updates.status(&app)
 }
 
-/// Async: it may wait for a sync to finish, and must not freeze the window meanwhile.
 #[tauri::command(async)]
 pub fn set_auto_update(app: State<Arc<App>>, updates: State<Updates>, enabled: bool) -> Res<()> {
     lock(&app.writer).set_setting(updater::AUTO_KEY, if enabled { "on" } else { "off" }).map_err(err)?;
@@ -254,7 +278,7 @@ pub async fn install_update(handle: AppHandle) -> Res<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::is_share_url;
+    use super::*;
 
     #[test]
     fn only_share_sites_open() {
@@ -264,5 +288,49 @@ mod tests {
         assert!(!is_share_url("https://x.com.evil.test/"), "exact host");
         assert!(!is_share_url("https://evil.test/?x.com"));
         assert!(!is_share_url("file:///etc/passwd"));
+    }
+
+    #[test]
+    fn png_needs_the_whole_signature() {
+        assert!(is_png(b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR"));
+        assert!(!is_png(b"xPNG\r\n\x1a\n"), "first byte matters");
+        assert!(!is_png(b"\x89PNG"), "too short");
+        assert!(!is_png(b"<svg>PNG</svg>"));
+    }
+
+    #[test]
+    fn bundle_id_matches_the_shared_database_folder() {
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        assert_eq!(conf["identifier"], store::APP_ID, "the CLI and app must open the same database");
+    }
+
+    /// The browser demo (app/public/demo.json) stands in for these commands, so it must have
+    /// their exact shape. This fails if Rust's output changes and the demo isn't updated.
+    #[test]
+    fn demo_data_matches_what_rust_sends() {
+        let demo: serde_json::Value = serde_json::from_str(include_str!("../../public/demo.json")).unwrap();
+        let meta = serde_json::to_value(store::meta(&sources::all())).unwrap();
+        assert_eq!(demo["meta"], meta, "demo.json `meta` differs from the `meta` command");
+
+        let db = store::Store::open_in_memory().unwrap();
+        let stats = serde_json::to_value(db.stats(&Filter::default(), Local::now().date_naive()).unwrap()).unwrap();
+        let keys = |v: &serde_json::Value| -> Vec<String> {
+            let mut k: Vec<String> = v.as_object().unwrap().keys().cloned().collect();
+            k.sort();
+            k
+        };
+        assert_eq!(keys(&demo["stats"]), keys(&stats), "demo.json `stats` keys differ from `Stats`");
+        let rows = [
+            ("hall_of_fame", serde_json::to_value(store::HallEntry::default()).unwrap()),
+            ("models", serde_json::to_value(store::ModelRow::default()).unwrap()),
+            ("weekly", serde_json::to_value(store::WeekRow::default()).unwrap()),
+        ];
+        for (field, row) in rows {
+            let demo_rows = demo["stats"][field].as_array().unwrap();
+            assert!(!demo_rows.is_empty(), "demo.json `{field}` is empty, so nothing is checked");
+            for r in demo_rows {
+                assert_eq!(keys(r), keys(&row), "a demo.json `{field}` row has different keys");
+            }
+        }
     }
 }

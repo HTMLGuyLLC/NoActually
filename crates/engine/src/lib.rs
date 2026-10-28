@@ -1,27 +1,43 @@
 //! Deterministic catch detection. Pure functions only: no I/O, no clock, no network,
 //! so the same history always produces the same score (and this crate builds for WASM).
+//!
+//! [`classify`] labels one [`Turn`]; [`normalize_model`] splits a raw model id into
+//! provider / family / version; [`redact`] and [`snippet`] decide what text may be kept;
+//! [`Tier`] and [`Answer`] turn a week's catches into the headline.
+//!
+//! Tests: each module keeps its unit tests inline in `mod tests`; the rule book's behavior
+//! suite lives in `src/tests.rs` because it exercises the whole crate.
+
+#![warn(missing_docs)]
 
 mod model;
 mod redact;
 mod rules;
+mod tier;
 
 pub use model::{normalize_model, Model};
-pub use redact::{redact, snippet};
+pub use redact::{redact, snippet, SNIPPET_CHARS};
+pub use tier::{Answer, Tier, UnknownTier};
 
 use serde::{Deserialize, Serialize};
 
 /// One AI message: its text and the raw model id that wrote it, when the source records one.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AiMsg {
+    /// What the AI wrote (sources may keep only the part the rules read).
     pub text: String,
+    /// The raw model id, exactly as the tool recorded it.
     pub model: Option<String>,
 }
 
 /// One human message with the AI reply before it and the AI reply after it.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Turn {
+    /// What the person typed.
     pub human: String,
+    /// The AI reply the person was answering.
     pub prev_ai: Option<AiMsg>,
+    /// The AI reply that came next.
     pub next_ai: Option<AiMsg>,
     /// The model this chat was using nearby, for when neither neighboring reply names one
     /// (a first message that was never answered, or replies the tool didn't tag).
@@ -29,6 +45,7 @@ pub struct Turn {
     pub chat_model: Option<String>,
 }
 
+/// What a turn was: one of three kinds of catch, or the AI catching you.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Label {
@@ -43,9 +60,15 @@ pub enum Label {
 }
 
 impl Label {
+    /// Every label.
+    pub const ALL: [Label; 4] = [Label::Confirmed, Label::Admitted, Label::Claimed, Label::Humbled];
+
+    /// True for the labels that count toward your score (everything but `Humbled`).
     pub fn is_catch(self) -> bool {
         !matches!(self, Label::Humbled)
     }
+
+    /// Stable id, as stored and serialized.
     pub fn as_str(self) -> &'static str {
         match self {
             Label::Confirmed => "confirmed",
@@ -54,29 +77,28 @@ impl Label {
             Label::Humbled => "humbled",
         }
     }
-    pub fn parse(s: &str) -> Option<Self> {
-        Some(match s {
-            "confirmed" => Label::Confirmed,
-            "admitted" => Label::Admitted,
-            "claimed" => Label::Claimed,
-            "humbled" => Label::Humbled,
-            _ => return None,
-        })
-    }
 }
 
+/// What kind of mistake a catch was.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Category {
+    /// Invented something: a page, function or fact that doesn't exist.
     MadeItUp,
+    /// Did something other than what you asked.
     IgnoredInstructions,
+    /// Misunderstood what you meant.
     Misread,
+    /// Left something out.
     MissedSomething,
+    /// Said it was fixed; it wasn't.
     StillBroken,
+    /// Anything else.
     JustWrong,
 }
 
 impl Category {
+    /// Every category, in display order.
     pub const ALL: [Category; 6] = [
         Category::MadeItUp,
         Category::IgnoredInstructions,
@@ -85,6 +107,13 @@ impl Category {
         Category::StillBroken,
         Category::JustWrong,
     ];
+
+    /// The category with this id, if any.
+    pub fn from_id(id: &str) -> Option<Category> {
+        Category::ALL.into_iter().find(|c| c.as_str() == id)
+    }
+
+    /// Stable id, as stored and serialized.
     pub fn as_str(self) -> &'static str {
         match self {
             Category::MadeItUp => "made_it_up",
@@ -95,6 +124,8 @@ impl Category {
             Category::JustWrong => "just_wrong",
         }
     }
+
+    /// Display title ("Made it up").
     pub fn title(self) -> &'static str {
         match self {
             Category::MadeItUp => "Made it up",
@@ -111,10 +142,15 @@ impl Category {
 /// always be explained; `human_span` / `ai_span` are the byte ranges that matched.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct Verdict {
+    /// `None` for an ordinary message.
     pub label: Option<Label>,
+    /// Set for catches only.
     pub category: Option<Category>,
+    /// Ids of the rules that fired.
     pub rules: Vec<&'static str>,
+    /// Byte range in the normalized, trimmed human text.
     pub human_span: Option<(usize, usize)>,
+    /// Byte range in the normalized next AI reply.
     pub ai_span: Option<(usize, usize)>,
 }
 
@@ -135,7 +171,8 @@ impl Verdict {
 /// Bump whenever a change would label or attribute existing history differently; stores
 /// rebuild their scores from the history files when it changes.
 /// 2: placeholder replies are skipped and messages fall back to the chat's model.
-pub const RULES_VERSION: u32 = 2;
+/// 3: approvals ("No, that's fine") aren't pushback; the AI's admission no longer picks the category.
+pub const RULES_VERSION: u32 = 3;
 
 /// Tools write placeholder ids for replies no model wrote (Claude Code's "<synthetic>" for errors,
 /// interruptions and "No response requested").
@@ -150,6 +187,7 @@ const AI_HEAD: usize = 250; // chars of the next AI reply checked
 const PASTE: usize = 2500; // longer human messages are pasted docs, not corrections
 const ANSWER_TAIL: usize = 300; // a '?' this close to the end of the AI reply means you're answering it
 
+/// Labels one turn. Same input, same verdict, always.
 pub fn classify(turn: &Turn) -> Verdict {
     let human_norm = normalize_quotes(turn.human.trim());
     let t = human_norm.as_str();
@@ -187,9 +225,8 @@ pub fn classify(turn: &Turn) -> Verdict {
             v.rules.push(m.rule);
             v.human_span = Some(m.span);
         }
-        // The AI's admission often names the mistake, so categories look at both sides.
-        let both = format!("{body}\n{next}");
-        v.category = Some(rules::category(&both));
+        // The rest of the AI's reply often names the mistake, so categories look at both sides.
+        v.category = Some(rules::category(body, next, ai_admit.map(|m| m.span)));
         return v;
     }
 
@@ -213,20 +250,21 @@ pub fn normalize_quotes(s: &str) -> String {
     s.replace(['\u{2018}', '\u{2019}'], "'").replace(['\u{201C}', '\u{201D}'], "\"")
 }
 
-pub(crate) fn head_chars(s: &str, n: usize) -> &str {
+/// The first `n` chars of `s` (not bytes, so multibyte text never splits).
+pub fn head_chars(s: &str, n: usize) -> &str {
     match s.char_indices().nth(n) {
         Some((i, _)) => &s[..i],
         None => s,
     }
 }
 
-fn tail_chars(s: &str, n: usize) -> &str {
+/// The last `n` chars of `s`.
+pub fn tail_chars(s: &str, n: usize) -> &str {
     let count = s.chars().count();
     if count <= n {
         return s;
     }
-    let (i, _) = s.char_indices().nth(count - n).unwrap();
-    &s[i..]
+    s.char_indices().nth(count - n).map_or(s, |(i, _)| &s[i..])
 }
 
 #[cfg(test)]

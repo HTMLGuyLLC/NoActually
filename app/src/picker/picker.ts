@@ -1,5 +1,5 @@
 // Model picker logic, kept pure so it can be tested without a window.
-import type { Filter, ModelRow } from "./api";
+import type { Filter, ModelRow } from "../api";
 
 export type PickItem = { filter: Filter; label: string; path: string; depth: number; catches: number; messages: number };
 
@@ -11,7 +11,8 @@ const total = (rows: ModelRow[]) => rows.reduce((a, m) => ({ c: a.c + m.catches,
 export function buildPickItems(models: ModelRow[]): PickItem[] {
   const all = total(models);
   const items: PickItem[] = [{ filter: {}, label: "All AI", path: "Every model", depth: 0, catches: all.c, messages: all.m }];
-  const byCatches = (rows: ModelRow[]) => (a: string, b: string) => total(rows.filter((m) => m.provider === b || m.family === b)).c - total(rows.filter((m) => m.provider === a || m.family === a)).c;
+  const byCatches = (rows: ModelRow[]) => (a: string, b: string) =>
+    total(rows.filter((m) => m.provider === b || m.family === b)).c - total(rows.filter((m) => m.provider === a || m.family === a)).c;
   const providers = [...new Set(models.map((m) => m.provider))].sort(byCatches(models));
   for (const p of providers) {
     const pRows = models.filter((m) => m.provider === p);
@@ -24,20 +25,48 @@ export function buildPickItems(models: ModelRow[]): PickItem[] {
       // A provider whose only family has its own name ("No model recorded") is already listed.
       if (families.length === 1 && fam === p) {
         for (const v of versions) {
-          items.push({ filter: { provider: p, family: fam, version: v.version }, label: modelName(v), path: p, depth: 1, catches: v.catches, messages: v.messages });
+          items.push({
+            filter: { provider: p, family: fam, version: v.version },
+            label: modelName(v),
+            path: p,
+            depth: 1,
+            catches: v.catches,
+            messages: v.messages,
+          });
         }
         continue;
       }
       // A family with one version and nothing else is just that model: no extra level.
-      if (versions.length === 1 && fRows.length === 1) {
-        const v = versions[0];
-        items.push({ filter: { provider: p, family: fam, version: v.version }, label: modelName(v), path: p, depth: 1, catches: v.catches, messages: v.messages });
+      const v = versions[0];
+      if (v && versions.length === 1 && fRows.length === 1) {
+        items.push({
+          filter: { provider: p, family: fam, version: v.version },
+          label: modelName(v),
+          path: p,
+          depth: 1,
+          catches: v.catches,
+          messages: v.messages,
+        });
         continue;
       }
       const ft = total(fRows);
-      items.push({ filter: { provider: p, family: fam }, label: fam, path: versions.length ? `${p} · all versions` : p, depth: 1, catches: ft.c, messages: ft.m });
+      items.push({
+        filter: { provider: p, family: fam },
+        label: fam,
+        path: versions.length ? `${p} · all versions` : p,
+        depth: 1,
+        catches: ft.c,
+        messages: ft.m,
+      });
       for (const v of versions) {
-        items.push({ filter: { provider: p, family: fam, version: v.version }, label: modelName(v), path: `${p} · ${fam}`, depth: 2, catches: v.catches, messages: v.messages });
+        items.push({
+          filter: { provider: p, family: fam, version: v.version },
+          label: modelName(v),
+          path: `${p} · ${fam}`,
+          depth: 2,
+          catches: v.catches,
+          messages: v.messages,
+        });
       }
     }
   }
@@ -52,3 +81,6 @@ export function matchPickItems(items: PickItem[], query: string): PickItem[] {
 }
 
 export const sameFilter = (a: Filter, b: Filter) => JSON.stringify(a) === JSON.stringify(b);
+
+/** "12.5%" of messages that were a catch, or "–" when there were none. */
+export const catchRate = (catches: number, messages: number) => (messages ? `${((100 * catches) / messages).toFixed(1)}%` : "–");

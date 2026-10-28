@@ -9,7 +9,10 @@ updates:
     commit-message:
       prefix: "deps(rust)"
     labels: [dependencies, rust]
+    # Groups match in the order listed, so `tauri` claims its crates before `rust-minor`.
     groups:
+      tauri:
+        patterns: ["tauri", "tauri-*"]
       rust-minor:
         update-types: [minor, patch]
 
@@ -21,11 +24,12 @@ updates:
     commit-message:
       prefix: "deps(app)"
     labels: [dependencies, javascript]
+    # Groups match in the order listed, so `tauri` claims @tauri-apps/* before `app-minor`.
     groups:
-      app-minor:
-        update-types: [minor, patch]
       tauri:
         patterns: ["@tauri-apps/*"]
+      app-minor:
+        update-types: [minor, patch]
 
   - package-ecosystem: github-actions
     directory: /

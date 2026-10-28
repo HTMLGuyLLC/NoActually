@@ -5,13 +5,23 @@ members = ["crates/engine", "crates/sources", "crates/store", "crates/cli", "app
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
+# Oldest Rust that builds the whole workspace, app included. CI's `msrv` job checks it.
+rust-version = "1.90"
 license = "MIT"
+authors = ["HTMLGuy LLC"]
 repository = "https://github.com/HTMLGuyLLC/NoActually"
+homepage = "https://github.com/HTMLGuyLLC/NoActually"
+readme = "README.md"
+keywords = ["ai", "llm", "claude", "codex", "scorecard"]
+categories = ["command-line-utilities", "development-tools"]
+# Shipped as an app and a CLI binary, not as crates on crates.io.
+publish = false
 
 [workspace.dependencies]
-engine = { path = "crates/engine" }
-sources = { path = "crates/sources" }
-store = { path = "crates/store" }
+# Library packages are named noactually-*, but code imports them by their short names.
+engine = { path = "crates/engine", package = "noactually-engine" }
+sources = { path = "crates/sources", package = "noactually-sources" }
+store = { path = "crates/store", package = "noactually-store" }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -20,9 +30,44 @@ rayon = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
 sha2 = "0.10"
 anyhow = "1"
+thiserror = "2"
+memchr = "2"
+ruzstd = "0.9.1"
 tempfile = "3"
 dirs = "6"
 log = "0.4"
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-build = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-positioner = { version = "2", features = ["tray-icon"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-log = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-updater = "2"
+notify = "8"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+# Pedantic is on as warnings, so `cargo clippy -- -D warnings` enforces it. The few lints below
+# are off because they fight this codebase's conventions rather than catch bugs.
+pedantic = { level = "warn", priority = -1 }
+# Tauri commands take their arguments by value; that's how the macro deserializes them.
+needless_pass_by_value = "allow"
+# `store::StoreError`-style names read better at call sites than bare `Error` re-exports would.
+module_name_repetitions = "allow"
+# Most public functions return data the caller obviously uses; #[must_use] everywhere is noise.
+must_use_candidate = "allow"
+# Counts are SQLite i64s and file offsets u64s; they never get near the lossy range.
+cast_possible_wrap = "allow"
+cast_sign_loss = "allow"
+cast_precision_loss = "allow"
+cast_possible_truncation = "allow"
+# Error cases are documented on the error enums, not repeated on every function.
+missing_errors_doc = "allow"
 
 [profile.release]
 lto = "thin"

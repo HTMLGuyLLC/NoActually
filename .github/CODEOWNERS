@@ -1,3 +1,6 @@
-# Every change gets a maintainer's eyes. Rules decide everyone's score, so they're called out.
+# This is a solo-maintained project. CODEOWNERS makes GitHub request a review from the maintainer
+# on every pull request; the branch ruleset does not require that review.
 *                           @HTMLGuyLLC
+
+# Scoring rules decide everyone's score, so changes here are always worth a second look.
 /crates/engine/src/rules.rs @HTMLGuyLLC

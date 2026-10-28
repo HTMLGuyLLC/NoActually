@@ -2,24 +2,35 @@
 
 use crate::{FileScan, SourceTurn};
 use chrono::{DateTime, Utc};
-use engine::{AiMsg, Turn};
+use engine::{head_chars, tail_chars, AiMsg, Turn};
 
 const KEEP_PREV: usize = 600; // chars from the end of the reply you answered
 const KEEP_NEXT: usize = 2000; // chars from the start of the reply after you
 
-fn head(s: &str, n: usize) -> String {
-    s.chars().take(n).collect()
-}
-
-fn tail(s: &str, n: usize) -> String {
-    let count = s.chars().count();
-    s.chars().skip(count.saturating_sub(n)).collect()
-}
-
+/// One message in a chat, in order. `pos` is where it starts in the file (or its index, for
+/// whole-file exports), so the pairing can say where to resume.
 #[derive(Debug, Clone)]
 pub enum Event {
-    Human { text: String, ts: DateTime<Utc>, key: Option<String>, pos: u64 },
-    Ai { text: String, model: Option<String>, pos: u64 },
+    /// Something the person typed.
+    Human {
+        /// The message.
+        text: String,
+        /// When it was sent.
+        ts: DateTime<Utc>,
+        /// The tool's id for it, for dedupe (see [`SourceTurn::key`]).
+        key: Option<String>,
+        /// Where it starts.
+        pos: u64,
+    },
+    /// An AI reply.
+    Ai {
+        /// The reply.
+        text: String,
+        /// The raw model id, if the tool recorded one.
+        model: Option<String>,
+        /// Where it starts.
+        pos: u64,
+    },
 }
 
 impl Event {
@@ -70,8 +81,10 @@ pub fn pair(source: &'static str, session: &str, events: Vec<Event>, end: u64, f
                     break;
                 }
                 // Keep only what the rules read: the end of the previous reply, the start of the next.
-                let ai = |e: Option<&Event>, keep: fn(&str) -> String| match e {
-                    Some(Event::Ai { text, model, .. }) => Some(AiMsg { text: keep(text), model: model.clone() }),
+                let ai = |e: Option<&Event>, keep: fn(&str, usize) -> &str, n: usize| match e {
+                    Some(Event::Ai { text, model, .. }) => {
+                        Some(AiMsg { text: keep(text, n).to_string(), model: model.clone() })
+                    }
                     _ => None,
                 };
                 scan.turns.push(SourceTurn {
@@ -81,8 +94,8 @@ pub fn pair(source: &'static str, session: &str, events: Vec<Event>, end: u64, f
                     key: key.clone(),
                     turn: Turn {
                         human: text.clone(),
-                        prev_ai: ai(last_ai.map(|(_, e)| e), |t| tail(t, KEEP_PREV)),
-                        next_ai: ai(next, |t| head(t, KEEP_NEXT)),
+                        prev_ai: ai(last_ai.map(|(_, e)| e), tail_chars, KEEP_PREV),
+                        next_ai: ai(next, head_chars, KEEP_NEXT),
                         chat_model: last_real.clone().or_else(|| first_after[i].clone()),
                     },
                 });

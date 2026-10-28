@@ -15,17 +15,26 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # Minimum supported Rust version. Keep in step with `rust-version` in Cargo.toml.
+  MSRV: '1.90'
 
+# Branch protection requires only the `ci-ok` job at the bottom, so renaming or adding a job
+# here never blocks merges.
 jobs:
-  check:
-    name: ${{ matrix.os }}
+  rust:
+    name: rust (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-22.04]
+        # Ubuntu 22.04 has the WebKitGTK 4.1 packages Tauri needs.
+        os: [ubuntu-22.04, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Install Linux system deps
         if: runner.os == 'Linux'
@@ -33,39 +42,32 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev build-essential
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Installs the toolchain pinned in rust-toolchain.toml (with rustfmt, clippy and wasm32).
+      - name: Rust toolchain
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
-          components: rustfmt, clippy
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - uses: Swatinem/rust-cache@v2
-
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
         with:
-          version: 10
+          package_json_file: app/package.json
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
           cache: pnpm
           cache-dependency-path: app/pnpm-lock.yaml
 
-      - name: Install frontend deps
-        run: pnpm --dir app install --frozen-lockfile
-
-      - name: Frontend type check
-        run: pnpm --dir app check
-
-      - name: Frontend tests
-        run: pnpm --dir app test
-
-      - name: Release script tests
-        run: node --test scripts/*.test.mjs
-
       # The app crate reads app/dist at compile time, so build the frontend first.
       - name: Build frontend
-        run: pnpm --dir app build
+        run: |
+          pnpm --dir app install --frozen-lockfile
+          pnpm --dir app build
 
       - name: Format
+        if: runner.os == 'Linux'
         run: cargo fmt --all --check
 
       - name: Clippy
@@ -74,12 +76,175 @@ jobs:
       - name: Test
         run: cargo test --workspace
 
-  crates-windows:
-    name: windows (crates only)
-    runs-on: windows-latest
+  frontend:
+    name: frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Test core crates
-        run: cargo test -p engine -p sources -p store -p noactually-cli
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          package_json_file: app/package.json
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm --dir app install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm --dir app check
+
+      - name: Lint and format (Biome)
+        run: pnpm --dir app lint
+
+      - name: Tests with coverage
+        run: pnpm --dir app test:coverage
+
+      - name: Build
+        run: pnpm --dir app build
+
+      - name: Audit production dependencies
+        run: pnpm --dir app audit --prod
+
+  scripts:
+    name: scripts and workflows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+
+      - name: Script tests
+        run: node --test scripts/*.test.mjs
+
+      - name: ShellCheck
+        run: shellcheck scripts/*.sh
+
+      - name: actionlint
+        uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+
+  msrv:
+    name: msrv
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev build-essential
+
+      # `cargo +<version>` overrides rust-toolchain.toml.
+      - name: Install MSRV toolchain
+        run: rustup toolchain install "$MSRV" --profile minimal
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          package_json_file: app/package.json
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      # The app crate reads app/dist at compile time.
+      - name: Build frontend
+        run: |
+          pnpm --dir app install --frozen-lockfile
+          pnpm --dir app build
+
+      - name: Check the whole workspace, app included
+        run: cargo "+$MSRV" check --workspace
+
+  wasm:
+    name: engine builds for wasm32
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Rust toolchain
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Check
+        run: cargo check -p noactually-engine --target wasm32-unknown-unknown
+
+  coverage:
+    name: rust coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install
+          rustup component add llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Coverage summary
+        run: cargo llvm-cov --workspace --exclude noactually-app --summary-only >> "$GITHUB_STEP_SUMMARY"
+
+  version:
+    name: versions agree
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+
+      # The Cargo workspace version is the source of truth; scripts/bump-version.sh keeps the rest in step.
+      - name: Compare versions
+        run: scripts/version.sh check
+
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [rust, frontend, scripts, deny, msrv, wasm, coverage, version]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: All jobs passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Job results: $RESULTS"
+          case " $RESULTS " in
+            *" failure "* | *" cancelled "*) echo "A required job did not pass."; exit 1 ;;
+          esac

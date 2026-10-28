@@ -37,7 +37,7 @@ You correct your AI all day: the function that doesn't exist, the instruction it
 - **Lives in your menu bar.** A quick glance on click, a full scorecard window, and a popup when you hit your 10th catch, a new tier, or a streak.
 - **A Hall of Fame.** Your best catches, kept as redacted snippets. Pin the ones you want to keep forever.
 - **Made to share.** One dialog for X, LinkedIn, Facebook, Threads, Bluesky, Reddit, WhatsApp and Instagram, plus share card images. You always see exactly what will be posted.
-- **History and live tracking.** It backfills what's already on disk (about 1,700 files in 6 seconds), then follows new chats as they happen.
+- **History and live tracking.** It backfills what's already on disk (files are read in parallel), then follows new chats as they happen.
 
 <p align="center">
   <img src="docs/screenshot-glance.png" alt="The menu bar quick glance" width="300">
@@ -122,6 +122,8 @@ cargo run --release -p noactually-cli -- sync
 cargo run --release -p noactually-cli -- stats --family "Claude Opus"
 ```
 
+Set `NOACTUALLY_DB=/path/to/test.db` to use a different database than your real one. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#command-line) for every command.
+
 ## How it's built
 
 ```
@@ -135,7 +137,7 @@ app/             Tauri 2 desktop app: menu bar, scorecard window, notifications
 Highlights:
 - **Crash-safe checkpoints.** A turn is only counted once its reply exists, and every file's writes commit in a single transaction.
 - **Hashed message keys.** Resumed sessions, forks and re-imports are never counted twice.
-- **Rules versioning.** When the rules change, scores are rebuilt from history.
+- **Rules versioning.** When the rules change, scores are rebuilt from history. Pinned catches are always kept; other history counts again only if its files still exist.
 
 The full design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -146,14 +148,31 @@ Issues and PRs are welcome. Good places to start:
 - A rule that miscounted one of your chats (use the **Wrong catch** form, and redact the text first)
 - Polish on the app
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md), then run the same checks as CI:
+Read [CONTRIBUTING.md](CONTRIBUTING.md), then run the same checks as CI with [just](https://github.com/casey/just) (`brew install just` or `cargo install just`):
 
 ```bash
-cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace
-pnpm --dir app check && pnpm --dir app test
+just ci
+```
+
+Without `just`, run these from a fresh clone. The frontend must be built first because the app crate reads `app/dist` at compile time:
+
+```bash
+pnpm --dir app install --frozen-lockfile
+pnpm --dir app build
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+pnpm --dir app check
+pnpm --dir app lint
+pnpm --dir app test
+node --test scripts/*.test.mjs
 ```
 
 You can try the UI in a browser on sample data with `cd app && pnpm dev`, then open http://localhost:1420.
+
+## History
+
+The first version was a Python prototype. It was replaced by the Rust engine, and the original is preserved at the git tag `prototype-v0`. The roadmap and what scoring means are in [docs/PRODUCT.md](docs/PRODUCT.md).
 
 ## License
 

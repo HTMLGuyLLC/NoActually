@@ -12,8 +12,14 @@ node_modules/
 dist/
 app/src-tauri/gen/
 
+# Test coverage output
+coverage/
+app/coverage/
+lcov.info
+
 # Local tooling and OS files
 .impeccable/
+.claude/
 *.log
 .DS_Store
 __pycache__/
