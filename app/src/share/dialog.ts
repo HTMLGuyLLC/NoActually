@@ -96,7 +96,11 @@ export function openShareDialog(post: Post, opener: HTMLElement | null, onClose:
     <div class="share-grid">${shareTargets(post.text).map(
       (t) =>
         html`<button class="share-btn" data-sd="share" data-id="${t.id}"><b>${t.label}</b>${
-          t.href ? (t.pasteText ? html`<span class="needs-paste">You'll paste the text</span>` : html`<span>Text filled in</span>`) : html`<span class="needs-paste">Saves image · paste caption</span>`
+          t.href
+            ? t.pasteText
+              ? html`<span class="needs-paste">You'll paste the text</span>`
+              : html`<span>Text filled in</span>`
+            : html`<span class="needs-paste">Saves image · paste caption</span>`
         }</button>`,
     )}</div>
     <div id="share-guide" class="share-guide" role="status" aria-live="polite">${note}</div>

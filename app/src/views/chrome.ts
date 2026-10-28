@@ -14,7 +14,8 @@ export const wordmarkView = (cls = "brand"): Html => html`<span class="${cls}">$
 const TAB_TITLES: Record<Tab, string> = { score: "Scorecard", sources: "Sources", settings: "Settings" };
 
 export function statusPillView(status: SyncStatus, demo: boolean): Html {
-  if (status.last_error) return html`<button class="sync-pill bad" data-action="sync-now" data-id="top" title="${status.last_error}">Couldn't check. Retry</button>`;
+  if (status.last_error)
+    return html`<button class="sync-pill bad" data-action="sync-now" data-id="top" title="${status.last_error}">Couldn't check. Retry</button>`;
   if (status.syncing) return html`<span class="sync-pill"><i class="dot live"></i>Checking…</span>`;
   const checked = `Checked ${ago(status.last_sync)}`;
   return html`<span class="sync-pill" title="${checked}"><i class="dot"></i>${demo ? "Demo data" : checked}</span>`;
@@ -22,7 +23,8 @@ export function statusPillView(status: SyncStatus, demo: boolean): Html {
 
 export function headerView(tab: Tab, status: SyncStatus, demo: boolean): Html {
   const tabs = TABS.map(
-    (t) => html`<button class="tab${tab === t ? " on" : ""}" data-action="tab" data-id="${t}"${tab === t ? raw(' aria-current="page"') : ""}>${TAB_TITLES[t]}</button>`,
+    (t) =>
+      html`<button class="tab${tab === t ? " on" : ""}" data-action="tab" data-id="${t}"${tab === t ? raw(' aria-current="page"') : ""}>${TAB_TITLES[t]}</button>`,
   );
   return html`<header class="top">${wordmarkView()}<div class="top-right">${statusPillView(status, demo)}<nav aria-label="Main">${tabs}</nav></div></header>`;
 }

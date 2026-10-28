@@ -70,7 +70,12 @@ type ScoreCard = Pick<Stats, "verdict" | "catches_last_7d" | "pct_real_chats_wit
 
 /** The score card. `tier` is the tier's display name. */
 export async function drawShareCard(s: ScoreCard, who: string, tier: string): Promise<Blob> {
-  const { c, g } = await canvas(["800 64px 'Bricolage Grotesque Variable'", "400 200px 'Gochi Hand'", "500 24px 'Instrument Sans'", "600 18px 'JetBrains Mono'"]);
+  const { c, g } = await canvas([
+    "800 64px 'Bricolage Grotesque Variable'",
+    "400 200px 'Gochi Hand'",
+    "500 24px 'Instrument Sans'",
+    "600 18px 'JetBrains Mono'",
+  ]);
   const { ink, muted, pen, ai } = CARD_THEME;
   const no = s.verdict === "no";
 
@@ -161,7 +166,12 @@ export function wrap(g: Pick<CanvasRenderingContext2D, "measureText">, text: str
 
 /** A card for one catch: your words in red pen, the AI's admission underneath. */
 export async function drawCatchCard(e: CatchLike): Promise<Blob> {
-  const { c, g } = await canvas(["800 54px 'Bricolage Grotesque Variable'", "400 52px 'Gochi Hand'", "500 26px 'Instrument Sans'", "600 16px 'JetBrains Mono'"]);
+  const { c, g } = await canvas([
+    "800 54px 'Bricolage Grotesque Variable'",
+    "400 52px 'Gochi Hand'",
+    "500 26px 'Instrument Sans'",
+    "600 16px 'JetBrains Mono'",
+  ]);
   const { ink, muted, pen, ai, aiSoft } = CARD_THEME;
 
   drawWordmark(g, 140, 78);

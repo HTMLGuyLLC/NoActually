@@ -53,7 +53,10 @@ export function judge(meta: Meta, catches7d: number): Pick<Stats, "tier" | "next
 export function demoStats({ meta, stats: base }: DemoData, filter: Filter): Stats {
   if (!Object.values(filter).some((v) => v != null)) return base;
   const keep = base.models.filter(
-    (m) => (!filter.provider || m.provider === filter.provider) && (!filter.family || m.family === filter.family) && (!filter.version || m.version === filter.version),
+    (m) =>
+      (!filter.provider || m.provider === filter.provider) &&
+      (!filter.family || m.family === filter.family) &&
+      (!filter.version || m.version === filter.version),
   );
   const catches = keep.reduce((a, m) => a + m.catches, 0);
   const share = base.catches ? catches / base.catches : 0;

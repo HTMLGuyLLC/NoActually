@@ -64,7 +64,10 @@ export function openPicker(trigger: HTMLElement, opts: PickerOptions): HTMLEleme
     list.innerHTML = (
       shown.length
         ? html`${shown.map(
-            (i, n) => html`<li role="option" id="${optionId(n)}" data-n="${n}" class="d${searching ? 0 : i.depth}" aria-selected="${String(opts.isSelected(i))}">
+            (
+              i,
+              n,
+            ) => html`<li role="option" id="${optionId(n)}" data-n="${n}" class="d${searching ? 0 : i.depth}" aria-selected="${String(opts.isSelected(i))}">
               <span class="pick-name"><b>${i.label}</b>${searching || i.depth === 0 ? html`<span class="pick-path">${i.path}</span>` : ""}</span>
               <span class="pick-count"><b>${num(i.catches)}</b> catches · ${catchRate(i.catches, i.messages)}</span></li>`,
           )}`

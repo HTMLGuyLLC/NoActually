@@ -51,7 +51,12 @@ const scorePost = (s: Stats, meta: Meta): Post => {
   return { title: "Share your score", text: shareText(s, who), image: () => drawShareCard(s, who, tierName(meta, s.tier)) };
 };
 
-const catchPost = (e: HallEntry): Post => ({ title: "Share this catch", text: catchShareText(e), image: () => drawCatchCard(e), quotesChat: !!(e.human || e.ai) });
+const catchPost = (e: HallEntry): Post => ({
+  title: "Share this catch",
+  text: catchShareText(e),
+  image: () => drawCatchCard(e),
+  quotesChat: !!(e.human || e.ai),
+});
 
 /** The data the scorecard was drawn from; its buttons only exist once both are loaded. */
 function drawn(): { s: Stats; meta: Meta } {
