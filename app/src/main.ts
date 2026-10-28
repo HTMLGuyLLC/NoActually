@@ -386,8 +386,7 @@ function glance(s: Stats) {
       <div class="because">You caught it <b>${s.catches_last_7d}×</b> this week.</div></div>
     <div class="g-score"><div><span class="n you">${num(s.catches)}</span><span class="eyebrow">you</span></div><div class="vs">vs</div><div><span class="n ai">${num(s.humbled)}</span><span class="eyebrow">AI</span></div></div>
     <div class="g-meta muted small">${s.current_streak_days ? `${s.current_streak_days}-day streak · ` : ""}${s.next_tier ? `${s.next_tier[1]} more for ${esc(s.next_tier[0])}` : "Top tier"}</div>
-    <div class="g-actions"><button id="open-main">Share or see more</button><button class="ghost" id="copy-share">Copy text</button></div>
-    <div id="copied" class="eyebrow" aria-live="polite"></div>
+    <div class="g-actions"><button id="open-main">Share or see more</button><button class="ghost" id="copy-share" aria-live="polite">Copy text</button></div>
   </div>`;
 }
 
@@ -592,7 +591,13 @@ async function render() {
 
 function wire(s: Stats) {
   const $ = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel);
-  $("#copy-share")?.addEventListener("click", () => copyText(shareText(s, filterLabel()), $("#copied")));
+  // The button itself confirms the copy, so the quick glance never grows taller.
+  $<HTMLButtonElement>("#copy-share")?.addEventListener("click", async (e) => {
+    const b = e.currentTarget as HTMLButtonElement;
+    const ok = await navigator.clipboard.writeText(shareText(s, filterLabel())).then(() => true, () => false);
+    b.textContent = ok ? "Copied ✓" : "Couldn't copy";
+    setTimeout(() => (b.textContent = "Copy text"), 1800);
+  });
   $("#open-share")?.addEventListener("click", () => openShareDialog(scorePost(s)));
   root.querySelectorAll<HTMLButtonElement>("[data-share-catch]").forEach((b) =>
     b.addEventListener("click", () => {

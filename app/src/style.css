@@ -148,17 +148,17 @@ button.small { padding: 7px 12px; font-size: 12.5px }
 .empty { display: grid; gap: 16px; justify-items: start; padding: 48px 0; max-width: 56ch }
 
 /* Quick glance: the small window under the menu bar icon. */
-.glance { padding: 18px; display: grid; gap: 12px; background: var(--surface); min-height: 100vh; align-content: start }
+.glance { padding: 20px 20px 22px; display: grid; gap: 12px; background: var(--surface); min-height: 100vh; align-content: start }
 .g-top { display: flex; justify-content: space-between; align-items: center }
-.g-q { font: 800 20px/1.1 var(--display) }
-.g-row { display: flex; align-items: flex-end; gap: 14px; padding-top: 14px }
+.g-q { font: 800 20px/1.1 var(--display); margin-top: 12px }
+.g-row { display: flex; align-items: flex-end; gap: 14px; padding-top: 10px; margin-bottom: 4px }
 /* The glance window loads hidden, so it skips the scrawl animation and shows the resting state. */
 .no.sm { font-size: 60px; animation: none }
 .g-row .because { font-size: 15px }
 .g-score { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; border-top: 2px solid var(--ink); padding-top: 10px }
 .g-score > div { display: grid } .g-score > div:last-child { text-align: right }
 .g-score .n { font: 800 32px/1 var(--display) }
-.g-actions { display: flex; gap: 8px }
+.g-actions { display: flex; gap: 8px; margin-top: 6px }
 
 @media (max-width: 760px) {
   .card, .split, .fame { grid-template-columns: 1fr }
