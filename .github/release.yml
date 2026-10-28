@@ -1,0 +1,19 @@
+# Groups auto-generated release notes by label.
+changelog:
+  exclude:
+    labels: [duplicate, invalid, wontfix]
+  categories:
+    - title: New AI tools
+      labels: [new source]
+    - title: Scoring rules
+      labels: [rules]
+    - title: Privacy
+      labels: [privacy]
+    - title: App and CLI
+      labels: [ui, cli, enhancement]
+    - title: Fixes
+      labels: [bug]
+    - title: Dependencies
+      labels: [dependencies]
+    - title: Other changes
+      labels: ["*"]

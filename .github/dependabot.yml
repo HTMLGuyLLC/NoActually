@@ -1,14 +1,39 @@
 version: 2
+# Grouped so routine bumps arrive as one PR per ecosystem instead of a dozen.
 updates:
   - package-ecosystem: cargo
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps(rust)"
+    labels: [dependencies, rust]
+    groups:
+      rust-minor:
+        update-types: [minor, patch]
+
   - package-ecosystem: npm
     directory: /app
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps(app)"
+    labels: [dependencies, javascript]
+    groups:
+      app-minor:
+        update-types: [minor, patch]
+      tauri:
+        patterns: ["@tauri-apps/*"]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: "ci"
+    labels: [dependencies, github_actions]
+    groups:
+      actions:
+        patterns: ["*"]
