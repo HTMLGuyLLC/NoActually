@@ -5,18 +5,42 @@ import { briefTier, briefTierRanges, landedPct, percent, steerTitle } from "../m
 
 const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
 
-function verdictView(b: Briefs, meta: Meta, still: boolean): Html {
-  const tier = briefTier(meta, b.tier);
-  const because = tier
+/** "92% of your tasks this week landed…", or how many more tasks it takes to get ranked. */
+function becauseLine(b: Briefs, meta: Meta): Html {
+  return briefTier(meta, b.tier)
     ? html`<b>${landedPct(b)}%</b> of your tasks this week landed without you adding, clarifying or starting over.`
     : html`Give it <b>${plural(b.to_rank, "more task")}</b> this week to get ranked. Your first message in a chat is its brief.`;
+}
+
+/** The verdict word, hand-written, with a screen-reader version. */
+function markView(b: Briefs, meta: Meta, still: boolean): Html {
+  const tier = briefTier(meta, b.tier);
+  return html`<div class="no${tier ? "" : " maybe"}${still ? " still" : ""}" aria-hidden="true">${tier?.verdict ?? "Hmm."}</div>
+      <span class="sr-only">${tier ? `${tier.verdict} Your brief tier is ${tier.name}.` : "Not ranked yet."}</span>`;
+}
+
+/** The overview's half: the verdict, the tier, and a way to the details. */
+export function briefsSummaryView(b: Briefs, meta: Meta, still: boolean): Html {
+  const tier = briefTier(meta, b.tier);
+  const body = b.tasks
+    ? html`<div class="verdict">${markView(b, meta, still)}<div class="because">${becauseLine(b, meta)}</div></div>
+        <p class="tier-line">${tier ? html`<span class="tier-label"><span>Tier</span>${tier.name}</span>` : ""}<span class="hand-note">${ladderNote(b, meta)}</span></p>`
+    : html`<p class="muted">No tasks yet. The first message of each chat is its brief.</p>`;
+  return html`<article class="card mini briefs">
+      <div class="eyebrow">How you brief it</div>
+      <h2 class="q">Do you make it guess?</h2>
+      ${body}
+      <div class="share">${tier ? html`<button data-action="share-briefs">Share your briefs</button>` : ""}<button class="ghost" data-action="view" data-id="briefs">See briefs</button></div>
+    </article>`;
+}
+
+function verdictView(b: Briefs, meta: Meta, still: boolean, subject: Html | string): Html {
   return html`
     <div class="eyebrow">How you brief it</div>
-    <h2 class="q">Do you make it guess?</h2>
+    <h1 class="q">Do you make ${subject} guess?</h1>
     <div class="verdict">
-      <div class="no${tier ? "" : " maybe"}${still ? " still" : ""}" aria-hidden="true">${tier?.verdict ?? "Hmm."}</div>
-      <span class="sr-only">${tier ? `${tier.verdict} Your brief tier is ${tier.name}.` : "Not ranked yet."}</span>
-      <div class="because">${because}</div>
+      ${markView(b, meta, still)}
+      <div class="because">${becauseLine(b, meta)}</div>
     </div>
     ${gradesView(b, meta)}`;
 }
@@ -33,13 +57,15 @@ function gradesView(b: Briefs, meta: Meta): Html {
   </div>`;
 }
 
-function ladderView(b: Briefs, meta: Meta): Html {
+/** How far the next tier (or a ranking) is. */
+function ladderNote(b: Briefs, meta: Meta): string {
   const next = b.next_tier && briefTier(meta, b.next_tier[0]);
-  const note = !b.tier
-    ? `${plural(b.to_rank, "more task")} to get ranked`
-    : next && b.next_tier
-      ? `${plural(b.next_tier[1], "more task")} landing in a row for ${next.name}`
-      : "Top tier. Don't let it slip.";
+  if (!b.tier) return `${plural(b.to_rank, "more task")} to get ranked`;
+  return next && b.next_tier ? `${plural(b.next_tier[1], "more task")} landing in a row for ${next.name}` : "Top tier. Don't let it slip.";
+}
+
+function ladderView(b: Briefs, meta: Meta): Html {
+  const note = ladderNote(b, meta);
   return html`
     <ol class="ladder" aria-label="Brief tiers">${briefTierRanges(meta).map(
       (t) => html`<li${t.id === b.tier ? raw(' class="on" aria-current="true"') : ""}><span>${t.name}</span><span>${t.range}</span></li>`,
@@ -79,15 +105,16 @@ function steeringView(b: Briefs, meta: Meta): Html {
   <p class="muted small">${plural(total, "steering message")}. ${num(yours)} of them could have been in the brief.</p>`;
 }
 
-/** The whole briefs block: verdict card, then what briefs carry and where steering went. */
-export function briefsView(b: Briefs, meta: Meta, still: boolean): Html {
+/** The Briefs section: verdict card, then what briefs carry and where steering went. `subject` is the
+ * model picker ("it" when there's none). */
+export function briefsView(b: Briefs, meta: Meta, still: boolean, subject: Html | string = "it"): Html {
   if (!b.tasks) {
-    return html`<section class="card briefs"><div><div class="eyebrow">How you brief it</div><h2 class="q">Do you make it guess?</h2>
+    return html`<section class="card briefs"><div><div class="eyebrow">How you brief it</div><h1 class="q">Do you make ${subject} guess?</h1>
       <p class="muted">No tasks yet. The first message of each chat is its brief, so start a chat and ask for something.</p></div></section>`;
   }
   return html`
     <section class="card briefs">
-      <div>${verdictView(b, meta, still)}</div>
+      <div>${verdictView(b, meta, still, subject)}</div>
       <div class="meter">${ladderView(b, meta)}</div>
     </section>
     <section class="split">

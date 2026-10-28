@@ -10,6 +10,7 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ### Changed
 
+- The scorecard is split into sections: Overview (both verdicts side by side, plus the headline stats), Catches, Briefs and Hall of fame. The tab row scrolls sideways instead of wrapping on narrow windows.
 - Rules version 4: existing history is re-read once to fill in briefs. Pinned catches are kept; other catches are re-counted from history files that still exist.
 - A rule's "but not when…" exception now skips just that match, so a later match in the same message can still count.
 

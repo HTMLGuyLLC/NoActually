@@ -5,8 +5,15 @@ export const TABS = ["score", "sources", "settings"] as const;
 export type Tab = (typeof TABS)[number];
 export const isTab = (x: unknown): x is Tab => TABS.some((t) => t === x);
 
+/** The scorecard's sections, each its own sub-tab. */
+export const SCORE_VIEWS = ["overview", "catches", "briefs", "hall"] as const;
+export type ScoreView = (typeof SCORE_VIEWS)[number];
+export const isScoreView = (x: unknown): x is ScoreView => SCORE_VIEWS.some((v) => v === x);
+
 export type AppState = {
   tab: Tab;
+  /** Which scorecard section is showing. */
+  view: ScoreView;
   filter: Filter;
   /** Every model, from the last unfiltered stats; the picker lists these even while narrowed. */
   allModels: ModelRow[];
@@ -25,6 +32,7 @@ export type AppState = {
 
 const initial = (): AppState => ({
   tab: "score",
+  view: "overview",
   filter: {},
   allModels: [],
   status: { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 },
@@ -44,6 +52,9 @@ export const isGlance = typeof location !== "undefined" && location.hash === "#g
 
 export function setTab(tab: Tab): void {
   s.tab = tab;
+}
+export function setView(view: ScoreView): void {
+  s.view = view;
 }
 export function setFilter(filter: Filter): void {
   s.filter = filter;

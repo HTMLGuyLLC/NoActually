@@ -33,6 +33,7 @@ async function view(): Promise<Html> {
     body = scorecardView(s, {
       meta,
       filter: state.filter,
+      view: state.view,
       still: s.verdict === state.lastVerdict,
       briefsStill: s.briefs.tier === state.lastBriefTier,
     });

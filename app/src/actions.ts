@@ -11,7 +11,7 @@ import { paintUpdate, render, scheduler } from "./render";
 import { drawBriefCard, drawCatchCard, drawShareCard } from "./share/cards";
 import { openShareDialog, type Post } from "./share/dialog";
 import { briefShareText, catchShareText, shareText } from "./share/share";
-import { isTab, setAutoUpdate, setFilter, setLaterFor, setTab, state } from "./state";
+import { isScoreView, isTab, setAutoUpdate, setFilter, setLaterFor, setTab, setView, state } from "./state";
 import { parseRetention } from "./views/settings";
 import { allowArgs } from "./views/sources";
 
@@ -128,6 +128,12 @@ export const clickActions = {
     return render();
   },
   "model-picker": (b) => togglePicker(b),
+  view: (b) => {
+    const view = data(b, "id");
+    if (!isScoreView(view)) throw new Error(`Unknown view: ${view}`);
+    setView(view);
+    return render();
+  },
   "clear-filter": () => {
     setFilter({});
     return render();

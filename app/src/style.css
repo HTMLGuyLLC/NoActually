@@ -151,6 +151,18 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .bar-bg { height: 12px; border-radius: 3px; background: var(--rule); overflow: hidden }
 .bar-bg i { display: block; height: 100%; width: var(--w, 0); background: var(--pen) }
 
+/* Scorecard sections: one row of sub-tabs that scrolls sideways rather than wrapping on narrow windows. */
+.views { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--rule); padding-bottom: 8px }
+.views::-webkit-scrollbar { display: none }
+.views .tab { white-space: nowrap; flex: none }
+.view-body { display: grid; gap: inherit }
+.duo { display: grid; grid-template-columns: 1fr 1fr; gap: 20px }
+.card.mini { grid-template-columns: 1fr; gap: 10px; align-content: start }
+.card.mini .no { font-size: clamp(64px, 8vw, 96px) }
+.card.mini.briefs .no { font-size: clamp(48px, 6vw, 72px) }
+.card.mini .verdict { margin-top: 22px }
+.tier-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin: 4px 0 0 }
+
 /* Briefs: the verdict words are longer than "No.", so they're smaller and may wrap. */
 .briefs .verdict { flex-wrap: wrap; margin-top: 26px }
 .briefs .no { font-size: clamp(54px, 8vw, 84px) }
@@ -259,7 +271,7 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .sd-foot { display: flex; gap: 8px; justify-content: flex-end }
 
 @media (max-width: 760px) {
-  .card, .split, .fame { grid-template-columns: 1fr }
+  .card, .split, .fame, .duo { grid-template-columns: 1fr }
   .stats { grid-template-columns: repeat(2, 1fr) }
   .stat:nth-child(3) { border-left: 0; padding-left: 0 }
 }

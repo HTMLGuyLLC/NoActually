@@ -4,7 +4,8 @@ import { filterLabel, isFiltered, shortSourceName, subjectLabel } from "../forma
 import { type Html, html, num, raw } from "../html";
 import { categoryTitle, tierName, tierRanges, topTier } from "../meta";
 import { catchRate, modelName } from "../picker/picker";
-import { briefsView } from "./briefs";
+import { SCORE_VIEWS, type ScoreView } from "../state";
+import { briefsSummaryView, briefsView } from "./briefs";
 
 export type ScorecardContext = {
   meta: Meta;
@@ -13,22 +14,33 @@ export type ScorecardContext = {
   still: boolean;
   /** The same, for the briefs verdict. */
   briefsStill?: boolean;
+  /** Which section is showing (default: the overview). */
+  view?: ScoreView;
 };
 
+const VIEW_TITLES: Record<ScoreView, string> = { overview: "Overview", catches: "Catches", briefs: "Briefs", hall: "Hall of fame" };
+
 const CHEVRON = raw(`<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>`);
+
+/** The model picker, shown as the question's subject ("Could [Claude Opus 5.5] replace you?"). One per page. */
+export const subjectButton = (ctx: Pick<ScorecardContext, "filter" | "meta">): Html =>
+  html`<button id="model-trigger" class="subject" data-action="model-picker" aria-haspopup="listbox" aria-expanded="false" title="Pick a model">${subjectLabel(
+    ctx.filter,
+    ctx.meta,
+  )}${CHEVRON}</button>`;
+
+/** "You caught it 17 times in the last 7 days." */
+const caughtLine = (s: Stats) => html`You caught it <b>${num(s.catches_last_7d)} ${s.catches_last_7d === 1 ? "time" : "times"}</b> in the last 7 days.`;
 
 function verdictView(s: Stats, ctx: ScorecardContext): Html {
   const no = s.verdict === "no";
   return html`
     <div class="eyebrow">This week's verdict</div>
-    <h1 class="q">Could <button id="model-trigger" class="subject" data-action="model-picker" aria-haspopup="listbox" aria-expanded="false" title="Pick a model">${subjectLabel(
-      ctx.filter,
-      ctx.meta,
-    )}${CHEVRON}</button> replace you?</h1>
+    <h1 class="q">Could ${subjectButton(ctx)} replace you?</h1>
     <div class="verdict">
       <div class="no${no ? "" : " maybe"}${ctx.still ? " still" : ""}" aria-hidden="true">${no ? "No." : "Hmm."}</div>
       <span class="sr-only">${no ? "No." : "Not yet."} Your tier is ${tierName(ctx.meta, s.tier)}.</span>
-      <div class="because">You caught it <b>${num(s.catches_last_7d)} ${s.catches_last_7d === 1 ? "time" : "times"}</b> in the last 7 days.${
+      <div class="because">${caughtLine(s)}${
         s.pct_real_chats_with_catch != null ? ` It slipped up in ${Math.round(s.pct_real_chats_with_catch)}% of your real chats.` : ""
       }</div>
     </div>
@@ -114,14 +126,50 @@ export function hallView(entries: HallEntry[]): Html {
   )}</div>`;
 }
 
-export function scorecardView(s: Stats, ctx: ScorecardContext): Html {
-  const { meta, filter } = ctx;
+/** The sub-tabs under the toolbar. Plain buttons, like the main nav, with the current one marked. */
+function viewsNav(view: ScoreView): Html {
+  return html`<nav class="views" aria-label="Scorecard sections">${SCORE_VIEWS.map(
+    (v) =>
+      html`<button class="tab${v === view ? " on" : ""}" data-action="view" data-id="${v}"${v === view ? raw(' aria-current="page"') : ""}>${VIEW_TITLES[v]}</button>`,
+  )}</nav>`;
+}
+
+/** Both verdicts side by side, each linking to its details. */
+function overviewView(s: Stats, ctx: ScorecardContext): Html {
+  const no = s.verdict === "no";
+  const progress = s.next_tier ? `${s.next_tier[1]} more this week for ${tierName(ctx.meta, s.next_tier[0])}` : "Top tier";
+  return html`
+    <section class="duo">
+      <article class="card mini">
+        <div class="eyebrow">This week's verdict</div>
+        <h1 class="q">Could ${subjectButton(ctx)} replace you?</h1>
+        <div class="verdict">
+          <div class="no${no ? "" : " maybe"}${ctx.still ? " still" : ""}" aria-hidden="true">${no ? "No." : "Hmm."}</div>
+          <span class="sr-only">${no ? "No." : "Not yet."} Your tier is ${tierName(ctx.meta, s.tier)}.</span>
+          <div class="because">${caughtLine(s)}</div>
+        </div>
+        <p class="tier-line"><span class="tier-label"><span>Tier</span>${tierName(ctx.meta, s.tier)}</span><span class="hand-note">${progress}</span></p>
+        <div class="share"><button data-action="open-share">Share your score</button><button class="ghost" data-action="view" data-id="catches">See catches</button></div>
+      </article>
+      ${briefsSummaryView(s.briefs, ctx.meta, ctx.briefsStill ?? false)}
+    </section>
+    ${statsView(s)}`;
+}
+
+function statsView(s: Stats): Html {
+  const peak = s.peak_hour == null ? "–" : new Date(2000, 0, 1, s.peak_hour).toLocaleTimeString(undefined, { hour: "numeric" });
+  return html`<section class="stats">
+      <div class="stat"><span class="v">${num(s.catches)}</span><span class="l">catches</span></div>
+      <div class="stat"><span class="v">${s.pct_real_chats_with_catch != null ? `${Math.round(s.pct_real_chats_with_catch)}%` : "–"}</span><span class="l">of real chats had a catch</span></div>
+      <div class="stat"><span class="v">${s.best_streak_days} days</span><span class="l">best streak · now ${s.current_streak_days}</span></div>
+      <div class="stat"><span class="v">${s.messages_per_catch ? `1 in ${s.messages_per_catch}` : "–"}</span><span class="l">messages is a catch · peak ${peak}</span></div>
+    </section>`;
+}
+
+function catchesView(s: Stats, ctx: ScorecardContext): Html {
+  const { meta } = ctx;
   const cats = Object.entries(s.categories).sort((a, b) => b[1] - a[1]);
   const topCat = cats[0]?.[1] ?? 1;
-  const peak = s.peak_hour == null ? "–" : new Date(2000, 0, 1, s.peak_hour).toLocaleTimeString(undefined, { hour: "numeric" });
-  const toolbar = isFiltered(filter)
-    ? html`<button class="chip-clear" data-action="clear-filter">Showing ${filterLabel(filter, meta)} only <span aria-hidden="true">×</span></button>`
-    : html`<span class="eyebrow">All models · pick one from “All AI” below</span>`;
   const models = s.models
     .filter((m) => m.messages > 0)
     .map(
@@ -135,7 +183,6 @@ export function scorecardView(s: Stats, ctx: ScorecardContext): Html {
       )
     : html`<p class="muted">No catches yet.</p>`;
   return html`
-    <section class="toolbar">${toolbar}<span class="muted small">${s.first_day ?? ""} – ${s.last_day ?? ""} · ${num(s.messages)} messages</span></section>
     <section class="card">
       <div>${verdictView(s, ctx)}</div>
       <div class="meter">
@@ -144,13 +191,6 @@ export function scorecardView(s: Stats, ctx: ScorecardContext): Html {
         <div class="share"><button data-action="open-share">Share your score</button></div>
       </div>
     </section>
-    <section class="stats">
-      <div class="stat"><span class="v">${num(s.catches)}</span><span class="l">catches</span></div>
-      <div class="stat"><span class="v">${s.pct_real_chats_with_catch != null ? `${Math.round(s.pct_real_chats_with_catch)}%` : "–"}</span><span class="l">of real chats had a catch</span></div>
-      <div class="stat"><span class="v">${s.best_streak_days} days</span><span class="l">best streak · now ${s.current_streak_days}</span></div>
-      <div class="stat"><span class="v">${s.messages_per_catch ? `1 in ${s.messages_per_catch}` : "–"}</span><span class="l">messages is a catch · peak ${peak}</span></div>
-    </section>
-    ${briefsView(s.briefs, meta, ctx.briefsStill ?? false)}
     <section><div class="head"><h2>Catches per week</h2></div><div class="chart">${chartView(s, meta)}</div></section>
     <section class="split">
       <div>
@@ -163,8 +203,31 @@ export function scorecardView(s: Stats, ctx: ScorecardContext): Html {
         <div class="head"><h2>What you catch</h2></div>
         <div class="cats">${catRows}</div>
       </div>
-    </section>
-    <section><div class="head"><h2>Hall of fame</h2><p class="muted">Snippets are redacted and kept per your privacy setting.</p></div>${hallView(s.hall_of_fame)}</section>`;
+    </section>`;
+}
+
+function hallSection(s: Stats, ctx: ScorecardContext): Html {
+  return html`<section><div class="head"><h2>Hall of fame · ${subjectButton(ctx)}</h2><p class="muted">Snippets are redacted and kept per your privacy setting.</p></div>${hallView(s.hall_of_fame)}</section>`;
+}
+
+export function scorecardView(s: Stats, ctx: ScorecardContext): Html {
+  const { meta, filter } = ctx;
+  const view = ctx.view ?? "overview";
+  const toolbar = isFiltered(filter)
+    ? html`<button class="chip-clear" data-action="clear-filter">Showing ${filterLabel(filter, meta)} only <span aria-hidden="true">×</span></button>`
+    : html`<span class="eyebrow">All models · pick one from “All AI”</span>`;
+  const body =
+    view === "catches"
+      ? catchesView(s, ctx)
+      : view === "briefs"
+        ? briefsView(s.briefs, meta, ctx.briefsStill ?? false, subjectButton(ctx))
+        : view === "hall"
+          ? hallSection(s, ctx)
+          : overviewView(s, ctx);
+  return html`
+    <section class="toolbar">${toolbar}<span class="muted small">${s.first_day ?? ""} – ${s.last_day ?? ""} · ${num(s.messages)} messages</span></section>
+    ${viewsNav(view)}
+    <div class="view-body">${body}</div>`;
 }
 
 /** Shown before there's anything to score. `watching` names the sources being read right now. */
