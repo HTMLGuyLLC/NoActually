@@ -468,8 +468,10 @@ fn db_path_prefers_the_new_variable() {
     let env = |vars: &'static [(&'static str, &'static str)]| {
         move |k: &str| vars.iter().find(|(n, _)| *n == k).map(|(_, v)| OsString::from(v))
     };
-    let data = Some(PathBuf::from("/data"));
-    assert_eq!(resolve_db_path(env(&[]), data.clone()).unwrap(), PathBuf::from("/data/app.noactually/noactually.db"));
+    // Absolute on every OS (on Windows "/data" has no drive letter, so it isn't).
+    let dir = std::env::temp_dir();
+    let data = Some(dir.clone());
+    assert_eq!(resolve_db_path(env(&[]), data.clone()).unwrap(), dir.join("app.noactually").join("noactually.db"));
     assert_eq!(resolve_db_path(env(&[("WA_DB", "/old.db")]), data.clone()).unwrap(), PathBuf::from("/old.db"));
     let both = env(&[("WA_DB", "/old.db"), ("NOACTUALLY_DB", "/new.db")]);
     assert_eq!(resolve_db_path(both, data.clone()).unwrap(), PathBuf::from("/new.db"));
