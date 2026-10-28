@@ -134,6 +134,9 @@ fn main() -> Result<()> {
             if let Some(d) = flag(&args, "--snippet-days") {
                 r.snippet_days = d.parse()?;
             }
+            if r.full_days == 0 || r.snippet_days == 0 {
+                bail!("keep text for at least 1 day");
+            }
             store.set_retention(r)?;
             println!("Keeping {:?} text; full text {} days, snippets {} days.", r.level, r.full_days, r.snippet_days);
         }

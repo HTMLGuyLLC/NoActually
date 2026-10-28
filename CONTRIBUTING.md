@@ -69,3 +69,12 @@ pnpm --dir app test
 
 - No raw chat data in commits, issues, tests or screenshots.
 - No new network calls or telemetry. See [PRIVACY.md](PRIVACY.md).
+
+## Releasing (maintainers)
+
+1. Bump the version in `Cargo.toml` (workspace), `app/package.json` and `app/src-tauri/tauri.conf.json`, and add a `CHANGELOG.md` entry.
+2. Tag and push: `git tag v0.1.0 && git push origin v0.1.0`. The Release workflow builds Windows and Linux into a draft release.
+3. On a Mac with the Developer ID certificate, run `scripts/release-macos.sh`. It builds a universal app, signs it, notarizes the DMG with Apple, and staples the ticket. Upload the DMG to the draft release.
+4. Check the draft and publish it.
+
+If the `APPLE_*` secrets are set in the repo, the Release workflow also signs and notarizes macOS, and step 3 isn't needed.

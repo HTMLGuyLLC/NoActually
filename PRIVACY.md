@@ -1,6 +1,6 @@
 # Privacy
 
-No, Actually runs on your computer. Your chats are not sent anywhere.
+No, Actually... runs on your computer. Your chats are not sent anywhere.
 
 ## What it reads
 
@@ -46,6 +46,11 @@ A future global board would be a separate opt-in that sends numbers only.
 ## How to delete your data
 
 - **Forget a source** in the app: deletes that source's events, aggregates and checkpoints. (Revoke only stops reading.)
-- **Delete everything:** quit the app and delete the database file `noactually.db` in the app data folder for `app.noactually` (macOS: `~/Library/Application Support/app.noactually/`, Windows: `%APPDATA%\app.noactually\`, Linux: `~/.local/share/app.noactually/`).
+- **Delete everything:** quit the app and delete the three `noactually.db*` files (`noactually.db`, `-wal`, `-shm`) in the app data folder for `app.noactually` (macOS: `~/Library/Application Support/app.noactually/`, Windows: `%APPDATA%\app.noactually\`, Linux: `~/.local/share/app.noactually/`).
+- Deleted text is overwritten in the database, not just unlinked, and the write-ahead log is truncated after Forget and after text ages out.
+
+## Logs
+
+The app keeps a small log for troubleshooting (macOS: `~/Library/Logs/app.noactually/`, up to about 2 MB). It records counts, timings and errors. Errors can name history files by path, which includes your project folder names. Logs never contain chat text.
 
 Uninstalling the app does not remove the database. Delete it yourself.

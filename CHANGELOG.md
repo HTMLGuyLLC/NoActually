@@ -19,6 +19,7 @@ First release.
 - Milestone notifications (catch counts, tier ups, streaks), with no backlog spam on first import
 - Share dialog for X, LinkedIn, Facebook, Threads, Bluesky, Reddit, WhatsApp and Instagram, showing exactly what will be posted and flagging networks where you paste the text yourself. Also saves a share card image or copies the text. Only numbers and the project link are shared.
 - Share any Hall of Fame catch: the post quotes your redacted snippet, and you can edit it before sharing. It comes with its own catch card image. Pinned catches stand out.
+- Universal macOS build (Apple silicon and Intel), signed with Developer ID and notarized by Apple
 - Rules versioning: when scoring rules change, scores are rebuilt from history, keeping your source choices and settings
 - Launch at login, quietly in the menu bar
 - Redaction of secrets, emails, links, paths and long numbers in any stored text

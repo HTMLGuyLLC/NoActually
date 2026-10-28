@@ -12,28 +12,46 @@ jobs:
   release:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.platform }}
+    # macOS builds only run here when signing secrets are set. Without them, the signed and
+    # notarized DMG comes from scripts/release-macos.sh on a maintainer's Mac, and CI never
+    # uploads an unsigned macOS build beside it.
+    env:
+      SIGN_MAC: ${{ secrets.APPLE_CERTIFICATE != '' }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: macOS (Apple silicon)
+          - name: macOS (universal)
             platform: macos-latest
-            args: --target aarch64-apple-darwin
-            rust_targets: aarch64-apple-darwin
-          - name: macOS (Intel)
-            platform: macos-latest
-            args: --target x86_64-apple-darwin
-            rust_targets: x86_64-apple-darwin
+            args: --target universal-apple-darwin
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+            mac: true
           - name: Windows
             platform: windows-latest
             args: ''
             rust_targets: ''
+            mac: false
           - name: Linux
             platform: ubuntu-22.04
             args: ''
             rust_targets: ''
+            mac: false
     steps:
+      - name: Skip unsigned macOS
+        if: matrix.mac && env.SIGN_MAC != 'true'
+        run: echo "No Apple signing secrets; the macOS DMG is built and notarized locally."
+
       - uses: actions/checkout@v4
+        if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
+
+      # tauri-action names the release after tauri.conf.json's version; a different tag would
+      # silently publish a second, mismatched release.
+      - name: Tag matches app version
+        if: ${{ github.ref_type == 'tag' && (!matrix.mac || env.SIGN_MAC == 'true') }}
+        shell: bash
+        run: |
+          v=$(node -p "require('./app/src-tauri/tauri.conf.json').version")
+          [ "${GITHUB_REF_NAME}" = "v$v" ] || { echo "Tag ${GITHUB_REF_NAME} doesn't match app version v$v"; exit 1; }
 
       - name: Install Linux system deps
         if: runner.os == 'Linux'
@@ -42,26 +60,31 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev build-essential
 
       - uses: dtolnay/rust-toolchain@stable
+        if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
         with:
           targets: ${{ matrix.rust_targets }}
 
       - uses: Swatinem/rust-cache@v2
+        if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
 
       - uses: pnpm/action-setup@v4
+        if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
         with:
           version: 10
 
       - uses: actions/setup-node@v4
+        if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
         with:
           node-version: 22
           cache: pnpm
           cache-dependency-path: app/pnpm-lock.yaml
 
       - name: Install frontend deps
+        if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
         run: pnpm --dir app install --frozen-lockfile
 
-      # Signing secrets are optional. Empty values build an unsigned app.
       - uses: tauri-apps/tauri-action@v0
+        if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -73,7 +96,8 @@ jobs:
         with:
           projectPath: app
           tagName: v__VERSION__
-          releaseName: 'No, Actually v__VERSION__'
+          releaseName: 'No, Actually... v__VERSION__'
+          releaseBody: 'See the [changelog](https://github.com/HTMLGuyLLC/NoActually/blob/main/CHANGELOG.md).'
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

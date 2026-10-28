@@ -124,12 +124,12 @@ pub fn run() {
 
             let open = MenuItem::with_id(tauri_app, "open", "Open scorecard", true, None::<&str>)?;
             let sync = MenuItem::with_id(tauri_app, "sync", "Check now", true, None::<&str>)?;
-            let quit = MenuItem::with_id(tauri_app, "quit", "Quit No, Actually", true, None::<&str>)?;
+            let quit = MenuItem::with_id(tauri_app, "quit", "Quit No, Actually...", true, None::<&str>)?;
             let menu = Menu::with_items(tauri_app, &[&open, &sync, &quit])?;
             TrayIconBuilder::with_id("tray")
                 .icon(tray_icon())
                 .icon_as_template(cfg!(target_os = "macos"))
-                .tooltip("No, Actually")
+                .tooltip("No, Actually...")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, e| match e.id.as_ref() {
@@ -192,5 +192,5 @@ pub fn run() {
             commands::open_share,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running No, Actually");
+        .expect("error while running No, Actually...");
 }

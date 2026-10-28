@@ -28,6 +28,10 @@ const SOURCE_TITLES: Record<string, string> = {
 };
 type Tab = "score" | "sources" | "settings";
 
+/** The app icon's underlined check, drawn in the theme's red pen and highlighter. */
+const MARK = `<svg class="mark" viewBox="0 0 44 44" aria-hidden="true"><path class="mark-check" d="M9 23 L17 31 L35 11"/><path class="mark-line" d="M8 38 Q22 35 36 38"/></svg>`;
+const WORDMARK = (cls = "brand") => `<span class="${cls}">${MARK}No, <em>Actually...</em></span>`;
+
 const root = document.getElementById("app")!;
 const isGlance = location.hash === "#glance";
 let tab: Tab = "score";
@@ -340,7 +344,7 @@ function sourcesView(list: SourceInfo[]) {
   };
   return `
     <section><div class="head"><h2>Sources</h2>
-      <p class="muted">Nothing is read until you allow it. No, Actually reads your messages and the AI's replies on this computer to count catches. Nothing leaves this machine.</p></div>
+      <p class="muted">Nothing is read until you allow it. No, Actually... reads your messages and the AI's replies on this computer to count catches. Nothing leaves this machine.</p></div>
       <div class="sources">${list.map(row).join("")}</div>
       <p class="muted small">Stop reading keeps your scores. Forget also deletes everything that source produced.</p>
     </section>`;
@@ -380,7 +384,7 @@ async function settingsView() {
 function glance(s: Stats) {
   const no = verdictIsNo(s);
   return `<div class="glance">
-    <div class="g-top"><span class="brand small">no, <em>actually.</em></span><span class="tier-label"><span>Tier</span>${esc(s.tier)}</span></div>
+    <div class="g-top">${WORDMARK("brand small")}<span class="tier-label"><span>Tier</span>${esc(s.tier)}</span></div>
     <div class="g-q">Could AI replace you?</div>
     <div class="g-row"><div class="no sm ${no ? "" : "maybe"}">${no ? "No." : "Hmm."}</div>
       <div class="because">You caught it <b>${s.catches_last_7d}×</b> this week.</div></div>
@@ -405,7 +409,7 @@ function onboarding(watching: string[]) {
       <button class="ghost" id="go-sources">Manage sources</button></section>`;
   }
   return `<section class="empty"><h1 class="q">Let's see if AI could replace you.</h1>
-    <p>No, Actually counts the times you caught your AI being wrong, privately, on this computer. Pick which tools it may read.</p>
+    <p>No, Actually... counts the times you caught your AI being wrong, privately, on this computer. Pick which tools it may read.</p>
     <button id="go-sources">Choose sources</button></section>`;
 }
 
@@ -581,11 +585,11 @@ async function render() {
       root.innerHTML = s.messages
         ? glance(s)
         : watching.length
-          ? `<div class="glance empty-glance"><span class="eyebrow"><i class="dot live"></i> Watching ${esc(listNames(watching))}</span><div class="g-q">No catches yet.</div><p class="muted small">Your score shows up after your first catch.</p><button class="ghost" id="open-main">Open No, Actually</button></div>`
+          ? `<div class="glance empty-glance"><span class="eyebrow"><i class="dot live"></i> Watching ${esc(listNames(watching))}</span><div class="g-q">No catches yet.</div><p class="muted small">Your score shows up after your first catch.</p><button class="ghost" id="open-main">Open No, Actually...</button></div>`
           : `<div class="glance empty-glance"><div class="g-q">Could AI replace you?</div><p class="muted small">Pick which AI tools to count, then find out.</p><button id="open-main">Set up</button></div>`;
     } else {
       const titles: Record<Tab, string> = { score: "Scorecard", sources: "Sources", settings: "Settings" };
-      const nav = `<header class="top"><div class="brand">no, <em>actually.</em></div><div class="top-right">${statusPill()}<nav>${(Object.keys(titles) as Tab[])
+      const nav = `<header class="top">${WORDMARK()}<div class="top-right">${statusPill()}<nav>${(Object.keys(titles) as Tab[])
         .map((t) => `<button class="tab ${tab === t ? "on" : ""}" data-tab="${t}">${titles[t]}</button>`)
         .join("")}</nav></div></header>`;
       let body = "";
@@ -643,7 +647,8 @@ function wire(s: Stats) {
       const choice = $<HTMLSelectElement>(`[data-since="${id}"]`)?.value ?? "all";
       const fromNow = choice === "none";
       const days = choice === "all" || fromNow ? null : Number(choice);
-      const since = days == null ? null : new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
+      // Local calendar date, matching how the store buckets days (toISOString would be UTC).
+      const since = days == null ? null : new Date(Date.now() - days * 864e5).toLocaleDateString("en-CA");
       b.disabled = true;
       b.textContent = "Allowing…";
       await api.allow(id, since, fromNow);

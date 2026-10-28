@@ -1,6 +1,6 @@
 [package]
 name = "noactually-app"
-description = "No, Actually desktop app: tray quick glance and full scorecard."
+description = "No, Actually... desktop app: tray quick glance and full scorecard."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

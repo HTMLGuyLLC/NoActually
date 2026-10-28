@@ -1,5 +1,6 @@
 //! Popups for moments worth sharing: catch counts, tier ups, streaks.
-//! The first sync only records a baseline, so backfilling history never spams notifications.
+//! Bulk reads (first launch, a newly allowed source, a rules rebuild) only move the baseline,
+//! so backfilling history never fires a pile of old milestones.
 
 use crate::{lock, App};
 use chrono::Local;
@@ -24,7 +25,8 @@ fn ordinal(n: i64) -> String {
     format!("{n}{suffix}")
 }
 
-pub fn check(handle: &AppHandle, app: &App) {
+/// `quiet` moves the baseline without notifying: used when history was just read in bulk.
+pub fn check(handle: &AppHandle, app: &App, quiet: bool) {
     let store = lock(&app.writer);
     let Ok(stats) = store.stats(&Default::default(), Local::now().date_naive()) else { return };
     let get = |k: &str| store.get_setting(k).ok().flatten();
@@ -36,7 +38,7 @@ pub fn check(handle: &AppHandle, app: &App) {
     let _ = store.set_setting("milestone.tier", stats.tier);
     let _ = store.set_setting("milestone.streak", &stats.current_streak_days.to_string());
     drop(store);
-    if first_run {
+    if first_run || quiet {
         return;
     }
 

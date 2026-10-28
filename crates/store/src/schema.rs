@@ -2,7 +2,8 @@ use anyhow::Result;
 use rusqlite::Connection;
 
 /// Each entry runs once, in order. Never edit a shipped migration; append a new one.
-const MIGRATIONS: &[&str] = &[r#"
+const MIGRATIONS: &[&str] = &[
+    r#"
 CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 
 -- Consent: a source is read only while allowed = 1 and paused = 0.
@@ -55,9 +56,17 @@ CREATE TABLE events (
 );
 CREATE INDEX events_day ON events (day);
 CREATE INDEX daily_day ON daily (day);
-"#];
+"#,
+    // 2: "From now on" keeps an exact cutoff, so even a rules rebuild never reads older history.
+    r#"
+ALTER TABLE sources ADD COLUMN start_after TEXT;
+"#,
+];
 
 pub fn migrate(conn: &Connection) -> Result<()> {
+    // Deleted text is overwritten, not just unlinked, so Forget and the retention step-down
+    // leave nothing readable in the file's free pages.
+    conn.pragma_update(None, "secure_delete", "ON")?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;

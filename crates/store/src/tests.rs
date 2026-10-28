@@ -44,6 +44,7 @@ fn counts_messages_catches_and_models() {
         100,
         1,
         None,
+        None,
     )
     .unwrap();
     let all = s.stats(&Filter::default(), today()).unwrap();
@@ -66,8 +67,8 @@ fn copies_are_never_counted_twice() {
     let mut s = Store::open_in_memory().unwrap();
     let t = now_ts(0);
     let one = || scan(vec![turn("no, that's wrong", "You're right.", "claude-opus-5-5", &t, "same-id")]);
-    s.ingest("test", "f1", &one(), 100, 1, None).unwrap();
-    s.ingest("test", "f2", &one(), 100, 1, None).unwrap();
+    s.ingest("test", "f1", &one(), 100, 1, None, None).unwrap();
+    s.ingest("test", "f2", &one(), 100, 1, None, None).unwrap();
     assert_eq!(s.stats(&Filter::default(), today()).unwrap().catches, 1);
 }
 
@@ -76,7 +77,8 @@ fn backfill_window_is_respected() {
     let mut s = Store::open_in_memory().unwrap();
     let old = now_ts(40);
     let since = Some(today() - Duration::days(7));
-    s.ingest("test", "f", &scan(vec![turn("no, that's wrong", "You're right.", "m", &old, "x")]), 1, 1, since).unwrap();
+    s.ingest("test", "f", &scan(vec![turn("no, that's wrong", "You're right.", "m", &old, "x")]), 1, 1, since, None)
+        .unwrap();
     assert_eq!(s.stats(&Filter::default(), today()).unwrap().messages, 0);
 }
 
@@ -95,6 +97,7 @@ fn retention_steps_down_and_pins_hold() {
         ]),
         1,
         1,
+        None,
         None,
     )
     .unwrap();
@@ -128,8 +131,16 @@ fn retention_steps_down_and_pins_hold() {
 fn forget_deletes_everything_for_a_source() {
     let mut s = Store::open_in_memory().unwrap();
     s.allow("test", None).unwrap();
-    s.ingest("test", "f", &scan(vec![turn("no, that's wrong", "You're right.", "m", &now_ts(0), "k")]), 1, 1, None)
-        .unwrap();
+    s.ingest(
+        "test",
+        "f",
+        &scan(vec![turn("no, that's wrong", "You're right.", "m", &now_ts(0), "k")]),
+        1,
+        1,
+        None,
+        None,
+    )
+    .unwrap();
     s.forget("test").unwrap();
     let left: i64 = s
         .conn
@@ -261,14 +272,14 @@ fn from_now_on_skips_existing_history_but_counts_new_messages() {
     let path = dir.path().join("a.jsonl");
     let ts = (Utc::now() - Duration::minutes(30)).to_rfc3339();
     let line = |v: serde_json::Value| format!("{v}\n");
-    let turn = |id: &str| {
+    let turn = |id: &str, ts: &str| {
         line(serde_json::json!({"type":"user","uuid":id,"timestamp":ts,"message":{"content":"no, that's wrong"}}))
             + &line(
                 serde_json::json!({"type":"assistant","timestamp":ts,"message":{"model":"claude-opus-5-5","content":[{"type":"text","text":"You're right."}]}}),
             )
     };
     // Written earlier today: must not count when the person picks "From now on".
-    std::fs::write(&path, turn("old")).unwrap();
+    std::fs::write(&path, turn("old", &ts)).unwrap();
     let src = sources::claude_code_at(dir.path().to_path_buf());
     let all = vec![sources::claude_code_at(dir.path().to_path_buf())];
     let mut s = Store::open_in_memory().unwrap();
@@ -278,8 +289,42 @@ fn from_now_on_skips_existing_history_but_counts_new_messages() {
 
     std::thread::sleep(std::time::Duration::from_millis(1100));
     let mut f = std::fs::OpenOptions::new().append(true).open(&path).unwrap();
-    f.write_all(turn("new").as_bytes()).unwrap();
+    f.write_all(turn("new", &Utc::now().to_rfc3339()).as_bytes()).unwrap();
     drop(f);
     let r = sync(&mut s, &all).unwrap();
     assert_eq!((r.messages, r.catches), (1, 1), "only the new message counts");
+}
+
+#[test]
+fn from_now_on_survives_a_rules_rebuild() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("a.jsonl");
+    let line = |v: serde_json::Value| format!("{v}\n");
+    let turn = |id: &str, ts: &str| {
+        line(serde_json::json!({"type":"user","uuid":id,"timestamp":ts,"message":{"content":"no, that's wrong"}}))
+            + &line(
+                serde_json::json!({"type":"assistant","timestamp":ts,"message":{"model":"claude-opus-5-5","content":[{"type":"text","text":"You're right."}]}}),
+            )
+    };
+    std::fs::write(&path, turn("old", &(Utc::now() - Duration::hours(3)).to_rfc3339())).unwrap();
+    let src = sources::claude_code_at(dir.path().to_path_buf());
+    let all = vec![sources::claude_code_at(dir.path().to_path_buf())];
+    let mut s = Store::open_in_memory().unwrap();
+    s.allow("claude-code", None).unwrap();
+    s.start_from_now(src.as_ref()).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    let mut f = std::fs::OpenOptions::new().append(true).open(&path).unwrap();
+    f.write_all(turn("new", &Utc::now().to_rfc3339()).as_bytes()).unwrap();
+    drop(f);
+    sync(&mut s, &all).unwrap();
+    assert_eq!(s.stats(&Filter::default(), today()).unwrap().messages, 1);
+
+    // A later release changes the rules: scores rebuild from disk, and the old message stays out.
+    s.set_setting("rules_version", "1").unwrap();
+    assert!(sync(&mut s, &all).unwrap().rescored);
+    assert_eq!(s.stats(&Filter::default(), today()).unwrap().messages, 1, "still only the message after the cutoff");
+
+    // Choosing "All history" later clears the cutoff.
+    s.allow("claude-code", None).unwrap();
+    assert!(s.source_state("claude-code").unwrap().unwrap().start_after.is_none());
 }

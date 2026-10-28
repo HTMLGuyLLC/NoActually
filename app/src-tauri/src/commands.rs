@@ -54,7 +54,8 @@ pub fn list_sources(app: State<Arc<App>>) -> Res<Vec<SourceInfo>> {
         .collect())
 }
 
-#[tauri::command]
+/// Async: it may wait for a sync to finish, and must not freeze the window meanwhile.
+#[tauri::command(async)]
 pub fn allow_source(
     handle: AppHandle,
     app: State<Arc<App>>,
@@ -81,14 +82,16 @@ pub fn allow_source(
     Ok(())
 }
 
-#[tauri::command]
+/// Async: it may wait for a sync to finish, and must not freeze the window meanwhile.
+#[tauri::command(async)]
 pub fn revoke_source(app: State<Arc<App>>, id: String) -> Res<()> {
     lock(&app.writer).revoke(&id).map_err(err)?;
     changed(&app);
     Ok(())
 }
 
-#[tauri::command]
+/// Async: it may wait for a sync to finish, and must not freeze the window meanwhile.
+#[tauri::command(async)]
 pub fn forget_source(app: State<Arc<App>>, id: String) -> Res<()> {
     lock(&app.writer).forget(&id).map_err(err)?;
     log::info!("forgot source {id}");
@@ -96,7 +99,8 @@ pub fn forget_source(app: State<Arc<App>>, id: String) -> Res<()> {
     Ok(())
 }
 
-#[tauri::command]
+/// Async: it may wait for a sync to finish, and must not freeze the window meanwhile.
+#[tauri::command(async)]
 pub fn pause_source(app: State<Arc<App>>, id: String, paused: bool) -> Res<()> {
     lock(&app.writer).set_paused(&id, paused).map_err(err)?;
     changed(&app);
@@ -130,7 +134,8 @@ pub fn get_retention(app: State<Arc<App>>) -> Res<Retention> {
     lock(&app.reader).retention().map_err(err)
 }
 
-#[tauri::command]
+/// Async: it may wait for a sync to finish, and must not freeze the window meanwhile.
+#[tauri::command(async)]
 pub fn set_retention(app: State<Arc<App>>, retention: Retention) -> Res<()> {
     if retention.full_days == 0 || retention.snippet_days == 0 {
         return Err("Keep text for at least 1 day.".into());
@@ -138,7 +143,8 @@ pub fn set_retention(app: State<Arc<App>>, retention: Retention) -> Res<()> {
     lock(&app.writer).set_retention(retention).map_err(err)
 }
 
-#[tauri::command]
+/// Async: it may wait for a sync to finish, and must not freeze the window meanwhile.
+#[tauri::command(async)]
 pub fn pin(app: State<Arc<App>>, id: i64, pinned: bool) -> Res<()> {
     lock(&app.writer).pin(id, pinned).map_err(err)
 }

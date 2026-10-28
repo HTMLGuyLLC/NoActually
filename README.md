@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="app/src-tauri/icons/128x128@2x.png" width="96" height="96" alt="No, Actually app icon">
+  <img src="app/src-tauri/icons/128x128@2x.png" width="96" height="96" alt="No, Actually... app icon">
 </p>
 
-<h1 align="center">No, Actually</h1>
+<h1 align="center">No, Actually...</h1>
 
 <p align="center">
   <b>Could AI replace you? No, actually.</b><br>
@@ -18,12 +18,12 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot-scorecard.png" alt="The No, Actually scorecard: a verdict, your catch count versus the AI's, a tier ladder and weekly chart" width="820">
+  <img src="docs/screenshot-scorecard.png" alt="The No, Actually... scorecard: a verdict, your catch count versus the AI's, a tier ladder and weekly chart" width="820">
 </p>
 
 ---
 
-You correct your AI all day: the function that doesn't exist, the instruction it ignored, the bug that's "fixed" but still broken. **No, Actually** reads your chat history on your own computer, finds those moments with fixed rules, and turns them into a score you can be proud of.
+You correct your AI all day: the function that doesn't exist, the instruction it ignored, the bug that's "fixed" but still broken. **No, Actually...** reads your chat history on your own computer, finds those moments with fixed rules, and turns them into a score you can be proud of.
 
 ## Features
 

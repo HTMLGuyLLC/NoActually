@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "No, Actually",
+  "productName": "No, Actually...",
   "version": "0.1.0",
   "identifier": "app.noactually",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "No, Actually",
+        "title": "No, Actually...",
         "url": "index.html",
         "width": 1080,
         "height": 820,
@@ -23,7 +23,7 @@
       },
       {
         "label": "glance",
-        "title": "No, Actually",
+        "title": "No, Actually...",
         "url": "index.html#glance",
         "width": 340,
         "height": 336,
@@ -54,6 +54,6 @@
       "minimumSystemVersion": "12.0"
     },
     "copyright": "© 2026 HTMLGuy LLC. MIT License.",
-    "longDescription": "No, Actually reads your AI chat history on your computer, finds the moments you caught the AI being wrong, and turns them into a private, deterministic scorecard. Nothing leaves your machine."
+    "longDescription": "No, Actually... reads your AI chat history on your computer, finds the moments you caught the AI being wrong, and turns them into a private, deterministic scorecard. Nothing leaves your machine."
   }
 }

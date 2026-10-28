@@ -1,6 +1,6 @@
 # Code of Conduct
 
-No, Actually is about catching mistakes, so this project has a lot of practice at being wrong in public. Do it kindly.
+No, Actually... is about catching mistakes, so this project has a lot of practice at being wrong in public. Do it kindly.
 
 ## Expected
 

@@ -1,4 +1,4 @@
-# No, Actually: product description
+# No, Actually...: product description
 
 ## One line
 
@@ -112,11 +112,11 @@ Rust instead of TypeScript because the watcher must keep running while the windo
 
 ## Name
 
-**No, Actually.** It's the verdict itself: "Could AI replace you? No, actually."
+**No, Actually...** It's the verdict itself: "Could AI replace you? No, actually."
 
 The working name was "Well, Actually", dropped because wellactually.dev is a live AI dev-tool product with the same name.
 
-Checked 2026-10-27 for "No, Actually":
+Checked 2026-10-27 for "No, Actually...":
 
 | Where | Result |
 |---|---|

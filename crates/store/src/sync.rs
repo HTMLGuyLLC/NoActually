@@ -76,17 +76,24 @@ pub fn sync(store: &mut Store, all: &[Box<dyn Source>]) -> Result<SyncReport> {
             for (job, scan) in scans {
                 match scan {
                     Ok(scan) => {
-                        let (m, c) = store.ingest(
+                        // One file failing to save (a locked database, say) must not stop the rest.
+                        let saved = store.ingest(
                             src.id(),
                             &job.path.to_string_lossy(),
                             &scan,
                             job.size,
                             job.mtime,
                             state.backfill_since,
-                        )?;
-                        report.files_read += 1;
-                        report.messages += m;
-                        report.catches += c;
+                            state.start_after,
+                        );
+                        match saved {
+                            Ok((m, c)) => {
+                                report.files_read += 1;
+                                report.messages += m;
+                                report.catches += c;
+                            }
+                            Err(e) => report.errors.push(format!("{}: couldn't save: {e}", job.path.display())),
+                        }
                     }
                     Err(e) => report.errors.push(format!("{}: {e}", job.path.display())),
                 }

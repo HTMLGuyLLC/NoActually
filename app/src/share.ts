@@ -23,8 +23,9 @@ export type ShareTarget = {
 };
 
 /**
- * Each network's own "share" link, pre-filled where the network allows it. Only numbers and the
- * project link go into these URLs; chat text never does.
+ * Each network's own "share" link, pre-filled with `text` where the network allows it. For a
+ * score that's numbers and the project link; for a catch it's the redacted, clipped snippet,
+ * which the share dialog shows (and lets the person edit) before anything opens.
  */
 export function shareTargets(text: string, url = SHARE_URL): ShareTarget[] {
   const t = encodeURIComponent(text);
@@ -44,6 +45,39 @@ export function shareTargets(text: string, url = SHARE_URL): ShareTarget[] {
 
 /** Hosts the app may open. The Rust side checks the same list before opening anything. */
 export const SHARE_HOSTS = ["x.com", "www.linkedin.com", "www.facebook.com", "www.threads.net", "bsky.app", "www.reddit.com", "wa.me", "github.com"];
+
+/** The app icon's underlined check, then "No, Actually...", with the text baseline at `y`. */
+function drawWordmark(g: CanvasRenderingContext2D, x: number, y: number, pen: string, ink: string) {
+  const size = 36;
+  const k = size / 44;
+  g.save();
+  g.translate(x, y - size + 6);
+  g.scale(k, k);
+  g.lineCap = "round";
+  g.lineJoin = "round";
+  g.strokeStyle = pen;
+  g.lineWidth = 5.5;
+  g.beginPath();
+  g.moveTo(9, 23);
+  g.lineTo(17, 31);
+  g.lineTo(35, 11);
+  g.stroke();
+  g.strokeStyle = "#e2b600";
+  g.lineWidth = 3.2;
+  g.beginPath();
+  g.moveTo(8, 38);
+  g.quadraticCurveTo(22, 35, 36, 38);
+  g.stroke();
+  g.restore();
+  const tx = x + size + 8;
+  g.fillStyle = ink;
+  g.font = "800 30px 'Bricolage Grotesque Variable'";
+  g.fillText("No,", tx, y);
+  const gap = g.measureText("No, ").width; // measured in the wordmark's own font
+  g.fillStyle = pen;
+  g.font = "400 36px 'Gochi Hand'";
+  g.fillText("Actually...", tx + gap, y + 2);
+}
 
 /** Draws the 1200×630 card (the size social sites use for link previews) in the light theme. */
 export async function drawShareCard(s: Stats, who: string): Promise<Blob> {
@@ -74,11 +108,7 @@ export async function drawShareCard(s: Stats, who: string): Promise<Blob> {
   g.textBaseline = "alphabetic";
   g.fillStyle = ink;
   g.font = "800 30px 'Bricolage Grotesque Variable'";
-  g.fillText("no,", 140, 78);
-  const markGap = g.measureText("no, ").width; // measure in the wordmark's own font
-  g.fillStyle = pen;
-  g.font = "400 36px 'Gochi Hand'";
-  g.fillText("actually.", 140 + markGap, 80);
+  drawWordmark(g, 140, 78, pen, ink);
 
   g.fillStyle = ink;
   g.font = "800 64px 'Bricolage Grotesque Variable'";
@@ -196,13 +226,7 @@ export async function drawCatchCard(e: CatchLike): Promise<Blob> {
   g.fillStyle = pen;
   g.fillRect(96, 0, 2, H);
 
-  g.fillStyle = ink;
-  g.font = "800 30px 'Bricolage Grotesque Variable'";
-  g.fillText("no,", 140, 78);
-  const gap = g.measureText("no, ").width;
-  g.fillStyle = pen;
-  g.font = "400 36px 'Gochi Hand'";
-  g.fillText("actually.", 140 + gap, 80);
+  drawWordmark(g, 140, 78, pen, ink);
 
   g.fillStyle = ink;
   g.font = "800 54px 'Bricolage Grotesque Variable'";

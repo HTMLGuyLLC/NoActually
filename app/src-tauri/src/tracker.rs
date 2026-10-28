@@ -17,6 +17,8 @@ pub enum Msg {
 
 const SAFETY_NET: Duration = Duration::from_secs(5 * 60);
 const DEBOUNCE: Duration = Duration::from_secs(2);
+/// More new messages than a person writes between two checks means history was just read.
+const BACKFILL_MESSAGES: usize = 40;
 
 /// Folders to watch: only the roots of sources the user has allowed.
 fn watched_roots(app: &App) -> Vec<PathBuf> {
@@ -49,7 +51,8 @@ fn watch(app: &App, tx: &mpsc::Sender<Msg>) -> Option<RecommendedWatcher> {
     Some(w)
 }
 
-fn sync_once(handle: &AppHandle, app: &App) {
+/// `quiet`: record milestones without announcing them (a backfill, or a source just allowed).
+fn sync_once(handle: &AppHandle, app: &App, quiet: bool) {
     lock(&app.status).syncing = true;
     let _ = handle.emit("sync-started", ());
     let started = std::time::Instant::now();
@@ -78,7 +81,9 @@ fn sync_once(handle: &AppHandle, app: &App) {
             status.files_with_errors = r.errors.len();
             drop(status);
             let _ = handle.emit("stats-changed", &r);
-            milestones::check(handle, app);
+            // A big pass is history arriving, not new catches: don't celebrate old milestones.
+            let backfill = quiet || r.rescored || r.messages > BACKFILL_MESSAGES;
+            milestones::check(handle, app, backfill);
             update_tray(handle, app);
         }
         Err(e) => {
@@ -94,7 +99,7 @@ fn sync_once(handle: &AppHandle, app: &App) {
 fn update_tray(handle: &AppHandle, app: &App) {
     let Ok(s) = lock(&app.reader).stats(&Default::default(), chrono::Local::now().date_naive()) else { return };
     if let Some(tray) = handle.tray_by_id("tray") {
-        let tip = format!("No, Actually · {} catches this week · {}", s.catches_last_7d, s.tier);
+        let tip = format!("No, Actually... · {} catches this week · {}", s.catches_last_7d, s.tier);
         let _ = tray.set_tooltip(Some(tip));
     }
 }
@@ -104,24 +109,33 @@ pub fn spawn(handle: AppHandle, app: Arc<App>, tx: mpsc::Sender<Msg>, rx: mpsc::
         .name("tracker".into())
         .spawn(move || {
             let mut watcher = watch(&app, &tx);
-            sync_once(&handle, &app); // catch up on anything written while the app was closed
+            // A panic in one pass (a malformed file, say) must not stop tracking for good.
+            let guarded = |quiet: bool| {
+                if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sync_once(&handle, &app, quiet))).is_err() {
+                    log::error!("sync pass panicked; will retry on the next change or timer");
+                    lock(&app.status).syncing = false;
+                }
+            };
+            guarded(false); // catch up on anything written while the app was closed
             loop {
+                let mut sources_changed = false;
                 match rx.recv_timeout(SAFETY_NET) {
-                    Ok(Msg::SourcesChanged) => watcher = watch(&app, &tx),
+                    Ok(Msg::SourcesChanged) => sources_changed = true,
                     Ok(Msg::FilesChanged) => {
-                        // Coalesce bursts: an AI reply streams many writes.
+                        // Coalesce bursts: an AI reply streams many writes. Keep any consent change
+                        // that arrives meanwhile, or a newly allowed source would go unwatched.
                         std::thread::sleep(DEBOUNCE);
-                        while rx.try_recv().is_ok() {}
+                        while let Ok(m) = rx.try_recv() {
+                            sources_changed |= matches!(m, Msg::SourcesChanged);
+                        }
                     }
                     Ok(Msg::SyncNow) | Err(mpsc::RecvTimeoutError::Timeout) => {}
                     Err(mpsc::RecvTimeoutError::Disconnected) => break,
                 }
-                // A panic in one pass (a malformed file, say) must not stop tracking for good.
-                let pass = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sync_once(&handle, &app)));
-                if pass.is_err() {
-                    log::error!("sync pass panicked; will retry on the next change or timer");
-                    lock(&app.status).syncing = false;
+                if sources_changed {
+                    watcher = watch(&app, &tx);
                 }
+                guarded(sources_changed);
             }
             drop(watcher);
         })

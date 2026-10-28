@@ -57,6 +57,9 @@ pub struct SourceState {
     /// Ignore history before this day. `None` means everything.
     pub backfill_since: Option<NaiveDate>,
     pub granted_at: Option<DateTime<Utc>>,
+    /// "From now on": ignore every message written before this moment.
+    #[serde(default)]
+    pub start_after: Option<DateTime<Utc>>,
     /// Extra files or folders the user pointed this source at (exports live here).
     pub paths: Vec<String>,
 }
@@ -129,8 +132,9 @@ impl Store {
     // ---- consent -----------------------------------------------------------------------
 
     pub fn source_states(&self) -> Result<Vec<SourceState>> {
-        let mut stmt =
-            self.conn.prepare("SELECT id, allowed, paused, backfill_since, granted_at, paths FROM sources")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, allowed, paused, backfill_since, granted_at, paths, start_after FROM sources")?;
         let rows = stmt.query_map([], |r| {
             Ok(SourceState {
                 id: r.get(0)?,
@@ -139,6 +143,7 @@ impl Store {
                 backfill_since: r.get::<_, Option<String>>(3)?.and_then(|s| s.parse().ok()),
                 granted_at: r.get::<_, Option<String>>(4)?.and_then(|s| s.parse().ok()),
                 paths: serde_json::from_str(&r.get::<_, String>(5)?).unwrap_or_default(),
+                start_after: r.get::<_, Option<String>>(6)?.and_then(|s| s.parse().ok()),
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -152,7 +157,8 @@ impl Store {
     pub fn allow(&self, id: &str, backfill_since: Option<NaiveDate>) -> Result<()> {
         self.conn.execute(
             "INSERT INTO sources (id, allowed, paused, backfill_since, granted_at, paths) VALUES (?1, 1, 0, ?2, ?3, '[]')
-             ON CONFLICT(id) DO UPDATE SET allowed = 1, paused = 0, backfill_since = excluded.backfill_since, granted_at = excluded.granted_at",
+             ON CONFLICT(id) DO UPDATE SET allowed = 1, paused = 0, backfill_since = excluded.backfill_since,
+               granted_at = excluded.granted_at, start_after = NULL",
             params![id, backfill_since.map(|d| d.to_string()), Utc::now().to_rfc3339()],
         )?;
         Ok(())
@@ -161,6 +167,9 @@ impl Store {
     /// "From now on": marks every file this source has today as already read, so only messages
     /// written after this moment count. Returns how many files were marked.
     pub fn start_from_now(&mut self, src: &dyn sources::Source) -> Result<usize> {
+        // The cutoff is what guarantees it; the checkpoints just save re-reading old bytes.
+        self.conn
+            .execute("UPDATE sources SET start_after = ?2 WHERE id = ?1", params![src.id(), Utc::now().to_rfc3339()])?;
         let extra = self.source_state(src.id())?.map(|s| s.paths).unwrap_or_default();
         let mut roots = src.roots();
         roots.extend(extra.iter().map(std::path::PathBuf::from));
@@ -194,6 +203,7 @@ impl Store {
             paused: false,
             backfill_since: None,
             granted_at: None,
+            start_after: None,
             paths: vec![],
         });
         if !st.paths.iter().any(|p| p == path) {
@@ -254,7 +264,7 @@ impl Store {
         }
         tx.execute("DELETE FROM sources WHERE id = ?1", [id])?;
         tx.commit()?;
-        Ok(())
+        self.flush_deleted()
     }
 
     // ---- ingestion ---------------------------------------------------------------------
@@ -270,6 +280,7 @@ impl Store {
 
     /// Writes one file's turns and its new checkpoint in a single transaction, so a crash
     /// can never count a turn without moving the checkpoint (or the reverse).
+    #[allow(clippy::too_many_arguments)] // one internal caller (sync); a struct would only rename them
     pub(crate) fn ingest(
         &mut self,
         source: &str,
@@ -278,6 +289,7 @@ impl Store {
         size: u64,
         mtime: i64,
         since: Option<NaiveDate>,
+        start_after: Option<DateTime<Utc>>,
     ) -> Result<(usize, usize)> {
         let retention = self.retention()?;
         let tx = self.conn.transaction()?;
@@ -292,7 +304,7 @@ impl Store {
                 continue; // a copy we've already counted (resumed or forked session, re-import)
             }
             let day = st.ts.with_timezone(&Local).date_naive();
-            if since.is_some_and(|s| day < s) {
+            if since.is_some_and(|s| day < s) || start_after.is_some_and(|t| st.ts < t) {
                 continue;
             }
             let v = classify(&st.turn);
@@ -390,7 +402,17 @@ impl Store {
              WHERE pinned = 0 AND level != 'category' AND (ts < ?1 OR ?2 = 'category')",
             params![snip_cut, r.level.as_str()],
         )?;
+        if changed > 0 {
+            self.flush_deleted()?;
+        }
         Ok(changed)
+    }
+
+    /// Folds the write-ahead log back into the database and truncates it, so text that was just
+    /// deleted doesn't linger in `noactually.db-wal`.
+    pub fn flush_deleted(&self) -> Result<()> {
+        self.conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
+        Ok(())
     }
 
     pub fn pin(&self, event_id: i64, pinned: bool) -> Result<()> {
