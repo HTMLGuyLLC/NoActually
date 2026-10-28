@@ -208,7 +208,7 @@ pub(crate) fn source_files(src: &dyn Source, extra: &[String]) -> Vec<PathBuf> {
 const CHECKPOINT_TRIES: u32 = 5;
 const CHECKPOINT_WAIT: std::time::Duration = std::time::Duration::from_millis(100);
 
-/// Tables that hold scores (everything but consent, settings and pins). Each has a `source` column.
+/// Tables that hold scores (everything but consent and settings). Each has a `source` column.
 const SCORE_TABLES: [&str; 5] = ["events", "daily", "sessions", "files", "seen"];
 
 /// Shown when a message's chat never recorded a model (a session with no real reply).
@@ -263,17 +263,22 @@ impl Store {
     // ---- settings ----------------------------------------------------------------------
 
     /// The retention settings, or the defaults if never set. A saved value that can't be read
-    /// falls back to the most private choice (category only, no text), never to a default that
-    /// might keep more than the user chose.
+    /// (say, written by a newer version) means new catches keep no text, never the defaults,
+    /// which might keep more than the user chose.
     pub fn retention(&self) -> Result<Retention> {
-        let Some(raw) = self.get_setting("retention")? else { return Ok(Retention::default()) };
+        Ok(self.saved_retention()?.unwrap_or(Retention { level: Level::Category, ..Retention::default() }))
+    }
+
+    /// The retention settings, or `None` if the saved value can't be read.
+    fn saved_retention(&self) -> Result<Option<Retention>> {
+        let Some(raw) = self.get_setting("retention")? else { return Ok(Some(Retention::default())) };
         match serde_json::from_str::<Retention>(&raw).map_err(Error::from).and_then(|r| r.validate().map(|()| r)) {
-            Ok(r) => Ok(r),
+            Ok(r) => Ok(Some(r)),
             Err(e) => {
                 log::error!(
-                    "the saved retention setting is unreadable ({e}); keeping category only until it is set again"
+                    "the saved retention setting is unreadable ({e}); new catches keep no text until it is set again"
                 );
-                Ok(Retention { level: Level::Category, ..Retention::default() })
+                Ok(None)
             }
         }
     }
@@ -388,12 +393,13 @@ impl Store {
     }
 
     /// Clears every score and checkpoint so history is re-read under new rules. Consent,
-    /// settings and pins stay (a pin comes back when its catch is read again). Scores only come
-    /// back for history files that still exist.
+    /// settings and pinned catches stay: a pin is often the only copy left once its history file
+    /// is gone. Other scores only come back for history files that still exist.
     pub fn reset_scores(&mut self) -> Result<()> {
         let tx = self.conn.transaction()?;
         for table in SCORE_TABLES {
-            tx.execute(&format!("DELETE FROM {table}"), [])?;
+            let keep = if table == "events" { " WHERE pinned = 0" } else { "" };
+            tx.execute(&format!("DELETE FROM {table}{keep}"), [])?;
         }
         tx.commit()?;
         Ok(())
@@ -422,7 +428,6 @@ impl Store {
         for table in SCORE_TABLES {
             tx.execute(&format!("DELETE FROM {table} WHERE source = ?1"), [id])?;
         }
-        tx.execute("DELETE FROM pins WHERE source = ?1", [id])?;
         tx.execute("DELETE FROM sources WHERE id = ?1", [id])?;
         tx.commit()?;
         self.flush_deleted()
@@ -493,11 +498,12 @@ impl Store {
             catches += usize::from(is_catch);
 
             let text = EventText::new(&st.turn, &v, retention.level);
+            // A pinned catch kept through a rules rebuild is already here; keep it as pinned.
             tx.execute(
                 "INSERT INTO events (ts, day, source, session, provider, family, version, model_raw, label, category, rules,
-                    level, human_full, ai_full, human_snip, ai_snip, seen_key, pinned)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,
-                    EXISTS(SELECT 1 FROM pins WHERE key = ?17))",
+                    level, human_full, ai_full, human_snip, ai_snip, seen_key)
+                 SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17
+                 WHERE NOT EXISTS (SELECT 1 FROM events WHERE seen_key = ?17)",
                 params![
                     st.ts.to_rfc3339(),
                     day,
@@ -527,8 +533,10 @@ impl Store {
     // ---- retention ---------------------------------------------------------------------
 
     /// Steps aging events down: full → snippet → category. Pinned events keep their text.
+    /// An unreadable retention setting skips the sweep: deleting text can't be undone, so it
+    /// waits until the user's choice is known again.
     pub fn sweep(&self, now: DateTime<Utc>) -> Result<usize> {
-        let r = self.retention()?;
+        let Some(r) = self.saved_retention()? else { return Ok(0) };
         let full_cut = (now - Duration::days(i64::from(r.full_days))).to_rfc3339();
         let snip_cut = (now - Duration::days(i64::from(r.snippet_days))).to_rfc3339();
         let mut changed = self.conn.execute(
@@ -568,18 +576,7 @@ impl Store {
 
     /// Pins (or unpins) a catch, keeping its text past the retention period.
     pub fn pin(&self, event_id: i64, pinned: bool) -> Result<()> {
-        let tx = self.conn.unchecked_transaction()?;
-        tx.execute("UPDATE events SET pinned = ?2 WHERE id = ?1", params![event_id, pinned])?;
-        // Remembered by hashed key, so the pin outlives a rebuild of scores.
-        if pinned {
-            tx.execute(
-                "INSERT OR IGNORE INTO pins (key, source) SELECT seen_key, source FROM events WHERE id = ?1",
-                [event_id],
-            )?;
-        } else {
-            tx.execute("DELETE FROM pins WHERE key = (SELECT seen_key FROM events WHERE id = ?1)", [event_id])?;
-        }
-        tx.commit()?;
+        self.conn.execute("UPDATE events SET pinned = ?2 WHERE id = ?1", params![event_id, pinned])?;
         Ok(())
     }
 

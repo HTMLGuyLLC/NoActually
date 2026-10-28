@@ -47,8 +47,9 @@ pub fn first(rules: &[Rule], text: &str) -> Option<Match> {
 }
 
 /// "that's fine", "it works", "you're right": a subject plus an approval word. Appended to an
-/// opener like "no, " it marks approval ("No, that's fine, ship it"), not pushback.
-const APPROVAL: &str = r"(that|this|it|you)('s|'re|s|re|\s+is|\s+are|\s+was|\s+looks?|\s+sounds?|\s+seems?)?(\s+(all|also|actually|just|totally|perfectly|pretty|really|now))?\s+(fine|good|great|ok|okay|perfect|right|correct|works?|worked|working)\b";
+/// opener like "no, " it marks approval ("No, that's fine, ship it"), not pushback. Present tense
+/// only: "No, it worked before you changed it" and "it was fine until…" are corrections.
+const APPROVAL: &str = r"(that|this|it|you)('s|'re|s|re|\s+is|\s+are|\s+looks?|\s+sounds?|\s+seems?)?(\s+(all|also|actually|just|totally|perfectly|pretty|really|now))?\s+(fine|good|great|ok|okay|perfect|right|correct|works?|working)\b";
 
 /// The AI admits it was wrong (checked at the start of its next reply).
 pub static AI_ADMIT: LazyLock<Vec<Rule>> = LazyLock::new(|| {

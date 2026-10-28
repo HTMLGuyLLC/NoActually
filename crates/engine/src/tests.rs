@@ -150,6 +150,12 @@ fn approvals_are_not_claims() {
         "Actually, it still fails",
         "that's not the problem",
         "that's not a problem with the code, it's the config",
+        // Past tense: it used to be fine, and the AI broke it.
+        "No, it worked before you changed it",
+        "No, it was working before your change",
+        "No, that was correct before, you broke it",
+        "No, it was fine until you touched it",
+        "Actually, it worked before",
     ] {
         assert_eq!(label("Should be done.", h, "Checking."), Some(Label::Claimed), "{h}");
     }

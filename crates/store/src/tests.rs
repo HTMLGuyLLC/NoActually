@@ -483,37 +483,36 @@ fn db_path_prefers_the_new_variable() {
 fn pins_survive_a_rules_rebuild() {
     let dir = tempfile::tempdir().unwrap();
     let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
-    std::fs::write(dir.path().join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_catch("u", &ts)).unwrap();
+    let file = dir.path().join("a.jsonl");
+    let catch = |n: &str| cc_ai("claude-opus-5-5", &ts, "hi") + &cc_catch(n, &ts);
+    std::fs::write(&file, catch("u1") + &catch("u2")).unwrap();
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
     s.allow("claude-code", None).unwrap();
     sync(&mut s, &all).unwrap();
-    let id: i64 = s.conn.query_row("SELECT id FROM events", [], |r| r.get(0)).unwrap();
-    s.pin(id, true).unwrap();
+    let pinned_id: i64 = s.conn.query_row("SELECT min(id) FROM events", [], |r| r.get(0)).unwrap();
+    s.pin(pinned_id, true).unwrap();
+    let pins = |s: &Store| -> (i64, i64) {
+        s.conn
+            .query_row("SELECT count(*), coalesce(sum(pinned), 0) FROM events", [], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+    };
 
     s.set_setting("rules_version", "1").unwrap(); // pretend older rules
     assert!(sync(&mut s, &all).unwrap().rescored);
-    let pinned: Vec<bool> = s
-        .conn
-        .prepare("SELECT pinned FROM events")
-        .unwrap()
-        .query_map([], |r| r.get(0))
-        .unwrap()
-        .map(Result::unwrap)
-        .collect();
-    assert_eq!(pinned, vec![true], "the re-read catch is pinned again");
+    assert_eq!(pins(&s), (2, 1), "both catches are back, and the pinned one isn't counted twice");
+    let still: i64 = s.conn.query_row("SELECT id FROM events WHERE pinned = 1", [], |r| r.get(0)).unwrap();
+    assert_eq!(still, pinned_id, "the pinned catch was kept, not re-created");
 
-    let id: i64 = s.conn.query_row("SELECT id FROM events", [], |r| r.get(0)).unwrap();
-    s.pin(id, false).unwrap();
-    s.reset_scores().unwrap();
-    sync(&mut s, &all).unwrap();
-    let pinned: bool = s.conn.query_row("SELECT pinned FROM events", [], |r| r.get(0)).unwrap();
-    assert!(!pinned, "unpinning forgets the pin");
+    std::fs::remove_file(&file).unwrap(); // the tool cleaned up old history
+    s.set_setting("rules_version", "1").unwrap();
+    assert!(sync(&mut s, &all).unwrap().rescored);
+    assert_eq!(pins(&s), (1, 1), "only the pinned catch outlives its deleted history file");
+    let text: Option<String> = s.conn.query_row("SELECT human_snip FROM events", [], |r| r.get(0)).unwrap();
+    assert!(text.is_some(), "and it keeps its text");
 
-    s.pin(s.conn.query_row("SELECT id FROM events", [], |r| r.get(0)).unwrap(), true).unwrap();
     s.forget("claude-code").unwrap();
-    let n: i64 = s.conn.query_row("SELECT count(*) FROM pins", [], |r| r.get(0)).unwrap();
-    assert_eq!(n, 0, "forgetting a source drops its pins");
+    assert_eq!(pins(&s), (0, 0), "forgetting a source deletes its pinned catches too");
 }
 
 #[test]
@@ -527,6 +526,19 @@ fn an_unreadable_retention_setting_keeps_no_text() {
     ingest(&mut s, "f", vec![turn("no, that's wrong", "You're right.", "m", &now_ts(1), "k")]);
     let text: Option<String> = s.conn.query_row("SELECT human_snip FROM events", [], |r| r.get(0)).unwrap();
     assert!(text.is_none(), "new catches keep no text while the setting is unreadable");
+}
+
+#[test]
+fn an_unreadable_retention_setting_never_deletes_stored_text() {
+    let mut s = Store::open_in_memory().unwrap();
+    s.set_retention(Retention { level: Level::Full, ..Retention::default() }).unwrap();
+    ingest(&mut s, "f", vec![turn("no, that's wrong", "You're right.", "m", &now_ts(1), "k")]);
+    s.set_setting("retention", r#"{"level":"everything"}"#).unwrap(); // e.g. saved by a newer version
+    assert_eq!(s.sweep(Utc::now()).unwrap(), 0);
+    let (level, text): (String, Option<String>) =
+        s.conn.query_row("SELECT level, human_full FROM events", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+    assert_eq!(level, "full");
+    assert!(text.is_some(), "text the user chose to keep stays until the setting is readable again");
 }
 
 #[test]

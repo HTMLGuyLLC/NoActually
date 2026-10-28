@@ -19,10 +19,10 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ### Fixed
 
-- Replies like "No, that's fine, ship it" or "Actually, that works" no longer count as catches.
+- Replies like "No, that's fine, ship it" or "Actually, that works" no longer count as catches. "No, it worked before you changed it" still does.
 - Catch categories are more accurate: an AI apologizing with "my error" no longer files a catch as "still broken", and "that's not what I meant" shows as a misread. Scores rebuild once with the updated rules.
-- Pinned catches stay pinned when scores rebuild after a rules update.
-- If the saved text-retention setting is damaged, the app keeps no text instead of falling back to the defaults.
+- Pinned catches are kept when scores rebuild after a rules update, even if their original chat file is gone.
+- If the saved text-retention setting can't be read, new catches keep no text instead of falling back to the defaults, and nothing already stored is deleted until the setting is fixed.
 - Deleted text is more reliably cleared from the database's log file, and importing an export no longer waits on a running sync.
 - The "No." verdict no longer replays its animation every time a background check finishes. It plays once at launch, and again only when the verdict changes.
 - A ChatGPT, Claude.ai or Codex `.zst` file can no longer exhaust memory when decompressed (ruzstd 0.9.1, RUSTSEC decompression bomb).
@@ -40,7 +40,7 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ### Internal
 
-- Rust: typed errors, shared readers, workspace lints (clippy pedantic, no `unsafe`), `cargo-deny`, MSRV 1.90 (app included), and 105 tests (up from 49) with no sleeps. Every scoring rule has a positive and a near-miss example, and a test keeps the browser demo data in step with what Rust sends.
+- Rust: typed errors, shared readers, workspace lints (clippy pedantic, no `unsafe`), `cargo-deny`, MSRV 1.90 (app included), and 106 tests (up from 49) with no sleeps. Every scoring rule has a positive and a near-miss example, and a test keeps the browser demo data in step with what Rust sends.
 - UI: split into small tested modules with one delegated event handler and an auto-escaping `html` template; Biome and Vitest with coverage (145 tests).
 - CI: separate rust (Linux, macOS, Windows), frontend, scripts, cargo-deny, MSRV, wasm32, coverage and version jobs behind one required `ci-ok` check. Every action is pinned by commit, and ShellCheck and actionlint run on every change.
 - Release: `scripts/bump-version.sh`, one `scripts/version.sh` for reading and checking the version, manual Release runs that only build, a `justfile` (`just ci` runs every check locally), and a macOS release script that refuses a dirty tree or a mismatched tag.

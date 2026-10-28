@@ -61,10 +61,9 @@ CREATE INDEX daily_day ON daily (day);
     r"
 ALTER TABLE sources ADD COLUMN start_after TEXT;
 ",
-    // 3: Pins are remembered by the event's hashed key, so they survive a rules rebuild.
+    // 3: Pinned catches survive a rules rebuild; re-reading one looks it up by key.
     r"
-CREATE TABLE pins (key TEXT PRIMARY KEY, source TEXT NOT NULL) WITHOUT ROWID;
-INSERT OR IGNORE INTO pins (key, source) SELECT seen_key, source FROM events WHERE pinned = 1;
+CREATE INDEX events_seen_key ON events (seen_key);
 ",
 ];
 
