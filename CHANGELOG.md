@@ -4,6 +4,8 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-28
+
 ### Fixed
 
 - The Instagram share card is now a tall 4:5 image (1080×1350) that fills the Instagram feed, instead of the wide link-preview card shrunk into a thin strip. Other networks keep the wide card.
@@ -75,6 +77,7 @@ First release.
 - Per-source consent: nothing is read until you allow it, and Forget deletes a source's data
 - `noactually` command-line tool (`sources`, `allow`, `sync`, `stats`)
 
-[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/HTMLGuyLLC/NoActually/releases/tag/v0.1.0
