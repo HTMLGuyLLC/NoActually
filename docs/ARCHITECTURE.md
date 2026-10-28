@@ -3,12 +3,18 @@
 Goals, in order: **private by default, reliable, fast, deterministic.**
 
 ```
-crates/engine    Pure rules: classify a turn, normalize model ids, redact, build snippets. No I/O. Compiles to WASM.
-crates/sources   One adapter per AI tool: detect, backfill, tail. Turns files into `Turn`s.
-crates/store     SQLite: consent + settings, file checkpoints, daily aggregates, catch events, retention sweeps.
-crates/cli       `noactually` binary: scan, stats, purge. Same code path as the app.
-app/             Tauri 2: tray quick-glance, full window, notifications, update checks. Thin shell over the crates.
+crates/engine    noactually-engine:  pure rules: classify a turn, normalize model ids, redact, build snippets. No I/O. Compiles to WASM.
+crates/sources   noactually-sources: one adapter per AI tool: detect, backfill, tail. Turns files into `Turn`s.
+crates/store     noactually-store:   SQLite: consent + settings, file checkpoints, daily aggregates, catch events, retention sweeps.
+crates/cli       noactually-cli:     the `noactually` binary. Same code path as the app.
+app/             noactually-app:     Tauri 2: tray quick-glance, full window, notifications, update checks. Thin shell over the crates.
 ```
+
+The crate directories keep short import names (`engine`, `sources`, `store`); the Cargo package names are the `noactually-*` ones above.
+
+### One source of truth
+
+Rust owns every table the UI needs. The app asks for them once through the `meta` Tauri command (tiers and their floors, categories and titles, sources and display names), and `Stats` carries the computed `verdict` and a tier id. The TypeScript side formats and draws; it doesn't re-derive tiers, verdicts or labels. The CLI uses the same values.
 
 ## Data flow
 
@@ -29,7 +35,7 @@ Nothing is read until the user allows it.
 
 - First launch lists every **detected** source with the exact path it would read and what it reads ("your messages and the AI's replies, to count catches"). Each is off until the user taps **Allow**.
 - Per source: allow/revoke, backfill window (everything, since a date, or none), pause.
-- **Revoke** stops reading. **Forget** also deletes that source's events, aggregates and checkpoints.
+- **Revoke** stops reading and keeps scores. **Forget** also deletes that source's events, aggregates and checkpoints.
 - Nothing leaves the machine. Share cards render locally. The only network use is the update check (see [Updates](#updates)) and opening a share URL the user taps. A future global board is a separate opt-in that sends numbers only.
 - macOS may show its own "access data from other apps" prompt for some sources. Declining it only means that source can't be read.
 
@@ -41,6 +47,23 @@ Nothing is read until the user allows it.
 - `latest.json` (written by `scripts/finish-release.sh`) holds the version, release date, and per platform a download URL on the same release plus a minisign signature.
 - A newer version shows a "Restart to update" banner in the scorecard window and a tray menu item. Nothing is downloaded until the user clicks one; then the plugin downloads the file, checks it against the public key in `tauri.conf.json` (`plugins.updater.pubkey`), installs it and restarts. It never restarts on its own.
 - macOS installs the `.app.tar.gz` in place; Windows runs the NSIS (or MSI) installer in passive mode; Linux replaces the AppImage.
+
+## Command line
+
+The `noactually` binary shares the engine and database with the app:
+
+| Command | What it does |
+|---|---|
+| `sources` | List sources, where they read from, and whether they're allowed |
+| `allow <source> [--since YYYY-MM-DD \| --from-now]` | Allow a source, optionally limiting the backfill |
+| `revoke <source>` | Stop reading, keep scores |
+| `forget <source>` | Stop reading and delete everything from that source |
+| `import <source> <path>` | Add an export file or folder (`chatgpt-export`, `claude-ai-export`) |
+| `sync` | Read anything new from allowed sources |
+| `stats [--source S] [--provider P] [--family F] [--version V] [--json]` | Print the scorecard |
+| `retention <full\|snippet\|category> [--full-days N] [--snippet-days N]` | Set how catch text is kept |
+
+**Database location.** One function, `store::default_db_path()`, picks the file for both the CLI and the app: `app.noactually/noactually.db` in your OS app-data folder. Set `NOACTUALLY_DB=/path/to/file.db` to use another database (development, demos, tests). `WA_DB` is still read as a deprecated fallback.
 
 ## What is stored
 
@@ -103,6 +126,32 @@ Adding a source means implementing the `Source` trait in `crates/sources`: `root
 - The watcher is a trigger, not the source of truth. A 5-minute sync catches anything the OS missed, and launch catches up on anything written while the app was closed.
 - The first sync only records a milestone baseline, so backfilling history never fires notifications.
 - Claude Code deletes old transcripts (about 30 days by default). Aggregates live in our database, so history survives that.
+
+## Testing
+
+- **Rules and adapters** (`crates/*`): unit and fixture tests. Rule changes need a test for the new case and a near-miss that must not match. Adapter tests use small, made-up files in the tool's real format; no real chats are ever committed.
+- **Store**: tests run against temporary SQLite files.
+- **Frontend** (`app/`): `vitest` for the logic, `tsc --noEmit` for types, Biome for lint and formatting.
+- **Scripts**: `node --test scripts/*.test.mjs` for the release helpers, ShellCheck for the shell scripts.
+- Coverage numbers come from `cargo llvm-cov` (Rust) and `vitest --coverage` (frontend) and appear in CI run summaries.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every pull request and push to `main`:
+
+| Job | Checks |
+|---|---|
+| `rust` | Ubuntu, macOS and Windows: build the frontend, clippy with `-D warnings`, tests for the whole workspace including the app crate. `cargo fmt --check` runs once, on Ubuntu. |
+| `frontend` | Type check, Biome, vitest with coverage, build, `pnpm audit --prod` |
+| `scripts` | Script tests, ShellCheck, actionlint |
+| `deny` | `cargo deny check` (licenses, advisories, sources) using `deny.toml` |
+| `msrv` | `cargo check` on the minimum supported Rust version, without the app crate |
+| `wasm` | `noactually-engine` builds for `wasm32-unknown-unknown` |
+| `coverage` | `cargo llvm-cov` summary in the job summary |
+| `version` | Cargo workspace, `app/package.json` and `tauri.conf.json` versions agree |
+| `ci-ok` | The only required check: fails if any job above failed or was cancelled |
+
+Run the same checks locally with `just ci` (see [CONTRIBUTING.md](../CONTRIBUTING.md)). `.github/workflows/release.yml` builds draft releases from `v*` tags; the macOS build is signed and notarized locally (see Releasing in CONTRIBUTING.md).
 
 ## Speed
 
