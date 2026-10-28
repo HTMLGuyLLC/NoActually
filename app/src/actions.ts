@@ -117,6 +117,11 @@ export const clickActions = {
     if (e) openShareDialog(catchPost(e), b, scheduler.flush);
   },
   "open-main": () => api.openMain(),
+  home: () => {
+    setTab("score");
+    setView("overview");
+    return render();
+  },
   "go-sources": () => {
     setTab("sources");
     return render();

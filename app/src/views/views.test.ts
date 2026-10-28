@@ -136,6 +136,12 @@ describe("chrome", () => {
     expect(m.match(/aria-current/g)).toHaveLength(1);
   });
 
+  it("gives every tab an icon and makes the logo a way home", () => {
+    const m = headerView("settings", { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 }, false).value;
+    expect(m.match(/class="tab-icon"/g)).toHaveLength(3);
+    expect(m).toContain('<button class="home" data-action="home"');
+  });
+
   it("escapes a sync error in the retry pill", () => {
     const m = statusPillView({ syncing: false, last_sync: null, last_error: HOSTILE, files_with_errors: 0 }, false).value;
     expect(m).toContain("Couldn't check. Retry");

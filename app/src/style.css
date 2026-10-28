@@ -72,6 +72,10 @@ select:hover, input[type="number"]:hover { border-color: var(--muted) }
 nav { display: flex; gap: 6px }
 .tab { background: transparent; color: var(--muted); border-color: transparent }
 .tab.on { color: var(--ink); border-color: var(--ink) }
+.tab { display: inline-flex; align-items: center; gap: 6px }
+.tab-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.home { background: none; border: 0; padding: 0; border-radius: 8px; cursor: pointer }
+.home:hover { filter: none; opacity: .85 }
 .sync-pill { display: inline-flex; align-items: center; gap: 7px; font: 500 12px var(--body); color: var(--muted); background: transparent; border: 0; padding: 0 }
 .sync-pill.bad { color: var(--pen); text-decoration: underline; cursor: pointer }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok) }
