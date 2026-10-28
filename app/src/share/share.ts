@@ -17,8 +17,8 @@ export function shareText(s: ScoreLike, who: string) {
 }
 
 /** The briefs score, ready to post: the tier's answer and how many tasks landed. Numbers only. */
-export function briefShareText(b: Pick<Briefs, "landed_last_7d" | "tasks_last_7d">, tier: BriefTier) {
-  return `Do I make my AI guess? ${tier.verdict} ${landedPct(b)}% of my tasks landed this week without me adding, clarifying or starting over. Brief tier: ${tier.name}. Do you make yours guess? ${SHARE_URL}`;
+export function briefShareText(b: Pick<Briefs, "landed_last_28d" | "tasks_last_28d">, tier: BriefTier) {
+  return `Do I make my AI guess? ${tier.verdict} ${landedPct(b)}% of my tasks in the last 28 days landed without me adding, clarifying or starting over. Brief tier: ${tier.name}. Do you make yours guess? ${SHARE_URL}`;
 }
 
 import type { CardShape } from "./cards";

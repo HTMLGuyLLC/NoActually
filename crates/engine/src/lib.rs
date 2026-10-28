@@ -17,7 +17,7 @@ mod redact;
 mod rules;
 mod tier;
 
-pub use brief::{read_prompt, BriefTier, Grade, Prompt, Signal, Signals, Steer, MIN_BRIEFS};
+pub use brief::{read_prompt, BriefTier, Grade, Prompt, Signal, Signals, Steer, MIN_BRIEFS, WINDOW_DAYS};
 pub use model::{normalize_model, Model};
 pub use redact::{redact, snippet, SNIPPET_CHARS};
 pub use tier::{Answer, Tier, UnknownTier};

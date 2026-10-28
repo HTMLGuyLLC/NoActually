@@ -5,11 +5,11 @@ import { briefTier, briefTierRanges, landedPct, percent, steerTitle } from "../m
 
 const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
 
-/** "92% of your tasks this week landed…", or how many more tasks it takes to get ranked. */
+/** "86% of your tasks in the last 28 days landed…", or how many more it takes to get ranked. */
 function becauseLine(b: Briefs, meta: Meta): Html {
   return briefTier(meta, b.tier)
-    ? html`<b>${landedPct(b)}%</b> of your tasks this week landed without you adding, clarifying or starting over.`
-    : html`Give it <b>${plural(b.to_rank, "more task")}</b> this week to get ranked. Your first message in a chat is its brief.`;
+    ? html`<b>${landedPct(b)}%</b> of your tasks in the last ${meta.brief_window_days} days landed without you adding, clarifying or starting over.`
+    : html`Give it <b>${plural(b.to_rank, "more task")}</b> with a follow-up to get ranked. One-shot tasks can't need steering, so they don't count.`;
 }
 
 /** The verdict word, hand-written, with a screen-reader version. */
@@ -57,11 +57,11 @@ function gradesView(b: Briefs, meta: Meta): Html {
   </div>`;
 }
 
-/** How far the next tier (or a ranking) is. */
+/** The next tier's target ("Architect at 90%. You're at 86%."), or how far a ranking is. */
 function ladderNote(b: Briefs, meta: Meta): string {
-  const next = b.next_tier && briefTier(meta, b.next_tier[0]);
   if (!b.tier) return `${plural(b.to_rank, "more task")} to get ranked`;
-  return next && b.next_tier ? `${plural(b.next_tier[1], "more task")} landing in a row for ${next.name}` : "Top tier. Don't let it slip.";
+  const next = briefTier(meta, b.next_tier);
+  return next ? `${next.name} at ${next.floor}%. You're at ${landedPct(b)}%.` : "Top tier. Don't let it slip.";
 }
 
 function ladderView(b: Briefs, meta: Meta): Html {

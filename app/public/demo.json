@@ -80,23 +80,24 @@
    {
     "id": "ticket_writer",
     "name": "Ticket writer",
-    "floor": 80,
+    "floor": 70,
     "verdict": "Often."
    },
    {
     "id": "tech_lead",
     "name": "Tech lead",
-    "floor": 90,
+    "floor": 80,
     "verdict": "Sometimes."
    },
    {
     "id": "architect",
     "name": "Architect",
-    "floor": 95,
+    "floor": 90,
     "verdict": "Rarely."
    }
   ],
-  "min_briefs": 5,
+  "min_briefs": 10,
+  "brief_window_days": 28,
   "signals": [
    {
     "id": "spot",
@@ -470,14 +471,12 @@
   ],
   "briefs": {
    "tasks": 214,
-   "landed": 188,
-   "tasks_last_7d": 24,
-   "landed_last_7d": 22,
+   "continued": 140,
+   "landed": 120,
+   "tasks_last_28d": 42,
+   "landed_last_28d": 36,
    "tier": "tech_lead",
-   "next_tier": [
-    "architect",
-    16
-   ],
+   "next_tier": "architect",
    "to_rank": 0,
    "grades": {
     "sharp": 42,
@@ -502,7 +501,7 @@
     "pct_of_briefs": 14.0,
     "landed_with_without": [
      96.7,
-     86.4
+     82.7
     ]
    }
   }

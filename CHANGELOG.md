@@ -6,7 +6,7 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ### Added
 
-- How you brief it: a second scorecard, "Do you make it guess?". Each chat's first message (or a "now…" / "next:" later on) is a task. Its brief is graded on what it carries (points at it, shows it, says what done is, sets limits, says why), and later messages that redirect it count as steering: the AI got it wrong, you added more, you clarified, or you started over. The weekly tier (Vibes only → Architect) is the share of tasks that landed without steering that was on you. Includes a tip, a share card, a quick-glance line, a tier-up popup, and the same numbers in `noactually stats`. Only counts are stored, never text.
+- How you brief it: a second scorecard, "Do you make it guess?". Each chat's first message (or a "now…" / "next:" later on) is a task. Its brief is graded on what it carries (points at it, shows it, says what done is, sets limits, says why), and later messages that redirect it count as steering: the AI got it wrong, you added more, you clarified, or you started over. The tier (Vibes only 0%, Ticket writer 70%, Tech lead 80%, Architect 90%) is the share of tasks that landed without steering that was on you. It counts tasks with a follow-up over the last 28 days, and needs at least 10 of them. Includes a tip, a share card, a quick-glance line, a tier-up popup, and the same numbers in `noactually stats`. Only counts are stored, never text.
 
 ### Changed
 

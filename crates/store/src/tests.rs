@@ -586,13 +586,14 @@ fn briefs_count_tasks_signals_and_steering() {
         ],
     );
     let b = stats(&s).briefs;
-    assert_eq!((b.tasks, b.landed), (3, 2), "only the added requirement counts against you");
+    // The CSV export got no reply yet, so it can't have needed steering: it doesn't count either way.
+    assert_eq!((b.tasks, b.continued, b.landed), (3, 2, 1), "only the added requirement counts against you");
     assert_eq!(b.grades, BTreeMap::from([("thin".into(), 2), ("sharp".into(), 1)]));
     assert_eq!(b.signals, BTreeMap::from([("spot".into(), 1), ("done".into(), 1), ("limits".into(), 1)]));
     let steering: BTreeMap<String, i64> =
         [("ai_wrong", 1), ("added", 1), ("clarified", 0), ("redo", 0)].map(|(k, n)| (k.into(), n)).into();
     assert_eq!(b.steering, steering);
-    assert_eq!((b.tasks_last_7d, b.tier, b.to_rank), (3, None, 2), "too few tasks to rank");
+    assert_eq!((b.tasks_last_28d, b.tier, b.to_rank), (2, None, 8), "too few tasks to rank");
     let msgs: Vec<i64> = s
         .conn()
         .prepare("SELECT messages FROM tasks ORDER BY id")
@@ -605,23 +606,29 @@ fn briefs_count_tasks_signals_and_steering() {
 }
 
 #[test]
-fn brief_tiers_come_from_this_weeks_tasks() {
+fn brief_tiers_come_from_the_last_28_days_of_tasks_that_continued() {
     let mut s = Store::open_in_memory().unwrap();
-    let (now, old) = (now_ts(0), now_ts(10));
-    let mut turns: Vec<SourceTurn> =
-        (0..10).map(|i| opener("add a CSV export", &format!("n{i}"), &now, &format!("n{i}"))).collect();
+    let (now, old) = (now_ts(0), now_ts(40));
+    let mut turns = Vec::new();
+    for i in 0..12 {
+        turns.push(opener("add a CSV export", &format!("n{i}"), &now, &format!("n{i}")));
+        turns.push(reply("thanks", &format!("n{i}"), &now, &format!("nr{i}")));
+    }
     turns.push(reply("I forgot to mention it should be gzipped", "n0", &now, "x"));
-    // Last month's steered tasks don't drag this week down.
+    // One-shot tasks can't need steering, so they don't pad the score.
+    for i in 0..3 {
+        turns.push(opener("add a CSV export", &format!("q{i}"), &now, &format!("q{i}")));
+    }
+    // Tasks from before the window don't drag it down.
     for i in 0..5 {
         turns.push(opener("add a CSV export", &format!("o{i}"), &old, &format!("o{i}")));
         turns.push(reply("scrap that", &format!("o{i}"), &old, &format!("ox{i}")));
     }
     ingest(&mut s, "f", turns);
     let b = stats(&s).briefs;
-    assert_eq!((b.tasks, b.landed, b.tasks_last_7d, b.landed_last_7d), (15, 9, 10, 9));
-    assert_eq!(b.tier, Some(BriefTier::TechLead));
-    assert_eq!(b.next_tier, Some((BriefTier::Architect, 10)));
-    assert_eq!(b.to_rank, 0);
+    assert_eq!((b.tasks, b.continued, b.landed), (20, 17, 11));
+    assert_eq!((b.tasks_last_28d, b.landed_last_28d), (12, 11));
+    assert_eq!((b.tier, b.next_tier, b.to_rank), (Some(BriefTier::Architect), None, 0));
     let tip = b.tip.unwrap();
     assert_eq!((tip.signal.as_str(), tip.pct_of_briefs, tip.landed_with_without), ("spot", 0.0, None));
 }
@@ -645,10 +652,11 @@ fn a_tip_quotes_the_gap_only_when_history_backs_it() {
     // "spot" is carried least (never), so it's the tip; "why" would be the one with a real gap.
     assert_eq!(tip.signal, "spot");
     assert_eq!(tip.landed_with_without, None, "no briefs carried it, so there's nothing to compare");
-    let groups = [(Signals(Signal::Why.bit()), true, 10), (Signals(0), true, 10), (Signals(0), false, 10)];
+    let groups =
+        [(Signals(Signal::Why.bit()), true, true, 10), (Signals(0), true, true, 10), (Signals(0), true, false, 10)];
     let why_tip = super::stats::tip_for(&groups, Signal::Why);
     assert_eq!(why_tip.landed_with_without, Some((100.0, 50.0)));
-    let small = [(Signals(Signal::Why.bit()), true, 9), (Signals(0), false, 10)];
+    let small = [(Signals(Signal::Why.bit()), true, true, 9), (Signals(0), true, false, 10)];
     assert_eq!(super::stats::tip_for(&small, Signal::Why).landed_with_without, None, "too few to say");
 }
 
@@ -667,7 +675,7 @@ fn briefs_follow_the_filter_and_are_forgotten_and_rebuilt() {
     ingest(&mut s, "f", vec![opener("add a CSV export", "a", &t, "a")]);
     s.forget("test").unwrap();
     let b = stats(&s).briefs;
-    assert_eq!((b.tasks, b.to_rank, b.steering.values().sum::<i64>(), b.tip), (0, 5, 0, None));
+    assert_eq!((b.tasks, b.to_rank, b.steering.values().sum::<i64>(), b.tip), (0, 10, 0, None));
 }
 
 #[test]

@@ -27,7 +27,7 @@ pub struct Snapshot {
     pub streak: i64,
     /// This week's brief tier, once ranked.
     pub brief_tier: Option<BriefTier>,
-    /// Percent of this week's tasks that landed, rounded.
+    /// Percent of the window's continued tasks that landed, rounded down like the tier floors.
     pub landed_pct: i64,
 }
 
@@ -42,7 +42,7 @@ impl Snapshot {
             streak: s.current_streak_days,
             brief_tier: b.tier,
             // Rounded down, like the tier floors, so the popup never says 95% for a Tech lead week.
-            landed_pct: if b.tasks_last_7d > 0 { 100 * b.landed_last_7d / b.tasks_last_7d } else { 0 },
+            landed_pct: if b.tasks_last_28d > 0 { 100 * b.landed_last_28d / b.tasks_last_28d } else { 0 },
         }
     }
 }
@@ -87,7 +87,7 @@ pub fn crossed(prev: &Snapshot, now: &Snapshot) -> Vec<Milestone> {
         out.push(Milestone {
             title: format!("Briefs: {}", t.name()),
             body: format!(
-                "{}% of this week's tasks landed without steering. Open the scorecard to share it.",
+                "{}% of your tasks in the last 28 days landed without steering. Open the scorecard to share it.",
                 now.landed_pct
             ),
         });
@@ -182,7 +182,8 @@ mod tests {
             m,
             vec![Milestone {
                 title: "Briefs: Tech lead".into(),
-                body: "92% of this week's tasks landed without steering. Open the scorecard to share it.".into()
+                body: "92% of your tasks in the last 28 days landed without steering. Open the scorecard to share it."
+                    .into()
             }]
         );
         assert_eq!(crossed(&briefs(None), &briefs(Some(Architect))).len(), 1, "a first ranking above the bottom");

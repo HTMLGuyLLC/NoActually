@@ -27,12 +27,12 @@ describe("briefShareText", () => {
     const tier = meta.brief_tiers[2];
     if (!tier) throw new Error("fixture");
     expect(briefShareText(briefs(), tier)).toBe(
-      `Do I make my AI guess? Sometimes. 95% of my tasks landed this week without me adding, clarifying or starting over. Brief tier: Tech lead. Do you make yours guess? ${SHARE_URL}`,
+      `Do I make my AI guess? Sometimes. 95% of my tasks in the last 28 days landed without me adding, clarifying or starting over. Brief tier: Tech lead. Do you make yours guess? ${SHARE_URL}`,
     );
   });
 
   it("matches the card's lines", () => {
-    expect(briefLines(briefs())).toEqual(["95% of my tasks landed without steering this week.", "20% of all my briefs were sharp."]);
+    expect(briefLines(briefs())).toEqual(["95% of my tasks landed without steering (last 28 days).", "20% of all my briefs were sharp."]);
     expect(gradeKey(briefs())).toBe("SHARP 20%  ·  SOLID 30%  ·  THIN 50%");
   });
 });

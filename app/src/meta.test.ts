@@ -5,10 +5,10 @@ import { meta } from "./test/fixtures";
 describe("briefTierRanges", () => {
   it("shows percent ranges, top tier first", () => {
     expect(briefTierRanges(meta).map((t) => [t.name, t.range])).toEqual([
-      ["Architect", "95%+ landed"],
-      ["Tech lead", "90–94%"],
-      ["Ticket writer", "80–89%"],
-      ["Vibes only", "0–79%"],
+      ["Architect", "90%+ landed"],
+      ["Tech lead", "80–89%"],
+      ["Ticket writer", "70–79%"],
+      ["Vibes only", "0–69%"],
     ]);
   });
 });
@@ -16,8 +16,8 @@ describe("briefTierRanges", () => {
 describe("percents", () => {
   it("rounds, and never divides by zero", () => {
     expect([percent(1, 3), percent(2, 3), percent(5, 0)]).toEqual([33, 67, 0]);
-    expect(landedPct({ landed_last_7d: 19, tasks_last_7d: 20 })).toBe(95);
-    expect(landedPct({ landed_last_7d: 18, tasks_last_7d: 19 })).toBe(94); // never shows 95% for a Tech lead week
+    expect(landedPct({ landed_last_28d: 19, tasks_last_28d: 20 })).toBe(95);
+    expect(landedPct({ landed_last_28d: 26, tasks_last_28d: 29 })).toBe(89); // 89.7%: never shows 90% for a Tech lead
   });
 });
 

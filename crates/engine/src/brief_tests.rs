@@ -286,32 +286,18 @@ fn a_new_task_partway_through_a_chat() {
 #[test]
 fn brief_tiers_follow_the_share_of_tasks_that_landed() {
     let at = BriefTier::for_tasks;
-    assert_eq!(at(4, 4), None, "too few tasks to say");
-    assert_eq!(at(0, 5), Some(BriefTier::VibesOnly));
-    assert_eq!(at(7, 9), Some(BriefTier::VibesOnly));
-    assert_eq!(at(8, 10), Some(BriefTier::TicketWriter));
-    assert_eq!(at(9, 10), Some(BriefTier::TechLead));
-    assert_eq!(at(19, 20), Some(BriefTier::Architect));
-    assert_eq!(at(5, 5), Some(BriefTier::Architect));
+    assert_eq!(at(9, 9), None, "too few tasks to say");
+    assert_eq!(at(0, 10), Some(BriefTier::VibesOnly));
+    assert_eq!(at(6, 10), Some(BriefTier::VibesOnly));
+    assert_eq!(at(7, 10), Some(BriefTier::TicketWriter));
+    assert_eq!(at(86, 100), Some(BriefTier::TechLead), "a typical heavy user");
+    assert_eq!(at(9, 10), Some(BriefTier::Architect));
     assert!(BriefTier::ALL.windows(2).all(|w| w[0] < w[1] && w[0].floor() < w[1].floor()));
     for t in BriefTier::ALL {
         assert_eq!(t.id().parse(), Ok(t));
         assert_eq!(serde_json::to_string(&t).unwrap(), format!("\"{}\"", t.id()));
     }
-}
-
-#[test]
-fn landed_needed_is_the_smallest_count_that_gets_there() {
-    for tasks in 0..60 {
-        for landed in 0..=tasks {
-            for t in BriefTier::ALL {
-                let k = t.landed_needed(landed, tasks);
-                let reaches = |k: i64| BriefTier::for_tasks(landed + k, tasks + k).is_some_and(|got| got >= t);
-                assert!(reaches(k), "{t:?} from {landed}/{tasks}: {k} isn't enough");
-                assert!(k == 0 || !reaches(k - 1), "{t:?} from {landed}/{tasks}: {k} isn't the fewest");
-            }
-        }
-    }
+    assert_eq!((BriefTier::TechLead.next(), BriefTier::Architect.next()), (Some(BriefTier::Architect), None));
 }
 
 #[test]

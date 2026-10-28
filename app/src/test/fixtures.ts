@@ -18,11 +18,12 @@ export const meta: Meta = {
   ],
   brief_tiers: [
     { id: "vibes_only", name: "Vibes only", floor: 0, verdict: "Constantly." },
-    { id: "ticket_writer", name: "Ticket writer", floor: 80, verdict: "Often." },
-    { id: "tech_lead", name: "Tech lead", floor: 90, verdict: "Sometimes." },
-    { id: "architect", name: "Architect", floor: 95, verdict: "Rarely." },
+    { id: "ticket_writer", name: "Ticket writer", floor: 70, verdict: "Often." },
+    { id: "tech_lead", name: "Tech lead", floor: 80, verdict: "Sometimes." },
+    { id: "architect", name: "Architect", floor: 90, verdict: "Rarely." },
   ],
-  min_briefs: 5,
+  min_briefs: 10,
+  brief_window_days: 28,
   signals: [
     { id: "spot", title: "Points at it", hint: "a file, function, link or code" },
     { id: "proof", title: "Shows it", hint: "an error, the output or an example" },
@@ -46,9 +47,10 @@ export const meta: Meta = {
 
 export const briefs = (over: Partial<Briefs> = {}): Briefs => ({
   tasks: 200,
-  landed: 180,
-  tasks_last_7d: 20,
-  landed_last_7d: 19,
+  continued: 120,
+  landed: 108,
+  tasks_last_28d: 40,
+  landed_last_28d: 38,
   tier: "architect",
   next_tier: null,
   to_rank: 0,

@@ -75,9 +75,14 @@ Same rules: no AI, deterministic, readable in [`crates/engine/src/brief.rs`](cra
 - **A task** starts with a chat's first message, or a later one that opens with "now…", "next:", "new task". Hellos, "continue" and questions ("what does this do?") aren't tasks.
 - **A brief's grade** counts what it carries, never its length: **points at it** (a file, function, link, `code`), **shows it** (an error, output, an example, anything pasted), **says what done is** (expected result, tests, a format), **sets limits** (don't, only, keep, without), **says why** (the goal or context). Three or more is **sharp**, two is **solid**, fewer is **thin**. Pasted blocks count as showing it, but their words aren't graded as yours.
 - **Steering** is a later message that redirects the task: a catch (the AI got it wrong), or one that's on you: **added more** ("also…", "I forgot to mention"), **clarified** ("I meant…", "to be clear"), or **started over** ("scrap that", "revert it").
-- **A task landed** when nothing on you followed it. The tier is the share that landed in the last 7 days (at least 5 tasks): Vibes only, Ticket writer 80%+, Tech lead 90%+, Architect 95%+. The AI being wrong never counts against you; that's a catch.
+- **A task landed** when nothing on you followed it. Only tasks with a follow-up count: a one-shot task can't need steering. The tier is the share that landed over the last 28 days (at least 10 such tasks): Vibes only, Ticket writer 70%+, Tech lead 80%+, Architect 90%+. The AI being wrong never counts against you; that's a catch.
 
-The tip names the thing your briefs carry least. It only quotes "briefs that do landed X% vs Y%" when your own history shows a real gap. On the author's history, longer briefs didn't steer less: bigger tasks get both longer briefs and more back-and-forth.
+The tip names the thing your briefs carry least. It only quotes "briefs that do landed X% vs Y%" when your own history shows a real gap. On the author's history, longer briefs didn't steer less: bigger tasks get both longer briefs and more back-and-forth. Published studies don't show that link either.
+
+**Where the numbers come from.** There's no public benchmark for weekly per-person scores, so every threshold was checked three ways: the author's history (8,600 messages), a random sample of 3,400 English chats from [WildChat-1M](https://huggingface.co/datasets/allenai/WildChat-1M) run through these exact rules, and published figures (Claude Code users interrupt in 5–9% of turns; in multi-turn developer chats, 14–17% of prompts refine the request).
+- The catch rate per message agrees across sources (1 in 47 for the author, 1 in 41 in WildChat).
+- Public chats are short and almost never steer, so the brief floors come from one heavy user. A typical month there was 86% (Tech lead).
+- Expect the brief floors to move once more people's numbers exist.
 
 ## Supported tools
 

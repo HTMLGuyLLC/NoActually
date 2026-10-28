@@ -19,7 +19,7 @@ export function glanceView(s: Stats, meta: Meta): Html {
   </div>`;
 }
 
-/** "Briefs: Tech lead · 92% landed", once this week has a brief tier. */
+/** "Briefs: Tech lead · 86% landed", once there's a brief tier. */
 function briefsLine(s: Stats, meta: Meta): Html | "" {
   const tier = briefTier(meta, s.briefs.tier);
   return tier ? html`<div class="g-meta muted small">Briefs: ${tier.name} · ${landedPct(s.briefs)}% landed</div>` : "";

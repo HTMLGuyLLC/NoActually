@@ -23,8 +23,10 @@ export type Meta = {
   sources: { id: string; name: string }[];
   /** Ascending by floor. */
   brief_tiers: BriefTier[];
-  /** Tasks in the last 7 days before a brief tier is given. */
+  /** Tasks with a follow-up, in the window, before a brief tier is given. */
   min_briefs: number;
+  /** Days of tasks a brief tier looks at. */
+  brief_window_days: number;
   /** What a brief can carry, in display order. */
   signals: (Titled & { hint: string })[];
   /** Signals a brief needs to be sharp. */
@@ -53,17 +55,22 @@ export type HallEntry = {
 export type WeekRow = { week: string; messages: number; catches: number };
 /** The signal your briefs carry least; the with/without rates only when your history backs them. */
 export type Tip = { signal: string; pct_of_briefs: number; landed_with_without: [number, number] | null };
-/** How you brief it. A task "landed" when you never had to add to, clarify or redo it. */
+/**
+ * How you brief it. A task "landed" when you never had to add to, clarify or redo it. Only tasks
+ * with a follow-up (`continued`) count toward landing: a one-shot task can't need steering.
+ */
 export type Briefs = {
   tasks: number;
+  continued: number;
   landed: number;
-  tasks_last_7d: number;
-  landed_last_7d: number;
-  /** A brief tier id from `Meta.brief_tiers`, or null until the week has enough tasks. */
+  /** Continued tasks in the last `Meta.brief_window_days` days, and how many of them landed. */
+  tasks_last_28d: number;
+  landed_last_28d: number;
+  /** A brief tier id from `Meta.brief_tiers`, or null until there are enough tasks. */
   tier: string | null;
-  /** The next tier's id and how many more tasks this week must land to reach it. */
-  next_tier: [string, number] | null;
-  /** More tasks this week before a tier is given (0 once ranked). */
+  /** The tier above it; its floor is the target to show. */
+  next_tier: string | null;
+  /** More tasks with a follow-up before a tier is given (0 once ranked). */
   to_rank: number;
   /** Keyed by grade id. */
   grades: Record<string, number>;

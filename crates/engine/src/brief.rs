@@ -531,36 +531,44 @@ static WHY: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     ]
 });
 
-/// How well your briefs landed this week: the share of tasks you never had to add to, clarify or
-/// redo. The AI getting it wrong doesn't count against you (that's a catch). Ordered lowest first.
+/// How well your briefs land: of the tasks in the last [`WINDOW_DAYS`] that went past their first
+/// message, the share you never had to add to, clarify or redo. A one-message task can't need
+/// steering, so it doesn't count either way. The AI getting it wrong doesn't count against you
+/// (that's a catch). Ordered lowest first.
+///
+/// The floors come from one heavy user's history (tasks that continued landed 83–90% of the time
+/// over 28 days, typically 86%). Public chat logs can't set them: casual chats almost never steer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BriefTier {
-    /// Under 80% landed.
+    /// Under 70% landed.
     VibesOnly,
-    /// 80% or more.
+    /// 70% or more.
     TicketWriter,
-    /// 90% or more.
+    /// 80% or more.
     TechLead,
-    /// 95% or more.
+    /// 90% or more.
     Architect,
 }
 
-/// Tasks in the last 7 days needed before a tier is given; fewer says too little.
-pub const MIN_BRIEFS: i64 = 5;
+/// Days of tasks a brief tier looks at: long enough that one "also…" doesn't swing it.
+pub const WINDOW_DAYS: i64 = 28;
+
+/// Tasks that continued, in the window, needed before a tier is given; fewer says too little.
+pub const MIN_BRIEFS: i64 = 10;
 
 impl BriefTier {
     /// Every tier, ascending by floor.
     pub const ALL: [BriefTier; 4] =
         [BriefTier::VibesOnly, BriefTier::TicketWriter, BriefTier::TechLead, BriefTier::Architect];
 
-    /// Percent of the week's tasks that must land.
+    /// Percent of the window's continued tasks that must land.
     pub const fn floor(self) -> i64 {
         match self {
             BriefTier::VibesOnly => 0,
-            BriefTier::TicketWriter => 80,
-            BriefTier::TechLead => 90,
-            BriefTier::Architect => 95,
+            BriefTier::TicketWriter => 70,
+            BriefTier::TechLead => 80,
+            BriefTier::Architect => 90,
         }
     }
 
@@ -604,15 +612,6 @@ impl BriefTier {
     /// The tier above this one, if any.
     pub fn next(self) -> Option<BriefTier> {
         BriefTier::ALL.into_iter().find(|t| *t > self)
-    }
-
-    /// How many more tasks in a row must land to reach this tier from `landed` of `tasks`.
-    pub fn landed_needed(self, landed: i64, tasks: i64) -> i64 {
-        let f = self.floor();
-        // Smallest k with (landed + k) * 100 >= f * (tasks + k), and enough tasks to rank.
-        let gap = f * tasks - 100 * landed;
-        let k = if gap <= 0 { 0 } else { (gap + (100 - f) - 1) / (100 - f) };
-        k.max(MIN_BRIEFS - tasks).max(0)
     }
 }
 

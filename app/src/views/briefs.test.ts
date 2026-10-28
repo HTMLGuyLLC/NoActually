@@ -7,30 +7,30 @@ import { scorecardView } from "./scorecard";
 const view = (over: Parameters<typeof briefs>[0] = {}, still = false) => briefsView(briefs(over), meta, still).value;
 
 describe("briefsView", () => {
-  it("answers with the tier's verdict, this week's landed share and the ladder", () => {
+  it("answers with the tier's verdict, the window's landed share and the ladder", () => {
     const m = view();
     expect(m).toContain("Do you make it guess?");
     expect(m).toContain(">Rarely.</div>");
     expect(m).toContain('<span class="sr-only">Rarely. Your brief tier is Architect.</span>');
-    expect(m).toContain("<b>95%</b> of your tasks this week landed");
-    expect(m).toContain('<li class="on" aria-current="true"><span>Architect</span><span>95%+ landed</span></li>');
-    expect(m).toContain("<span>Ticket writer</span><span>80–89%</span>");
+    expect(m).toContain("<b>95%</b> of your tasks in the last 28 days landed");
+    expect(m).toContain('<li class="on" aria-current="true"><span>Architect</span><span>90%+ landed</span></li>');
+    expect(m).toContain("<span>Ticket writer</span><span>70–79%</span>");
     expect(m).toContain("Top tier.");
     expect(m).toContain('data-action="share-briefs"');
     expect(m).not.toContain("style=");
   });
 
-  it("says how far the next tier is, by name", () => {
-    const m = view({ tier: "tech_lead", next_tier: ["architect", 1] });
+  it("names the next tier's target and where you are", () => {
+    const m = view({ tier: "tech_lead", next_tier: "architect", landed_last_28d: 34 });
     expect(m).toContain(">Sometimes.</div>");
-    expect(m).toContain("1 more task landing in a row for Architect");
+    expect(m).toContain("Architect at 90%. You&#39;re at 85%.");
   });
 
   it("waits to rank a thin week, and offers nothing to share yet", () => {
-    const m = view({ tier: null, next_tier: null, to_rank: 3, tasks_last_7d: 2 });
+    const m = view({ tier: null, next_tier: null, to_rank: 3, tasks_last_28d: 7 });
     expect(m).toContain('class="no maybe"');
     expect(m).toContain(">Hmm.</div>");
-    expect(m).toContain("<b>3 more tasks</b> this week to get ranked");
+    expect(m).toContain("<b>3 more tasks</b> with a follow-up to get ranked");
     expect(m).not.toContain("share-briefs");
   });
 

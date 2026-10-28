@@ -1,6 +1,6 @@
 //! Static tables the UI needs (tiers, categories, sources), so it never hard-codes them.
 
-use engine::{BriefTier, Category, Grade, Signal, Steer, Tier, MIN_BRIEFS};
+use engine::{BriefTier, Category, Grade, Signal, Steer, Tier, MIN_BRIEFS, WINDOW_DAYS};
 use serde::Serialize;
 use sources::Source;
 
@@ -15,8 +15,10 @@ pub struct Meta {
     pub sources: Vec<SourceInfo>,
     /// Brief tiers, ascending by floor.
     pub brief_tiers: Vec<BriefTierInfo>,
-    /// Tasks in the last 7 days before a brief tier is given.
+    /// Continued tasks in the window before a brief tier is given.
     pub min_briefs: i64,
+    /// Days of tasks a brief tier looks at.
+    pub brief_window_days: i64,
     /// What a brief can carry, in display order.
     pub signals: Vec<SignalInfo>,
     /// Signals a brief needs to be sharp.
@@ -34,7 +36,7 @@ pub struct BriefTierInfo {
     pub id: &'static str,
     /// Display name.
     pub name: &'static str,
-    /// Percent of the week's tasks that must land.
+    /// Percent of the window's continued tasks that must land.
     pub floor: i64,
     /// The answer to "Do you make it guess?".
     pub verdict: &'static str,
@@ -100,6 +102,7 @@ pub fn meta(sources: &[Box<dyn Source>]) -> Meta {
             .map(|t| BriefTierInfo { id: t.id(), name: t.name(), floor: t.floor(), verdict: t.verdict() })
             .collect(),
         min_briefs: MIN_BRIEFS,
+        brief_window_days: WINDOW_DAYS,
         signals: Signal::ALL.iter().map(|s| SignalInfo { id: s.as_str(), title: s.title(), hint: s.hint() }).collect(),
         sharp_signals: Grade::SHARP,
         grades: Grade::ALL.iter().map(|g| Titled { id: g.as_str(), title: g.title() }).collect(),
@@ -121,11 +124,12 @@ mod tests {
         assert_eq!(m["sources"][0], serde_json::json!({"id":"claude-code","name":"Claude Code"}));
         assert_eq!(
             m["brief_tiers"][2],
-            serde_json::json!({"id":"tech_lead","name":"Tech lead","floor":90,"verdict":"Sometimes."})
+            serde_json::json!({"id":"tech_lead","name":"Tech lead","floor":80,"verdict":"Sometimes."})
         );
         assert_eq!(m["signals"][0]["id"], "spot");
         assert_eq!(m["grades"][2], serde_json::json!({"id":"sharp","title":"Sharp"}));
         assert_eq!(m["steers"][0], serde_json::json!({"id":"ai_wrong","title":"It got it wrong"}));
-        assert_eq!((m["min_briefs"].as_i64(), m["sharp_signals"].as_u64()), (Some(5), Some(3)));
+        assert_eq!((m["min_briefs"].as_i64(), m["sharp_signals"].as_u64()), (Some(10), Some(3)));
+        assert_eq!(m["brief_window_days"], 28);
     }
 }

@@ -281,22 +281,24 @@ fn brief_lines(b: &store::Briefs) -> Vec<String> {
         return Vec::new();
     }
     let pct = |n: i64, of: i64| if of > 0 { 100 * n / of } else { 0 };
+    let recent = pct(b.landed_last_28d, b.tasks_last_28d);
     let tier = match b.tier {
         Some(t) => format!(
-            "{} {}{}",
+            "{} {}  ({recent}% landed in {} days{})",
             t.verdict(),
             t.name(),
-            b.next_tier.map_or(String::new(), |(n, k)| format!("  ({k} more landed this week for {})", n.name()))
+            engine::WINDOW_DAYS,
+            b.next_tier.map_or(String::new(), |n| format!("; {} at {}%", n.name(), n.floor()))
         ),
-        None => format!("Hmm. {} more tasks this week to get ranked", b.to_rank),
+        None => format!("Hmm. {} more tasks with a follow-up to get ranked", b.to_rank),
     };
     let mut out = vec![
         String::new(),
         format!("Do you make it guess? {tier}"),
         format!(
-            "  Landed           {}% of {} tasks needed no adding, clarifying or redoing",
-            pct(b.landed, b.tasks),
-            b.tasks
+            "  Landed           {}% of {} tasks with a follow-up needed no adding, clarifying or redoing",
+            pct(b.landed, b.continued),
+            b.continued
         ),
         format!(
             "  Sharp briefs     {}%  ({}+ of the 5 signals)",
@@ -379,19 +381,20 @@ mod tests {
     #[test]
     fn brief_lines_say_the_tier_or_how_far_off_it_is() {
         assert!(brief_lines(&store::Briefs::default()).is_empty(), "nothing before the first task");
-        let mut b = store::Briefs { tasks: 10, landed: 9, to_rank: 2, ..Default::default() };
+        let mut b = store::Briefs { tasks: 10, continued: 8, landed: 6, to_rank: 2, ..Default::default() };
         b.grades.insert("sharp".into(), 3);
         b.signals.insert("why".into(), 5);
         b.steering.insert("added".into(), 1);
         let text = brief_lines(&b).join("\n");
-        assert!(text.contains("Do you make it guess? Hmm. 2 more tasks this week to get ranked"), "{text}");
-        assert!(text.contains("Landed           90% of 10 tasks"), "{text}");
+        assert!(text.contains("Do you make it guess? Hmm. 2 more tasks with a follow-up to get ranked"), "{text}");
+        assert!(text.contains("Landed           75% of 8 tasks with a follow-up"), "{text}");
         assert!(text.contains("Sharp briefs     30%"), "{text}");
         assert!(text.contains("Says why              50%"), "{text}");
         assert!(text.contains("You added more       1"), "{text}");
         b.tier = Some(engine::BriefTier::TechLead);
-        b.next_tier = Some((engine::BriefTier::Architect, 4));
-        assert!(brief_lines(&b)[1].ends_with("Sometimes. Tech lead  (4 more landed this week for Architect)"));
+        b.next_tier = Some(engine::BriefTier::Architect);
+        (b.tasks_last_28d, b.landed_last_28d) = (40, 34);
+        assert!(brief_lines(&b)[1].ends_with("Sometimes. Tech lead  (85% landed in 28 days; Architect at 90%)"));
     }
 
     #[test]

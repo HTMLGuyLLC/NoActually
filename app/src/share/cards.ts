@@ -305,11 +305,11 @@ export async function drawCatchCard(e: CatchLike, shape: CardShape = "wide"): Pr
   return png(c);
 }
 
-type BriefsCard = Pick<Briefs, "landed_last_7d" | "tasks_last_7d" | "grades" | "tasks">;
+type BriefsCard = Pick<Briefs, "landed_last_28d" | "tasks_last_28d" | "grades" | "tasks">;
 
 const BRIEF_QUESTION = "Do I make my AI guess?";
 export const briefLines = (b: BriefsCard): [string, string] => [
-  `${landedPct(b)}% of my tasks landed without steering this week.`,
+  `${landedPct(b)}% of my tasks landed without steering (last 28 days).`,
   `${percent(b.grades.sharp ?? 0, b.tasks)}% of all my briefs were sharp.`,
 ];
 
