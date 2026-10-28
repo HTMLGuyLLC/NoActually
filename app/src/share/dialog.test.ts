@@ -82,6 +82,19 @@ describe("share dialog", () => {
     expect(must("#share-guide").textContent).toBe("Couldn't make the card: no canvas");
   });
 
+  it("saves the tall card for Instagram and the wide one from Save image", async () => {
+    const image = vi.fn(async () => new Blob());
+    URL.createObjectURL = vi.fn(() => "blob:card");
+    openShareDialog(post({ image }), opener, onClose);
+    click('[data-sd="share"][data-id="instagram"]');
+    await settle();
+    expect(image).toHaveBeenLastCalledWith("portrait");
+    expect(must("#share-guide").textContent).toContain("Post the image from the Instagram app");
+    click('[data-sd="image"]');
+    await settle();
+    expect(image).toHaveBeenLastCalledWith("wide");
+  });
+
   it("closes from the × button, focusing the opener and running onClose", () => {
     openShareDialog(post(), opener, onClose);
     click('[data-sd="close"]');

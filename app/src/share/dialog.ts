@@ -3,13 +3,14 @@ import { api, demo } from "../api";
 import { data, must, say } from "../dom";
 import { errorText } from "../format";
 import { type Html, html } from "../html";
+import type { CardShape } from "./cards";
 import { shareGuide, shareTargets } from "./share";
 
 export type Post = {
   title: string;
   text: string;
-  /** Draws the image to save or post. */
-  image: () => Promise<Blob>;
+  /** Draws the image to save or post, in the shape the network shows best. */
+  image: (shape: CardShape) => Promise<Blob>;
   /** The text quotes a chat, so the person may edit it before it goes anywhere. */
   quotesChat?: boolean;
 };
@@ -27,10 +28,10 @@ async function copyText(text: string, out: HTMLElement) {
 }
 
 /** Saves the post's image. `copyImage` also puts it on the clipboard so it pastes into a post. */
-async function saveImage(post: Post, out: HTMLElement | null, copyImage = true): Promise<boolean> {
+async function saveImage(post: Post, out: HTMLElement | null, copyImage = true, shape: CardShape = "wide"): Promise<boolean> {
   say(out, "Drawing your card…");
   try {
-    const blob = await post.image();
+    const blob = await post.image(shape);
     let copied = false;
     if (copyImage) {
       try {
@@ -67,7 +68,7 @@ async function share(id: string, post: Post, text: string, out: HTMLElement) {
   const target = shareTargets(text).find((t) => t.id === id);
   if (!target) return;
   const next = shareGuide(target, await writeClipboard(text), PASTE_KEY);
-  if (next.saveImage && !(await saveImage(post, null, false))) return;
+  if (next.saveImage && !(await saveImage(post, null, false, target.card))) return;
   guide(out, next.guide, next.paste);
   if (!next.open || !target.href) return;
   try {

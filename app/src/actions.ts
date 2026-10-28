@@ -48,13 +48,13 @@ const thenRender = async (btn: HTMLButtonElement, work: () => Promise<unknown>, 
 
 const scorePost = (s: Stats, meta: Meta): Post => {
   const who = filterLabel(state.filter, meta);
-  return { title: "Share your score", text: shareText(s, who), image: () => drawShareCard(s, who, tierName(meta, s.tier)) };
+  return { title: "Share your score", text: shareText(s, who), image: (shape) => drawShareCard(s, who, tierName(meta, s.tier), shape) };
 };
 
 const catchPost = (e: HallEntry): Post => ({
   title: "Share this catch",
   text: catchShareText(e),
-  image: () => drawCatchCard(e),
+  image: (shape) => drawCatchCard(e, shape),
   quotesChat: !!(e.human || e.ai),
 });
 

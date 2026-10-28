@@ -15,6 +15,8 @@ export function shareText(s: ScoreLike, who: string) {
   return `Could ${who} replace me? ${s.verdict === "no" ? "No." : "Maybe…"} I caught it ${s.catches_last_7d} ${times} this week${pct}. Me ${s.catches}, ${who} ${s.humbled}. What's your score? ${SHARE_URL}`;
 }
 
+import type { CardShape } from "./cards";
+
 export type ShareTarget = {
   id: string;
   label: string;
@@ -22,6 +24,8 @@ export type ShareTarget = {
   href: string | null;
   /** The network ignores pre-filled text, so the text is copied for pasting. */
   pasteText?: boolean;
+  /** The image shape the network shows best, when it posts the saved card. */
+  card?: CardShape;
 };
 
 /**
@@ -41,7 +45,7 @@ export function shareTargets(text: string, url = SHARE_URL): ShareTarget[] {
     { id: "bluesky", label: "Bluesky", href: `https://bsky.app/intent/compose?text=${t}` },
     { id: "reddit", label: "Reddit", href: `https://www.reddit.com/submit?url=${u}&title=${encodeURIComponent(text.replace(` ${url}`, ""))}` },
     { id: "whatsapp", label: "WhatsApp", href: `https://wa.me/?text=${t}` },
-    { id: "instagram", label: "Instagram", href: null, pasteText: true },
+    { id: "instagram", label: "Instagram", href: null, pasteText: true, card: "portrait" },
   ];
 }
 

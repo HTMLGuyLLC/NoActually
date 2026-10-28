@@ -48,6 +48,11 @@ describe("shareTargets", () => {
     expect(by("instagram").href).toBeNull();
   });
 
+  it("asks for the tall card only where the network shows it best (Instagram's 4:5 feed)", () => {
+    expect(by("instagram").card).toBe("portrait");
+    for (const t of targets) if (t.id !== "instagram") expect(t.card).toBeUndefined();
+  });
+
   it("only ever points at allowed hosts", () => {
     for (const t of targets) if (t.href) expect(SHARE_HOSTS).toContain(new URL(t.href).host);
   });
