@@ -1,9 +1,10 @@
 //! Desktop shell. All logic lives in the engine / sources / store crates; this file wires
-//! them to a tray icon, two windows, a file watcher and notifications.
+//! them to a tray icon, two windows, a file watcher, notifications and update checks.
 
 mod commands;
 mod milestones;
 mod tracker;
+mod updater;
 
 use serde::Serialize;
 use sources::Source;
@@ -98,6 +99,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![HIDDEN_ARG]),
@@ -124,8 +126,11 @@ pub fn run() {
 
             let open = MenuItem::with_id(tauri_app, "open", "Open scorecard", true, None::<&str>)?;
             let sync = MenuItem::with_id(tauri_app, "sync", "Check now", true, None::<&str>)?;
+            let update = MenuItem::with_id(tauri_app, "update", updater::menu_text(None), true, None::<&str>)?;
             let quit = MenuItem::with_id(tauri_app, "quit", "Quit No, Actually...", true, None::<&str>)?;
-            let menu = Menu::with_items(tauri_app, &[&open, &sync, &quit])?;
+            let menu = Menu::with_items(tauri_app, &[&open, &sync, &update, &quit])?;
+            let (update_tx, update_rx) = mpsc::channel();
+            tauri_app.manage(updater::Updates::new(&handle, update_tx, update));
             TrayIconBuilder::with_id("tray")
                 .icon(tray_icon())
                 .icon_as_template(cfg!(target_os = "macos"))
@@ -137,6 +142,7 @@ pub fn run() {
                     "sync" => {
                         let _ = app.state::<std::sync::Arc<App>>().tracker.send(tracker::Msg::SyncNow);
                     }
+                    "update" => updater::on_menu(app),
                     "quit" => app.exit(0),
                     _ => {}
                 })
@@ -158,6 +164,7 @@ pub fn run() {
             } else {
                 show_main(&handle);
             }
+            updater::spawn(handle.clone(), app.clone(), update_rx);
             tracker::spawn(handle, app, tx, rx);
             Ok(())
         })
@@ -190,6 +197,10 @@ pub fn run() {
             commands::set_autostart,
             commands::save_share_card,
             commands::open_share,
+            commands::update_status,
+            commands::set_auto_update,
+            commands::check_for_updates,
+            commands::install_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running No, Actually...");

@@ -48,7 +48,7 @@ You correct your AI all day: the function that doesn't exist, the instruction it
 | | |
 |---|---|
 | **Asks first** | Nothing is read until you click **Allow** on a source. Pause, stop, or **Forget** (delete everything from it) any time. |
-| **Stays on your machine** | No accounts, no servers, no telemetry. The only network use is opening a share link you click. Fonts are bundled. |
+| **Stays on your machine** | No accounts, no servers, no telemetry. The only network use is an update check against GitHub (no identifiers, can be turned off) and opening a share link you click. Fonts are bundled. |
 | **Stores numbers, not chats** | Ordinary messages are only counted. For catches you choose **full text**, **snippet**, or **category only**, and text steps down on a timer you set. |
 | **Redacts** | Keys, emails, links, paths and long numbers are removed from anything kept. |
 
@@ -106,10 +106,10 @@ For developers. Needs Rust stable, Node 20+ and pnpm:
 
 ```bash
 git clone https://github.com/HTMLGuyLLC/NoActually.git
-cd NoActually/app && pnpm install && pnpm tauri build
+cd NoActually/app && pnpm install && pnpm tauri build -c '{"bundle":{"createUpdaterArtifacts":false}}'
 ```
 
-The app lands in `target/release/bundle/`. To run it in development instead, use `pnpm tauri dev`.
+The app lands in `target/release/bundle/`. (The `-c` part skips the signed update files, which need the project's private key.) To run it in development instead, use `pnpm tauri dev`.
 
 ### Command line
 

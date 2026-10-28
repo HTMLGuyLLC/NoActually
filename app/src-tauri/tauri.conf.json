@@ -41,6 +41,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "category": "Productivity",
     "shortDescription": "Count the times you caught your AI being wrong.",
     "icon": [
@@ -55,5 +56,16 @@
     },
     "copyright": "© 2026 HTMLGuy LLC. MIT License.",
     "longDescription": "No, Actually... reads your AI chat history on your computer, finds the moments you caught the AI being wrong, and turns them into a private, deterministic scorecard. Nothing leaves your machine."
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDA4QUU5RjE3MjAwQjgxODQKUldTRWdRc2dGNSt1Q09JdVQvcDcvdHROdTBEMjUySitGdFdCZStBVU9KcGpPcWVneFM0cC9sVjcK",
+      "endpoints": [
+        "https://github.com/HTMLGuyLLC/NoActually/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

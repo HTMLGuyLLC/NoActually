@@ -214,6 +214,9 @@ button.small { padding: 7px 12px; font-size: 12.5px }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: #2f9e44 }
 .dot.live { background: var(--ai); animation: pulse 1s ease-in-out infinite alternate }
 @keyframes pulse { to { opacity: .3 } }
+.update-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); font-size: 14px }
+.update-banner span { margin-right: auto }
+#update-slot:empty { display: none }
 .settings-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 0; border-bottom: 1px solid var(--rule) }
 .toggle { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer }
 .toggle input { width: 18px; height: 18px; accent-color: var(--pen) }

@@ -1,8 +1,9 @@
 import "./fonts";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { api, demo, type Filter, type HallEntry, type Level, type SourceInfo, type Stats, type SyncStatus } from "./api";
+import { api, demo, type Filter, type HallEntry, type Level, type SourceInfo, type Stats, type SyncStatus, type UpdateStatus } from "./api";
 import { buildPickItems, matchPickItems, modelName, sameFilter, type PickItem } from "./picker";
+import { updateBanner, updateLine } from "./update";
 import { catchShareText, drawCatchCard, drawShareCard, shareTargets, shareText, verdictIsNo } from "./share";
 
 const TIERS: [string, string][] = [
@@ -39,6 +40,9 @@ let filter: Filter = {};
 let allModels: Stats["models"] = [];
 let status: SyncStatus = { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 };
 let current: Stats | null = null;
+let update: UpdateStatus | null = null;
+/** The version the person said "Later" to; its banner stays hidden until a newer one. */
+let laterFor: string | null = null;
 
 /** Every string from chats goes through here before it touches innerHTML. */
 const esc = (s: unknown) =>
@@ -367,6 +371,14 @@ async function settingsView() {
         <span class="muted small">Starts quietly in the menu bar so new catches are counted.</span>
       </div>
       <div class="settings-row">
+        <label class="toggle"><input id="auto-update" type="checkbox" ${update?.auto ? "checked" : ""} ${demo ? "disabled" : ""}/><span>Check for updates automatically</span></label>
+        <span class="muted small">Asks GitHub for the latest version number at launch and every 6 hours. Sends nothing about you.</span>
+      </div>
+      <div class="settings-row">
+        <button class="ghost" id="check-update" ${demo ? "disabled" : ""}>Check for updates</button>
+        <span class="muted small" id="update-line" aria-live="polite">${update ? esc(updateLine(update)) : ""}</span>
+      </div>
+      <div class="settings-row">
         <button class="ghost" id="sync-now">Check now</button>
         <span class="muted small" id="sync-line">Last checked ${esc(ago(status.last_sync))}.</span>
       </div>
@@ -566,6 +578,21 @@ function flushDeferred() {
   deferred = false;
   render();
 }
+/** Redraws only the update banner and the Settings line, so a check never interrupts anything. */
+function showUpdate() {
+  if (!update) return;
+  const slot = root.querySelector("#update-slot");
+  if (slot) {
+    slot.innerHTML = updateBanner(update, laterFor);
+    slot.querySelector("#install-update")?.addEventListener("click", () => api.installUpdate().catch(() => {}));
+    slot.querySelector("#later-update")?.addEventListener("click", () => ((laterFor = update?.available ?? null), showUpdate()));
+  }
+  const line = root.querySelector("#update-line");
+  if (line) line.textContent = updateLine(update);
+  const box = root.querySelector<HTMLInputElement>("#auto-update");
+  if (box && document.activeElement !== box) box.checked = update.auto;
+}
+
 // A field losing focus may be the moment a deferred update can land.
 root.addEventListener("focusout", () => setTimeout(() => !busy() && flushDeferred(), 0));
 
@@ -602,7 +629,7 @@ async function render() {
       if (tab === "score") body = s.messages ? scorecard(s) : onboarding(watchingNames(await api.sources()));
       if (tab === "sources") body = sourcesView(await api.sources());
       if (tab === "settings") body = await settingsView();
-      root.innerHTML = `<div class="wrap">${nav}${body}</div>`;
+      root.innerHTML = `<div class="wrap">${nav}<div id="update-slot">${update ? updateBanner(update, laterFor) : ""}</div>${body}</div>`;
     }
     wire(s);
   } catch (e) {
@@ -700,6 +727,17 @@ function wire(s: Stats) {
       box.checked = !box.checked;
     }
   });
+  $<HTMLInputElement>("#auto-update")?.addEventListener("change", async (e) => {
+    const box = e.target as HTMLInputElement;
+    try {
+      await api.setAutoUpdate(box.checked);
+      if (update) update.auto = box.checked;
+    } catch {
+      box.checked = !box.checked;
+    }
+  });
+  $("#check-update")?.addEventListener("click", () => api.checkForUpdates());
+  showUpdate();
   for (const id of ["#sync-now", "#sync-now-top"]) $(id)?.addEventListener("click", () => api.syncNow());
 }
 
@@ -714,7 +752,9 @@ api.syncStatus()
   .then((s) => (status = s))
   .catch(() => {})
   .finally(() => render());
+if (!isGlance) api.updateStatus().then((u) => ((update = u), showUpdate()));
 if (!demo) {
+  if (!isGlance) listen("update-changed", () => api.updateStatus().then((u) => ((update = u), showUpdate())));
   // A check starting changes only the status line; a finished one may change the numbers.
   listen("sync-started", () => ((status = { ...status, syncing: true }), updateStatus()));
   listen("stats-changed", () => api.syncStatus().then((s) => ((status = s), refresh())));

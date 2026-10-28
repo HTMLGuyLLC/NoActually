@@ -1,5 +1,6 @@
 //! Everything the windows can ask the Rust side to do.
 
+use crate::updater::{self, UpdateStatus, Updates};
 use crate::{lock, tracker::Msg, App, SyncStatus};
 use chrono::{Local, NaiveDate};
 use serde::Serialize;
@@ -223,6 +224,32 @@ pub fn open_share(handle: AppHandle, url: String) -> Res<()> {
         return Err("That link isn't a share link.".into());
     }
     handle.opener().open_url(url, None::<&str>).map_err(err)
+}
+
+#[tauri::command]
+pub fn update_status(app: State<Arc<App>>, updates: State<Updates>) -> UpdateStatus {
+    updates.status(&app)
+}
+
+/// Async: it may wait for a sync to finish, and must not freeze the window meanwhile.
+#[tauri::command(async)]
+pub fn set_auto_update(app: State<Arc<App>>, updates: State<Updates>, enabled: bool) -> Res<()> {
+    lock(&app.writer).set_setting(updater::AUTO_KEY, if enabled { "on" } else { "off" }).map_err(err)?;
+    if enabled {
+        let _ = updates.tx.send(updater::Msg::CheckNow);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn check_for_updates(updates: State<Updates>) {
+    let _ = updates.tx.send(updater::Msg::CheckNow);
+}
+
+/// Downloads and installs the waiting update, then restarts the app.
+#[tauri::command]
+pub async fn install_update(handle: AppHandle) -> Res<()> {
+    updater::install(handle).await
 }
 
 #[cfg(test)]
