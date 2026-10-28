@@ -80,7 +80,8 @@ notarize() { # file to submit, then files to staple
   for f in "$@"; do xcrun stapler staple "$f"; done
 }
 
-# 1. Build and sign the app only.
+# 1. Build and sign the app only. A universal build needs both Mac targets on the pinned toolchain.
+(cd "$ROOT" && rustup target add aarch64-apple-darwin x86_64-apple-darwin)
 pnpm tauri build --target universal-apple-darwin --bundles app
 # shellcheck disable=SC2012  # one app bundle, plain names
 APP="$(ls -d "$BUNDLE"/macos/*.app | head -1)"

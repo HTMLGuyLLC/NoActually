@@ -5,7 +5,7 @@
 //     Prints the plain name a release file gets ("No-Actually-0.2.0-Windows-Setup.exe").
 //
 //   node scripts/latest-json.mjs finish --version 0.2.0 --tag v0.2.0 --repo owner/name \
-//     --assets names.txt [--in latest.json] [--mac-file NAME --mac-sig FILE.sig]
+//     --assets assets.txt (one "<id>\t<name>" or "<name>" per line) [--in latest.json] [--mac-file NAME --mac-sig FILE.sig]
 //     Prints latest.json with every URL pointing at the renamed files, plus the Mac entries.
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
@@ -36,8 +36,10 @@ const MAC_TARGETS = ["darwin-universal", "darwin-aarch64", "darwin-x86_64", "dar
 /**
  * latest.json for a release: tauri-action's entries (Windows, Linux, maybe macOS) re-pointed at
  * the renamed files, the locally built Mac update added, and every file checked to be on the release.
+ * On a draft release tauri-action v1 links files by asset id (".../download/v0.2.0/683868082"), so
+ * `assetIds` maps those ids to the files' current names.
  */
-export function finishLatest({ latest, version, tag, repo, assets, mac, now = new Date() }) {
+export function finishLatest({ latest, version, tag, repo, assets, assetIds = {}, mac, now = new Date() }) {
   const out = {
     version,
     notes: latest?.notes ?? "",
@@ -46,7 +48,8 @@ export function finishLatest({ latest, version, tag, repo, assets, mac, now = ne
   };
   const url = (file) => `https://github.com/${repo}/releases/download/${tag}/${encodeURIComponent(file)}`;
   for (const [target, p] of Object.entries(latest?.platforms ?? {})) {
-    const file = plainName(decodeURIComponent(p.url.split("/").pop()), version);
+    const last = decodeURIComponent(p.url.split("/").pop());
+    const file = plainName(assetIds[last] ?? last, version);
     out.platforms[target] = { signature: p.signature, url: url(file) };
   }
   if (mac) for (const t of MAC_TARGETS) out.platforms[t] = { signature: mac.signature.trim(), url: url(mac.file) };
@@ -71,9 +74,13 @@ function main(argv) {
     });
     for (const k of ["version", "tag", "repo", "assets"]) if (!v[k]) throw new Error(`--${k} is required`);
     const latest = v.in ? JSON.parse(readFileSync(v.in, "utf8")) : null;
-    const assets = readFileSync(v.assets, "utf8").split("\n").map((s) => s.trim()).filter(Boolean);
+    // One asset per line: "<id>\t<name>", or just "<name>".
+    const lines = readFileSync(v.assets, "utf8").split("\n").map((s) => s.trim()).filter(Boolean);
+    const rows = lines.map((l) => (l.includes("\t") ? l.split("\t") : [null, l]));
+    const assets = rows.map(([, name]) => name);
+    const assetIds = Object.fromEntries(rows.filter(([id]) => id));
     const mac = v["mac-file"] ? { file: basename(v["mac-file"]), signature: readFileSync(v["mac-sig"], "utf8") } : null;
-    console.log(JSON.stringify(finishLatest({ latest, version: v.version, tag: v.tag, repo: v.repo, assets, mac }), null, 2));
+    console.log(JSON.stringify(finishLatest({ latest, version: v.version, tag: v.tag, repo: v.repo, assets, assetIds, mac }), null, 2));
     return;
   }
   throw new Error("usage: latest-json.mjs plain-name|finish …");

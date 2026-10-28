@@ -62,7 +62,7 @@ else
   echo "Couldn't download latest.json: $dl_err" >&2
   exit 1
 fi
-gh api "repos/$REPO/releases/$RID/assets" --paginate -q '.[].name' > "$WORK/assets.txt"
+gh api "repos/$REPO/releases/$RID/assets" --paginate -q '.[] | "\(.id)\t\(.name)"' > "$WORK/assets.txt"
 node "$ROOT/scripts/latest-json.mjs" finish --version "$VERSION" --tag "$TAG" --repo "$REPO" \
   --assets "$WORK/assets.txt" "${IN_ARGS[@]+"${IN_ARGS[@]}"}" "${MAC_ARGS[@]+"${MAC_ARGS[@]}"}" > "$WORK/latest.out.json"
 mv "$WORK/latest.out.json" "$WORK/latest.json"

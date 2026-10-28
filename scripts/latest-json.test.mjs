@@ -1,5 +1,9 @@
 // Run with: node --test scripts/
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { finishLatest, plainName } from "./latest-json.mjs";
 
@@ -72,4 +76,40 @@ test("refuses a file that points at missing downloads", () => {
     /linux-x86_64/,
   );
   assert.throws(() => finishLatest({ latest: null, version: "0.2.0", tag: "v0.2.0", repo: REPO, assets, mac: null }), /no platforms/);
+});
+
+test("follows tauri-action's asset-id links on a draft release", () => {
+  const byId = {
+    ...ci,
+    platforms: {
+      "windows-x86_64": { signature: "W", url: dl("683870400") },
+      "linux-x86_64": { signature: "L", url: dl("683868082") },
+    },
+  };
+  // finish-release.sh renames the files first, so the ids already point at the plain names.
+  const assetIds = { 683870400: "No-Actually-0.2.0-Windows-Setup.exe", 683868082: "No-Actually-0.2.0-Linux.AppImage" };
+  const out = finishLatest({ latest: byId, version: "0.2.0", tag: "v0.2.0", repo: REPO, assets, assetIds, mac });
+  assert.equal(out.platforms["windows-x86_64"].url, dl("No-Actually-0.2.0-Windows-Setup.exe"));
+  assert.equal(out.platforms["linux-x86_64"].url, dl("No-Actually-0.2.0-Linux.AppImage"));
+  assert.throws(
+    () => finishLatest({ latest: byId, version: "0.2.0", tag: "v0.2.0", repo: REPO, assets, mac }),
+    /files not on the release/,
+    "an unknown id is still refused",
+  );
+});
+
+test("the command line reads `<id>\\t<name>` asset lists", () => {
+  const dir = mkdtempSync(join(tmpdir(), "latest-json-"));
+  try {
+    const latest = { ...ci, platforms: { "linux-x86_64": { signature: "L", url: dl("42") } } };
+    writeFileSync(join(dir, "in.json"), JSON.stringify(latest));
+    writeFileSync(join(dir, "assets.txt"), "42\tNo-Actually-0.2.0-Linux.AppImage\nNo-Actually-0.2.0-Mac.dmg\n");
+    const script = new URL("./latest-json.mjs", import.meta.url).pathname;
+    const args = ["finish", "--version", "0.2.0", "--tag", "v0.2.0", "--repo", REPO, "--assets", join(dir, "assets.txt"), "--in", join(dir, "in.json")];
+    const r = spawnSync(process.execPath, [script, ...args], { encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(JSON.parse(r.stdout).platforms["linux-x86_64"].url, dl("No-Actually-0.2.0-Linux.AppImage"));
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
 });
