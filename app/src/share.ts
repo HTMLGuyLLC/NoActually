@@ -79,20 +79,10 @@ export async function drawShareCard(s: Stats, who: string): Promise<Blob> {
   await Promise.all(
     ["800 64px 'Bricolage Grotesque Variable'", "400 200px 'Gochi Hand'", "500 24px 'Instrument Sans'", "600 18px 'JetBrains Mono'"].map((f) => document.fonts.load(f)),
   );
-  const ink = "#141a2e", muted = "#5d6680", pen = "#e0322b", ai = "#3b5bdb", rule = "#dfe3ee";
+  const ink = "#141a2e", muted = "#5d6680", pen = "#e0322b", ai = "#3b5bdb";
 
   g.fillStyle = "#fbfcfe";
   g.fillRect(0, 0, W, H);
-  g.strokeStyle = rule;
-  g.lineWidth = 1;
-  for (let y = 40; y < H; y += 40) {
-    g.beginPath();
-    g.moveTo(0, y + 0.5);
-    g.lineTo(W, y + 0.5);
-    g.stroke();
-  }
-  g.fillStyle = pen;
-  g.fillRect(96, 0, 2, H); // the margin line of a legal pad
 
   g.textBaseline = "alphabetic";
   g.fillStyle = ink;
@@ -202,18 +192,9 @@ export async function drawCatchCard(e: CatchLike): Promise<Blob> {
   await Promise.all(
     ["800 54px 'Bricolage Grotesque Variable'", "400 52px 'Gochi Hand'", "500 26px 'Instrument Sans'", "600 16px 'JetBrains Mono'"].map((f) => document.fonts.load(f)),
   );
-  const ink = "#141a2e", muted = "#5d6680", pen = "#e0322b", ai = "#3b5bdb", aiSoft = "#e7ecfd", rule = "#dfe3ee";
+  const ink = "#141a2e", muted = "#5d6680", pen = "#e0322b", ai = "#3b5bdb", aiSoft = "#e7ecfd";
   g.fillStyle = "#fbfcfe";
   g.fillRect(0, 0, W, H);
-  g.strokeStyle = rule;
-  for (let y = 40; y < H; y += 40) {
-    g.beginPath();
-    g.moveTo(0, y + 0.5);
-    g.lineTo(W, y + 0.5);
-    g.stroke();
-  }
-  g.fillStyle = pen;
-  g.fillRect(96, 0, 2, H);
 
   drawWordmark(g, 140, 78, pen, ink);
 
