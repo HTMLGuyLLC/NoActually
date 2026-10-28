@@ -97,7 +97,11 @@ nav { display: flex; gap: 6px }
 
 .split { display: grid; grid-template-columns: 1.1fr 1fr; gap: 36px }
 .split > * { min-width: 0 }
+/* About as tall as "What you catch" with all six categories; longer lists scroll in place. */
+.models-scroll { max-height: 15rem; overflow-y: auto; overscroll-behavior: contain; border-bottom: 1px solid var(--rule) }
+.models-scroll:focus-visible { outline: 3px solid var(--ai); outline-offset: 2px }
 table.models { width: 100%; border-collapse: collapse; font-size: 14px }
+.models thead th { position: sticky; top: 0; background: var(--paper); z-index: 1 }
 .models th { text-align: left; font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 8px 6px; border-bottom: 1px solid var(--rule) }
 .models td { padding: 9px 6px; border-bottom: 1px solid var(--rule) }
 .models td.n, .models th:not(:first-child) { text-align: right }
@@ -115,7 +119,14 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .you-said { font: 400 21px/1.2 var(--hand); color: var(--pen); overflow-wrap: anywhere }
 .ai-said { font-size: 14px; color: var(--muted); background: var(--ai-soft); border-radius: 8px; padding: 8px 10px; overflow-wrap: anywhere }
 .ai-said b { color: var(--ai) }
-.pin { justify-self: start; padding: 6px 10px; font-size: 12px }
+.catch-actions { display: flex; gap: 8px; flex-wrap: wrap }
+button.small { padding: 7px 12px; font-size: 12.5px }
+/* Pinned catches are the ones you chose to keep: give them the red-pen treatment. */
+.catch { position: relative }
+.catch.pinned { border: 2px solid var(--pen); background: linear-gradient(var(--pen-soft), var(--pen-soft)) padding-box;
+  box-shadow: 0 14px 30px -18px color-mix(in srgb, var(--pen) 70%, transparent) }
+.pinned-tag { position: absolute; top: -11px; right: 14px; background: var(--pen); color: #fff; font: 600 10.5px/1 var(--mono);
+  letter-spacing: .08em; text-transform: uppercase; padding: 6px 9px; border-radius: 999px; transform: rotate(2deg) }
 
 .sources { display: grid; gap: 10px }
 .source { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface) }
@@ -202,13 +213,22 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 button:disabled { opacity: .55; cursor: default }
 @media (prefers-reduced-motion: reduce) { .dot.live { animation: none } }
 
-/* Share panel: one button per network, plus image and text for anything else. */
-.share-panel { display: grid; gap: 10px; border-top: 1px dashed var(--rule); padding-top: 14px }
-.share-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px }
-.share-btn { background: transparent; color: var(--ink); border: 1px solid var(--rule); border-radius: 10px; padding: 9px 6px; font-weight: 600 }
+/* Share dialog: one button per network, each saying whether you'll need to paste. */
+.share-dialog { width: min(560px, calc(100vw - 32px)); border: 1px solid var(--rule); border-radius: 18px; padding: 22px; background: var(--surface); color: var(--ink);
+  box-shadow: 0 30px 80px -20px rgba(10, 14, 30, .5) }
+.share-dialog[open] { display: grid; gap: 12px; animation: pop .16s ease-out }
+.share-dialog::backdrop { background: rgba(10, 14, 30, .55) }
+.sd-head { display: flex; justify-content: space-between; align-items: center }
+.sd-close { background: none; border: 0; color: var(--muted); font-size: 26px; line-height: 1; padding: 2px 6px }
+.sd-close:hover { filter: none; color: var(--ink) }
+#share-text { width: 100%; resize: none; font: 400 14px/1.45 var(--body); color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px }
+.share-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px }
+.share-btn { display: grid; gap: 3px; justify-items: start; text-align: left; background: transparent; color: var(--ink); border: 1px solid var(--rule); border-radius: 12px; padding: 10px 11px; font: 600 14px var(--body) }
+.share-btn span { font: 500 11px/1.25 var(--body); color: var(--muted) }
+.share-btn .needs-paste { color: var(--pen) }
 .share-btn:hover { filter: none; border-color: var(--ink); background: var(--pen-soft) }
-.share-more { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px }
-.linkish { background: none; border: 0; padding: 0; color: var(--ink); font: 600 13px var(--body); text-decoration: underline; text-underline-offset: 3px }
-.linkish:hover { filter: none; color: var(--pen) }
-.share-status { font-size: 12.5px; color: var(--muted); min-height: 1em }
-@media (max-width: 420px) { .share-grid { grid-template-columns: repeat(2, 1fr) } }
+.share-guide { font-size: 13px; color: var(--muted); padding: 10px 12px; border-radius: 10px; background: var(--paper) }
+.share-guide.paste { color: var(--ink); background: color-mix(in srgb, var(--hl) 55%, transparent); border: 1px solid color-mix(in srgb, var(--hl) 90%, var(--ink) 10%) }
+.share-guide kbd { font: 600 12px var(--mono); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--muted); background: var(--surface) }
+.sd-foot { display: flex; gap: 8px; justify-content: flex-end }
+@media (max-width: 520px) { .share-grid { grid-template-columns: repeat(2, 1fr) } }

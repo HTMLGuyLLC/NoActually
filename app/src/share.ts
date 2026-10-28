@@ -138,3 +138,103 @@ export async function drawShareCard(s: Stats, who: string): Promise<Blob> {
 
   return new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error("Couldn't draw the card."))), "image/png"));
 }
+
+type CatchLike = { model: string; human: string | null; ai: string | null };
+
+function clip(s: string, n: number) {
+  const t = s.replace(/\s+/g, " ").trim();
+  return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t;
+}
+
+/** A single catch, ready to post. Quotes are the stored (already redacted) snippets, clipped short. */
+export function catchShareText(e: CatchLike, url = SHARE_URL) {
+  const who = e.model || "my AI";
+  const you = e.human ? ` Me: “${clip(e.human, 90)}”` : "";
+  const ai = e.ai ? ` ${who}: “${clip(e.ai, 90)}”` : "";
+  return `I caught ${who} being wrong.${you}${ai} Could AI replace me? No, actually. ${url}`;
+}
+
+/** Wraps text to lines no wider than `max` px in the current font. */
+function wrap(g: CanvasRenderingContext2D, text: string, max: number, maxLines: number) {
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let line = "";
+  for (const w of words) {
+    const next = line ? `${line} ${w}` : w;
+    if (g.measureText(next).width > max && line) {
+      lines.push(line);
+      line = w;
+      if (lines.length === maxLines) break;
+    } else line = next;
+  }
+  if (lines.length < maxLines && line) lines.push(line);
+  if (lines.length === maxLines && words.join(" ") !== lines.join(" ")) lines[maxLines - 1] = lines[maxLines - 1].replace(/\s*\S*$/, "…");
+  return lines;
+}
+
+/** A 1200×630 card for one catch: your words in red pen, the AI's admission underneath. */
+export async function drawCatchCard(e: CatchLike): Promise<Blob> {
+  const W = 1200, H = 630;
+  const c = document.createElement("canvas");
+  c.width = W * 2;
+  c.height = H * 2;
+  const g = c.getContext("2d")!;
+  g.scale(2, 2);
+  await Promise.all(
+    ["800 54px 'Bricolage Grotesque Variable'", "400 52px 'Gochi Hand'", "500 26px 'Instrument Sans'", "600 16px 'JetBrains Mono'"].map((f) => document.fonts.load(f)),
+  );
+  const ink = "#141a2e", muted = "#5d6680", pen = "#e0322b", ai = "#3b5bdb", aiSoft = "#e7ecfd", rule = "#dfe3ee";
+  g.fillStyle = "#fbfcfe";
+  g.fillRect(0, 0, W, H);
+  g.strokeStyle = rule;
+  for (let y = 40; y < H; y += 40) {
+    g.beginPath();
+    g.moveTo(0, y + 0.5);
+    g.lineTo(W, y + 0.5);
+    g.stroke();
+  }
+  g.fillStyle = pen;
+  g.fillRect(96, 0, 2, H);
+
+  g.fillStyle = ink;
+  g.font = "800 30px 'Bricolage Grotesque Variable'";
+  g.fillText("no,", 140, 78);
+  const gap = g.measureText("no, ").width;
+  g.fillStyle = pen;
+  g.font = "400 36px 'Gochi Hand'";
+  g.fillText("actually.", 140 + gap, 80);
+
+  g.fillStyle = ink;
+  g.font = "800 54px 'Bricolage Grotesque Variable'";
+  g.fillText(`I caught ${e.model || "my AI"} being wrong.`, 140, 170, W - 280);
+
+  let y = 250;
+  if (e.human) {
+    g.fillStyle = pen;
+    g.font = "400 52px 'Gochi Hand'";
+    for (const line of wrap(g, `“${clip(e.human, 160)}”`, W - 280, 3)) {
+      g.fillText(line, 140, y);
+      y += 58;
+    }
+  }
+  if (e.ai) {
+    g.font = "500 26px 'Instrument Sans'";
+    const lines = wrap(g, clip(e.ai, 200), W - 340, 2);
+    const boxH = 34 + lines.length * 36;
+    g.fillStyle = aiSoft;
+    g.beginPath();
+    g.roundRect(140, y, W - 280, boxH, 14);
+    g.fill();
+    g.fillStyle = ai;
+    g.font = "600 16px 'JetBrains Mono'";
+    g.fillText((e.model || "AI").toUpperCase(), 166, y + 30);
+    g.fillStyle = ink;
+    g.font = "500 26px 'Instrument Sans'";
+    lines.forEach((l, i) => g.fillText(l, 166, y + 66 + i * 36));
+  }
+  g.textAlign = "center";
+  g.fillStyle = muted;
+  g.font = "500 18px 'Instrument Sans'";
+  g.fillText("Could AI replace you?  github.com/HTMLGuyLLC/NoActually", W / 2, 606);
+  return new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error("Couldn't draw the card."))), "image/png"));
+}

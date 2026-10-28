@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { api, demo, type Filter, type HallEntry, type Level, type SourceInfo, type Stats, type SyncStatus } from "./api";
 import { buildPickItems, matchPickItems, modelName, sameFilter, type PickItem } from "./picker";
-import { drawShareCard, shareTargets, shareText, verdictIsNo } from "./share";
+import { catchShareText, drawCatchCard, drawShareCard, shareTargets, shareText, verdictIsNo } from "./share";
 
 const TIERS: [string, string][] = [
   ["Irreplaceable", "15+ catches/wk"],
@@ -65,11 +65,20 @@ async function copyText(text: string, out: HTMLElement | null) {
   }
 }
 
-/** Saves the card image. `copyImage` also puts it on the clipboard so it pastes into a post. */
-async function saveCard(s: Stats, out: HTMLElement | null, copyImage = true): Promise<boolean> {
+type Post = {
+  title: string;
+  text: string;
+  /** Draws the image to save or post. */
+  image: () => Promise<Blob>;
+  /** The text quotes a chat, so the person may edit it before it goes anywhere. */
+  quotesChat?: boolean;
+};
+
+/** Saves the post's image. `copyImage` also puts it on the clipboard so it pastes into a post. */
+async function saveImage(post: Post, out: HTMLElement | null, copyImage = true): Promise<boolean> {
   say(out, "Drawing your card…");
   try {
-    const blob = await drawShareCard(s, filterLabel());
+    const blob = await post.image();
     let copied = false;
     if (copyImage) {
       try {
@@ -82,7 +91,7 @@ async function saveCard(s: Stats, out: HTMLElement | null, copyImage = true): Pr
     if (demo) {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = "no-actually-scorecard.png";
+      a.download = "no-actually.png";
       a.click();
       say(out, "Card downloaded.");
       return true;
@@ -96,29 +105,82 @@ async function saveCard(s: Stats, out: HTMLElement | null, copyImage = true): Pr
   }
 }
 
-async function share(id: string, s: Stats, out: HTMLElement | null) {
-  const text = shareText(s, filterLabel());
+const PASTE_KEY = /Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘V" : "Ctrl+V";
+
+/** Says what happens next in the share dialog; `paste` makes it the loud, can't-miss version. */
+function guide(out: HTMLElement | null, html: string, paste = false) {
+  if (!out) return;
+  out.innerHTML = html;
+  out.className = `share-guide${paste ? " paste" : ""}`;
+}
+
+async function share(id: string, post: Post, text: string, out: HTMLElement | null) {
   const target = shareTargets(text).find((t) => t.id === id);
   if (!target) return;
+  const copied = await navigator.clipboard.writeText(text).then(
+    () => true,
+    () => false,
+  );
+  const pasteNote = copied
+    ? `Your text is copied. When ${esc(target.label)} opens, click into the post and press <kbd>${PASTE_KEY}</kbd> to paste it.`
+    : `Copy the text above, then paste it into the post.`;
   if (!target.href) {
     // Instagram can't be pre-filled from outside the app: hand over the image and the caption.
-    if (await saveCard(s, out, false)) {
-      await navigator.clipboard.writeText(text).catch(() => {});
-      say(out, "Card saved and caption copied. Post the image from Instagram and paste the caption.");
+    if (await saveImage(post, null, false)) {
+      guide(out, `<b>Card saved.</b> Post the image from the Instagram app, then press <kbd>${PASTE_KEY}</kbd> in the caption to paste your text${copied ? "" : " (copy it above first)"}.`, true);
     }
     return;
   }
-  if (target.pasteText) {
-    await navigator.clipboard.writeText(text).catch(() => {});
-    say(out, `${target.label} only takes the link, so your text is copied. Paste it into the post.`);
-  } else {
-    say(out, `Opening ${target.label}…`);
-  }
+  guide(out, target.pasteText ? `<b>Paste your text.</b> ${pasteNote}` : `Opening ${esc(target.label)} with your post filled in…`, !!target.pasteText);
   try {
     await api.openShare(target.href);
   } catch (e) {
-    say(out, String(e));
+    guide(out, esc(e));
   }
+}
+
+const scorePost = (s: Stats): Post => ({ title: "Share your score", text: shareText(s, filterLabel()), image: () => drawShareCard(s, filterLabel()) });
+
+const catchPost = (e: HallEntry): Post => ({ title: "Share this catch", text: catchShareText(e), image: () => drawCatchCard(e), quotesChat: !!(e.human || e.ai) });
+
+/** The share dialog: what will be posted, one button per network, and image / text fallbacks. */
+function openShareDialog(post: Post) {
+  document.querySelector("dialog.share-dialog")?.remove();
+  const dlg = document.createElement("dialog");
+  dlg.className = "share-dialog";
+  dlg.setAttribute("aria-labelledby", "share-title");
+  const note = post.quotesChat
+    ? "This quotes your chat (already redacted). Edit it above before sharing if you like."
+    : "Only these numbers and the project link are shared. Never your chats.";
+  dlg.innerHTML = `
+    <div class="sd-head"><h2 id="share-title">${esc(post.title)}</h2><button class="sd-close" aria-label="Close">×</button></div>
+    <label class="eyebrow" for="share-text">What you'll post${post.quotesChat ? " · you can edit it" : ""}</label>
+    <textarea id="share-text" rows="${post.quotesChat ? 4 : 3}" ${post.quotesChat ? "" : "readonly"}>${esc(post.text)}</textarea>
+    <div class="share-grid">${shareTargets(post.text)
+      .map(
+        (t) => `<button class="share-btn" data-share="${t.id}"><b>${esc(t.label)}</b>${
+          t.href ? (t.pasteText ? `<span class="needs-paste">You'll paste the text</span>` : `<span>Text filled in</span>`) : `<span class="needs-paste">Saves image · paste caption</span>`
+        }</button>`,
+      )
+      .join("")}</div>
+    <div id="share-guide" class="share-guide" aria-live="polite">${note}</div>
+    <div class="sd-foot"><button class="ghost" id="sd-image">Save image</button><button class="ghost" id="sd-copy">Copy text</button></div>`;
+  document.body.appendChild(dlg);
+  const out = dlg.querySelector<HTMLElement>("#share-guide");
+  const box = dlg.querySelector<HTMLTextAreaElement>("#share-text")!;
+  const close = () => {
+    dlg.close();
+    dlg.remove();
+    flushDeferred();
+  };
+  dlg.querySelector(".sd-close")!.addEventListener("click", close);
+  dlg.addEventListener("cancel", (e) => (e.preventDefault(), close())); // Esc
+  dlg.addEventListener("click", (e) => e.target === dlg && close()); // backdrop
+  dlg.querySelectorAll<HTMLButtonElement>("[data-share]").forEach((b) => b.addEventListener("click", () => share(b.dataset.share!, post, box.value, out)));
+  dlg.querySelector("#sd-copy")!.addEventListener("click", () => copyText(box.value, out));
+  dlg.querySelector("#sd-image")!.addEventListener("click", () => saveImage(post, out));
+  dlg.showModal();
+  dlg.querySelector<HTMLButtonElement>("[data-share]")?.focus();
 }
 
 // ---- views ---------------------------------------------------------------------------
@@ -180,25 +242,22 @@ function hall(entries: HallEntry[]) {
   return `<div class="fame">${entries
     .map(
       (e) => `
-      <article class="catch">
+      <article class="catch ${e.pinned ? "pinned" : ""}">
+        ${e.pinned ? `<span class="pinned-tag">Pinned · kept forever</span>` : ""}
         <div class="meta"><span class="chip">${esc(CATEGORY_TITLES[e.category] ?? e.label)}</span><span class="chip conf">${esc(e.label)} · ${esc(e.day)}</span></div>
         ${e.human ? `<div class="you-said">“${esc(e.human)}”</div>` : ""}
         ${e.ai ? `<div class="ai-said"><b>${esc(e.model || SOURCE_TITLES[e.source])}:</b> ${esc(e.ai)}</div>` : ""}
-        <button class="ghost pin" data-pin="${e.id}" data-pinned="${e.pinned}">${e.pinned ? "Unpin" : "Pin, keep forever"}</button>
+        <div class="catch-actions">
+          <button class="ghost small" data-share-catch="${e.id}">Share</button>
+          <button class="ghost small" data-pin="${e.id}" data-pinned="${e.pinned}">${e.pinned ? "Unpin" : "Pin, keep forever"}</button>
+        </div>
       </article>`,
     )
     .join("")}</div>`;
 }
 
 function shareButtons() {
-  return `<div class="share-panel">
-    <span class="eyebrow">Share your score</span>
-    <div class="share-grid">${shareTargets("")
-      .map((t) => `<button class="share-btn" data-share="${t.id}">${esc(t.label)}</button>`)
-      .join("")}</div>
-    <div class="share-more"><button class="linkish" id="save-card">Save image</button><span aria-hidden="true">·</span><button class="linkish" id="copy-share">Copy text</button></div>
-    <div id="copied" class="share-status" aria-live="polite"></div>
-  </div>`;
+  return `<div class="share"><button id="open-share">Share your score</button></div>`;
 }
 
 function scorecard(s: Stats) {
@@ -210,12 +269,11 @@ function scorecard(s: Stats) {
     <section class="toolbar">${
       filtered
         ? `<button class="chip-clear" id="clear-filter">Showing ${esc(filterLabel())} only <span aria-hidden="true">×</span></button>`
-        : `<span class="eyebrow">All models · tap the name to pick one</span>`
+        : `<span class="eyebrow">All models · pick one from “All AI” below</span>`
     }<span class="muted small">${esc(s.first_day ?? "")} – ${esc(s.last_day ?? "")} · ${num(s.messages)} messages</span></section>
     <section class="card">
       <div>${verdictBlock(s)}</div>
       <div class="meter">
-        <span class="tier">${esc(s.tier)} · ${s.catches_last_7d} / wk</span>
         ${ladder(s)}
         ${s.next_tier ? `<p class="hand-note">${s.next_tier[1]} more this week for ${esc(s.next_tier[0])}</p>` : ""}
         ${shareButtons()}
@@ -231,14 +289,14 @@ function scorecard(s: Stats) {
     <section class="split">
       <div>
         <div class="head"><h2>By model</h2></div>
-        <table class="models"><thead><tr><th>Model</th><th>Catches</th><th>Messages</th><th>Rate</th></tr></thead><tbody>
+        <div class="models-scroll" tabindex="0" aria-label="Catches by model"><table class="models"><thead><tr><th>Model</th><th>Catches</th><th>Messages</th><th>Rate</th></tr></thead><tbody>
         ${s.models
           .filter((m) => m.messages > 0)
           .map(
             (m) => `<tr><td>${esc(modelName(m))}</td><td class="n">${num(m.catches)}</td><td class="n">${num(m.messages)}</td><td class="n">${((100 * m.catches) / m.messages).toFixed(1)}%</td></tr>`,
           )
           .join("")}
-        </tbody></table>
+        </tbody></table></div>
       </div>
       <div>
         <div class="head"><h2>What you catch</h2></div>
@@ -451,7 +509,7 @@ let deferred = false;
 
 /** True while the person is mid-action: a popover is open or a field / confirm is in progress. */
 function busy() {
-  if (document.querySelector(".picker-pop")) return true;
+  if (document.querySelector(".picker-pop, dialog[open]")) return true;
   if (root.querySelector('[data-confirm="yes"]')) return true;
   const el = document.activeElement;
   return !!el && root.contains(el) && el.matches("input, select, textarea");
@@ -535,8 +593,13 @@ async function render() {
 function wire(s: Stats) {
   const $ = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel);
   $("#copy-share")?.addEventListener("click", () => copyText(shareText(s, filterLabel()), $("#copied")));
-  $("#save-card")?.addEventListener("click", () => saveCard(s, $("#copied")));
-  root.querySelectorAll<HTMLButtonElement>("[data-share]").forEach((b) => b.addEventListener("click", () => share(b.dataset.share!, s, $("#copied"))));
+  $("#open-share")?.addEventListener("click", () => openShareDialog(scorePost(s)));
+  root.querySelectorAll<HTMLButtonElement>("[data-share-catch]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const e = s.hall_of_fame.find((h) => h.id === Number(b.dataset.shareCatch));
+      if (e) openShareDialog(catchPost(e));
+    }),
+  );
   $("#open-main")?.addEventListener("click", () => api.openMain());
   $("#go-sources")?.addEventListener("click", () => ((tab = "sources"), render()));
   root.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((b) => b.addEventListener("click", () => ((tab = b.dataset.tab as Tab), render())));

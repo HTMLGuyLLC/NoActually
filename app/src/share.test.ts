@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Stats } from "./api";
-import { SHARE_HOSTS, SHARE_URL, shareTargets, shareText } from "./share";
+import { catchShareText, SHARE_HOSTS, SHARE_URL, shareTargets, shareText } from "./share";
 
 const stats = (over: Partial<Stats>): Stats =>
   ({ catches: 177, humbled: 3, catches_last_7d: 17, pct_real_chats_with_catch: 37.6, tier: "Irreplaceable", ...over }) as Stats;
@@ -44,5 +44,19 @@ describe("shareTargets", () => {
 
   it("only ever points at allowed hosts", () => {
     for (const t of targets) if (t.href) expect(SHARE_HOSTS).toContain(new URL(t.href).host);
+  });
+});
+
+describe("catchShareText", () => {
+  it("quotes both sides, clipped, and links the project", () => {
+    const t = catchShareText({ model: "Claude Opus 5", human: "that's not a real page", ai: "You're right, that route doesn't exist." });
+    expect(t).toBe(`I caught Claude Opus 5 being wrong. Me: “that's not a real page” Claude Opus 5: “You're right, that route doesn't exist.” Could AI replace me? No, actually. ${SHARE_URL}`);
+    const long = catchShareText({ model: "GPT", human: "x".repeat(300), ai: null });
+    expect(long).toContain("…”");
+    expect(long.length).toBeLessThan(220);
+  });
+
+  it("works when only the category was kept", () => {
+    expect(catchShareText({ model: "", human: null, ai: null })).toBe(`I caught my AI being wrong. Could AI replace me? No, actually. ${SHARE_URL}`);
   });
 });
