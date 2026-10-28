@@ -86,8 +86,6 @@ nav { display: flex; gap: 6px }
 
 .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 18px; padding: clamp(20px, 4vw, 36px);
   display: grid; grid-template-columns: 1.25fr 1fr; gap: 28px; position: relative; overflow: hidden }
-.card::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
-  background: repeating-linear-gradient(to bottom, transparent 0 31px, var(--rule) 31px 32px) }
 .card > * { position: relative; min-width: 0 }
 .q { font: 800 clamp(26px, 4vw, 38px)/1.08 var(--display); letter-spacing: -0.02em; margin-top: 10px }
 .verdict { display: flex; align-items: flex-end; gap: 14px; margin: 12px 0 6px }
