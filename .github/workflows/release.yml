@@ -33,7 +33,7 @@ jobs:
             args: ''
             rust_targets: ''
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Linux system deps
         if: runner.os == 'Linux'
