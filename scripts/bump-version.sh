@@ -12,6 +12,10 @@ set -euo pipefail
 
 NEW="${1:?usage: scripts/bump-version.sh X.Y.Z}"
 [[ "$NEW" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "'$NEW' isn't a version like 1.2.3" >&2; exit 1; }
+# Check the tools first, so a missing one can't leave the version half bumped.
+for tool in cargo node; do
+  command -v "$tool" >/dev/null || { echo "$tool isn't on PATH; nothing was changed." >&2; exit 1; }
+done
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REPO_URL="https://github.com/HTMLGuyLLC/NoActually"
@@ -66,10 +70,11 @@ cat "$TMP" > "$ROOT/CHANGELOG.md"
 
 cat <<EOF
 
-Done. Review the diff, then:
-  git commit -am "release: v$NEW"
-  git tag v$NEW
-  git push origin main v$NEW        # the Release workflow builds Windows and Linux into a draft
+Done. Review the diff, then (main only takes pull requests):
+  git switch -c release-$NEW && git commit -am "release: v$NEW"
+  # open a pull request, merge it once CI is green, then:
+  git switch main && git pull && git tag v$NEW
+  git push origin v$NEW             # the Release workflow builds Windows and Linux into a draft
   scripts/release-macos.sh          # on the release Mac
   scripts/finish-release.sh v$NEW
 EOF
