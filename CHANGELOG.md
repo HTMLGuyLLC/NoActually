@@ -7,11 +7,39 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 ### Added
 
 - In-app updates. The app checks GitHub releases for a newer version a minute after launch and every 6 hours, and offers "Restart to update" in the scorecard and the menu bar menu. It never restarts on its own, and only installs updates signed with the project's key. The check sends no identifiers; turn it off in Settings → Check for updates automatically.
+- `meta` command: the UI reads tiers, categories and sources from Rust, and scorecard data includes the verdict, tier ids, and category and source names, so the app and CLI can't disagree.
+
+### Changed
+
+- `NOACTUALLY_DB` picks the database file. `WA_DB` still works but is deprecated.
+- `noactually import` also allows the source, like the app does.
+- The CLI rejects unknown options and explains missing values.
+- Keyboard focus survives redraws and returns to the opener after the share dialog. The model picker is a proper combobox and closes when focus leaves. Tabs announce the current page, and the weekly chart has a text summary.
+- Better contrast for category chips and the "Pinned" tag. All motion respects "reduce motion".
 
 ### Fixed
 
-- CI runs with a read-only GitHub token (code scanning: missing workflow permissions).
 - The "No." verdict no longer replays its animation every time a background check finishes. It plays once at launch, and again only when the verdict changes.
+- A ChatGPT, Claude.ai or Codex `.zst` file can no longer exhaust memory when decompressed (ruzstd 0.9.1, RUSTSEC decompression bomb).
+- Messages skipped by a "since" date or "From now on" are counted if you later allow more history.
+- A database error on one file no longer stops the whole sync.
+- Two quick edits to a history file in the same second are always noticed.
+- The app and CLI never read sources or open the database from a relative path when no home or app data folder is available.
+- A failed Allow, Pin, Forget, Pause, Import or Install no longer leaves its button stuck; the error shows next to it.
+- The update banner escapes the version string, the filter label can no longer read "undefined", and retention days are limited to 1–3650.
+
+### Security
+
+- The production content security policy no longer allows inline styles.
+- CI runs with a read-only GitHub token, and the release workflow uses least-privilege permissions and a pinned `tauri-action`.
+
+### Internal
+
+- Rust: typed errors, shared readers, workspace lints (clippy pedantic, no `unsafe`), `cargo-deny`, MSRV 1.90, and 98 tests (up from 49) with no sleeps, including one that keeps the browser demo data in step with what Rust sends.
+- UI: split into small tested modules with one delegated event handler and an auto-escaping `html` template; Biome and Vitest with coverage (145 tests).
+- CI: separate rust (Linux, macOS, Windows), frontend, scripts, cargo-deny, MSRV, wasm32, coverage and version jobs behind one required `ci-ok` check. ShellCheck and actionlint run on every change.
+- Release: `scripts/bump-version.sh`, a `justfile` (`just ci` runs every check locally), and a macOS release script that refuses a dirty tree or a mismatched tag.
+- Removed the Python prototype (kept at tag `prototype-v0`) and the sample scorecard.
 
 ## [0.1.0] - 2026-10-27
 
