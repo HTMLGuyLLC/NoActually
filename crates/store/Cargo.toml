@@ -1,9 +1,20 @@
 [package]
-name = "store"
+name = "noactually-store"
 description = "Local SQLite store: consent, checkpoints, daily aggregates, catch events, retention."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[lib]
+name = "store"
 
 [dependencies]
 engine.workspace = true
@@ -14,7 +25,12 @@ serde_json.workspace = true
 chrono.workspace = true
 rayon.workspace = true
 sha2.workspace = true
-anyhow.workspace = true
+thiserror.workspace = true
+dirs.workspace = true
 
 [dev-dependencies]
+sources = { workspace = true, features = ["test-support"] }
 tempfile.workspace = true
+
+[lints]
+workspace = true

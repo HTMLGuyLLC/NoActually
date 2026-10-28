@@ -3,31 +3,41 @@ name = "noactually-app"
 description = "No, Actually... desktop app: tray quick glance and full scorecard."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
 
 [lib]
 name = "noactually_app"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build.workspace = true
 
 [dependencies]
-engine.workspace = true
 sources.workspace = true
 store.workspace = true
 serde.workspace = true
+# Used by the code `tauri::generate_context!` expands to.
 serde_json.workspace = true
 chrono.workspace = true
-anyhow.workspace = true
 log.workspace = true
-tauri = { version = "2", features = ["tray-icon", "image-png"] }
-tauri-plugin-notification = "2"
-tauri-plugin-autostart = "2"
-tauri-plugin-positioner = { version = "2", features = ["tray-icon"] }
-tauri-plugin-dialog = "2"
-tauri-plugin-single-instance = "2"
-tauri-plugin-log = "2"
-tauri-plugin-opener = "2"
-notify = "8"
-tauri-plugin-updater = "2"
+tauri.workspace = true
+tauri-plugin-notification.workspace = true
+tauri-plugin-autostart.workspace = true
+tauri-plugin-positioner.workspace = true
+tauri-plugin-dialog.workspace = true
+tauri-plugin-single-instance.workspace = true
+tauri-plugin-log.workspace = true
+tauri-plugin-opener.workspace = true
+tauri-plugin-updater.workspace = true
+notify.workspace = true
+
+[lints]
+workspace = true

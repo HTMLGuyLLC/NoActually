@@ -1,0 +1,2 @@
+# Product names that look like code to clippy::doc_markdown. ".." keeps clippy's defaults.
+doc-valid-idents = ["ChatGPT", "OpenAI", "DeepSeek", "SQLite", "GitHub", ".."]
