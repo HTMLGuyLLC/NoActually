@@ -5,13 +5,23 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+# Least privilege: nothing is writable until the job that publishes asks for it.
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   release:
     name: ${{ matrix.name }}
+    # Manual runs are only allowed on main (to test the pipeline); real releases come from tags.
+    if: github.ref_type == 'tag' || github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.platform }}
+    timeout-minutes: 60
+    permissions:
+      contents: write
     # macOS builds only run here when signing secrets are set. Without them, the signed and
     # notarized DMG comes from scripts/release-macos.sh on a maintainer's Mac, and CI never
     # uploads an unsigned macOS build beside it.
@@ -44,13 +54,14 @@ jobs:
       - uses: actions/checkout@v7
         if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
 
-      # tauri-action names the release after tauri.conf.json's version; a different tag would
-      # silently publish a second, mismatched release.
+      # tauri-action names the release after the app version; a different tag would silently
+      # publish a second, mismatched release. The Cargo workspace version is the source of truth.
       - name: Tag matches app version
         if: ${{ github.ref_type == 'tag' && (!matrix.mac || env.SIGN_MAC == 'true') }}
         shell: bash
         run: |
-          v=$(node -p "require('./app/src-tauri/tauri.conf.json').version")
+          v=$(awk '/^\[workspace\.package\]/{f=1;next} /^\[/{f=0} f && /^version *=/{gsub(/[" ]/,"",$0); sub(/^version=/,"",$0); print; exit}' Cargo.toml)
+          [ -n "$v" ] || { echo "Couldn't read the Cargo workspace version"; exit 1; }
           [ "${GITHUB_REF_NAME}" = "v$v" ] || { echo "Tag ${GITHUB_REF_NAME} doesn't match app version v$v"; exit 1; }
 
       - name: Install Linux system deps
@@ -64,13 +75,14 @@ jobs:
         with:
           targets: ${{ matrix.rust_targets }}
 
+      # Release builds read the cache but never write it, so a cache can't be poisoned into a signed build.
       - uses: Swatinem/rust-cache@v2
         if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
+        with:
+          save-if: false
 
       - uses: pnpm/action-setup@v6
         if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
-        with:
-          version: 10
 
       - uses: actions/setup-node@v7
         if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
@@ -83,7 +95,8 @@ jobs:
         if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
         run: pnpm --dir app install --frozen-lockfile
 
-      - uses: tauri-apps/tauri-action@v1
+      # Pinned by commit: this step runs with a write token and the signing secrets.
+      - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
