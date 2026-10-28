@@ -1,0 +1,40 @@
+name: Feature request
+description: Suggest an idea or ask for a new AI tool to be supported.
+labels: [enhancement]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Type of request
+      options:
+        - New feature
+        - New AI tool support
+        - Change to existing behavior
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What do you want, and why
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        ### Only for "New AI tool support"
+        Never paste real chats. Describe the file layout instead.
+  - type: input
+    id: tool
+    attributes:
+      label: AI tool
+      description: Name and version.
+  - type: dropdown
+    id: tool_os
+    attributes:
+      label: Operating system
+      options: [macOS, Windows, Linux, Not applicable]
+  - type: textarea
+    id: history_location
+    attributes:
+      label: Where does it store history?
+      description: Folder path, file names, and format (JSONL, SQLite, JSON export, encrypted, unknown).

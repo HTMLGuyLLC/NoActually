@@ -1,0 +1,19 @@
+[package]
+name = "noactually-cli"
+description = "Command-line scorecard. Same engine and store as the desktop app."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "noactually"
+path = "src/main.rs"
+
+[dependencies]
+engine.workspace = true
+sources.workspace = true
+store.workspace = true
+chrono.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+dirs.workspace = true

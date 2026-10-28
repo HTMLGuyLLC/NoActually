@@ -1,0 +1,55 @@
+name: Wrong catch (false positive or miss)
+description: A message was counted as a catch when it should not be, or missed when it should count.
+labels: [rules]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not paste private content.** Redact names, emails, URLs, keys, file paths and anything else personal.
+        Keep only the words that matter, like "no, that's not right" and "you're right, my mistake".
+  - type: dropdown
+    id: direction
+    attributes:
+      label: What went wrong
+      options:
+        - Counted as a catch, but should not be
+        - Not counted, but should be
+        - Wrong label
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Redacted example
+      description: Your message, with the AI reply before and after it if relevant.
+      placeholder: |
+        AI: ...
+        You: ...
+        AI: ...
+    validations:
+      required: true
+  - type: dropdown
+    id: expected
+    attributes:
+      label: Label you expected
+      options: [Confirmed, Admitted, Claimed, Humbled, None (not a catch)]
+    validations:
+      required: true
+  - type: input
+    id: tool
+    attributes:
+      label: AI tool
+      placeholder: Claude Code, Codex, ChatGPT export...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version
+  - type: checkboxes
+    id: redacted
+    attributes:
+      label: Privacy
+      options:
+        - label: I removed all private content from this report.
+          required: true

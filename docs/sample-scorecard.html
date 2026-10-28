@@ -1,0 +1,321 @@
+<title>No, Actually Scorecard</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Instrument+Sans:wght@400;500;600&family=Gochi+Hand&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a proofread page. One shareable card up top, then the marked-up evidence below it. */
+:root {
+  --paper: #fbfcfe; --surface: #ffffff; --ink: #141a2e; --muted: #5d6680; --rule: #dfe3ee;
+  --pen: #e0322b; --pen-soft: #fde8e6; --hl: #fff27a; --ai: #3b5bdb; --ai-soft: #e7ecfd;
+  --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body: "Instrument Sans", "Helvetica Neue", system-ui, sans-serif;
+  --hand: "Gochi Hand", "Bradley Hand", "Comic Sans MS", cursive;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #0f1320; --surface: #171c2c; --ink: #eef1f8; --muted: #9aa3bd; --rule: #2a3147;
+  --pen: #ff5a4f; --pen-soft: #3a1c1e; --hl: #6b5f12; --ai: #8ea6ff; --ai-soft: #1d2747; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --paper: #0f1320; --surface: #171c2c; --ink: #eef1f8; --muted: #9aa3bd; --rule: #2a3147;
+  --pen: #ff5a4f; --pen-soft: #3a1c1e; --hl: #6b5f12; --ai: #8ea6ff; --ai-soft: #1d2747; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--paper); color: var(--ink); font: 400 15px/1.55 var(--body); }
+.wrap { max-width: 980px; margin: 0 auto; padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 56px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0 }
+h2 { font-size: 26px; font-weight: 800; letter-spacing: -0.01em }
+.eyebrow { font: 600 11px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted) }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px }
+.section-head p { margin: 0; color: var(--muted); max-width: 52ch }
+
+/* top bar */
+.top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap }
+.brand { font: 800 22px/1 var(--display); letter-spacing: -0.02em }
+.brand em { font: 400 26px/1 var(--hand); color: var(--pen); font-style: normal; margin-left: 2px }
+.who { color: var(--muted); font-size: 13px }
+
+/* the shareable card */
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 18px; padding: clamp(22px, 4vw, 40px);
+  display: grid; grid-template-columns: 1.25fr 1fr; gap: 32px; position: relative; overflow: hidden;
+  box-shadow: 0 1px 0 var(--rule), 0 24px 48px -32px rgba(20, 26, 46, .35) }
+.card::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background: repeating-linear-gradient(to bottom, transparent 0 31px, var(--rule) 31px 32px) }
+.card > * { position: relative; min-width: 0 }
+.q { font: 800 clamp(26px, 4.4vw, 40px)/1.08 var(--display); letter-spacing: -0.02em }
+.q s { text-decoration-color: var(--pen); text-decoration-thickness: 3px; color: var(--muted) }
+.verdict { display: flex; align-items: flex-end; gap: 14px; margin: 14px 0 8px }
+.no { font: 400 clamp(84px, 13vw, 132px)/.8 var(--hand); color: var(--pen); transform: rotate(-6deg); transform-origin: left bottom }
+.because { font-size: 18px; max-width: 30ch; padding-bottom: 6px }
+.because b { background: linear-gradient(transparent 55%, var(--hl) 55%); font-weight: 600 }
+.score { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; margin-top: 22px;
+  border-top: 2px solid var(--ink); padding-top: 14px }
+.side { display: grid; gap: 2px }
+.side:last-child { text-align: right }
+.side .n { font: 800 44px/1 var(--display); font-variant-numeric: tabular-nums }
+.side.you .n { color: var(--pen) }
+.side.ai .n { color: var(--ai) }
+.vs { font: 400 22px/1 var(--hand); color: var(--muted) }
+
+.meter { display: grid; gap: 14px; align-content: start }
+.tier { display: inline-flex; align-items: center; gap: 8px; justify-self: start; background: var(--pen); color: #fff;
+  font: 600 12px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; padding: 9px 12px; border-radius: 999px }
+.ladder { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px }
+.ladder li { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 10px 12px; border-radius: 10px;
+  border: 1px dashed var(--rule); color: var(--muted); font-size: 14px }
+.ladder li span:last-child { font: 400 12px/1.6 var(--mono) }
+.ladder li.on { border: 2px solid var(--pen); color: var(--ink); background: var(--pen-soft); font-weight: 600 }
+.ladder li.on::after { content: "you are here"; grid-column: 1 / -1; font: 400 17px/1 var(--hand); color: var(--pen) }
+.share { display: flex; gap: 8px; flex-wrap: wrap }
+button { font: 600 13px/1 var(--body); color: var(--ink); background: var(--surface); border: 1.5px solid var(--ink);
+  border-radius: 999px; padding: 10px 14px; cursor: pointer }
+button:hover { background: var(--ink); color: var(--paper) }
+button:focus-visible { outline: 3px solid var(--ai); outline-offset: 2px }
+
+/* stat strip */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule) }
+.stat { padding: 18px 16px; display: grid; gap: 6px; border-left: 1px solid var(--rule) }
+.stat:first-child { border-left: 0; padding-left: 0 }
+.stat .v { font: 800 32px/1 var(--display); font-variant-numeric: tabular-nums }
+.stat .l { color: var(--muted); font-size: 13px }
+
+/* chart */
+.chart { overflow-x: auto }
+.chart svg { display: block; width: 100%; min-width: 560px; height: auto }
+.chart text { font: 11px var(--mono); fill: var(--muted) }
+.chart .peak { font: 400 16px var(--hand); fill: var(--pen) }
+
+/* hall of fame */
+.fame { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px }
+.catch { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 18px; display: grid; gap: 12px; align-content: start }
+.catch .meta { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap }
+.chip { font: 600 10.5px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 6px 8px; border-radius: 6px; background: var(--pen-soft); color: var(--pen) }
+.chip.conf { background: var(--ai-soft); color: var(--ai) }
+.you-said { font: 400 22px/1.2 var(--hand); color: var(--pen) }
+.ai-said { font-size: 14px; color: var(--muted); background: var(--ai-soft); border-radius: 8px; padding: 8px 10px }
+.ai-said b { color: var(--ai); font-weight: 600 }
+
+/* categories + badges */
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 40px }
+.split > * { min-width: 0 }
+.cats { display: grid; gap: 12px }
+.cat { display: grid; grid-template-columns: 9.5em 1fr 2.5em; align-items: center; gap: 10px; font-size: 14px }
+.bar { height: 12px; border-radius: 3px; background: var(--rule); overflow: hidden }
+.bar i { display: block; height: 100%; background: var(--pen) }
+.cat .mono { text-align: right }
+.badges { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px }
+.badge { display: grid; grid-template-columns: 40px 1fr; gap: 10px; align-items: center; padding: 10px; border-radius: 12px; border: 1px solid var(--rule); background: var(--surface) }
+.badge .seal { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font: 400 20px/1 var(--hand);
+  color: #fff; background: var(--pen) }
+.badge b { display: block; font-size: 14px }
+.badge small { color: var(--muted); font-size: 12px; line-height: 1.35; display: block }
+.badge.locked { opacity: .55 }
+.badge.locked .seal { background: transparent; color: var(--muted); border: 1.5px dashed var(--muted) }
+
+/* humbled */
+.humbled { display: grid; grid-template-columns: auto 1fr; gap: 24px; align-items: center; background: var(--ai-soft);
+  border-radius: 16px; padding: 22px }
+.humbled .n { font: 800 64px/1 var(--display); color: var(--ai) }
+.humbled p { margin: 4px 0 0 }
+
+/* method */
+.method { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px }
+.step { border-top: 2px solid var(--ink); padding-top: 12px; display: grid; gap: 6px; align-content: start }
+.step p { margin: 0; color: var(--muted); font-size: 14px }
+code { font: 12.5px var(--mono); background: var(--ai-soft); color: var(--ai); padding: 1px 5px; border-radius: 4px }
+.precision { margin-top: 18px; overflow-x: auto }
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 460px }
+th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--rule) }
+th { font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
+td.mono { text-align: right }
+.foot { color: var(--muted); font-size: 13px; border-top: 1px solid var(--rule); padding-top: 16px }
+
+@media (max-width: 760px) {
+  .card, .split, .fame, .method { grid-template-columns: 1fr }
+  .stats { grid-template-columns: repeat(2, 1fr) }
+  .stat:nth-child(3) { border-left: 0; padding-left: 0 }
+  .stat:nth-child(n+3) { border-top: 1px solid var(--rule) }
+  .badges { grid-template-columns: 1fr }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .no { animation: scrawl .6s cubic-bezier(.16, 1, .3, 1) both .15s }
+  @keyframes scrawl { from { transform: rotate(-14deg) scale(1.25); opacity: .2 } }
+}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">no, <em>actually.</em></div>
+    <div class="who mono">Shane · Claude Code · Jun 2 – Oct 27, 2026</div>
+  </header>
+
+  <section class="card" aria-label="Shareable scorecard">
+    <div>
+      <div class="eyebrow">This week's verdict</div>
+      <h1 class="q" style="margin-top:12px">Could Claude replace you?</h1>
+      <div class="verdict">
+        <div class="no" aria-hidden="true">No.</div>
+        <div class="because">You caught it <b>10 times</b> in the last 7 days. It slipped up in 36% of your real chats.</div>
+      </div>
+      <div class="score" aria-label="Score: you 126, Claude 3">
+        <div class="side you"><span class="eyebrow">You caught Claude</span><span class="n">126</span></div>
+        <div class="vs">vs</div>
+        <div class="side ai"><span class="eyebrow">Claude caught you</span><span class="n">3</span></div>
+      </div>
+    </div>
+    <div class="meter">
+      <span class="tier">Sharp-eyed · 10 / wk</span>
+      <ol class="ladder">
+        <li><span>Irreplaceable</span><span>15+ catches/wk</span></li>
+        <li class="on"><span>Sharp-eyed</span><span>7–14</span></li>
+        <li><span>Coworker</span><span>3–6</span></li>
+        <li><span>Rubber stamp</span><span>0–2</span></li>
+      </ol>
+      <div class="share">
+        <button id="copy-share" type="button">Copy share text</button>
+        <button id="copy-badge" type="button">Copy README badge</button>
+      </div>
+      <div id="copied" class="eyebrow" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <section class="stats" aria-label="Totals">
+    <div class="stat"><span class="v">126</span><span class="l">catches since June</span></div>
+    <div class="stat"><span class="v">36%</span><span class="l">of real chats had a catch (10+ messages)</span></div>
+    <div class="stat"><span class="v">10 days</span><span class="l">longest catch streak</span></div>
+    <div class="stat"><span class="v">1 in 52</span><span class="l">of your messages is a catch</span></div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Catches per week</h2>
+      <p>6,503 messages across 4,853 Claude Code sessions. Busy weeks don't always mean more catches.</p>
+    </div>
+    <div class="chart" id="chart"></div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Hall of fame</h2>
+      <p>Real catches from your history, picked from the ones where Claude admitted the miss.</p>
+    </div>
+    <div class="fame">
+      <article class="catch">
+        <div class="meta"><span class="chip">Made it up</span><span class="chip conf">Confirmed · Sep 21</span></div>
+        <div class="you-said">"that's not a real page"</div>
+        <div class="ai-said"><b>Claude:</b> You're right, I said that carelessly. <code>/admin/families</code> doesn't exist.</div>
+      </article>
+      <article class="catch">
+        <div class="meta"><span class="chip">Missed something</span><span class="chip conf">Confirmed · Aug 24</span></div>
+        <div class="you-said">"you missed a simple feature many spreadsheet apps have: resize columns"</div>
+        <div class="ai-said"><b>Claude:</b> Fair. You're right that it's table stakes. Building it now.</div>
+      </article>
+      <article class="catch">
+        <div class="meta"><span class="chip">Flat-out wrong</span><span class="chip conf">Admitted · Oct</span></div>
+        <div class="you-said">"look it up, i think there's a trick for this on mac"</div>
+        <div class="ai-said"><b>Claude:</b> Found it. I was wrong earlier when I said the LiDE has no lock.</div>
+      </article>
+      <article class="catch">
+        <div class="meta"><span class="chip">Ignored instructions</span><span class="chip conf">Admitted</span></div>
+        <div class="you-said">"woah, don't create a brand new component. We have it in other places. DRY"</div>
+        <div class="ai-said"><b>Claude:</b> You're right, I duplicated it. Let me find the existing one.</div>
+      </article>
+    </div>
+  </section>
+
+  <section class="split">
+    <div>
+      <div class="section-head"><h2>What you catch</h2></div>
+      <div class="cats" id="cats"></div>
+    </div>
+    <div>
+      <div class="section-head"><h2>Badges</h2></div>
+      <div class="badges">
+        <div class="badge"><span class="seal">100</span><div><b>Century</b><small>100 catches. You hit it in late September.</small></div></div>
+        <div class="badge"><span class="seal">10</span><div><b>On a roll</b><small>Caught a mistake 10 days in a row.</small></div></div>
+        <div class="badge"><span class="seal">?!</span><div><b>Hallucination hunter</b><small>Caught Claude citing a page that doesn't exist.</small></div></div>
+        <div class="badge"><span class="seal">z</span><div><b>Night shift</b><small>30% of your catches land after 9 pm.</small></div></div>
+        <div class="badge locked"><span class="seal">15</span><div><b>Irreplaceable</b><small>15 catches in one week. Your best was 19, so just once more.</small></div></div>
+        <div class="badge locked"><span class="seal">:(</span><div><b>False alarm</b><small>Correct Claude and turn out to be wrong. Nobody wants this one.</small></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="humbled" aria-label="Times Claude corrected you">
+    <div class="n">3</div>
+    <div>
+      <div class="eyebrow">Humbled</div>
+      <p><strong>Claude corrected you 3 times.</strong> You asked "splish has no ui right?" and it said "Actually it does," then pointed to the flag in the launcher code.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>How a catch is counted</h2>
+      <p>No AI judge. Every label comes from fixed text rules, so the same history always gives the same score.</p>
+    </div>
+    <div class="method">
+      <div class="step"><span class="eyebrow">Signal 1 · you</span><h3>You push back</h3><p>Your message opens with correction language: <code>no, that…</code>, <code>still not working</code>, <code>you missed</code>, <code>i asked you to</code>. Skipped when you're answering a question Claude just asked.</p></div>
+      <div class="step"><span class="eyebrow">Signal 2 · the AI</span><h3>Claude admits it</h3><p>Claude's next reply opens with an admission: <code>you're right</code>, <code>good catch</code>, <code>my mistake</code>, <code>I was wrong</code>, <code>I missed</code>.</p></div>
+      <div class="step"><span class="eyebrow">Not a catch</span><h3>You add context</h3><p>Messages starting <code>also</code>, <code>fyi</code>, <code>btw</code>, or saying <code>I forgot to mention</code> are neutral. Claude couldn't have known.</p></div>
+    </div>
+    <div class="precision">
+      <table>
+        <thead><tr><th>Label</th><th>Rule</th><th style="text-align:right">Count</th><th style="text-align:right">Spot-check</th></tr></thead>
+        <tbody>
+          <tr><td>Confirmed</td><td>You push back and Claude admits it</td><td class="mono">7</td><td class="mono">7 / 7</td></tr>
+          <tr><td>Admitted</td><td>Claude admits a miss</td><td class="mono">103</td><td class="mono">~11 / 15</td></tr>
+          <tr><td>Claimed</td><td>You push back, Claude doesn't admit it</td><td class="mono">16</td><td class="mono">13 / 14</td></tr>
+          <tr><td>Humbled</td><td>Claude opens with "Actually" or "Not quite"</td><td class="mono">3</td><td class="mono">3 / 3</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="foot">Built from local Claude Code transcripts only. ChatGPT and Claude.ai history plug in through their official data exports. Raw chats never leave your machine. Only these numbers get shared.</footer>
+</div>
+
+<script>
+const weeks = [["Jul 13",7],["Jul 20",5],["Jul 27",19],["Aug 3",9],["Aug 10",17],["Aug 17",5],["Aug 24",13],["Aug 31",1],["Sep 7",0],["Sep 14",6],["Sep 21",15],["Sep 28",8],["Oct 5",5],["Oct 12",5],["Oct 19",4],["Oct 26",7]];
+const cats = [["Flat-out wrong",84],["Still broken",26],["Ignored instructions",8],["Missed something",6],["Made it up",1],["Misread you",1]];
+
+(function chart() {
+  const W = 900, H = 260, L = 34, R = 10, T = 28, B = 30, max = 20;
+  const bw = (W - L - R) / weeks.length, y = v => T + (H - T - B) * (1 - v / max);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Catches per week, July to October; peak 19 the week of Jul 27">`;
+  for (const g of [0, 5, 10, 15, 20]) {
+    s += `<line x1="${L}" x2="${W - R}" y1="${y(g)}" y2="${y(g)}" stroke="var(--rule)" stroke-width="1"/>`;
+    s += `<text x="${L - 8}" y="${y(g) + 4}" text-anchor="end">${g}</text>`;
+  }
+  // tier threshold: 15/wk = Irreplaceable
+  s += `<line x1="${L}" x2="${W - R}" y1="${y(15)}" y2="${y(15)}" stroke="var(--pen)" stroke-dasharray="4 4" stroke-width="1.5"/>`;
+  s += `<text x="${W - R}" y="${y(15) - 6}" text-anchor="end" class="peak">irreplaceable line</text>`;
+  weeks.forEach(([lab, v], i) => {
+    const x = L + i * bw + bw * 0.18, w = bw * 0.64, top = y(v);
+    s += `<rect x="${x}" y="${top}" width="${w}" height="${y(0) - top}" rx="3" fill="${v >= 15 ? "var(--pen)" : "var(--ink)"}" opacity="${v >= 15 ? 1 : .82}"><title>${lab}: ${v} catches</title></rect>`;
+    if (v >= 15) s += `<text x="${x + w / 2}" y="${top - 6}" text-anchor="middle" style="fill:var(--pen);font-weight:600">${v}</text>`;
+    if (i % 2 === 0) s += `<text x="${x + w / 2}" y="${H - 10}" text-anchor="middle">${lab}</text>`;
+  });
+  document.getElementById("chart").innerHTML = s + "</svg>";
+})();
+
+(function categories() {
+  const top = cats[0][1];
+  document.getElementById("cats").innerHTML = cats.map(([n, v]) =>
+    `<div class="cat"><span>${n}</span><span class="bar"><i style="width:${Math.max(2, v / top * 100)}%"></i></span><span class="mono">${v}</span></div>`).join("");
+})();
+
+const shareText = "Could Claude replace me? No. I caught it 10 times this week, and in 36% of my chats. Me 126, Claude 3. #NoActually";
+const badgeText = "![No, Actually](https://img.shields.io/badge/caught_Claude-126%C3%97-e0322b?label=well%2C%20actually)";
+function copy(text, label) {
+  const out = document.getElementById("copied");
+  const done = () => { out.textContent = label + " copied"; };
+  try {
+    navigator.clipboard.writeText(text).then(done, () => { out.textContent = text; });
+  } catch (e) { out.textContent = text; }
+}
+document.getElementById("copy-share").addEventListener("click", () => copy(shareText, "Share text"));
+document.getElementById("copy-badge").addEventListener("click", () => copy(badgeText, "Badge markdown"));
+</script>

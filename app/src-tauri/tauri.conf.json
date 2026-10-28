@@ -1,0 +1,59 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "No, Actually",
+  "version": "0.1.0",
+  "identifier": "app.noactually",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "No, Actually",
+        "url": "index.html",
+        "width": 1080,
+        "height": 820,
+        "minWidth": 420,
+        "minHeight": 560,
+        "visible": false
+      },
+      {
+        "label": "glance",
+        "title": "No, Actually",
+        "url": "index.html#glance",
+        "width": 340,
+        "height": 330,
+        "resizable": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Productivity",
+    "shortDescription": "Count the times you caught your AI being wrong.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "12.0"
+    },
+    "copyright": "© 2026 HTMLGuy LLC. MIT License.",
+    "longDescription": "No, Actually reads your AI chat history on your computer, finds the moments you caught the AI being wrong, and turns them into a private, deterministic scorecard. Nothing leaves your machine."
+  }
+}

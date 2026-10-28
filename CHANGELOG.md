@@ -1,0 +1,29 @@
+# Changelog
+
+All notable changes are listed here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
+
+## [Unreleased]
+
+## [0.1.0]
+
+First release.
+
+### Added
+
+- Live tracking for Claude Code, Claude Cowork and Codex (CLI and desktop)
+- Import of ChatGPT and Claude.ai data exports
+- Deterministic rules for catches (Confirmed, Admitted, Claimed) and Humbled moments, with no AI in the scoring path
+- Per-model breakdown (provider, family, version) with a searchable model picker
+- Retention levels for catch text (Full, Snippet, Category only) with TTLs that step down over time
+- Menu bar quick glance and a full scorecard window
+- Milestone notifications (catch counts, tier ups, streaks), with no backlog spam on first import
+- Share buttons for X, LinkedIn, Facebook, Threads, Bluesky, Reddit, WhatsApp and Instagram, plus a share card image and share text. Only numbers and the project link are shared.
+- Rules versioning: when scoring rules change, scores are rebuilt from history, keeping your source choices and settings
+- Launch at login, quietly in the menu bar
+- Redaction of secrets, emails, links, paths and long numbers in any stored text
+- Bundled fonts and a strict content security policy: the app makes no network requests
+- Per-source consent: nothing is read until you allow it, and Forget deletes a source's data
+- `noactually` command-line tool (`sources`, `allow`, `sync`, `stats`)
+
+[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/HTMLGuyLLC/NoActually/releases/tag/v0.1.0
