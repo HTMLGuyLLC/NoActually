@@ -20,7 +20,7 @@
   "devDependencies": {
     "@tauri-apps/cli": "2.12.4",
     "typescript": "5.9.3",
-    "vite": "7.1.12",
+    "vite": "8.3.5",
     "vitest": "^3.2.7"
   }
 }
