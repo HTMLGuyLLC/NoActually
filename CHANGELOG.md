@@ -4,6 +4,8 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-28
+
 ### Added
 
 - How you brief it: a second scorecard, "Do you make it guess?". Each chat's first message (or a "now…" / "next:" later on) is a task. Its brief is graded on what it carries (points at it, shows it, says what done is, sets limits, says why), and later messages that redirect it count as steering: the AI got it wrong, you added more, you clarified, or you started over. The tier (Vibes only 0%, Ticket writer 70%, Tech lead 80%, Architect 90%) is the share of tasks that landed without steering that was on you. It counts tasks with a follow-up over the last 28 days, and needs at least 10 of them. Includes a tip, a share card, a quick-glance line, a tier-up popup, and the same numbers in `noactually stats`. Only counts are stored, never text.
@@ -11,6 +13,7 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 ### Changed
 
 - The scorecard is split into sections: Overview (both verdicts side by side, plus the headline stats), Catches, Briefs and Hall of fame. The tab row scrolls sideways instead of wrapping on narrow windows.
+- The top tabs have icons, the logo takes you back to the scorecard, and cards drop the ruled-line background.
 - Rules version 4: existing history is re-read once to fill in briefs. Pinned catches are kept; other catches are re-counted from history files that still exist.
 - A rule's "but not when…" exception now skips just that match, so a later match in the same message can still count.
 
@@ -92,7 +95,8 @@ First release.
 - Per-source consent: nothing is read until you allow it, and Forget deletes a source's data
 - `noactually` command-line tool (`sources`, `allow`, `sync`, `stats`)
 
-[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/HTMLGuyLLC/NoActually/releases/tag/v0.1.0
