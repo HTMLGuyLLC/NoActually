@@ -13,13 +13,18 @@
 mod error;
 mod meta;
 pub mod milestones;
+mod progress;
 mod schema;
 mod stats;
 mod sync;
 
 pub use error::{Error, Result};
 pub use meta::{meta, BriefTierInfo, CategoryInfo, Meta, SignalInfo, SourceInfo, TierInfo, Titled};
-pub use stats::{Briefs, Filter, HallEntry, ModelRow, Stats, Tip, WeekRow};
+pub use progress::{
+    Bests, Goal, GoalKind, GoalNews, GoalStatus, GoalWeek, HistoryWeek, Insights, ModelLanded, Progress, Trophy,
+    WeekState, GOAL_WEEKS, MIN_WEEK,
+};
+pub use stats::{Briefs, Filter, HallEntry, ModelRow, Overall, Stats, Tip, WeekRow};
 pub use sync::{sync, SyncReport};
 
 use chrono::{DateTime, Duration, Local, NaiveDate, Utc};

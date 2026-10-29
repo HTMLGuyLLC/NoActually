@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { briefTier, briefTierRanges, categoryTitle, landedPct, percent, sourceName, steerTitle, tierName, tierRanges, topTier } from "./meta";
+import { briefTier, briefTierRanges, categoryTitle, landedPct, percent, signalTitle, sourceName, steerTitle, tierName, tierOf, tierRanges } from "./meta";
 import { meta } from "./test/fixtures";
 
 describe("briefTierRanges", () => {
@@ -24,10 +24,10 @@ describe("percents", () => {
 describe("tierRanges", () => {
   it("derives the ladder's ranges from the floors, top tier first", () => {
     expect(tierRanges(meta).map((t) => [t.name, t.range])).toEqual([
-      ["Irreplaceable", "15+ catches/wk"],
-      ["Sharp-eyed", "7–14"],
-      ["Coworker", "3–6"],
-      ["Rubber stamp", "0–2"],
+      ["Irreplaceable", "90+"],
+      ["Sharp-eyed", "80–89"],
+      ["Coworker", "65–79"],
+      ["Rubber stamp", "0–64"],
     ]);
   });
 
@@ -36,7 +36,7 @@ describe("tierRanges", () => {
       { id: "b", name: "B", floor: 1 },
       { id: "a", name: "A", floor: 0 },
     ];
-    expect(tierRanges({ ...meta, tiers }).map((t) => t.range)).toEqual(["1+ catches/wk", "0"]);
+    expect(tierRanges({ ...meta, tiers }).map((t) => t.range)).toEqual(["1+", "0"]);
   });
 });
 
@@ -57,8 +57,15 @@ describe("lookups", () => {
     expect(sourceName(meta, "new-tool")).toBe("new-tool");
   });
 
-  it("finds the top tier, or none", () => {
-    expect(topTier(meta)?.floor).toBe(15);
-    expect(topTier({ ...meta, tiers: [] })).toBeUndefined();
+  it("says a missing tier is not scored yet, not a made-up name", () => {
+    expect(tierName(meta, null)).toBe("Not scored yet");
+  });
+
+  it("finds a tier by id, and a signal's title", () => {
+    expect(tierOf(meta, "coworker")?.floor).toBe(65);
+    expect(tierOf(meta, null)).toBeUndefined();
+    expect(tierOf(meta, "legend")).toBeUndefined();
+    expect(signalTitle(meta, "why")).toBe("Says why");
+    expect(signalTitle(meta, "unknown")).toBe("unknown");
   });
 });

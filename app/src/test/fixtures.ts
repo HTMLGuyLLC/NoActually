@@ -1,13 +1,17 @@
 // Shared test data, shaped like the Rust side's output.
-import type { Briefs, HallEntry, Meta, ModelRow, SourceInfo, Stats } from "../api";
+import type { Briefs, HallEntry, Meta, ModelRow, Overall, Progress, SourceInfo, Stats } from "../api";
 
 export const meta: Meta = {
   tiers: [
     { id: "rubber_stamp", name: "Rubber stamp", floor: 0 },
-    { id: "coworker", name: "Coworker", floor: 3 },
-    { id: "sharp_eyed", name: "Sharp-eyed", floor: 7 },
-    { id: "irreplaceable", name: "Irreplaceable", floor: 15 },
+    { id: "coworker", name: "Coworker", floor: 65 },
+    { id: "sharp_eyed", name: "Sharp-eyed", floor: 80 },
+    { id: "irreplaceable", name: "Irreplaceable", floor: 90 },
   ],
+  direction_weight: 70,
+  catch_proof: 3,
+  humbled_cost: 5,
+  humbled_base: 30,
   categories: [
     { id: "made_it_up", title: "Made it up" },
     { id: "just_wrong", title: "Flat-out wrong" },
@@ -43,6 +47,8 @@ export const meta: Meta = {
     { id: "clarified", title: "You clarified" },
     { id: "redo", title: "You started over" },
   ],
+  min_week: 5,
+  goal_weeks: 4,
 };
 
 export const briefs = (over: Partial<Briefs> = {}): Briefs => ({
@@ -63,13 +69,59 @@ export const briefs = (over: Partial<Briefs> = {}): Briefs => ({
 
 export const HOSTILE = `<img src=x onerror="alert(1)">&'"`;
 
-export const row = (provider: string, family: string, version: string, catches: number, messages = 100): ModelRow => ({
+export const row = (provider: string, family: string, version: string, catches: number, messages = 100, tasks = 20): ModelRow => ({
   provider,
   family,
   version,
   catches,
   messages,
   humbled: 0,
+  tasks,
+  continued: tasks / 2,
+  landed: Math.floor((tasks / 2) * 0.8),
+});
+
+export const overall = (over: Partial<Overall> = {}): Overall => ({
+  score: 86,
+  direction: 83,
+  judgment: 95,
+  tier: "sharp_eyed",
+  next_tier: "irreplaceable",
+  verdict: "no",
+  catches: 41,
+  humbled: 2,
+  to_rank: 0,
+  ...over,
+});
+
+export const week = (day: string, over: Partial<Progress["weeks"][number]> = {}): Progress["weeks"][number] => ({
+  week: day,
+  messages: 200,
+  catches: 8,
+  humbled: 0,
+  tasks: 20,
+  continued: 12,
+  landed: 10,
+  signals: { spot: 12, proof: 8, done: 6, limits: 3, why: 4 },
+  grades: { thin: 8, solid: 7, sharp: 5 },
+  steering: { ai_wrong: 3, added: 2, clarified: 1, redo: 0 },
+  steered: { ai_wrong: 2, added: 2, clarified: 1, redo: 0 },
+  ...over,
+});
+
+export const progress = (over: Partial<Progress> = {}): Progress => ({
+  weeks: [week("2026-10-05"), week("2026-10-12", { landed: 11 }), week("2026-10-19", { landed: 9 }), week("2026-10-26", { tasks: 4, continued: 2, landed: 2 })],
+  goal: null,
+  suggestion: { kind: "habit", signal: "limits", target: 30, id: 0, start: "2026-10-28" },
+  options: [
+    { kind: "habit", signal: "limits", target: 30, id: 0, start: "2026-10-28" },
+    { kind: "steer", steer: "added", target: 15, id: 0, start: "2026-10-28" },
+    { kind: "tier", tier: "irreplaceable", target: 0, id: 0, start: "2026-10-28" },
+  ],
+  trophies: [],
+  bests: { landed: [91, "2026-10-19"], sharp: [40, "2026-10-05"], goal_streak: 0 },
+  insights: { signals: [], steer: null, models: [] },
+  ...over,
 });
 
 export const hallEntry = (over: Partial<HallEntry> = {}): HallEntry => ({
@@ -95,9 +147,7 @@ export const stats = (over: Partial<Stats> = {}): Stats => ({
   humbled: 3,
   labels: {},
   catches_last_7d: 17,
-  tier: "irreplaceable",
-  next_tier: null,
-  verdict: "no",
+  overall: overall(),
   messages_per_catch: 47,
   real_chats: 100,
   pct_real_chats_with_catch: 37.6,

@@ -1,24 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { briefs, HOSTILE, meta, stats } from "../test/fixtures";
+import { briefs, HOSTILE, meta, overall, stats } from "../test/fixtures";
 import { briefLines, gradeKey } from "./cards";
 import { briefShareText, catchShareText, clip, SHARE_HOSTS, SHARE_URL, SHARE_URL_SHORT, type ShareTarget, shareGuide, shareTargets, shareText } from "./share";
 
 describe("shareText", () => {
-  it("brags with numbers only and links to the project", () => {
-    const t = shareText(stats(), "Claude Opus 5.5");
+  const unranked = { score: null, direction: null, judgment: null, tier: null, next_tier: null, verdict: "hmm" as const };
+
+  it("brags with the score and its tier, numbers only, and links to the project", () => {
+    const t = shareText(stats(), "Claude Opus 5.5", "Sharp-eyed");
     expect(t).toBe(
-      `Could Claude Opus 5.5 replace me? No. I caught it 17 times this week, and in 38% of my chats. Me 177, Claude Opus 5.5 3. What's your score? ${SHARE_URL}`,
+      `Could Claude Opus 5.5 replace me? No. My score is 86 (Sharp-eyed): 83% of my tasks landed without steering, and I caught it 41 times to its 2 in 28 days. What's yours? ${SHARE_URL}`,
     );
   });
 
-  it("hedges when Rust's verdict is hmm, and handles the singular", () => {
-    const t = shareText(stats({ verdict: "hmm", catches_last_7d: 1, pct_real_chats_with_catch: null }), "AI");
-    expect(t).toContain("Maybe… I caught it 1 time this week.");
+  it("falls back to this week's catches before there is a score, and handles the singular", () => {
+    const s = stats({ overall: overall(unranked), catches_last_7d: 1 });
+    expect(shareText(s, "AI", "Not scored yet")).toBe(
+      `Could AI replace me? Maybe… I caught it 1 time this week. Me 177, AI 3. What's your score? ${SHARE_URL}`,
+    );
+    expect(shareText(stats({ overall: overall(unranked), catches_last_7d: 17 }), "AI", "")).toContain("I caught it 17 times this week.");
   });
 
-  it("follows the verdict, never re-deriving it from the count", () => {
-    expect(shareText(stats({ verdict: "hmm", catches_last_7d: 50 }), "AI")).toContain("Maybe…");
-    expect(shareText(stats({ verdict: "no", catches_last_7d: 0 }), "AI")).toContain("No.");
+  it("follows the verdict, never re-deriving it from the score", () => {
+    expect(shareText(stats({ overall: overall({ verdict: "hmm" }) }), "AI", "Sharp-eyed")).toContain("Maybe…");
+    expect(shareText(stats({ overall: overall({ verdict: "no", score: 10 }) }), "AI", "Rubber stamp")).toContain("No.");
   });
 });
 
@@ -38,7 +43,7 @@ describe("briefShareText", () => {
 });
 
 describe("shareTargets", () => {
-  const text = shareText(stats(), "AI");
+  const text = shareText(stats(), "AI", "Sharp-eyed");
   const targets = shareTargets(text);
   const by = (id: string): ShareTarget => {
     const t = targets.find((x) => x.id === id);

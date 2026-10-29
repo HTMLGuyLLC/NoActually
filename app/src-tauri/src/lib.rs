@@ -8,6 +8,7 @@ mod updater;
 
 use serde::Serialize;
 use sources::Source;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Mutex, MutexGuard};
 use store::Store;
 use tauri::menu::{Menu, MenuItem};
@@ -18,6 +19,10 @@ use tauri_plugin_positioner::{Position, WindowExt};
 /// Passed by the login item so a launch at login starts quietly in the menu bar.
 pub const HIDDEN_ARG: &str = "--hidden";
 
+/// Settings key: "off" makes it an ordinary app (no menu bar or tray icon, quits when its
+/// window closes). Anything else, or never set, keeps it running in the menu bar.
+pub const MENU_BAR_KEY: &str = "menu_bar";
+
 pub struct App {
     /// Sync and settings changes. Held for the length of a sync pass.
     pub writer: Mutex<Store>,
@@ -26,6 +31,27 @@ pub struct App {
     pub sources: Vec<Box<dyn Source>>,
     pub tracker: mpsc::Sender<tracker::Msg>,
     pub status: Mutex<SyncStatus>,
+    /// Keep running in the menu bar or tray after the window closes.
+    pub menu_bar: AtomicBool,
+}
+
+impl App {
+    pub fn menu_bar(&self) -> bool {
+        self.menu_bar.load(Ordering::Relaxed)
+    }
+}
+
+/// Shows or hides the menu bar icon and remembers the choice for when the window closes.
+pub fn apply_menu_bar(handle: &AppHandle, app: &App, enabled: bool) {
+    app.menu_bar.store(enabled, Ordering::Relaxed);
+    if let Some(tray) = handle.tray_by_id("tray") {
+        let _ = tray.set_visible(enabled);
+    }
+    if !enabled {
+        if let Some(w) = handle.get_webview_window("glance") {
+            let _ = w.hide();
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -121,6 +147,7 @@ fn setup(tauri_app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     log::info!("database: {}", db.display());
     let writer = Store::open(&db)?;
     let reader = Store::open(&db)?;
+    let menu_bar = writer.get_setting(MENU_BAR_KEY)?.as_deref() != Some("off");
     let (tx, rx) = mpsc::channel();
     let app = std::sync::Arc::new(App {
         writer: Mutex::new(writer),
@@ -128,6 +155,7 @@ fn setup(tauri_app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         sources: sources::all(),
         tracker: tx.clone(),
         status: Mutex::new(SyncStatus::default()),
+        menu_bar: AtomicBool::new(menu_bar),
     });
     tauri_app.manage(app.clone());
 
@@ -139,9 +167,11 @@ fn setup(tauri_app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let (update_tx, update_rx) = mpsc::channel();
     tauri_app.manage(updater::Updates::new(&handle, update_tx, update));
     build_tray(tauri_app, &menu)?;
+    apply_menu_bar(&handle, &app, menu_bar);
 
-    // A launch at login stays in the menu bar; a launch by the user opens the scorecard.
-    if std::env::args().any(|a| a == HIDDEN_ARG) {
+    // A launch at login stays in the menu bar; a launch by the user opens the scorecard. With no
+    // menu bar icon there'd be nothing to click, so it always opens.
+    if menu_bar && std::env::args().any(|a| a == HIDDEN_ARG) {
         #[cfg(target_os = "macos")]
         let _ = handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
     } else {
@@ -179,10 +209,15 @@ pub fn run() {
         ))
         .setup(setup)
         .on_window_event(|window, event| match event {
-            // Closing the scorecard hides it; tracking keeps running from the menu bar.
+            // Closing the scorecard hides it and tracking keeps running from the menu bar, unless
+            // it's set to be an ordinary app: then closing quits.
             WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
-                api.prevent_close();
-                hide_main(window);
+                if window.app_handle().state::<std::sync::Arc<App>>().menu_bar() {
+                    api.prevent_close();
+                    hide_main(window);
+                } else {
+                    window.app_handle().exit(0);
+                }
             }
             WindowEvent::Focused(false) if window.label() == "glance" => {
                 let _ = window.hide();
@@ -192,6 +227,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::meta,
             commands::stats,
+            commands::progress,
+            commands::set_goal,
+            commands::clear_goal,
+            commands::check_brief,
+            commands::learned,
+            commands::set_learned,
+            commands::get_menu_bar,
+            commands::set_menu_bar,
             commands::list_sources,
             commands::allow_source,
             commands::revoke_source,

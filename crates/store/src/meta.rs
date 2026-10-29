@@ -1,14 +1,26 @@
 //! Static tables the UI needs (tiers, categories, sources), so it never hard-codes them.
 
-use engine::{BriefTier, Category, Grade, Signal, Steer, Tier, MIN_BRIEFS, WINDOW_DAYS};
+use crate::{GOAL_WEEKS, MIN_WEEK};
+use engine::{
+    BriefTier, Category, Grade, Signal, Steer, Tier, CATCH_PROOF, DIRECTION_WEIGHT, HUMBLED_BASE, HUMBLED_COST,
+    MIN_BRIEFS, WINDOW_DAYS,
+};
 use serde::Serialize;
 use sources::Source;
 
 /// Everything the UI would otherwise duplicate from Rust.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Meta {
-    /// Ascending by floor.
+    /// Overall tiers, ascending by floor.
     pub tiers: Vec<TierInfo>,
+    /// Percent of the overall score from landed tasks; the rest is who corrects whom.
+    pub direction_weight: i64,
+    /// Catches in the window that fully show you check its work.
+    pub catch_proof: i64,
+    /// Judgment points lost per 1% of tasks the AI had to correct you on.
+    pub humbled_cost: i64,
+    /// Fewest tasks corrections are counted against.
+    pub humbled_base: i64,
     /// In display order.
     pub categories: Vec<CategoryInfo>,
     /// In display order.
@@ -27,6 +39,10 @@ pub struct Meta {
     pub grades: Vec<Titled>,
     /// Why a task was steered, in display order.
     pub steers: Vec<Titled>,
+    /// Briefs a week needs before it counts toward a chart point, goal or best.
+    pub min_week: i64,
+    /// Weeks a habit or steering goal must be met.
+    pub goal_weeks: i64,
 }
 
 /// One brief tier.
@@ -69,7 +85,7 @@ pub struct TierInfo {
     pub id: &'static str,
     /// Display name.
     pub name: &'static str,
-    /// Catches in the last 7 days needed to reach it.
+    /// Overall score needed to reach it.
     pub floor: i64,
 }
 
@@ -95,6 +111,10 @@ pub struct SourceInfo {
 pub fn meta(sources: &[Box<dyn Source>]) -> Meta {
     Meta {
         tiers: Tier::ALL.iter().map(|t| TierInfo { id: t.id(), name: t.name(), floor: t.floor() }).collect(),
+        direction_weight: DIRECTION_WEIGHT,
+        catch_proof: CATCH_PROOF,
+        humbled_cost: HUMBLED_COST,
+        humbled_base: HUMBLED_BASE,
         categories: Category::ALL.iter().map(|c| CategoryInfo { id: c.as_str(), title: c.title() }).collect(),
         sources: sources.iter().map(|s| SourceInfo { id: s.id(), name: s.name() }).collect(),
         brief_tiers: BriefTier::ALL
@@ -107,6 +127,8 @@ pub fn meta(sources: &[Box<dyn Source>]) -> Meta {
         sharp_signals: Grade::SHARP,
         grades: Grade::ALL.iter().map(|g| Titled { id: g.as_str(), title: g.title() }).collect(),
         steers: Steer::ALL.iter().map(|c| Titled { id: c.as_str(), title: c.title() }).collect(),
+        min_week: MIN_WEEK,
+        goal_weeks: GOAL_WEEKS,
     }
 }
 
@@ -118,7 +140,7 @@ mod tests {
     fn matches_the_ui_contract() {
         let m = serde_json::to_value(meta(&sources::all())).unwrap();
         assert_eq!(m["tiers"][0], serde_json::json!({"id":"rubber_stamp","name":"Rubber stamp","floor":0}));
-        assert_eq!(m["tiers"][3], serde_json::json!({"id":"irreplaceable","name":"Irreplaceable","floor":15}));
+        assert_eq!(m["tiers"][3], serde_json::json!({"id":"irreplaceable","name":"Irreplaceable","floor":90}));
         assert_eq!(m["categories"][0], serde_json::json!({"id":"made_it_up","title":"Made it up"}));
         assert_eq!(m["categories"].as_array().unwrap().len(), Category::ALL.len());
         assert_eq!(m["sources"][0], serde_json::json!({"id":"claude-code","name":"Claude Code"}));
@@ -131,5 +153,7 @@ mod tests {
         assert_eq!(m["steers"][0], serde_json::json!({"id":"ai_wrong","title":"It got it wrong"}));
         assert_eq!((m["min_briefs"].as_i64(), m["sharp_signals"].as_u64()), (Some(10), Some(3)));
         assert_eq!(m["brief_window_days"], 28);
+        assert_eq!((m["direction_weight"].as_i64(), m["catch_proof"].as_i64()), (Some(70), Some(3)));
+        assert_eq!((m["min_week"].as_i64(), m["goal_weeks"].as_i64()), (Some(5), Some(4)));
     }
 }

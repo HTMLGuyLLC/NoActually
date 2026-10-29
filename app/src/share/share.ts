@@ -8,12 +8,17 @@ export const SHARE_URL = "https://github.com/HTMLGuyLLC/NoActually";
 /** The link as printed on the cards: "github.com/HTMLGuyLLC/NoActually". */
 export const SHARE_URL_SHORT = SHARE_URL.replace(/^https:\/\//, "");
 
-type ScoreLike = Pick<Stats, "verdict" | "catches_last_7d" | "pct_real_chats_with_catch" | "catches" | "humbled">;
+type ScoreLike = Pick<Stats, "overall" | "catches_last_7d" | "catches" | "humbled">;
 
-export function shareText(s: ScoreLike, who: string) {
-  const pct = s.pct_real_chats_with_catch != null ? `, and in ${Math.round(s.pct_real_chats_with_catch)}% of my chats` : "";
-  const times = s.catches_last_7d === 1 ? "time" : "times";
-  return `Could ${who} replace me? ${s.verdict === "no" ? "No." : "Maybe…"} I caught it ${s.catches_last_7d} ${times} this week${pct}. Me ${s.catches}, ${who} ${s.humbled}. What's your score? ${SHARE_URL}`;
+/** The score, ready to post: the answer, the score and its two halves. Numbers only. */
+export function shareText(s: ScoreLike, who: string, tier: string) {
+  const o = s.overall;
+  const answer = o.verdict === "no" ? "No." : "Maybe…";
+  if (o.score == null) {
+    const times = s.catches_last_7d === 1 ? "time" : "times";
+    return `Could ${who} replace me? ${answer} I caught it ${s.catches_last_7d} ${times} this week. Me ${s.catches}, ${who} ${s.humbled}. What's your score? ${SHARE_URL}`;
+  }
+  return `Could ${who} replace me? ${answer} My score is ${o.score} (${tier}): ${o.direction}% of my tasks landed without steering, and I caught it ${o.catches} ${o.catches === 1 ? "time" : "times"} to its ${o.humbled} in 28 days. What's yours? ${SHARE_URL}`;
 }
 
 /** The briefs score, ready to post: the tier's answer and how many tasks landed. Numbers only. */

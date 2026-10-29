@@ -1,14 +1,19 @@
 // The UI's state: one object, read anywhere, changed only through the named setters below.
 import type { Filter, Meta, ModelRow, Stats, SyncStatus, UpdateStatus, Verdict } from "./api";
 
-export const TABS = ["score", "sources", "settings"] as const;
+export const TABS = ["score", "improve", "learn", "sources", "settings"] as const;
 export type Tab = (typeof TABS)[number];
 export const isTab = (x: unknown): x is Tab => TABS.some((t) => t === x);
 
 /** The scorecard's sections, each its own sub-tab. */
-export const SCORE_VIEWS = ["overview", "catches", "briefs", "hall"] as const;
+export const SCORE_VIEWS = ["overview", "briefs", "catches", "hall"] as const;
 export type ScoreView = (typeof SCORE_VIEWS)[number];
 export const isScoreView = (x: unknown): x is ScoreView => SCORE_VIEWS.some((v) => v === x);
+
+/** How far back the Improve charts look. */
+export const RANGES = ["12w", "6m", "all"] as const;
+export type Range = (typeof RANGES)[number];
+export const isRange = (x: unknown): x is Range => RANGES.some((r) => r === x);
 
 export type AppState = {
   tab: Tab;
@@ -28,6 +33,12 @@ export type AppState = {
   /** The brief tier last drawn (undefined: none drawn yet), for the same reason. */
   lastBriefTier: string | null | undefined;
   meta: Meta | null;
+  /** Improve: how far back the charts look. */
+  range: Range;
+  /** Learn: the lesson open, or null for the list. */
+  lesson: string | null;
+  /** Learn: what's typed in the brief checker. Never saved. */
+  draft: string;
 };
 
 const initial = (): AppState => ({
@@ -42,6 +53,9 @@ const initial = (): AppState => ({
   lastVerdict: null,
   lastBriefTier: undefined,
   meta: null,
+  range: "12w",
+  lesson: null,
+  draft: "",
 });
 
 const s: AppState = initial();
@@ -86,6 +100,15 @@ export function setLastVerdict(verdict: Verdict): void {
 }
 export function setLastBriefTier(tier: string | null): void {
   s.lastBriefTier = tier;
+}
+export function setRange(range: Range): void {
+  s.range = range;
+}
+export function setLesson(id: string | null): void {
+  s.lesson = id;
+}
+export function setDraft(text: string): void {
+  s.draft = text;
 }
 export function setMeta(meta: Meta): Meta {
   s.meta = meta;

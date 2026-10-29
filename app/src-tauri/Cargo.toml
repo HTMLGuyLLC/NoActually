@@ -21,6 +21,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build.workspace = true
 
 [dependencies]
+engine.workspace = true
 sources.workspace = true
 store.workspace = true
 serde.workspace = true

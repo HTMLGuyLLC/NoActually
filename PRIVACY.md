@@ -15,6 +15,9 @@ macOS may show its own "access data from other apps" prompt for some sources. Sa
 | Ordinary messages (not catches) | Counts only, per day, source and model | Never | Forever (just numbers) |
 | Sessions | Hashed id, source, day range, message and catch counts | Never | Forever |
 | Tasks (briefs) | Day, source, hashed chat id, model, which of 5 signals the brief carried, message and steering counts | Never | Forever |
+| Your goal | What it asks for (a signal, a kind of steering or a tier), its target percent and start day | Never | Until you drop it |
+| Goal weeks and trophies | Each finished week's count, percent and result; finished goals and the day | Never | Forever (kept even after Forget, since they're totals across sources) |
+| Lessons done | The ids of lessons you marked done | Never | Forever |
 | Catch / humbled events | Time, source, model, label, category, matched rule ids | Per retention level | Per TTL |
 | File checkpoints | Path, byte offset, size, modified time | Never | Until you forget the source |
 | Message fingerprints | Short hashes of message ids, so copies are never counted twice | Never | Until you forget the source |
@@ -55,7 +58,7 @@ To offer new versions, the app downloads one small public file, `latest.json`, f
 
 ## How to delete your data
 
-- **Forget a source** in the app: deletes that source's events, aggregates and checkpoints. (Revoke only stops reading.)
+- **Forget a source** in the app: deletes that source's events, aggregates and checkpoints. (Revoke only stops reading.) Goal weeks already finished stay, as totals.
 - **Delete everything:** quit the app and delete the three `noactually.db*` files (`noactually.db`, `-wal`, `-shm`) in the app data folder for `app.noactually` (macOS: `~/Library/Application Support/app.noactually/`, Windows: `%APPDATA%\app.noactually\`, Linux: `~/.local/share/app.noactually/`).
 - Deleted text is overwritten in the database, not just unlinked, and the write-ahead log is truncated after Forget and after text ages out.
 

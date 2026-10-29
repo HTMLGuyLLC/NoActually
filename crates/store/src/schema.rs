@@ -82,6 +82,16 @@ CREATE TABLE tasks (
 CREATE INDEX tasks_session ON tasks (session);
 CREATE INDEX tasks_day ON tasks (day);
 ",
+    // 5: Goals. A goal's closed weeks, frozen as they were, and finished goals. Numbers only.
+    // Not score tables: a rules rebuild or Forget doesn't take back a week you already earned.
+    r"
+CREATE TABLE goal_weeks (
+    goal INTEGER NOT NULL, week TEXT NOT NULL,
+    count INTEGER NOT NULL, value INTEGER NOT NULL, state TEXT NOT NULL,
+    PRIMARY KEY (goal, week)
+) WITHOUT ROWID;
+CREATE TABLE trophies (id INTEGER PRIMARY KEY, goal TEXT NOT NULL, done TEXT NOT NULL);
+",
 ];
 
 /// Sets connection pragmas and applies any migrations the database hasn't had. Each migration

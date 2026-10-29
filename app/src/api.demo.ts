@@ -1,21 +1,22 @@
 // The browser demo's stand-in for the Rust side: sample numbers from public/demo.json, read-only.
-import type { ArgsOf, Command, Filter, Meta, ResultOf, SourceInfo, Stats } from "./api";
+import type { ArgsOf, Command, Filter, Goal, GoalStatus, Meta, Overall, Progress, ResultOf, SourceInfo, Stats } from "./api";
 import { modelName } from "./picker/picker";
 
-export type DemoData = { meta: Meta; stats: Stats };
+export type DemoData = { meta: Meta; stats: Stats; progress: Progress };
 
 const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
 
 /** A light check that demo.json has the shape the UI reads, so a stale file fails loudly, not oddly. */
 export function isDemoData(x: unknown): x is DemoData {
-  if (!isRecord(x) || !isRecord(x.meta) || !isRecord(x.stats)) return false;
-  const { meta, stats } = x;
+  if (!isRecord(x) || !isRecord(x.meta) || !isRecord(x.stats) || !isRecord(x.progress)) return false;
+  const { meta, stats, progress } = x;
   return (
     Array.isArray(meta.tiers) &&
     Array.isArray(meta.categories) &&
     Array.isArray(meta.sources) &&
-    typeof stats.tier === "string" &&
-    (stats.verdict === "no" || stats.verdict === "hmm") &&
+    isRecord(stats.overall) &&
+    (stats.overall.verdict === "no" || stats.overall.verdict === "hmm") &&
+    Array.isArray(progress.weeks) &&
     typeof stats.catches === "number" &&
     Array.isArray(stats.models) &&
     Array.isArray(stats.weekly) &&
@@ -37,16 +38,26 @@ function demoData(): Promise<DemoData> {
   return loaded;
 }
 
-/** What Rust would say for this many catches this week: the tier reached, the next one, the verdict. */
-export function judge(meta: Meta, catches7d: number): Pick<Stats, "tier" | "next_tier" | "verdict"> {
+/** What Rust's `Score::of` says for a window (engine/src/tier.rs): the demo's stand-in for it. */
+export function judge(meta: Meta, w: { continued: number; landed: number; catches: number; humbled: number }): Overall {
+  const base = { catches: w.catches, humbled: w.humbled, to_rank: Math.max(0, meta.min_briefs - w.continued) };
+  if (w.continued < meta.min_briefs) return { ...base, score: null, direction: null, judgment: null, tier: null, next_tier: null, verdict: "hmm" };
+  const direction = Math.floor((1000 * Math.min(w.landed, w.continued)) / w.continued);
+  const right = Math.max(0, 1000 - Math.floor((meta.humbled_cost * 1000 * Math.max(0, w.humbled)) / Math.max(w.continued, meta.humbled_base)));
+  const judgment = Math.floor((right * Math.min(Math.max(0, w.catches), meta.catch_proof)) / meta.catch_proof);
+  const score = Math.floor((meta.direction_weight * direction + (100 - meta.direction_weight) * judgment) / 100 / 10);
   const up = [...meta.tiers].sort((a, b) => a.floor - b.floor);
-  const reached = up.filter((t) => catches7d >= t.floor).pop();
-  const next = up.find((t) => t.floor > catches7d);
+  const tier = up.filter((t) => score >= t.floor).pop();
+  const next = up.find((t) => t.floor > score);
   const coworker = up.find((t) => t.id === "coworker")?.floor ?? Number.POSITIVE_INFINITY;
   return {
-    tier: reached?.id ?? up[0]?.id ?? "",
-    next_tier: next ? [next.id, next.floor - catches7d] : null,
-    verdict: catches7d >= coworker ? "no" : "hmm",
+    ...base,
+    score,
+    direction: Math.floor(direction / 10),
+    judgment: Math.floor(judgment / 10),
+    tier: tier?.id ?? null,
+    next_tier: next?.id ?? null,
+    verdict: score >= coworker ? "no" : "hmm",
   };
 }
 
@@ -63,11 +74,28 @@ export function demoStats({ meta, stats: base }: DemoData, filter: Filter): Stat
   const share = base.catches ? catches / base.catches : 0;
   const scale = (n: number) => Math.round(n * share);
   const catches_last_7d = scale(base.catches_last_7d);
+  const sum = (k: "tasks" | "continued" | "landed") => keep.reduce((a, m) => a + m[k], 0);
+  const taskShare = base.briefs.continued ? sum("continued") / base.briefs.continued : 0;
+  const windowTasks = Math.round(base.briefs.tasks_last_28d * taskShare);
+  const windowLanded = Math.round(base.briefs.landed_last_28d * taskShare);
   const categories: Record<string, number> = {};
   for (const [k, v] of Object.entries(base.categories)) if (scale(v) > 0) categories[k] = scale(v);
   return {
     ...base,
-    ...judge(meta, catches_last_7d),
+    overall: judge(meta, {
+      continued: windowTasks,
+      landed: windowLanded,
+      catches: scale(base.overall.catches),
+      humbled: Math.round(base.overall.humbled * share),
+    }),
+    briefs: {
+      ...base.briefs,
+      tasks: sum("tasks"),
+      continued: sum("continued"),
+      landed: sum("landed"),
+      tasks_last_28d: windowTasks,
+      landed_last_28d: windowLanded,
+    },
     models: keep,
     catches,
     messages: keep.reduce((a, m) => a + m.messages, 0),
@@ -88,6 +116,11 @@ const demoSources: SourceInfo[] = [
 ];
 
 type Handlers = { [C in Command]: (args: ArgsOf<C>) => ResultOf<C> | Promise<ResultOf<C>> };
+
+/** The demo keeps what you set in Learn and Improve for the visit, so trying them feels real. */
+const visit: { learned: string[]; goal: GoalStatus | null | undefined; menuBar: boolean } = { learned: [], goal: undefined, menuBar: true };
+
+const fresh = (goal: Goal): GoalStatus => ({ goal, weeks: [], met: 0, streak: 0, needed: goal.kind === "tier" ? 0 : 4, done: false, need: null, score: null });
 
 /** Every command has a demo answer; changes are accepted and ignored. */
 const handlers: Handlers = {
@@ -116,6 +149,35 @@ const handlers: Handlers = {
   set_auto_update: () => null,
   check_for_updates: () => null,
   install_update: () => null,
+  progress: async () => {
+    const p = (await demoData()).progress;
+    return visit.goal === undefined ? p : { ...p, goal: visit.goal };
+  },
+  set_goal: ({ kind, target }) => {
+    const now = new Date();
+    const local = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const goal: Goal = { ...kind, id: Date.now(), target, start: local };
+    visit.goal = fresh(goal);
+    return goal;
+  },
+  clear_goal: () => {
+    visit.goal = null;
+    return null;
+  },
+  // The rules run in Rust; the browser demo can't grade a draft, and says so.
+  check_brief: () => {
+    throw new Error("The brief checker runs in the app.");
+  },
+  learned: () => visit.learned,
+  set_learned: ({ id, done }) => {
+    visit.learned = [...visit.learned.filter((x) => x !== id), ...(done ? [id] : [])];
+    return visit.learned;
+  },
+  get_menu_bar: () => visit.menuBar,
+  set_menu_bar: ({ enabled }) => {
+    visit.menuBar = enabled;
+    return null;
+  },
 };
 
 export async function demoCall<C extends Command>(cmd: C, args: ArgsOf<C>): Promise<ResultOf<C>> {

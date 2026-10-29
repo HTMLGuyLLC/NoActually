@@ -17,8 +17,16 @@ export type Tier = { id: string; name: string; floor: number };
 export type BriefTier = Tier & { verdict: string };
 export type Titled = { id: string; title: string };
 export type Meta = {
-  /** Ascending by floor. */
+  /** Overall tiers, ascending by floor (an overall score, 0 to 100). */
   tiers: Tier[];
+  /** Percent of the overall score from landed tasks; the rest is who corrects whom. */
+  direction_weight: number;
+  /** Catches in the window that fully show you check its work. */
+  catch_proof: number;
+  /** Judgment points lost per 1% of tasks the AI had to correct you on. */
+  humbled_cost: number;
+  /** Fewest tasks corrections are counted against (so a thin month isn't wiped out). */
+  humbled_base: number;
   categories: Titled[];
   sources: { id: string; name: string }[];
   /** Ascending by floor. */
@@ -35,10 +43,25 @@ export type Meta = {
   grades: Titled[];
   /** Why a task was steered, in display order. */
   steers: Titled[];
+  /** Briefs a week needs before it counts toward a chart point, goal or best. */
+  min_week: number;
+  /** Weeks a habit or steering goal must be met. */
+  goal_weeks: number;
 };
 
 export type Verdict = "no" | "hmm";
-export type ModelRow = { provider: string; family: string; version: string; messages: number; catches: number; humbled: number };
+export type ModelRow = {
+  provider: string;
+  family: string;
+  version: string;
+  messages: number;
+  catches: number;
+  humbled: number;
+  /** Tasks given to it, the ones that continued, and of those the ones that landed. */
+  tasks: number;
+  continued: number;
+  landed: number;
+};
 export type HallEntry = {
   id: number;
   day: string;
@@ -80,6 +103,24 @@ export type Briefs = {
   steering: Record<string, number>;
   tip: Tip | null;
 };
+/**
+ * "Could AI replace you?": an overall score over the last `Meta.brief_window_days` days, mixing how
+ * often your tasks land (`direction`) with who corrects whom (`judgment`). Score fields are null
+ * until there are enough tasks with a follow-up.
+ */
+export type Overall = {
+  score: number | null;
+  direction: number | null;
+  judgment: number | null;
+  /** A tier id from `Meta.tiers`. */
+  tier: string | null;
+  next_tier: string | null;
+  verdict: Verdict;
+  /** Catches and times it caught you, in the window. */
+  catches: number;
+  humbled: number;
+  to_rank: number;
+};
 export type Stats = {
   first_day: string | null;
   last_day: string | null;
@@ -88,11 +129,7 @@ export type Stats = {
   humbled: number;
   labels: Record<string, number>;
   catches_last_7d: number;
-  /** A tier id from `Meta.tiers`. */
-  tier: string;
-  /** The next tier's id and how many more catches this week reach it. */
-  next_tier: [string, number] | null;
-  verdict: Verdict;
+  overall: Overall;
   messages_per_catch: number | null;
   real_chats: number;
   pct_real_chats_with_catch: number | null;
@@ -106,6 +143,57 @@ export type Stats = {
   hall_of_fame: HallEntry[];
   briefs: Briefs;
 };
+/** One week of history (the week's Monday, local time). */
+export type HistoryWeek = {
+  week: string;
+  messages: number;
+  catches: number;
+  humbled: number;
+  tasks: number;
+  continued: number;
+  landed: number;
+  /** Briefs carrying each signal; briefs per grade; steering messages and steered tasks per cause. */
+  signals: Record<string, number>;
+  grades: Record<string, number>;
+  steering: Record<string, number>;
+  steered: Record<string, number>;
+};
+export type GoalKind = { kind: "habit"; signal: string } | { kind: "steer"; steer: string } | { kind: "tier"; tier: string };
+/** `target` is a percent: a floor for a habit, a ceiling for steering, unused for a tier. */
+export type Goal = GoalKind & { id: number; target: number; start: string };
+export type WeekState = "open" | "met" | "missed" | "paused";
+export type GoalWeek = { week: string; count: number; value: number; state: WeekState };
+export type GoalStatus = {
+  goal: Goal;
+  weeks: GoalWeek[];
+  met: number;
+  streak: number;
+  /** Weeks it takes (0 for a tier goal). */
+  needed: number;
+  done: boolean;
+  /** Habit goals: more briefs carrying the signal this week would reach the target (null when out of reach this week). */
+  need: number | null;
+  /** Tier goals: the overall score now. */
+  score: number | null;
+};
+export type Trophy = { goal: Goal; done: string };
+export type Progress = {
+  weeks: HistoryWeek[];
+  goal: GoalStatus | null;
+  suggestion: Goal;
+  /** Every goal you could pick now, with targets from your own numbers (all AI). */
+  options: Goal[];
+  trophies: Trophy[];
+  bests: { landed: [number, string] | null; sharp: [number, string] | null; goal_streak: number };
+  insights: {
+    signals: Tip[];
+    /** [steer id, its share of the steering that was on you]. */
+    steer: [string, number] | null;
+    models: { family: string; landed: number; continued: number }[];
+  };
+};
+/** A draft brief, graded like your history. `signals` is a bit mask, in `Meta.signals` order. */
+export type Check = { signals: number; grade: string; rules: string[]; not_a_brief: boolean };
 export type SourceState = {
   id: string;
   allowed: boolean;
@@ -152,6 +240,14 @@ export type Commands = {
   set_auto_update: { args: { enabled: boolean }; result: null };
   check_for_updates: { args: undefined; result: null };
   install_update: { args: undefined; result: null };
+  progress: { args: { filter: Filter }; result: Progress };
+  set_goal: { args: { kind: GoalKind; target: number }; result: Goal };
+  clear_goal: { args: undefined; result: null };
+  check_brief: { args: { text: string }; result: Check };
+  learned: { args: undefined; result: string[] };
+  set_learned: { args: { id: string; done: boolean }; result: string[] };
+  get_menu_bar: { args: undefined; result: boolean };
+  set_menu_bar: { args: { enabled: boolean }; result: null };
 };
 export type Command = keyof Commands;
 export type ArgsOf<C extends Command> = Commands[C]["args"];
@@ -186,4 +282,12 @@ export const api = {
   setAutoUpdate: (enabled: boolean) => call("set_auto_update", { enabled }),
   checkForUpdates: () => call("check_for_updates", undefined),
   installUpdate: () => call("install_update", undefined),
+  progress: (filter: Filter) => call("progress", { filter }),
+  setGoal: (kind: GoalKind, target: number) => call("set_goal", { kind, target }),
+  clearGoal: () => call("clear_goal", undefined),
+  checkBrief: (text: string) => call("check_brief", { text }),
+  learned: () => call("learned", undefined),
+  setLearned: (id: string, done: boolean) => call("set_learned", { id, done }),
+  getMenuBar: () => call("get_menu_bar", undefined),
+  setMenuBar: (enabled: boolean) => call("set_menu_bar", { enabled }),
 };

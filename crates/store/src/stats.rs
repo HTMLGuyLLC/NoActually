@@ -2,7 +2,9 @@
 
 use crate::{Result, Store};
 use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, Timelike};
-use engine::{Answer, BriefTier, Category, Grade, Label, Signal, Signals, Steer, Tier, MIN_BRIEFS, WINDOW_DAYS};
+use engine::{
+    Answer, BriefTier, Category, Grade, Label, Score, Signal, Signals, Steer, Tier, Window, MIN_BRIEFS, WINDOW_DAYS,
+};
 use rusqlite::{params_from_iter, Connection};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
@@ -20,7 +22,7 @@ const TIP_MIN_LIFT: f64 = 10.0;
 const TIP_MAX_PCT: f64 = 50.0;
 
 /// The labels that count as catches, as an SQL list: `('confirmed','admitted','claimed')`.
-static CATCH_KINDS: LazyLock<String> = LazyLock::new(|| {
+pub(crate) static CATCH_KINDS: LazyLock<String> = LazyLock::new(|| {
     let ids: Vec<String> = Label::ALL.iter().filter(|l| l.is_catch()).map(|l| format!("'{}'", l.as_str())).collect();
     format!("({})", ids.join(","))
 });
@@ -40,7 +42,7 @@ pub struct Filter {
 
 impl Filter {
     /// `AND col = ?` for each set field, and the values to bind, in order.
-    fn sql(&self) -> (String, Vec<String>) {
+    pub(crate) fn sql(&self) -> (String, Vec<String>) {
         let mut sql = String::new();
         let mut args = Vec::new();
         for (col, v) in [
@@ -75,6 +77,36 @@ pub struct ModelRow {
     pub catches: i64,
     /// Times it caught you.
     pub humbled: i64,
+    /// Tasks given to it.
+    pub tasks: i64,
+    /// Of those, the ones that went past their first message.
+    pub continued: i64,
+    /// Continued tasks you never had to steer.
+    pub landed: i64,
+}
+
+/// "Could AI replace you?": the overall score from the last [`WINDOW_DAYS`] days, and the two
+/// parts it mixes. The score fields are `None` until there are enough tasks to rank.
+#[derive(Debug, PartialEq, Eq, Serialize)]
+pub struct Overall {
+    /// 0 to 100.
+    pub score: Option<i64>,
+    /// Percent of continued tasks that landed.
+    pub direction: Option<i64>,
+    /// 0 to 100: how rarely it corrected you, once you've shown you check its work.
+    pub judgment: Option<i64>,
+    /// The tier the score reaches.
+    pub tier: Option<Tier>,
+    /// The tier above it; its floor is the target to show.
+    pub next_tier: Option<Tier>,
+    /// The headline answer.
+    pub verdict: Answer,
+    /// Times you caught it in the window.
+    pub catches: i64,
+    /// Times it caught you in the window.
+    pub humbled: i64,
+    /// More continued tasks before a score is given (0 once ranked).
+    pub to_rank: i64,
 }
 
 /// One week's numbers.
@@ -132,12 +164,8 @@ pub struct Stats {
     pub labels: BTreeMap<String, i64>,
     /// Catches in the 7 days ending today.
     pub catches_last_7d: i64,
-    /// This week's tier.
-    pub tier: Tier,
-    /// The next tier and how many more catches this week reach it.
-    pub next_tier: Option<(Tier, i64)>,
     /// "Could AI replace you?"
-    pub verdict: Answer,
+    pub overall: Overall,
     /// One catch every this many messages.
     pub messages_per_catch: Option<i64>,
     /// Chats with at least 10 messages.
@@ -195,7 +223,7 @@ pub struct Briefs {
 
 /// The signal your briefs carry least, and (when your own history backs it up) how much more
 /// often continued tasks whose briefs carry it landed.
-#[derive(Debug, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct Tip {
     /// Signal id.
     pub signal: String,
@@ -207,17 +235,17 @@ pub struct Tip {
 }
 
 /// The daily / events rows one filter selects.
-struct View<'a> {
-    conn: &'a Connection,
-    /// `AND …` clause; works on `daily` and `events` (same column names).
-    clause: String,
-    args: Vec<String>,
+pub(crate) struct View<'a> {
+    pub(crate) conn: &'a Connection,
+    /// `AND …` clause; works on `daily`, `events` and `tasks` (same column names).
+    pub(crate) clause: String,
+    pub(crate) args: Vec<String>,
 }
 
 impl View<'_> {
     /// Runs `sql` (with `{w}` already holding the filter clause) binding the filter's values
     /// and then `extra`, in that order.
-    fn rows<T>(
+    pub(crate) fn rows<T>(
         &self,
         sql: &str,
         extra: &[&str],
@@ -242,16 +270,21 @@ struct Totals {
     catches: i64,
     humbled: i64,
     catches_last_7d: i64,
+    catches_28d: i64,
+    humbled_28d: i64,
 }
 
 fn totals(v: &View, today: NaiveDate) -> Result<Totals> {
     let kinds = CATCH_KINDS.as_str();
     let week_ago = (today - Duration::days(6)).to_string();
+    let window = (today - Duration::days(WINDOW_DAYS - 1)).to_string();
     Ok(Totals {
         messages: v.sum("AND kind = 'message'", &[])?,
         catches: v.sum(&format!("AND kind IN {kinds}"), &[])?,
         humbled: v.sum("AND kind = 'humbled'", &[])?,
         catches_last_7d: v.sum(&format!("AND kind IN {kinds} AND day >= ?"), &[&week_ago])?,
+        catches_28d: v.sum(&format!("AND kind IN {kinds} AND day >= ?"), &[&window])?,
+        humbled_28d: v.sum("AND kind = 'humbled' AND day >= ?", &[&window])?,
     })
 }
 
@@ -331,7 +364,7 @@ fn peak_hour(hours: &[i64; 24]) -> Option<u32> {
 }
 
 /// The Monday starting `d`'s week.
-fn monday_of(d: NaiveDate) -> NaiveDate {
+pub(crate) fn monday_of(d: NaiveDate) -> NaiveDate {
     d - Duration::days(i64::from(d.weekday().num_days_from_monday()))
 }
 
@@ -352,6 +385,27 @@ fn weekly(v: &View) -> Result<Vec<WeekRow>> {
 }
 
 fn models(v: &View) -> Result<Vec<ModelRow>> {
+    let mut rows = model_counts(v)?;
+    let sql = format!(
+        "SELECT provider, family, version, COUNT(*), COALESCE(SUM(messages >= 2), 0), COALESCE(SUM({}), 0)
+         FROM tasks WHERE 1=1 {} GROUP BY provider, family, version",
+        LANDED.as_str(),
+        v.clause
+    );
+    for (key, tasks, continued, landed) in v.rows(&sql, &[], |r| {
+        Ok(((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?), r.get(3)?, r.get(4)?, r.get(5)?))
+    })? {
+        let i = rows.iter().position(|m| (&m.provider, &m.family, &m.version) == (&key.0, &key.1, &key.2));
+        let i = i.unwrap_or_else(|| {
+            rows.push(ModelRow { provider: key.0, family: key.1, version: key.2, ..ModelRow::default() });
+            rows.len() - 1
+        });
+        (rows[i].tasks, rows[i].continued, rows[i].landed) = (tasks, continued, landed);
+    }
+    Ok(rows)
+}
+
+fn model_counts(v: &View) -> Result<Vec<ModelRow>> {
     let sql = format!(
         "SELECT provider, family, version,
             SUM(CASE WHEN kind = 'message' THEN n ELSE 0 END),
@@ -368,6 +422,7 @@ fn models(v: &View) -> Result<Vec<ModelRow>> {
             messages: r.get(3)?,
             catches: r.get(4)?,
             humbled: r.get(5)?,
+            ..ModelRow::default()
         })
     })
 }
@@ -401,7 +456,7 @@ fn hall_of_fame(v: &View) -> Result<Vec<HallEntry>> {
 }
 
 /// One decimal percent of `n` in `total`.
-fn pct(n: i64, total: i64) -> f64 {
+pub(crate) fn pct(n: i64, total: i64) -> f64 {
     if total == 0 {
         return 0.0;
     }
@@ -414,12 +469,14 @@ static ON_YOU: LazyLock<String> = LazyLock::new(|| {
     format!("({})", cols.join(" + "))
 });
 
+/// A continued task that nothing on you steered, as SQL over `tasks`.
+pub(crate) static LANDED: LazyLock<String> = LazyLock::new(|| format!("(messages >= 2 AND {} = 0)", ON_YOU.as_str()));
+
 /// One group of tasks: the signals their brief carried, whether they continued, whether they landed.
 pub(crate) type Group = (Signals, bool, bool, i64);
 
 fn briefs(v: &View, today: NaiveDate) -> Result<Briefs> {
-    let on_you = ON_YOU.as_str();
-    let landed = format!("(messages >= 2 AND {on_you} = 0)");
+    let landed = LANDED.as_str();
     // At most 32 masks x 3 outcomes, so the per-signal math happens here, not in SQL.
     let sql =
         format!("SELECT signals, messages >= 2, {landed}, COUNT(*) FROM tasks WHERE 1=1 {} GROUP BY 1, 2, 3", v.clause);
@@ -446,16 +503,23 @@ fn briefs(v: &View, today: NaiveDate) -> Result<Briefs> {
     for (c, n) in Steer::ALL.iter().zip(row.into_iter().flatten()) {
         b.steering.insert(c.as_str().to_string(), n);
     }
-    let since = (today - Duration::days(WINDOW_DAYS - 1)).to_string();
-    let sql =
-        format!("SELECT COUNT(*), COALESCE(SUM({landed}), 0) FROM tasks WHERE messages >= 2 {} AND day >= ?", v.clause);
-    (b.tasks_last_28d, b.landed_last_28d) =
-        v.rows(&sql, &[&since], |r| Ok((r.get(0)?, r.get(1)?)))?.pop().unwrap_or_default();
+    (b.tasks_last_28d, b.landed_last_28d) = window_tasks(v, today)?;
     b.tier = BriefTier::for_tasks(b.landed_last_28d, b.tasks_last_28d);
     b.next_tier = b.tier.and_then(BriefTier::next);
     b.to_rank = (MIN_BRIEFS - b.tasks_last_28d).max(0);
     b.tip = tip(&groups, b.tasks);
     Ok(b)
+}
+
+/// Continued tasks in the last [`WINDOW_DAYS`] days ending `today`, and how many landed.
+fn window_tasks(v: &View, today: NaiveDate) -> Result<(i64, i64)> {
+    let since = (today - Duration::days(WINDOW_DAYS - 1)).to_string();
+    let sql = format!(
+        "SELECT COUNT(*), COALESCE(SUM({}), 0) FROM tasks WHERE messages >= 2 {} AND day >= ?",
+        LANDED.as_str(),
+        v.clause
+    );
+    Ok(v.rows(&sql, &[&since], |r| Ok((r.get(0)?, r.get(1)?)))?.pop().unwrap_or_default())
 }
 
 /// The signal carried least (ties: display order), unless your briefs mostly carry it already.
@@ -489,13 +553,38 @@ pub(crate) fn tip_for(groups: &[Group], s: Signal) -> Tip {
 static SOURCE_NAMES: LazyLock<Vec<(&'static str, &'static str)>> =
     LazyLock::new(|| sources::all().iter().map(|s| (s.id(), s.name())).collect());
 
-/// The tier `catches_last_7d` reaches, and how far the next one is.
-fn tier_progress(catches_last_7d: i64) -> (Tier, Option<(Tier, i64)>) {
-    let tier = Tier::for_catches(catches_last_7d);
-    (tier, tier.next().map(|next| (next, next.floor() - catches_last_7d)))
+/// The overall score from the window's tasks (already in `b`) and corrections.
+fn overall(b: &Briefs, catches: i64, humbled: i64) -> Overall {
+    overall_of(b.tasks_last_28d, b.landed_last_28d, catches, humbled)
+}
+
+fn overall_of(continued: i64, landed: i64, catches: i64, humbled: i64) -> Overall {
+    let score = Score::of(Window { continued, landed, catches, humbled });
+    let tier = score.map(|s| s.tier);
+    Overall {
+        score: score.map(|s| s.score),
+        direction: score.map(|s| s.direction),
+        judgment: score.map(|s| s.judgment),
+        tier,
+        next_tier: tier.and_then(Tier::next),
+        verdict: Answer::for_tier(tier),
+        catches,
+        humbled,
+        to_rank: (MIN_BRIEFS - continued).max(0),
+    }
 }
 
 impl Store {
+    /// Just the overall score across all AI: a few queries, for goals and the tray.
+    pub fn overall(&self, today: NaiveDate) -> Result<Overall> {
+        let v = View { conn: self.conn(), clause: String::new(), args: vec![] };
+        let (continued, landed) = window_tasks(&v, today)?;
+        let window = (today - Duration::days(WINDOW_DAYS - 1)).to_string();
+        let catches = v.sum(&format!("AND kind IN {} AND day >= ?", *CATCH_KINDS), &[&window])?;
+        let humbled = v.sum("AND kind = 'humbled' AND day >= ?", &[&window])?;
+        Ok(overall_of(continued, landed, catches, humbled))
+    }
+
     /// The scorecard for `f`, with "this week" ending on `today`.
     pub fn stats(&self, f: &Filter, today: NaiveDate) -> Result<Stats> {
         let (clause, args) = f.sql();
@@ -505,7 +594,7 @@ impl Store {
         let (labels, categories) = labels_and_categories(&v)?;
         let (real_chats, real_with_catch) = real_chats(self.conn(), f.source.as_deref())?;
         let (best_streak_days, current_streak_days) = streaks(&catch_days(&v)?, today);
-        let (tier, next_tier) = tier_progress(t.catches_last_7d);
+        let briefs = briefs(&v, today)?;
         Ok(Stats {
             first_day,
             last_day,
@@ -514,9 +603,7 @@ impl Store {
             humbled: t.humbled,
             labels,
             catches_last_7d: t.catches_last_7d,
-            tier,
-            next_tier,
-            verdict: Answer::for_catches(t.catches_last_7d),
+            overall: overall(&briefs, t.catches_28d, t.humbled_28d),
             messages_per_catch: (t.catches > 0).then(|| (t.messages as f64 / t.catches as f64).round() as i64),
             real_chats,
             pct_real_chats_with_catch: (real_chats > 0).then(|| pct(real_with_catch, real_chats)),
@@ -527,7 +614,7 @@ impl Store {
             weekly: weekly(&v)?,
             models: models(&v)?,
             hall_of_fame: hall_of_fame(&v)?,
-            briefs: briefs(&v, today)?,
+            briefs,
         })
     }
 }
@@ -572,10 +659,20 @@ mod tests {
     }
 
     #[test]
-    fn next_tier_counts_what_is_left() {
-        assert_eq!(tier_progress(0), (Tier::RubberStamp, Some((Tier::Coworker, 3))));
-        assert_eq!(tier_progress(5), (Tier::Coworker, Some((Tier::SharpEyed, 2))));
-        assert_eq!(tier_progress(15), (Tier::Irreplaceable, None));
+    fn overall_mixes_the_window_and_waits_for_enough_tasks() {
+        let b = |continued, landed| Briefs {
+            tasks_last_28d: continued,
+            landed_last_28d: landed,
+            to_rank: (MIN_BRIEFS - continued).max(0),
+            ..Briefs::default()
+        };
+        let o = overall(&b(150, 125), 41, 2);
+        assert_eq!(
+            (o.score, o.tier, o.next_tier, o.verdict),
+            (Some(86), Some(Tier::SharpEyed), Some(Tier::Irreplaceable), Answer::No)
+        );
+        let o = overall(&b(4, 4), 9, 0);
+        assert_eq!((o.score, o.tier, o.verdict, o.to_rank, o.catches), (None, None, Answer::Hmm, MIN_BRIEFS - 4, 9));
     }
 
     #[test]

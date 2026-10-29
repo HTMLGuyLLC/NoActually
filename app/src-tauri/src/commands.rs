@@ -10,7 +10,7 @@ use chrono::{Local, NaiveDate};
 use serde::Serialize;
 use sources::{Kind, Source};
 use std::sync::Arc;
-use store::{Filter, Meta, Retention, SourceState, Stats};
+use store::{Filter, Goal, GoalKind, Meta, Progress, Retention, SourceState, Stats};
 use tauri::{AppHandle, State};
 use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_dialog::{DialogExt, FileDialogBuilder, FilePath};
@@ -53,6 +53,62 @@ pub fn meta(app: State<Arc<App>>) -> Meta {
 #[tauri::command]
 pub fn stats(app: State<Arc<App>>, filter: Filter) -> Res<Stats> {
     lock(&app.reader).stats(&filter, Local::now().date_naive()).map_err(err)
+}
+
+/// The Improve tab: history for the filter, plus your goal, trophies and bests. Off the main
+/// thread: it reads every week of history.
+#[tauri::command(async)]
+pub fn progress(app: State<Arc<App>>, filter: Filter) -> Res<Progress> {
+    lock(&app.reader).progress(&filter, Local::now().date_naive()).map_err(err)
+}
+
+#[tauri::command(async)]
+pub fn set_goal(app: State<Arc<App>>, kind: GoalKind, target: i64) -> Res<Goal> {
+    let now = chrono::Local::now();
+    lock(&app.writer).set_goal(kind, target, now.date_naive(), now.timestamp_millis()).map_err(err)
+}
+
+#[tauri::command(async)]
+pub fn clear_goal(app: State<Arc<App>>) -> Res<()> {
+    lock(&app.writer).clear_goal().map_err(err)
+}
+
+/// Longest draft the brief checker grades. The engine reads the first 4,000 characters anyway;
+/// this just keeps a giant paste from crossing the bridge.
+const CHECK_MAX_BYTES: usize = 64 * 1024;
+
+/// Grades a draft brief with the same rules scoring uses. Nothing is stored or logged.
+#[tauri::command]
+pub fn check_brief(text: String) -> engine::Check {
+    let mut end = text.len().min(CHECK_MAX_BYTES);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    engine::check(&text[..end])
+}
+
+#[tauri::command]
+pub fn learned(app: State<Arc<App>>) -> Res<Vec<String>> {
+    lock(&app.reader).learned().map_err(err)
+}
+
+#[tauri::command(async)]
+pub fn set_learned(app: State<Arc<App>>, id: String, done: bool) -> Res<Vec<String>> {
+    lock(&app.writer).set_learned(&id, done).map_err(err)
+}
+
+/// True when the app keeps running in the menu bar (macOS) or system tray after its window
+/// closes; false when it's an ordinary app that quits.
+#[tauri::command]
+pub fn get_menu_bar(app: State<Arc<App>>) -> bool {
+    app.menu_bar()
+}
+
+#[tauri::command(async)]
+pub fn set_menu_bar(handle: AppHandle, app: State<Arc<App>>, enabled: bool) -> Res<()> {
+    lock(&app.writer).set_setting(crate::MENU_BAR_KEY, if enabled { "on" } else { "off" }).map_err(err)?;
+    crate::apply_menu_bar(&handle, &app, enabled);
+    Ok(())
 }
 
 #[tauri::command]
@@ -291,6 +347,13 @@ mod tests {
     }
 
     #[test]
+    fn the_checker_cuts_giant_drafts_on_a_char_boundary() {
+        let huge = "é".repeat(CHECK_MAX_BYTES); // two bytes each: the cut lands mid-character
+        assert_eq!(check_brief(huge).grade, engine::Grade::Thin);
+        assert_eq!(check_brief("Fix `a.ts`. Done when tests pass. Don't touch b.".into()).grade, engine::Grade::Sharp);
+    }
+
+    #[test]
     fn png_needs_the_whole_signature() {
         assert!(is_png(b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR"));
         assert!(!is_png(b"xPNG\r\n\x1a\n"), "first byte matters");
@@ -329,6 +392,15 @@ mod tests {
             serde_json::to_value(store::Briefs { tip: Some(store::Tip::default()), ..Default::default() }).unwrap();
         assert_eq!(keys(&demo["stats"]["briefs"]), keys(&briefs), "demo.json `briefs` keys differ from `Briefs`");
         assert_eq!(keys(&demo["stats"]["briefs"]["tip"]), keys(&briefs["tip"]), "demo.json `briefs.tip` keys differ");
+        assert_eq!(keys(&demo["stats"]["overall"]), keys(&stats["overall"]), "demo.json `overall` keys differ");
+        let progress =
+            serde_json::to_value(db.progress(&Filter::default(), Local::now().date_naive()).unwrap()).unwrap();
+        assert_eq!(keys(&demo["progress"]), keys(&progress), "demo.json `progress` keys differ from `Progress`");
+        let week = serde_json::to_value(store::HistoryWeek::default()).unwrap();
+        for w in demo["progress"]["weeks"].as_array().unwrap() {
+            assert_eq!(keys(w), keys(&week), "a demo.json `progress.weeks` row has different keys");
+        }
+        assert!(demo["progress"]["goal"].is_object(), "the demo shows a goal under way");
         for (field, row) in rows {
             let demo_rows = demo["stats"][field].as_array().unwrap();
             assert!(!demo_rows.is_empty(), "demo.json `{field}` is empty, so nothing is checked");

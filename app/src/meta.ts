@@ -16,8 +16,8 @@ function withRanges<T extends Tier>(tiers: T[], top: (floor: number) => string, 
     .reverse();
 }
 
-/** Catch tiers top-down: "15+ catches/wk", "7–14", … */
-export const tierRanges = (meta: Meta): TierRange[] => withRanges(meta.tiers, (f) => `${f}+ catches/wk`);
+/** Overall tiers top-down: "90+", "80–89", … */
+export const tierRanges = (meta: Meta): TierRange[] => withRanges(meta.tiers, (f) => `${f}+`);
 
 /** Brief tiers top-down: "95%+ landed", "90–94%", … */
 export const briefTierRanges = (meta: Meta): (BriefTier & { range: string })[] => withRanges(meta.brief_tiers, (f) => `${f}%+ landed`, "%");
@@ -33,10 +33,11 @@ export const percent = (n: number, total: number): number => (total > 0 ? Math.r
 export const landedPct = (b: Pick<Briefs, "landed_last_28d" | "tasks_last_28d">): number =>
   b.tasks_last_28d > 0 ? Math.floor((100 * b.landed_last_28d) / b.tasks_last_28d) : 0;
 
-export const tierName = (meta: Meta, id: string): string => meta.tiers.find((t) => t.id === id)?.name ?? id;
+export const tierName = (meta: Meta, id: string | null): string => (id ? (meta.tiers.find((t) => t.id === id)?.name ?? id) : "Not scored yet");
 
-/** The highest tier: its floor is the chart's dashed line. */
-export const topTier = (meta: Meta): Tier | undefined => meta.tiers.reduce<Tier | undefined>((top, t) => (!top || t.floor > top.floor ? t : top), undefined);
+export const tierOf = (meta: Meta, id: string | null): Tier | undefined => meta.tiers.find((t) => t.id === id);
+
+export const signalTitle = (meta: Meta, id: string): string => meta.signals.find((s) => s.id === id)?.title ?? id;
 
 export const categoryTitle = (meta: Meta, id: string): string => meta.categories.find((c) => c.id === id)?.title ?? id;
 

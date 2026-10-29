@@ -10,7 +10,7 @@ use engine::Answer;
 use std::path::PathBuf;
 use store::{Filter, Level, Retention, Store};
 
-const HELP: &str = "noactually: count the times you caught your AI being wrong
+const HELP: &str = "noactually: could AI replace you? Score how you work with your AI
 
 USAGE
   noactually sources                     List sources, where they read from, and whether they're allowed
@@ -20,6 +20,7 @@ USAGE
   noactually import <source> <path>      Import an export file or folder (chatgpt-export, claude-ai-export)
   noactually sync                        Read anything new from allowed sources
   noactually stats [filters] [--json]    Scorecard. Filters: --source --provider --family --version
+  noactually check <brief>               What a draft brief carries, graded like your history (nothing is saved)
   noactually retention <full|snippet|category> [--full-days N] [--snippet-days N]
 
 Data lives in NOACTUALLY_DB, or app.noactually/noactually.db in your app data folder (shared with the desktop app).
@@ -36,6 +37,7 @@ enum Command {
     Import { id: String, path: PathBuf },
     Sync,
     Stats { filter: Filter, json: bool },
+    Check { text: String },
     Retention { level: Level, full_days: Option<u32>, snippet_days: Option<u32> },
 }
 
@@ -114,6 +116,9 @@ fn parse_args(args: &[String]) -> Result<Command> {
             };
             Command::Stats { filter, json: a.has("--json") }
         }
+        // The whole rest is the brief, so it's never read as flags.
+        "check" if !rest.is_empty() => Command::Check { text: rest.join(" ") },
+        "check" => bail!("missing brief: noactually check \"Fix the crash in checkout.ts…\""),
         "retention" => {
             let a = Args::split(rest, &["--full-days", "--snippet-days"], &[])?;
             Command::Retention {
@@ -192,6 +197,11 @@ fn run(cmd: Command, store: &mut Store, all: &[Box<dyn sources::Source>]) -> Res
                 print_card(&s);
             }
         }
+        Command::Check { text } => {
+            for line in check_lines(&text) {
+                println!("{line}");
+            }
+        }
         Command::Retention { level, full_days, snippet_days } => {
             let old = store.retention()?;
             let r = Retention {
@@ -234,17 +244,10 @@ fn print_card(s: &store::Stats) {
         println!("No messages yet. Allow a source and run `noactually sync`.");
         return;
     }
-    let verdict = match s.verdict {
-        Answer::No => "No.",
-        Answer::Hmm => "Maybe…",
-    };
-    println!("Could AI replace you? {verdict} You caught it {} times in the last 7 days.\n", s.catches_last_7d);
-    println!(
-        "  Tier            {}{}",
-        s.tier.name(),
-        s.next_tier.map_or(String::new(), |(n, k)| format!("  ({k} more this week for {})", n.name()))
-    );
-    println!("  You vs AI       {} – {}", s.catches, s.humbled);
+    for line in overall_lines(&s.overall) {
+        println!("{line}");
+    }
+    println!("  You vs AI       {} – {}  (all time)", s.catches, s.humbled);
     println!(
         "  Messages        {}  ({} to {})",
         s.messages,
@@ -273,6 +276,57 @@ fn print_card(s: &store::Stats) {
     for line in brief_lines(&s.briefs) {
         println!("{line}");
     }
+}
+
+/// "Could AI replace you?": the overall score and what it's made of.
+fn overall_lines(o: &store::Overall) -> Vec<String> {
+    let verdict = match o.verdict {
+        Answer::No => "No.",
+        Answer::Hmm => "Maybe…",
+    };
+    let days = engine::WINDOW_DAYS;
+    match (o.score, o.tier, o.direction, o.judgment) {
+        (Some(score), Some(tier), Some(direction), Some(judgment)) => vec![
+            format!(
+                "Could AI replace you? {verdict} {} · score {score}{}\n",
+                tier.name(),
+                o.next_tier.map_or(String::new(), |n| format!("  ({} at {})", n.name(), n.floor()))
+            ),
+            format!(
+                "  Your briefs     {direction}% of tasks landed in {days} days ({}% of the score)",
+                engine::DIRECTION_WEIGHT
+            ),
+            format!(
+                "  Who corrects    you {} · it {} in {days} days → {judgment} ({}% of the score)",
+                o.catches,
+                o.humbled,
+                100 - engine::DIRECTION_WEIGHT
+            ),
+        ],
+        _ => vec![format!(
+            "Could AI replace you? {verdict} Not scored yet: {} more tasks with a follow-up in {days} days.\n",
+            o.to_rank
+        )],
+    }
+}
+
+/// `noactually check "<brief>"`: what a draft brief carries, with the same rules scoring uses.
+fn check_lines(text: &str) -> Vec<String> {
+    let c = engine::check(text);
+    let mut out = vec![format!(
+        "{} ({} of {} things a brief can carry)",
+        c.grade.title(),
+        c.signals.count(),
+        engine::Signal::ALL.len()
+    )];
+    for s in engine::Signal::ALL {
+        let mark = if c.signals.has(s) { "✓" } else { "·" };
+        out.push(format!("  {mark} {:<18} {}", s.title(), s.hint()));
+    }
+    if c.not_a_brief {
+        out.push("  (Reads as a question or a hello: your history doesn't grade those as briefs.)".into());
+    }
+    out
 }
 
 /// The "Do you make it guess?" half of the card.
@@ -361,6 +415,37 @@ mod tests {
             parse("retention full --snippet-days 90").unwrap(),
             Command::Retention { level: Level::Full, full_days: None, snippet_days: Some(90) }
         );
+    }
+
+    #[test]
+    fn check_reads_the_whole_rest_as_the_brief() {
+        assert_eq!(parse("check --fix the thing").unwrap(), Command::Check { text: "--fix the thing".into() });
+        assert!(err("check").starts_with("missing brief"));
+        let lines = check_lines("Fix the crash in `checkout.ts`. Done when the tests pass. Don't touch the API.");
+        assert_eq!(lines[0], "Sharp (3 of 5 things a brief can carry)");
+        assert!(lines.iter().any(|l| l.starts_with("  ✓ Points at it")));
+        assert!(lines.iter().any(|l| l.starts_with("  · Says why")));
+        assert!(check_lines("how does this work?").last().unwrap().contains("question"));
+    }
+
+    #[test]
+    fn overall_lines_show_the_score_or_how_far_off_it_is() {
+        let o = store::Overall {
+            score: Some(86),
+            direction: Some(83),
+            judgment: Some(95),
+            tier: Some(engine::Tier::SharpEyed),
+            next_tier: Some(engine::Tier::Irreplaceable),
+            verdict: Answer::No,
+            catches: 41,
+            humbled: 2,
+            to_rank: 0,
+        };
+        let text = overall_lines(&o).join("\n");
+        assert!(text.starts_with("Could AI replace you? No. Sharp-eyed · score 86  (Irreplaceable at 90)"), "{text}");
+        assert!(text.contains("you 41 · it 2 in 28 days → 95 (30% of the score)"), "{text}");
+        let unranked = store::Overall { score: None, tier: None, verdict: Answer::Hmm, to_rank: 4, ..o };
+        assert!(overall_lines(&unranked)[0].contains("Not scored yet: 4 more tasks"));
     }
 
     #[test]

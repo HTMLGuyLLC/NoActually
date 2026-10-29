@@ -1,17 +1,21 @@
 // What every control does. Views mark controls with data-action="…" (and data-id for the thing
 // acted on); one delegated listener per event type on the root dispatches through the maps below,
 // so nothing is re-bound on each redraw.
-import { api, type BriefTier, type HallEntry, type Meta, type Stats } from "./api";
+import { api, type BriefTier, type GoalKind, type HallEntry, type Meta, type Stats } from "./api";
 import { data, say } from "./dom";
 import { errorText, filterLabel } from "./format";
+import { scheduleCheck } from "./learn/checker";
+import { lessonById } from "./learn/lessons";
 import { briefTier, tierName } from "./meta";
+import type { PickStat } from "./picker/picker";
 import { buildPickItems, sameFilter } from "./picker/picker";
 import { closePicker, openPicker, pickerOpen } from "./picker/popover";
 import { paintUpdate, render, scheduler } from "./render";
 import { drawBriefCard, drawCatchCard, drawShareCard } from "./share/cards";
 import { openShareDialog, type Post } from "./share/dialog";
 import { briefShareText, catchShareText, shareText } from "./share/share";
-import { isScoreView, isTab, setAutoUpdate, setFilter, setLaterFor, setTab, setView, state } from "./state";
+import { isRange, isScoreView, isTab, setAutoUpdate, setDraft, setFilter, setLaterFor, setLesson, setRange, setTab, setView, state } from "./state";
+import { judgeQuiz } from "./views/learn";
 import { parseRetention } from "./views/settings";
 import { allowArgs } from "./views/sources";
 
@@ -48,7 +52,8 @@ const thenRender = async (btn: HTMLButtonElement, work: () => Promise<unknown>, 
 
 const scorePost = (s: Stats, meta: Meta): Post => {
   const who = filterLabel(state.filter, meta);
-  return { title: "Share your score", text: shareText(s, who), image: (shape) => drawShareCard(s, who, tierName(meta, s.tier), shape) };
+  const tier = tierName(meta, s.overall.tier);
+  return { title: "Share your score", text: shareText(s, who, tier), image: (shape) => drawShareCard(s, who, tier, shape) };
 };
 
 const briefsPost = (s: Stats, tier: BriefTier): Post => ({
@@ -64,6 +69,14 @@ const catchPost = (e: HallEntry): Post => ({
   quotesChat: !!(e.human || e.ai),
 });
 
+/** True on the second click. The first relabels the button and holds off redraws until then. */
+function confirmed(b: HTMLButtonElement, ask: string): boolean {
+  if (b.dataset.confirm === "yes") return true;
+  b.dataset.confirm = "yes";
+  b.textContent = ask;
+  return false;
+}
+
 /** The data the scorecard was drawn from; its buttons only exist once both are loaded. */
 function drawn(): { s: Stats; meta: Meta } {
   const { current: s, meta } = state;
@@ -71,10 +84,17 @@ function drawn(): { s: Stats; meta: Meta } {
   return { s, meta };
 }
 
+/** The picker shows the numbers the page is about. */
+export function pickStatFor(tab: typeof state.tab, view: typeof state.view): PickStat {
+  if (tab !== "score" || view === "overview") return "both";
+  return view === "briefs" ? "briefs" : "catches";
+}
+
 function togglePicker(trigger: HTMLButtonElement) {
   if (pickerOpen()) return closePicker();
   openPicker(trigger, {
     items: buildPickItems(state.allModels),
+    stat: pickStatFor(state.tab, state.view),
     isSelected: (i) => sameFilter(i.filter, state.filter),
     onChoose: (i) => {
       setFilter(i.filter);
@@ -92,7 +112,7 @@ export const clickActions = {
   // The button itself confirms the copy, so the quick glance never grows taller.
   "copy-share": async (b) => {
     const { s, meta } = drawn();
-    const ok = await navigator.clipboard.writeText(shareText(s, filterLabel(state.filter, meta))).then(
+    const ok = await navigator.clipboard.writeText(shareText(s, filterLabel(state.filter, meta), tierName(meta, s.overall.tier))).then(
       () => true,
       () => false,
     );
@@ -139,6 +159,69 @@ export const clickActions = {
     setView(view);
     return render();
   },
+  range: (b) => {
+    const r = data(b, "id");
+    if (!isRange(r)) throw new Error(`Unknown range: ${r}`);
+    setRange(r);
+    return render();
+  },
+  lesson: (b) => {
+    const id = data(b, "id");
+    setLesson(lessonById(id) ? id : null);
+    return render().then(() => window.scrollTo({ top: 0 }));
+  },
+  "open-lesson": (b) => {
+    const id = data(b, "id");
+    setTab("learn");
+    setLesson(lessonById(id) ? id : null);
+    return render().then(() => window.scrollTo({ top: 0 }));
+  },
+  "lesson-done": (b) =>
+    thenRender(b, async () => {
+      const done = data(b, "done") === "true";
+      await api.setLearned(data(b, "id"), done);
+      // Finishing a lesson goes back to the list, where the track's progress shows it.
+      if (done) setLesson(null);
+    }),
+  "try-template": (b) => {
+    const l = lessonById(data(b, "id"));
+    if (!l) return;
+    setDraft(l.template);
+    setLesson(null);
+    return render().then(() => {
+      const box = document.querySelector<HTMLTextAreaElement>("#draft");
+      box?.focus();
+      box?.scrollIntoView({ block: "center" });
+    });
+  },
+  "copy-draft": async (b) => {
+    const ok = await navigator.clipboard.writeText(state.draft).then(
+      () => true,
+      () => false,
+    );
+    say(b.parentElement?.querySelector("#draft-status") ?? null, ok ? "Copied your brief." : "Couldn't copy.");
+  },
+  "clear-draft": () => {
+    setDraft("");
+    const box = document.querySelector<HTMLTextAreaElement>("#draft");
+    if (box) {
+      box.value = "";
+      box.focus();
+    }
+    scheduleCheck(document, 0);
+  },
+  // Switching or dropping a goal loses this week's progress on it, so each takes a second click.
+  "start-goal": (b) => {
+    if (b.dataset.replaces === "yes" && !confirmed(b, "Click again to switch")) return;
+    const raw = b.dataset.goal ?? b.closest(".goal-pick")?.querySelector<HTMLSelectElement>("#goal-pick")?.value ?? "";
+    const g = parseGoalChoice(raw);
+    if (!g) throw new Error("Pick a goal first");
+    return thenRender(b, () => api.setGoal(g.kind, g.target));
+  },
+  "clear-goal": (b) => {
+    if (!confirmed(b, "Click again to drop it")) return;
+    return thenRender(b, () => api.clearGoal());
+  },
   "clear-filter": () => {
     setFilter({});
     return render();
@@ -155,11 +238,7 @@ export const clickActions = {
   import: (b) => thenRender(b, () => api.importExport(data(b, "id"))),
   // Forget deletes data, so it takes a second click to confirm.
   forget: (b) => {
-    if (b.dataset.confirm !== "yes") {
-      b.dataset.confirm = "yes";
-      b.textContent = "Click again to delete its data";
-      return;
-    }
+    if (!confirmed(b, "Click again to delete its data")) return;
     return thenRender(b, () => api.forget(data(b, "id")));
   },
   "save-privacy": async (b) => {
@@ -188,6 +267,24 @@ export const clickActions = {
   retry: () => render(),
 } satisfies Record<string, Handler>;
 
+/** A goal choice from the Improve form, checked before it's sent. */
+export function parseGoalChoice(raw: string): { kind: GoalKind; target: number } | null {
+  let v: unknown;
+  try {
+    v = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof v !== "object" || v === null) return null;
+  const o = v as Record<string, unknown>;
+  const target = typeof o.target === "number" ? o.target : Number.NaN;
+  if (!Number.isFinite(target)) return null;
+  if (o.kind === "habit" && typeof o.signal === "string") return { kind: { kind: "habit", signal: o.signal }, target };
+  if (o.kind === "steer" && typeof o.steer === "string") return { kind: { kind: "steer", steer: o.steer }, target };
+  if (o.kind === "tier" && typeof o.tier === "string") return { kind: { kind: "tier", tier: o.tier }, target };
+  return null;
+}
+
 type InputHandler = (el: HTMLInputElement) => unknown;
 
 /** Undoes a checkbox the backend refused, so it never shows a setting that isn't saved. */
@@ -206,6 +303,12 @@ export const changeActions = {
   },
   autostart: toggle((on) => api.setAutostart(on)),
   "auto-update": toggle((on) => api.setAutoUpdate(on), setAutoUpdate),
+  // The "Launch at login" hint depends on it, so the page redraws.
+  "menu-bar": toggle(
+    (on) => api.setMenuBar(on),
+    () => void render(),
+  ),
+  quiz: (r) => judgeQuiz(r),
 } satisfies Record<string, InputHandler>;
 
 const has = <T extends object>(map: T, key: string): key is Extract<keyof T, string> => Object.keys(map).includes(key);
@@ -225,6 +328,13 @@ export function bindActions(root: HTMLElement): void {
     } catch (err) {
       report(err);
     }
+  });
+  // Typing in the brief checker: kept in memory and re-graded when typing pauses.
+  root.addEventListener("input", (e) => {
+    const el = e.target;
+    if (!(el instanceof HTMLTextAreaElement) || el.dataset.action !== "draft") return;
+    setDraft(el.value);
+    scheduleCheck(root);
   });
   root.addEventListener("change", (e) => {
     const el = actionTarget(e);

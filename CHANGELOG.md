@@ -4,6 +4,20 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+### Added
+
+- **Could AI replace you?** is now an overall score from 0 to 100 over the last 28 days: 70% how often your tasks land, 30% judgment (how rarely the AI has to correct you, per task, once you've caught it 3 times). Tiers: Rubber stamp, Coworker 65+, Sharp-eyed 80+, Irreplaceable 90+. Catching fewer mistakes because you briefed well never costs points. Overall and brief tiers are announced once, the first time you reach each one.
+- **Improve** tab: one weekly goal suggested from your numbers (a habit, a steering ceiling or a higher tier), judged once each week is over, with week-by-week marks, streaks that pause on quiet weeks, trophies, personal bests, last week's recap, charts (tasks landed with tier bands, what your briefs carry, grades, steering, catch rate) over 12 weeks, 6 months or all time, and "what works for you" from your own history. Finished goal weeks are frozen. Popups when a goal week is met and when a goal is done.
+- **Learn** tab: 12 one-minute lessons in three tracks (the 5 habits, steer less, catch more), each with a before/after, a template and a quick quiz, plus a brief checker that grades a draft as you type with the same rules as your score and saves nothing. The next lesson is picked from your briefs. A test grades every lesson example with the real rules and fails if the copy names a product, model or version.
+- `noactually check "<brief>"` grades a draft brief from the command line.
+- Settings: **Keep running in the menu bar**. Off makes it an ordinary app with no menu bar or tray icon that quits when its window closes.
+
+### Changed
+
+- The model picker shows the numbers the page is about: landed % on Briefs, catches on Catches and Hall of fame, both on the overview.
+- Scorecard sections run Overview, Briefs, Catches, Hall of fame. The Catches section asks "Do you catch its mistakes?" and shows your judgment score.
+- The top tabs show icons only on narrow windows.
+
 ## [0.3.0] - 2026-10-28
 
 ### Added

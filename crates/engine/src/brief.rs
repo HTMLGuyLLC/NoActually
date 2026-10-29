@@ -250,6 +250,29 @@ pub fn read_prompt(turn: &Turn, verdict: &Verdict, has_task: bool) -> Prompt {
     Prompt::Other
 }
 
+/// A draft brief checked on its own, for practice: what it carries and how it grades.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Check {
+    /// The specifics it carries.
+    pub signals: Signals,
+    /// Its grade.
+    pub grade: Grade,
+    /// Ids of the rules that fired, one per signal.
+    pub rules: Vec<&'static str>,
+    /// True when it reads as a question or a hello, which isn't graded as a brief in your history.
+    pub not_a_brief: bool,
+}
+
+/// Grades `text` as if it were a chat's first message, with the same rules scoring uses.
+pub fn check(text: &str) -> Check {
+    let norm = normalize_quotes(text.trim());
+    let t = norm.as_str();
+    let not_a_brief = t.is_empty() || first(&CHATTER, t).is_some() || is_question(t);
+    let Prompt::Brief { signals, mut rules } = brief(t, "task.first") else { unreachable!("brief() always briefs") };
+    rules.remove(0);
+    Check { signals, grade: Grade::of(signals), rules, not_a_brief }
+}
+
 fn brief(t: &str, started_by: &'static str) -> Prompt {
     let mut signals = Signals::default();
     let mut rules = vec![started_by];

@@ -1,0 +1,474 @@
+{
+  "signal_hints": {
+    "spot": "Point at it: name the file, function or doc. 'In checkout.ts, the total is wrong.'",
+    "proof": "Show it: paste the error, the output or an example. 'It says: Card declined.'",
+    "done": "Say what done looks like: 'Done when the tests pass.'",
+    "limits": "Set limits: say what to leave alone. 'Don't change the API.'",
+    "why": "Say why: share the goal. 'Our customers need this before tax season.'"
+  },
+  "tracks": [
+    {
+      "id": "habits",
+      "title": "The 5 habits",
+      "blurb": "Five things a good brief carries, whoever you hand it to.",
+      "lessons": [
+        {
+          "id": "point-at-it",
+          "title": "Point at it",
+          "reviewed": "2026-10",
+          "teaches": { "signal": "spot" },
+          "why": "When you name the place, nobody has to go hunting for it.",
+          "before": {
+            "text": "The date is wrong on the invoice page. Fix it.",
+            "signals": []
+          },
+          "after": {
+            "text": "The invoice date from formatDate in dates.ts is a day off. It should show the order date, not the day before.",
+            "signals": ["spot", "done"]
+          },
+          "template": "In <file, function or doc>, <what's wrong>. It should <what you want instead>.",
+          "tips": [
+            "Use the real name of the file, the function or the doc.",
+            "Wrap exact names in backticks so they stand out.",
+            "If it's on a screen, say which page and which button."
+          ],
+          "quiz": [
+            {
+              "kind": "sharper",
+              "question": "Which brief is sharper?",
+              "options": ["Fix the slow search.", "The search in `searchProducts` is slow. It should return in under 200ms."],
+              "answer": 1,
+              "explain": "It names the exact function, so there's no hunt and no guess."
+            },
+            {
+              "kind": "missing",
+              "question": "What's this brief missing?",
+              "brief": "The welcome email should use the customer's first name. Don't change the subject line.",
+              "options": ["spot", "done", "limits"],
+              "answer": "spot",
+              "explain": "Which welcome email? Name the file or template it lives in."
+            }
+          ]
+        },
+        {
+          "id": "show-it",
+          "title": "Show it",
+          "reviewed": "2026-10",
+          "teaches": { "signal": "proof" },
+          "why": "The exact error or output says more than any description of it.",
+          "before": {
+            "text": "The checkout page is broken. Can you fix it?",
+            "signals": []
+          },
+          "after": {
+            "text": "Checkout fails when I click Pay. The console says: TypeError: total is undefined. Please fix it in checkout.ts.",
+            "signals": ["spot", "proof"]
+          },
+          "template": "When I <do this>, I get <the exact error or output>. Here it is: <paste it>.",
+          "tips": [
+            "Paste the exact error. Don't retell it from memory.",
+            "Show what you got and what you expected.",
+            "One real example beats a paragraph of description."
+          ],
+          "quiz": [
+            {
+              "kind": "sharper",
+              "question": "Which brief is sharper?",
+              "options": ["Expected the order date, but every row in the CSV export shows 1970-01-01.", "The CSV export gives weird dates."],
+              "answer": 0,
+              "explain": "It shows what you saw and what you wanted, so the gap is plain."
+            },
+            {
+              "kind": "missing",
+              "question": "What's this brief missing?",
+              "brief": "In report.py, the monthly totals look off. They should match the bank statement.",
+              "options": ["spot", "proof", "done"],
+              "answer": "proof",
+              "explain": "Look off how? Show one total you got and the one you expected."
+            }
+          ]
+        },
+        {
+          "id": "say-what-done-is",
+          "title": "Say what done is",
+          "reviewed": "2026-10",
+          "teaches": { "signal": "done" },
+          "why": "If you don't say what finished looks like, you get someone else's idea of it.",
+          "before": {
+            "text": "Write an email to the team about the office move.",
+            "signals": []
+          },
+          "after": {
+            "text": "Write a short email to my team about the office move. It should list the new address and the move date, in under 100 words.",
+            "signals": ["done", "why"]
+          },
+          "template": "<the task>. Done when <how you'll check it>.",
+          "tips": [
+            "Say how you'll check it: the tests pass, it fits on one page, it matches the old output.",
+            "Name the shape you want: a table, a list, three bullet points.",
+            "If there's a length, say it."
+          ],
+          "quiz": [
+            {
+              "kind": "sharper",
+              "question": "Which brief is sharper?",
+              "options": ["Make the Q3 report better.", "Update the Q3 report so the summary fits on one page, as a bulleted list."],
+              "answer": 1,
+              "explain": "You'll know it's done when it fits on one page as a list."
+            },
+            {
+              "kind": "missing",
+              "question": "What's this brief missing?",
+              "brief": "Rename getUser to fetchUser because the old name confuses new hires. Don't touch the tests.",
+              "options": ["spot", "done", "limits", "why"],
+              "answer": "done",
+              "explain": "How will you know it worked? Say what to check, like the build passing."
+            }
+          ]
+        },
+        {
+          "id": "set-limits",
+          "title": "Set limits",
+          "reviewed": "2026-10",
+          "teaches": { "signal": "limits" },
+          "why": "Limits stop the extra changes you'd have to find and undo later.",
+          "before": {
+            "text": "Clean up the styles on the pricing page.",
+            "signals": []
+          },
+          "after": {
+            "text": "Clean up the styles in pricing.css. Only change spacing and colors. Keep the layout as it is.",
+            "signals": ["spot", "limits"]
+          },
+          "template": "<the task>. Only change <what's in scope>. Don't touch <what's off limits>.",
+          "tips": [
+            "Say what's off limits: other files, the public API, the wording.",
+            "Name the scope: only this page, only this function.",
+            "A limit is cheaper than a cleanup."
+          ],
+          "quiz": [
+            {
+              "kind": "sharper",
+              "question": "Which brief is sharper?",
+              "options": ["Tidy up checkout.ts.", "Tidy up checkout.ts. Don't rename anything and don't add new packages."],
+              "answer": 1,
+              "explain": "Same task, but now the names and the packages are safe."
+            },
+            {
+              "kind": "missing",
+              "question": "What's this brief missing?",
+              "brief": "In about.html, fix the typo in the first paragraph because the founders spotted it. It should say 'founded in 2019'.",
+              "options": ["spot", "done", "limits", "why"],
+              "answer": "limits",
+              "explain": "Nothing says to leave the rest of the page alone, so expect a few bonus edits."
+            }
+          ]
+        },
+        {
+          "id": "say-why",
+          "title": "Say why",
+          "reviewed": "2026-10",
+          "teaches": { "signal": "why" },
+          "why": "The goal answers all the small questions you didn't think to spell out.",
+          "before": {
+            "text": "Make the signup form shorter.",
+            "signals": []
+          },
+          "after": {
+            "text": "Make the signup form shorter. Our customers give up at the phone number step. Keep the email field.",
+            "signals": ["limits", "why"]
+          },
+          "template": "<the task>. The goal is <what this is for, or who it's for>.",
+          "tips": ["Share the goal, not just the task.", "Say who it's for: your team, a customer, a demo.", "One sentence of why is plenty."],
+          "quiz": [
+            {
+              "kind": "sharper",
+              "question": "Which brief is sharper?",
+              "options": ["Cache the price list because the supplier lets us call them once a minute.", "Cache the price list."],
+              "answer": 0,
+              "explain": "Knowing the reason tells you how long the cache can last."
+            },
+            {
+              "kind": "missing",
+              "question": "What's this brief missing?",
+              "brief": "Add a dark mode toggle to settings.tsx. Don't change the default theme. Done when it remembers the choice.",
+              "options": ["spot", "done", "limits", "why"],
+              "answer": "why",
+              "explain": "Who asked for it, and what for? That shapes every small choice."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "steer",
+      "title": "Steer less",
+      "blurb": "Get it right in the first message, so you don't have to keep steering.",
+      "lessons": [
+        {
+          "id": "say-it-all-up-front",
+          "title": "Say it all up front",
+          "reviewed": "2026-10",
+          "teaches": { "steer": "added" },
+          "why": "Every 'oh, and also' sends the work around again. Put it in the first message.",
+          "before": {
+            "text": "Add a CSV export to the orders page.",
+            "signals": []
+          },
+          "after": {
+            "text": "Add a CSV export to the orders page. Include the date, customer and total. Make sure it works with 10,000 rows. Don't change the page layout.",
+            "signals": ["done", "limits"]
+          },
+          "template": "<the task>. It needs <every must-have>. Don't <what to avoid>.",
+          "tips": [
+            "Before you send, ask yourself: what would I add next?",
+            "List every must-have in the first message.",
+            "If you catch yourself typing 'also', it belonged in the brief."
+          ],
+          "quiz": [
+            {
+              "kind": "sharper",
+              "question": "Which brief is sharper?",
+              "options": ["Add a search box to the help page.", "Add a search box to help.html. It should search titles only, and it must work on phones."],
+              "answer": 1,
+              "explain": "The phone part is said up front, not sent later as an 'also'."
+            },
+            {
+              "kind": "missing",
+              "question": "What's this brief missing?",
+              "brief": "Add a CSV export to orders.ts. It should include tax. Don't change the table.",
+              "options": ["spot", "done", "limits", "why"],
+              "answer": "why",
+              "explain": "Who needs the export, and for what? That's where the next 'also' hides."
+            }
+          ]
+        },
+        {
+          "id": "say-exactly-what-you-mean",
+          "title": "Say exactly what you mean",
+          "reviewed": "2026-10",
+          "teaches": { "steer": "clarified" },
+          "why": "Words like 'it', 'the header' or 'clean it up' can mean three things. Pick one, and you won't need 'I meant'.",
+          "before": {
+            "text": "Update the header.",
+            "signals": []
+          },
+          "after": {
+            "text": "Update the page header in header.tsx, not the email header. Change the title to 'Spring sale' and leave the logo alone.",
+            "signals": ["spot", "limits"]
+          },
+          "template": "In <exact place>, change <exact thing> to <exact result>. Not <the thing it could be mixed up with>.",
+          "tips": [
+            "Swap 'it' and 'this' for the real name.",
+            "If two things share a name, say which one.",
+            "Say 'not the X' when there's an easy wrong guess."
+          ],
+          "quiz": [
+            {
+              "kind": "sharper",
+              "question": "Which brief is sharper?",
+              "options": ["Make the button bigger.", "Make the Save button on the settings page 48px tall. Leave the Cancel button alone."],
+              "answer": 1,
+              "explain": "Which button, how big, and which one to skip. Nothing left to guess."
+            }
+          ]
+        },
+        {
+          "id": "plan-big-tasks-first",
+          "title": "Plan big tasks first",
+          "reviewed": "2026-10",
+          "teaches": { "steer": "redo" },
+          "why": "A plan you can read in a minute catches a wrong turn before hours of work get thrown away.",
+          "before": {
+            "text": "Move the app from the old payment system to the new one.",
+            "signals": []
+          },
+          "after": {
+            "text": "We need to move checkout to the new payment system. Before any code, give me the plan as a list. Don't start until I say go.",
+            "signals": ["done", "limits", "why"]
+          },
+          "template": "<the big task>. Before you start, give me the plan as a list. Wait for my OK before you change anything.",
+          "tips": [
+            "Ask for a plan when the work touches many files or will take a while.",
+            "Read the plan. Fix it there, while changes are cheap.",
+            "Say 'wait for my OK' so the work doesn't start early."
+          ],
+          "quiz": [
+            {
+              "kind": "sharper",
+              "question": "Which brief is sharper?",
+              "options": [
+                "Rewrite the billing module.",
+                "Rewrite the billing module. First give me the plan as a list, and don't change any files until I approve it."
+              ],
+              "answer": 1,
+              "explain": "You get to check the route before anyone starts driving."
+            },
+            {
+              "kind": "missing",
+              "question": "What's this brief missing?",
+              "brief": "Split utils.ts into smaller files. Give me the plan as a list first. Don't move anything yet.",
+              "options": ["spot", "done", "limits", "why"],
+              "answer": "why",
+              "explain": "Smaller for what? Faster builds and easier reviews lead to different plans."
+            }
+          ]
+        },
+        {
+          "id": "let-it-ask-first",
+          "title": "Let it ask first",
+          "reviewed": "2026-10",
+          "teaches": { "steer": "clarified" },
+          "why": "When the task is fuzzy, even to you, a few questions up front beat a wrong first draft.",
+          "before": {
+            "text": "Write a welcome email for new customers.",
+            "signals": []
+          },
+          "after": {
+            "text": "Write a welcome email for new customers. The goal is a second order from each of them. Keep it under 120 words. If anything is unclear, ask me questions before you start.",
+            "signals": ["done", "limits", "why"]
+          },
+          "template": "<the task>. The goal is <the goal>. If anything is unclear, ask me questions before you start.",
+          "tips": [
+            "Use it when you can't picture the result yet.",
+            "Answer the questions, then let the work start.",
+            "Ask for a few questions at a time, not twenty."
+          ],
+          "quiz": [
+            {
+              "kind": "sharper",
+              "question": "Which brief is sharper?",
+              "options": [
+                "Plan the offsite for my team of 12. Ask me questions first if anything is unclear. Don't book anything yet.",
+                "Plan the team offsite."
+              ],
+              "answer": 0,
+              "explain": "It gives the who, a safe limit, and room to ask before guessing."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "catch",
+      "title": "Catch more",
+      "blurb": "Check the work before you trust it.",
+      "lessons": [
+        {
+          "id": "ask-for-proof",
+          "title": "Ask for proof",
+          "reviewed": "2026-10",
+          "teaches": { "catch": true },
+          "why": "A confident answer isn't a checked one. Asking where it came from takes ten seconds.",
+          "before": {
+            "text": "Update the refund flow to use the retry helper.",
+            "signals": []
+          },
+          "after": {
+            "text": "Update the refund flow in refunds.ts to use retryPayment. Before you change it, show me where retryPayment is defined. Don't write a new helper.",
+            "signals": ["spot", "limits"]
+          },
+          "template": "<the task>. Before you rely on <the name or fact>, show me where it's defined.",
+          "tips": [
+            "Ask 'where is that defined?' for any name you don't recognize.",
+            "Ask for the source: the file, the line, the page of the doc.",
+            "If it can't point to it, treat it as a guess."
+          ],
+          "quiz": [
+            {
+              "kind": "pick",
+              "question": "The answer uses a `maxRetries` setting you've never seen. What's your next step?",
+              "options": ["Use it. It sounds right.", "Ask where it's defined, then look at that spot.", "Ask it to try harder."],
+              "answer": 1,
+              "explain": "A name you can't find is a guess until you see it in the code."
+            },
+            {
+              "kind": "sharper",
+              "question": "Which brief is sharper?",
+              "options": [
+                "Use the parseCsv helper for the import.",
+                "Use the parseCsv helper for the import. First show me the file where parseCsv is defined, and don't write a new one."
+              ],
+              "answer": 1,
+              "explain": "It asks to see the helper before trusting that it exists."
+            }
+          ]
+        },
+        {
+          "id": "run-it-before-you-trust-it",
+          "title": "Run it before you trust it",
+          "reviewed": "2026-10",
+          "teaches": { "catch": true },
+          "why": "Work that looks right and work that works are not the same thing. Running it is how you know.",
+          "before": {
+            "text": "Fix the date bug.",
+            "signals": []
+          },
+          "after": {
+            "text": "Fix the off-by-one date bug in formatDate. Add a test for the last day of the month, and run it before you say it's fixed.",
+            "signals": ["spot", "done"]
+          },
+          "template": "<the task>. Add a test for <the case that broke>. Run it and show me the result.",
+          "tips": [
+            "Ask for a test that fails before the fix and passes after.",
+            "Try it yourself: click the button, open the file, read the email out loud.",
+            "'Should work' is not the same as 'works'."
+          ],
+          "quiz": [
+            {
+              "kind": "pick",
+              "question": "You're told the bug is fixed. What do you do first?",
+              "options": ["Ship it.", "Run the tests and try the broken case yourself.", "Ask if it's sure."],
+              "answer": 1,
+              "explain": "Being sure isn't proof. A passing test and your own try are."
+            },
+            {
+              "kind": "sharper",
+              "question": "Which brief is sharper?",
+              "options": ["Fix the login timeout.", "Fix the login timeout in session.ts. Make sure the tests pass, and add one for an expired session."],
+              "answer": 1,
+              "explain": "It says where, and how you'll both know it works."
+            }
+          ]
+        },
+        {
+          "id": "watch-for-confident-guesses",
+          "title": "Watch for confident guesses",
+          "reviewed": "2026-10",
+          "teaches": { "catch": true },
+          "why": "A wrong answer can sound just as sure as a right one. Learn the tells.",
+          "before": {
+            "text": "Make the upload faster.",
+            "signals": []
+          },
+          "after": {
+            "text": "Make the upload in upload.ts faster. Only use code that's already in the project, and show me the before and after times.",
+            "signals": ["spot", "limits"]
+          },
+          "template": "<the task>. Only use <functions or sources> that already exist. Show me <the test, output or source> for each claim.",
+          "tips": [
+            "Watch for names you've never seen. Search for them.",
+            "'Fixed!' with no test or output is a claim, not proof.",
+            "Be extra careful with exact numbers, dates and quotes. Check them at the source."
+          ],
+          "quiz": [
+            {
+              "kind": "pick",
+              "question": "Which of these is the biggest red flag?",
+              "options": ["It calls a function you can't find anywhere.", "It asks you a question first.", "It shows the test output."],
+              "answer": 0,
+              "explain": "A made-up name looks just like a real one. Search before you trust it."
+            },
+            {
+              "kind": "pick",
+              "question": "The reply says 'Fixed, it works now' and shows nothing else. What's the best answer?",
+              "options": ["Great, thanks!", "Show me the test run or the output.", "Start over."],
+              "answer": 1,
+              "explain": "Ask for the evidence. If it's real, it takes a second to show."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

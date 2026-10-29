@@ -130,12 +130,17 @@ function drawFooter(g: CanvasRenderingContext2D, text: string, w: number, y: num
   g.textAlign = "left";
 }
 
-type ScoreCard = Pick<Stats, "verdict" | "catches_last_7d" | "pct_real_chats_with_catch" | "catches" | "humbled">;
+type ScoreCard = Pick<Stats, "overall" | "catches_last_7d" | "catches" | "humbled">;
 
 const SCORE_FONTS = ["800 64px 'Bricolage Grotesque Variable'", "400 200px 'Gochi Hand'", "500 24px 'Instrument Sans'", "600 18px 'JetBrains Mono'"];
 const heading = (size: number) => `800 ${size}px 'Bricolage Grotesque Variable'`;
-const timesLine = (s: ScoreCard) => `I caught it ${s.catches_last_7d} ${s.catches_last_7d === 1 ? "time" : "times"} this week.`;
-const pctLine = (s: ScoreCard) => (s.pct_real_chats_with_catch == null ? null : `It slipped up in ${Math.round(s.pct_real_chats_with_catch)}% of my chats.`);
+/** "Score 86. 83% of my tasks landed." or, before a score, this week's catches. */
+const timesLine = (s: ScoreCard) =>
+  s.overall.score == null
+    ? `I caught it ${s.catches_last_7d} ${s.catches_last_7d === 1 ? "time" : "times"} this week.`
+    : `Score ${s.overall.score}. ${s.overall.direction}% of my tasks landed.`;
+const pctLine = (s: ScoreCard) =>
+  s.overall.score == null ? null : `I caught it ${s.overall.catches} ${s.overall.catches === 1 ? "time" : "times"} to its ${s.overall.humbled} in 28 days.`;
 
 /** Hand-written `text`, rotated like a red-pen mark, baseline at (x, y). */
 function drawMark(g: CanvasRenderingContext2D, text: string, color: string, x: number, y: number, size: number) {
@@ -150,7 +155,7 @@ function drawMark(g: CanvasRenderingContext2D, text: string, color: string, x: n
 
 /** The big hand-written verdict. */
 function drawVerdict(g: CanvasRenderingContext2D, s: ScoreCard, x: number, y: number, size: number) {
-  const no = s.verdict === "no";
+  const no = s.overall.verdict === "no";
   drawMark(g, no ? "No." : "Hmm.", no ? CARD_THEME.pen : CARD_THEME.muted, x, y, size);
 }
 

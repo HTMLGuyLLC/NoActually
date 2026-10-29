@@ -1,14 +1,17 @@
 // Quick glance: the small window under the menu bar icon.
 import type { Meta, Stats } from "../api";
 import { type Html, html, num } from "../html";
-import { briefTier, landedPct, tierName } from "../meta";
+import { briefTier, landedPct, tierName, tierOf } from "../meta";
 import { wordmarkView } from "./chrome";
 
 export function glanceView(s: Stats, meta: Meta): Html {
-  const no = s.verdict === "no";
-  const progress = s.next_tier ? `${s.next_tier[1]} more for ${tierName(meta, s.next_tier[0])}` : "Top tier";
+  const o = s.overall;
+  const no = o.verdict === "no";
+  const next = tierOf(meta, o.next_tier);
+  const progress =
+    o.score == null ? `${o.to_rank} more ${o.to_rank === 1 ? "task" : "tasks"} to get a score` : next ? `${next.name} at ${next.floor}` : "Top tier";
   return html`<div class="glance">
-    <div class="g-top">${wordmarkView("brand small")}<span class="tier-label"><span>Tier</span>${tierName(meta, s.tier)}</span></div>
+    <div class="g-top">${wordmarkView("brand small")}${o.tier ? html`<span class="tier-label"><span>Score ${o.score}</span>${tierName(meta, o.tier)}</span>` : ""}</div>
     <div class="g-q">Could AI replace you?</div>
     <div class="g-row"><div class="no sm${no ? "" : " maybe"}">${no ? "No." : "Hmm."}</div>
       <div class="because">You caught it <b>${s.catches_last_7d}×</b> this week.</div></div>

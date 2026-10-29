@@ -11,13 +11,17 @@ const MARK = raw(
 
 export const wordmarkView = (cls = "brand"): Html => html`<span class="${cls}">${MARK}<span>No, Actually...</span></span>`;
 
-const TAB_TITLES: Record<Tab, string> = { score: "Scorecard", sources: "Sources", settings: "Settings" };
+const TAB_TITLES: Record<Tab, string> = { score: "Scorecard", improve: "Improve", learn: "Learn", sources: "Sources", settings: "Settings" };
 
 /** Small line icons beside each tab's name (decoration: the name is the label). */
 const svg = (d: string) => raw(`<svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`);
 const TAB_ICONS: Record<Tab, ReturnType<typeof raw>> = {
   // Bar chart.
   score: svg("M4 20V10M10 20V4M16 20v-7M22 20H2"),
+  // A line climbing to a target.
+  improve: svg("M3 17l6-6 4 4 8-8M15 7h6v6"),
+  // An open book.
+  learn: svg("M2 5h6a4 4 0 0 1 4 4v11a3 3 0 0 0-3-3H2zM22 5h-6a4 4 0 0 0-4 4v11a3 3 0 0 1 3-3h7z"),
   // Folders stacked: where the history comes from.
   sources: svg("M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"),
   // Cog.
@@ -37,7 +41,7 @@ export function statusPillView(status: SyncStatus, demo: boolean): Html {
 export function headerView(tab: Tab, status: SyncStatus, demo: boolean): Html {
   const tabs = TABS.map(
     (t) =>
-      html`<button class="tab${tab === t ? " on" : ""}" data-action="tab" data-id="${t}"${tab === t ? raw(' aria-current="page"') : ""}>${TAB_ICONS[t]}${TAB_TITLES[t]}</button>`,
+      html`<button class="tab${tab === t ? " on" : ""}" data-action="tab" data-id="${t}" title="${TAB_TITLES[t]}"${tab === t ? raw(' aria-current="page"') : ""}>${TAB_ICONS[t]}<span class="tab-name">${TAB_TITLES[t]}</span></button>`,
   );
   // The logo goes home: the scorecard's overview.
   const home = html`<button class="home" data-action="home" title="Go to the scorecard">${wordmarkView()}<span class="sr-only">, go to the scorecard</span></button>`;

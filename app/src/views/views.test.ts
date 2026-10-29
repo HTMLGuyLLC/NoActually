@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HOSTILE, hallEntry, meta, row, source, stats } from "../test/fixtures";
+import { HOSTILE, hallEntry, meta, overall, row, source, stats } from "../test/fixtures";
 import { headerView, statusPillView } from "./chrome";
 import { emptyGlanceView, glanceView } from "./glance";
 import { chartSummary, chartView, hallView, onboardingView, scorecardView } from "./scorecard";
@@ -20,6 +20,7 @@ describe("scorecardView", () => {
     expect(m).toContain('data-id="overview" aria-current="page">Overview</button>');
     expect(m).toContain("Could ");
     expect(m).toContain("Do you make it guess?");
+    expect(m).toContain("Do you catch its mistakes?");
     expect(m).toContain('data-action="view" data-id="catches"');
     expect(m).not.toContain("Hall of fame ·");
   });
@@ -33,19 +34,27 @@ describe("scorecardView", () => {
     expect(scorecardView(stats(), { ...ctx, view: "hall" }).value).toContain('data-action="pin"');
   });
 
-  it("draws the verdict, ladder and breakdowns from Rust's data", () => {
-    const m = scorecardView(stats(), { ...ctx, view: "catches" }).value;
+  it("draws the ladder from Rust's data on the overview", () => {
+    const m = scorecardView(stats(), ctx).value;
     expect(m).toContain(">No.</div>");
-    expect(m).toContain('<li class="on" aria-current="true"><span>Irreplaceable</span><span>15+ catches/wk</span></li>');
+    expect(m).toContain('<li class="on" aria-current="true"><span>Sharp-eyed</span><span>80–89</span></li>');
+    expect(m).toContain("<span>Irreplaceable</span><span>90+</span>");
+    expect(m).not.toContain("style=");
+  });
+
+  it("draws the breakdowns from Rust's data in the catches section", () => {
+    const m = scorecardView(stats(), { ...ctx, view: "catches" }).value;
+    expect(m).toContain("Do you catch");
     expect(m).toContain("Flat-out wrong"); // category title from meta
     expect(m).toContain('data-w="100"'); // the top category's bar; width set through CSSOM
     expect(m).not.toContain("style=");
   });
 
-  it("shows Hmm. and the next tier by name when Rust says hmm", () => {
-    const m = scorecardView(stats({ verdict: "hmm", tier: "rubber_stamp", next_tier: ["coworker", 2] }), ctx).value;
+  it("shows Hmm. and the next tier by name and floor when Rust says hmm", () => {
+    const m = scorecardView(stats({ overall: overall({ verdict: "hmm", score: 60, tier: "rubber_stamp", next_tier: "coworker" }) }), ctx).value;
     expect(m).toContain("no maybe");
-    expect(m).toContain("2 more this week for Coworker");
+    expect(m).toContain(">Hmm.</div>");
+    expect(m).toContain("Coworker at 65. You&#39;re at 60.");
   });
 
   it("keeps the scrawl still when the verdict didn't change", () => {
@@ -69,6 +78,61 @@ describe("scorecardView", () => {
   });
 });
 
+describe("overview hero", () => {
+  const hero = (over: Parameters<typeof overall>[0] = {}, extra: Parameters<typeof stats>[0] = {}) =>
+    scorecardView(stats({ overall: overall(over), ...extra }), ctx).value;
+
+  it("shows the score, the tier and why, with a share button once scored", () => {
+    const m = hero();
+    expect(m).toContain("Last 28 days");
+    expect(m).toContain("Score <b>86</b>. Your tasks landed <b>83%</b> of the time, and you caught it 41 times to its 2 in 28 days.");
+    expect(m).toContain("Your tier is Sharp-eyed, score 86.");
+    expect(m).toContain("Irreplaceable at 90. You&#39;re at 86.");
+    expect(m).toContain('data-action="open-share"');
+  });
+
+  it("shows the two parts as bars with their weights from meta", () => {
+    const m = hero();
+    expect(m).toContain('aria-label="What the score is made of"');
+    expect(m).toContain("Your briefs<small");
+    expect(m).toContain("tasks that landed · 70% of the score");
+    expect(m).toContain('data-w="83"');
+    expect(m).toContain("Who corrects whom<small");
+    expect(m).toContain("how rarely it has to correct you");
+    expect(m).toContain("· 30% of the score");
+    expect(m).toContain('data-w="95"');
+    expect(hero({}, {}).split('class="part"')).toHaveLength(3);
+  });
+
+  it("says Top tier at the top of the ladder", () => {
+    expect(hero({ tier: "irreplaceable", next_tier: null, score: 93 })).toContain("Top tier. Don&#39;t let it slip.");
+  });
+
+  it("asks for more tasks, and offers nothing to share, until there is a score", () => {
+    const m = hero({ score: null, direction: null, judgment: null, tier: null, next_tier: null, verdict: "hmm", to_rank: 7 });
+    expect(m).toContain("<b>7 more tasks</b> with a follow-up to get a score");
+    expect(m).toContain("7 more tasks to get a score");
+    expect(m).toContain("Not scored yet.");
+    expect(m).toContain('data-w="0"');
+    expect(m).not.toContain('data-action="open-share"');
+    expect(m).not.toContain('aria-current="true"'); // no tier on the ladder
+  });
+
+  it("says task, not tasks, for one", () => {
+    expect(hero({ score: null, tier: null, next_tier: null, verdict: "hmm", to_rank: 1 })).toContain("<b>1 more task</b> with");
+  });
+
+  it("says why fewer catches never costs points", () => {
+    expect(hero()).toContain("3 catches in 28 days show you check its work.");
+  });
+
+  it("escapes names from meta and unknown ids", () => {
+    const bad = { ...meta, tiers: meta.tiers.map((t) => ({ ...t, name: HOSTILE })) };
+    safe(scorecardView(stats(), { ...ctx, meta: bad }).value);
+    safe(scorecardView(stats({ overall: overall({ tier: HOSTILE, next_tier: HOSTILE }) }), ctx).value);
+  });
+});
+
 describe("hallView", () => {
   it("uses Rust's category title, never the label, and the source name when no model was recorded", () => {
     const m = hallView([hallEntry({ category_title: "Made it up", label: "confirmed", model: "", source_name: "ChatGPT (export)" })]).value;
@@ -89,21 +153,23 @@ describe("hallView", () => {
 });
 
 describe("chartView", () => {
-  it("draws the top tier's floor as the line and marks weeks over it", () => {
-    const m = chartView(stats(), meta).value;
-    expect(m).toContain("irreplaceable line");
+  it("marks the peak week", () => {
+    const m = chartView(stats()).value;
     expect(m).toContain('class="bar hot"');
+    expect(m.match(/class="bar hot"/g)).toHaveLength(1);
+    expect(m).toContain('aria-label="Catches per week"');
     expect(m).toContain('aria-describedby="chart-summary"');
   });
 
   it("says when there are no weeks", () => {
-    expect(chartView(stats({ weekly: [] }), meta).value).toContain("No weeks yet.");
+    expect(chartView(stats({ weekly: [] })).value).toContain("No weeks yet.");
   });
 
   it("summarises the chart in words for screen readers", () => {
-    const t = chartSummary(stats().weekly, "Irreplaceable", 15);
-    expect(t).toMatch(/^2 weeks from .+\. Most catches: 16, the week of .+\. 1 week reached the irreplaceable line of 15\.$/);
-    expect(chartSummary([], "Irreplaceable", 15)).toBe("No weeks yet.");
+    const t = chartSummary(stats().weekly);
+    expect(t).toMatch(/^2 weeks from .+\. Most catches: 16, the week of .+\.$/);
+    expect(chartSummary(stats().weekly.slice(0, 1))).toMatch(/^1 week from /);
+    expect(chartSummary([])).toBe("No weeks yet.");
   });
 });
 
@@ -115,12 +181,20 @@ describe("onboarding and glance", () => {
     safe(m);
   });
 
-  it("shows the tier by name in the glance", () => {
-    const m = glanceView(stats({ tier: "sharp_eyed", next_tier: ["irreplaceable", 3] }), meta).value;
-    expect(m).toContain("Sharp-eyed");
-    expect(m).toContain("3 more for Irreplaceable");
+  it("shows the score and tier by name in the glance", () => {
+    const m = glanceView(stats(), meta).value;
+    expect(m).toContain("<span>Score 86</span>Sharp-eyed");
+    expect(m).toContain("Irreplaceable at 90");
     expect(m).toContain('role="status"'); // copy confirmation is announced, not the button itself
-    expect(glanceView(stats(), meta).value).toContain("Top tier");
+    expect(glanceView(stats({ overall: overall({ tier: "irreplaceable", next_tier: null }) }), meta).value).toContain("Top tier");
+  });
+
+  it("asks for more tasks in the glance until there is a score", () => {
+    const o = overall({ score: null, direction: null, judgment: null, tier: null, next_tier: null, verdict: "hmm", to_rank: 4 });
+    const m = glanceView(stats({ overall: o }), meta).value;
+    expect(m).toContain("4 more tasks to get a score");
+    expect(m).not.toContain("tier-label");
+    expect(m).toContain(">Hmm.</div>");
   });
 
   it("has an empty glance before the first catch", () => {
@@ -132,13 +206,13 @@ describe("onboarding and glance", () => {
 describe("chrome", () => {
   it("marks the current tab for assistive tech", () => {
     const m = headerView("sources", { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 }, false).value;
-    expect(m).toContain('data-id="sources" aria-current="page"');
+    expect(m).toContain('data-id="sources" title="Sources" aria-current="page"');
     expect(m.match(/aria-current/g)).toHaveLength(1);
   });
 
   it("gives every tab an icon and makes the logo a way home", () => {
     const m = headerView("settings", { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 }, false).value;
-    expect(m.match(/class="tab-icon"/g)).toHaveLength(3);
+    expect(m.match(/class="tab-icon"/g)).toHaveLength(5);
     expect(m).toContain('<button class="home" data-action="home"');
   });
 
@@ -224,6 +298,7 @@ describe("settingsView", () => {
   const base = {
     retention: { level: "snippet" as const, full_days: 30, snippet_days: 365 },
     autostart: true,
+    menuBar: true,
     update: null,
     status: { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 },
     demo: false,
@@ -237,7 +312,17 @@ describe("settingsView", () => {
     expect(m).toContain("Last checked never.");
   });
 
+  it("checks the menu-bar toggle when it's on, and leaves it clear when off", () => {
+    expect(settingsView(base).value).toContain('id="menu-bar" data-action="menu-bar" type="checkbox" checked');
+    expect(settingsView(base).value).toContain("Keep running in the menu bar");
+    const off = settingsView({ ...base, menuBar: false }).value;
+    expect(off).toContain('id="menu-bar" data-action="menu-bar" type="checkbox"/>');
+    expect(off).toContain("Opens the app when you log in.");
+  });
+
   it("disables what the demo can't do", () => {
-    expect(settingsView({ ...base, demo: true }).value).toContain('data-action="check-update" disabled');
+    const m = settingsView({ ...base, demo: true }).value;
+    expect(m).toContain('data-action="check-update" disabled');
+    expect(m).toContain('id="menu-bar" data-action="menu-bar" type="checkbox" checked disabled');
   });
 });

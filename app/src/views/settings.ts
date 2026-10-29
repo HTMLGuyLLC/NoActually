@@ -25,11 +25,11 @@ export function parseRetention(f: RetentionFields): Retention {
   return { level: f.level, full_days: days(f.fullDays, DEFAULT_FULL_DAYS), snippet_days: days(f.snippetDays, DEFAULT_SNIPPET_DAYS) };
 }
 
-export type SettingsContext = { retention: Retention; autostart: boolean; update: UpdateStatus | null; status: SyncStatus; demo: boolean };
+export type SettingsContext = { retention: Retention; autostart: boolean; menuBar: boolean; update: UpdateStatus | null; status: SyncStatus; demo: boolean };
 
 const attr = (on: boolean, name: string) => (on ? raw(` ${name}`) : "");
 
-export function settingsView({ retention: r, autostart, update, status, demo }: SettingsContext): Html {
+export function settingsView({ retention: r, autostart, menuBar, update, status, demo }: SettingsContext): Html {
   const opt = (level: Level, title: string, body: string) =>
     html`<label class="level${r.level === level ? " on" : ""}"><input type="radio" name="level" value="${level}" data-action="level"${attr(
       r.level === level,
@@ -39,8 +39,12 @@ export function settingsView({ retention: r, autostart, update, status, demo }: 
   return html`
     <section><div class="head"><h2>General</h2></div>
       <div class="settings-row">
+        <label class="toggle"><input id="menu-bar" data-action="menu-bar" type="checkbox"${attr(menuBar, "checked")}${off}/><span>Keep running in the menu bar</span></label>
+        <span class="muted small">On: closing the window keeps it counting from the menu bar (the system tray on Windows and Linux). Off: it's an ordinary app that only counts while it's open, and quits when you close it.</span>
+      </div>
+      <div class="settings-row">
         <label class="toggle"><input id="autostart" data-action="autostart" type="checkbox"${attr(autostart, "checked")}${off}/><span>Launch at login</span></label>
-        <span class="muted small">Starts quietly in the menu bar so new catches are counted.</span>
+        <span class="muted small">${menuBar ? "Starts quietly in the menu bar so new catches are counted." : "Opens the app when you log in."}</span>
       </div>
       <div class="settings-row">
         <label class="toggle"><input id="auto-update" data-action="auto-update" type="checkbox"${attr(!!update?.auto, "checked")}${off}/><span>Check for updates automatically</span></label>

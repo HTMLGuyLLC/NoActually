@@ -6,8 +6,8 @@
 
 <p align="center">
   <b>A scoreboard for you vs. your AI.</b><br>
-  Every time you catch it being wrong, you score. Every task that lands without a redo, your briefs level up.<br>
-  A weekly verdict, tiers to climb, and a card worth bragging about.
+  Brief it well, catch it when it's wrong, and find out if it could really replace you.<br>
+  Tiers to climb, goals to hit, lessons to level up, and a card worth bragging about.
 </p>
 
 <p align="center">
@@ -20,19 +20,22 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot-scorecard.png" alt="The No, Actually... scorecard overview: the catch verdict and the brief verdict side by side, each with its tier, above the headline stats" width="820">
+  <img src="docs/screenshot-scorecard.png" alt="The No, Actually... scorecard overview: the overall score and tier, with how you brief it and who corrects whom below" width="820">
 </p>
 
 ---
 
 You correct your AI all day: the function that doesn't exist, the instruction it ignored, the bug that's "fixed" but still broken. And sometimes it goes sideways because the ask was vague.
 
-**No, Actually...** reads the chat history already on your computer and answers two questions every week:
+**No, Actually...** reads the chat history already on your computer and answers one big question, built from two smaller ones:
 
-| | The question | What it counts | Tiers |
+| | The question | What it measures | Tiers |
 |---|---|---|---|
-| 🧠 | **Could AI replace you?** | Times you caught it being wrong | Rubber stamp → Coworker → Sharp-eyed → **Irreplaceable** |
-| 🎯 | **Do you make it guess?** | How often your tasks landed without you adding, clarifying or starting over | Vibes only → Ticket writer → Tech lead → **Architect** |
+| 🧠 | **Could AI replace you?** | Your overall score, 0 to 100, from both questions below | Rubber stamp → Coworker → Sharp-eyed → **Irreplaceable** |
+| 🎯 | ↳ **Do you make it guess?** | How often your tasks land without you adding, clarifying or starting over | Vibes only → Ticket writer → Tech lead → **Architect** |
+| 🧐 | ↳ **Do you catch its mistakes?** | Who corrects whom: you catching it, or it catching you | You 41 · It 2 |
+
+Better prompts mean fewer mistakes to catch, and that never costs you: once you've caught it a few times (proof you check its work), more catches add nothing.
 
 > **💸 Costs nothing to run.** No AI does the judging, so there's no API key, no tokens spent and no subscription. Fixed, readable rules score your chats right on your computer: the same history always gives the same score, and nothing is uploaded.
 
@@ -40,19 +43,21 @@ You correct your AI all day: the function that doesn't exist, the instruction it
 
 1. **[Download it](https://github.com/HTMLGuyLLC/NoActually/releases/latest)** for Mac, Windows or Linux ([which file?](#download-and-install)).
 2. Open it, click **Choose sources**, and **Allow** the AI tools you want counted. Nothing is read until you do.
-3. That's it. It backfills your history, then keeps score as you work, from your menu bar (Mac) or system tray (Windows and Linux).
+3. That's it. It backfills your history, then keeps score as you work, from your menu bar (Mac) or system tray (Windows and Linux). Prefer an ordinary app that quits when you close it? Turn off **Keep running in the menu bar** in Settings.
 
 <p align="center">
-  <img src="docs/screenshot-glance.png" alt="The menu bar quick glance: this week's verdict, your catches versus the AI's, your streak and your brief tier" width="300">
+  <img src="docs/screenshot-glance.png" alt="The menu bar quick glance: the verdict, your score and tier, your catches versus the AI's, and your brief tier" width="300">
 </p>
 
 ## What you get
 
-- **A weekly verdict.** "Could Claude replace you? **No.** You caught it 17 times in the last 7 days."
+- **A verdict and a score.** "Could Claude replace you? **No.** Score 86, Sharp-eyed." Updated as you work, over the last 28 days.
 - **A brief score.** "Do you make it guess? **Sometimes.** 85% of your tasks landed." Plus what your briefs carry, where the steering went, and one tip backed by your own history.
-- **Every model, side by side.** All AI, one provider, one family, or one exact version (say, Claude Opus 5.5).
+- **Improve.** One weekly goal picked from your own numbers ("Set limits in 25% of your briefs"), streaks, trophies, personal bests, last week's recap, and charts of how you're trending.
+- **Learn.** 12 one-minute lessons in three tracks (the 5 habits, steer less, catch more), quick quizzes, and a brief checker that grades a draft as you type, with the same rules as your score.
+- **Every model, side by side.** All AI, one provider, one family, or one exact version (say, Claude Opus 5.5). The picker shows the numbers that page is about.
 - **A Hall of Fame** of your best catches, as redacted snippets. Pin the ones you want to keep forever.
-- **Tier-up popups** for your 10th catch, a new tier, or a streak.
+- **Popups** for your 10th catch, a new tier, a streak, a goal week met, or a goal done.
 - **Made to brag.** Share cards for X, LinkedIn, Bluesky, Threads, Reddit, Facebook, WhatsApp and Instagram. You always see exactly what will be posted before anything goes anywhere.
 
 ## Private and secure by design
@@ -63,7 +68,7 @@ Your AI chats can hold code, keys, client names and half-formed ideas. This app 
 |---|---|
 | 🔒 **Local only** | No accounts, no servers, no telemetry, no analytics. Fonts are bundled. The only network use is an update check against GitHub and a share link you click yourself. The update check carries no account, ID, stats or chat data (GitHub sees your IP address, as with any download), and you can turn it off. |
 | ✋ **Asks first** | Every source is off until you **Allow** it. Pause it, stop it, or **Forget** it (deletes everything it read) any time. |
-| 🔢 **Numbers, not chats** | Ordinary messages are only counted, never stored. For catches you pick **full text**, **snippet** (the default) or **category only**, and kept text steps down on a timer you set. Briefs store counts only, never words. |
+| 🔢 **Numbers, not chats** | Ordinary messages are only counted, never stored. For catches you pick **full text**, **snippet** (the default) or **category only**, and kept text steps down on a timer you set. Briefs, goals and lessons store numbers only, never words, and the brief checker saves nothing you type. |
 | ✂️ **Redacted** | Keys, emails, links, home paths and long numbers are stripped from any text kept. It's pattern-based, so it can miss things: pick **category only** if that matters. |
 | ✅ **Verifiable** | MIT open source. The Mac app is signed and notarized by Apple, updates are signed, and every release ships `SHA256SUMS.txt`. |
 
@@ -90,9 +95,21 @@ Claude Code, Claude Cowork and Codex live, plus ChatGPT and Claude.ai through th
 </details>
 
 <details>
+<summary><b>Will the lessons go out of date?</b></summary>
+
+They're written not to. They teach habits that work with any collaborator, human or AI (point at it, show it, say what done is, set limits, say why), never tool tricks or magic phrases. A test fails the build if a lesson names a product, a model or a version, and the real scoring rules grade every example, so a lesson can never disagree with your score.
+</details>
+
+<details>
 <summary><b>Will it slow my computer down?</b></summary>
 
 The engine is native Rust, and the window uses your system's built-in web view instead of shipping its own browser. The first backfill reads files in parallel. After that it only reads what's new since its last checkpoint.
+</details>
+
+<details>
+<summary><b>If I brief it better, it makes fewer mistakes. Doesn't that lower my score?</b></summary>
+
+No. Catches only have to show you check its work: 3 in 28 days is full credit, and more add nothing. After that, what counts is how rarely the AI has to correct *you*, per task. Most of the score (70%) is how often your tasks land, so briefing better is the fastest way up.
 </details>
 
 <details>
@@ -131,6 +148,31 @@ Free, and it costs nothing to run. It never calls an AI, so there's no API key t
 
 ## How the scoring works
 
+### Could AI replace you? (the overall score)
+
+Over the last 28 days, once you have at least 10 tasks with a follow-up:
+
+```
+score = 70% × direction + 30% × judgment
+
+direction = % of your tasks that landed (see "How a brief is graded")
+judgment  = 100, minus 5 for each 1% of your tasks where the AI had to correct you
+            (counted against at least 30 tasks, so a quiet month isn't wiped out),
+            scaled down until you've caught it 3 times
+```
+
+| Tier | Score | Answer |
+|---|---|---|
+| Irreplaceable | 90+ | No. |
+| Sharp-eyed | 80–89 | No. |
+| Coworker | 65–79 | No. |
+| Rubber stamp | under 65 | Hmm. |
+
+A few things this gets right on purpose:
+- **Briefing better never costs you.** Past 3 catches, more catches add nothing, so an AI that makes fewer mistakes because you briefed it well doesn't lower your score.
+- **No catches at all caps you.** Landing everything but never catching anything is a Coworker (70) at best: there's no sign you check its work.
+- **Being corrected counts, per task.** If the AI keeps catching *you*, judgment drops. It's measured per task, never against your catches, so it doesn't depend on how often the AI is wrong.
+
 ### How a catch is counted
 
 | Label | Rule |
@@ -140,7 +182,7 @@ Free, and it costs nothing to run. It never calls an AI, so there's no API key t
 | **Claimed** | Your message opens with "no, that…", "still not working", "you missed"… (not when you're answering its question) |
 | **Humbled** | The AI corrects *you* ("Actually…", "Not quite") |
 
-Adding context ("also", "fyi", "I forgot to mention") never counts against the AI. Each catch is charged to the model that wrote the reply you corrected. The weekly tier comes from catches in the last 7 days: Rubber stamp 0–2, Coworker 3–6, Sharp-eyed 7–14, Irreplaceable 15+.
+Adding context ("also", "fyi", "I forgot to mention") never counts against the AI. Each catch is charged to the model that wrote the reply you corrected.
 
 ### How a brief is graded
 
@@ -158,6 +200,13 @@ Adding context ("also", "fyi", "I forgot to mention") never counts against the A
 
 The tip names the thing your briefs carry least. It only quotes "briefs that do landed X% vs Y%" when your own history shows a real gap.
 
+### How goals work
+
+- **One goal at a time**, across all AI: a habit ("set limits in 25% of your briefs"), a ceiling on one kind of steering ("keep 'you added more' to 15% of tasks"), or a tier to reach.
+- **Suggested from your numbers.** A habit goal asks for 15 points more than your last 8 weeks, capped at 80%, so it's a stretch, not a wall.
+- **Weeks run Monday to Sunday**, local time, counting only tasks from the day you set the goal. A week needs 5 briefs to count; quieter weeks pause the goal instead of breaking your streak.
+- **Met 4 weeks, it's done**, and it goes on your trophy shelf. Finished weeks are frozen, so a rules update or an import can't take back a week you earned.
+
 ### Where the thresholds come from
 
 There's no public benchmark for weekly per-person scores, so every threshold was checked three ways:
@@ -171,6 +220,7 @@ What that showed:
 - The catch rate agrees across sources: 1 in 47 messages for the author, 1 in 41 in WildChat.
 - Public chats are short and almost never steer, so the brief floors come from one heavy user, whose typical month landed 86% (Tech lead). Expect them to move as more people's numbers exist.
 - Longer briefs didn't steer less. Bigger tasks get both longer briefs and more back-and-forth, which is why the tier scores outcomes, not length.
+- The overall score puts the author's typical month at 86 (Sharp-eyed): 83% of 150 tasks landed, 41 catches, and the AI corrected them twice.
 
 ## Supported tools
 
@@ -230,18 +280,19 @@ cargo run --release -p noactually-cli -- sources              # what it can read
 cargo run --release -p noactually-cli -- allow claude-code
 cargo run --release -p noactually-cli -- sync
 cargo run --release -p noactually-cli -- stats --family "Claude Opus"
+cargo run --release -p noactually-cli -- check "Fix the crash in checkout.ts. Done when the tests pass."
 ```
 
-`stats` prints both scores. Set `NOACTUALLY_DB=/path/to/test.db` to use a different database than your real one. Every command is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#command-line).
+`stats` prints the overall score and both halves. `check "<brief>"` grades a draft brief, like the app's checker. Set `NOACTUALLY_DB=/path/to/test.db` to use a different database than your real one. Every command is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#command-line).
 
 ### How it's built
 
 ```
-crates/engine    catch rules, brief grading, model names, redaction: pure Rust, no I/O, WASM-ready
+crates/engine    catch rules, brief grading, the overall score, model names, redaction: pure Rust, no I/O, WASM-ready
 crates/sources   one adapter per AI tool (Claude Code, Codex, exports…)
-crates/store     SQLite: consent, checkpoints, daily counts, tasks, retention, rules versioning
+crates/store     SQLite: consent, checkpoints, daily counts, tasks, goals, retention, rules versioning
 crates/cli       the `noactually` command
-app/             Tauri 2 desktop app: menu bar, scorecard window, notifications
+app/             Tauri 2 desktop app: menu bar, scorecard, Improve and Learn, notifications
 ```
 
 - **Crash-safe checkpoints.** A turn is only counted once its reply exists, and each file's writes commit in a single transaction.

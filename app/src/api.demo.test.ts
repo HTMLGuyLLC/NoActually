@@ -1,18 +1,19 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import shipped from "../public/demo.json";
 import { demoCall, demoStats, isDemoData, judge } from "./api.demo";
-import { hallEntry, meta, row, stats } from "./test/fixtures";
+import { briefs, hallEntry, meta, progress, row, stats } from "./test/fixtures";
 
 const base = stats({
   catches: 100,
   catches_last_7d: 20,
   messages: 400,
-  models: [row("Anthropic", "Claude Opus", "5", 75, 300), row("OpenAI", "GPT Astra", "6", 25, 100)],
+  models: [row("Anthropic", "Claude Opus", "5", 75, 300, 200), row("OpenAI", "GPT Astra", "6", 25, 100)],
+  briefs: briefs({ continued: 110, tasks_last_28d: 40, landed_last_28d: 38 }),
   categories: { just_wrong: 8, made_it_up: 1 },
   weekly: [{ week: "2026-10-19", messages: 40, catches: 12 }],
   hall_of_fame: [hallEntry({ id: 1, model: "Claude Opus 5" }), hallEntry({ id: 2, model: "GPT Astra 6" })],
 });
-const data = { meta, stats: base };
+const data = { meta, stats: base, progress: progress() };
 
 describe("demoStats", () => {
   it("returns the sample as is with no filter", () => {
@@ -31,9 +32,18 @@ describe("demoStats", () => {
     expect(s.hall_of_fame.map((h) => h.id)).toEqual([2]);
   });
 
-  it("recomputes the tier and verdict the way Rust would for the narrowed count", () => {
+  it("scores the narrowed window the way Rust would", () => {
+    // Opus holds 100 of the 110 tasks with a follow-up, so 36 of the window's 40 and 35 of its 38 landed.
+    const s = demoStats(data, { provider: "Anthropic" });
+    expect(s.briefs).toMatchObject({ tasks: 200, continued: 100, landed: 80, tasks_last_28d: 36, landed_last_28d: 35 });
+    expect(s.overall).toEqual(judge(meta, { continued: 36, landed: 35, catches: 31, humbled: 2 }));
+    // 2 corrections on 36 tasks (5.6%) cost 28 judgment points: Sharp-eyed, not Irreplaceable.
+    expect(s.overall).toMatchObject({ score: 89, judgment: 72, tier: "sharp_eyed", verdict: "no", next_tier: "irreplaceable" });
+  });
+
+  it("gives no score when the narrowed window is too thin, and says how many tasks are missing", () => {
     const s = demoStats(data, { provider: "OpenAI" });
-    expect(s).toMatchObject({ tier: "coworker", next_tier: ["sharp_eyed", 2], verdict: "no" });
+    expect(s.overall).toMatchObject({ score: null, tier: null, verdict: "hmm", to_rank: 6 });
   });
 
   it("matches on family and version too", () => {
@@ -43,10 +53,74 @@ describe("demoStats", () => {
 });
 
 describe("judge", () => {
-  it("follows the floors from meta", () => {
-    expect(judge(meta, 0)).toEqual({ tier: "rubber_stamp", next_tier: ["coworker", 3], verdict: "hmm" });
-    expect(judge(meta, 3)).toMatchObject({ tier: "coworker", verdict: "no" });
-    expect(judge(meta, 15)).toEqual({ tier: "irreplaceable", next_tier: null, verdict: "no" });
+  const w = (continued: number, landed: number, catches: number, humbled: number) => ({ continued, landed, catches, humbled });
+
+  it("matches the Rust score for the author's month", () => {
+    // engine/src/tier.rs: 125 of 150 landed, 41 catches to 2.
+    expect(judge(meta, w(150, 125, 41, 2))).toEqual({
+      score: 86,
+      direction: 83,
+      judgment: 93,
+      tier: "sharp_eyed",
+      next_tier: "irreplaceable",
+      verdict: "no",
+      catches: 41,
+      humbled: 2,
+      to_rank: 0,
+    });
+  });
+
+  it("matches the other Rust cases", () => {
+    expect(judge(meta, w(100, 92, 10, 0))).toMatchObject({ tier: "irreplaceable", next_tier: null });
+    // Landing everything but never catching anything: no proof you check its work.
+    expect(judge(meta, w(50, 50, 0, 0))).toMatchObject({ judgment: 0, score: 70, tier: "coworker" });
+    // The AI keeps correcting you: on 18% of tasks, 10 points are left.
+    expect(judge(meta, w(50, 40, 3, 9)).judgment).toBe(10);
+    expect(judge(meta, w(50, 40, 3, 30)).judgment).toBe(0);
+    // More landed than continued is clamped.
+    expect(judge(meta, w(10, 99, 3, 0)).direction).toBe(100);
+  });
+
+  it("gives nulls and the tasks still needed below min_briefs", () => {
+    expect(judge(meta, w(meta.min_briefs - 1, 9, 50, 0))).toEqual({
+      score: null,
+      direction: null,
+      judgment: null,
+      tier: null,
+      next_tier: null,
+      verdict: "hmm",
+      catches: 50,
+      humbled: 0,
+      to_rank: 1,
+    });
+    expect(judge(meta, w(0, 0, 0, 0)).to_rank).toBe(meta.min_briefs);
+    expect(judge(meta, w(meta.min_briefs, 0, 0, 0)).score).toBe(0);
+  });
+
+  it("scores the same with fewer catches once past the proof", () => {
+    const many = judge(meta, w(100, 85, 40, 0));
+    const few = judge(meta, w(100, 85, meta.catch_proof, 0));
+    expect(few.score).toBe(many.score);
+    // Even when it has corrected you: judgment never compares catches with corrections.
+    for (const humbled of [1, 2, 5]) expect(judge(meta, w(100, 85, meta.catch_proof, humbled)).score).toBe(judge(meta, w(100, 85, 40, humbled)).score);
+    const one = judge(meta, w(100, 85, 1, 0)).score ?? -1;
+    const two = judge(meta, w(100, 85, 2, 0)).score ?? -1;
+    expect(one).toBeLessThan(two);
+    expect(two).toBeLessThan(few.score ?? -1);
+  });
+
+  it("never lets landing more cost points", () => {
+    let last = -1;
+    for (let landed = 0; landed <= 100; landed++) {
+      const score = judge(meta, w(100, landed, 5, 1)).score ?? -1;
+      expect(score).toBeGreaterThanOrEqual(last);
+      last = score;
+    }
+  });
+
+  it("says hmm below Coworker and no from it up", () => {
+    expect(judge(meta, w(50, 40, 3, 9)).verdict).toBe("hmm"); // score 63
+    expect(judge(meta, w(50, 50, 0, 0)).verdict).toBe("no"); // score 70
   });
 });
 
@@ -56,12 +130,14 @@ describe("isDemoData", () => {
     if (!isDemoData(shipped)) return;
     // Every hall entry carries the display strings Rust now sends.
     for (const h of shipped.stats.hall_of_fame) expect(h.category_title && h.source_name).toBeTruthy();
-    expect(shipped.meta.tiers.map((t) => t.id)).toContain(shipped.stats.tier);
+    expect(shipped.meta.tiers.map((t) => t.id)).toContain(shipped.stats.overall.tier);
   });
 
-  it("rejects the old shape (bare stats, tier names, no verdict)", () => {
+  it("rejects the old shape (bare stats, no overall, no progress)", () => {
     expect(isDemoData(base)).toBe(false);
-    expect(isDemoData({ meta, stats: { ...base, verdict: undefined } })).toBe(false);
+    expect(isDemoData({ meta, stats: base })).toBe(false); // no progress
+    expect(isDemoData({ ...data, stats: { ...base, overall: undefined } })).toBe(false);
+    expect(isDemoData({ ...data, stats: { ...base, overall: { ...base.overall, verdict: "maybe" } } })).toBe(false);
     expect(isDemoData(null)).toBe(false);
   });
 });
@@ -79,5 +155,44 @@ describe("demoCall", () => {
     expect((await demoCall("list_sources", undefined)).length).toBeGreaterThan(0);
     expect((await demoCall("sync_status", undefined)).syncing).toBe(false);
     vi.unstubAllGlobals();
+  });
+
+  describe("learn and improve", () => {
+    beforeEach(() => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({ json: async () => data })),
+      );
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    it("answers progress, and shows the goal set during the visit", async () => {
+      expect((await demoCall("progress", { filter: {} })).goal).toBeNull();
+      const goal = await demoCall("set_goal", { kind: { kind: "habit", signal: "why" }, target: 40 });
+      expect(goal).toMatchObject({ kind: "habit", signal: "why", target: 40 });
+      expect((await demoCall("progress", { filter: {} })).goal).toMatchObject({ goal, weeks: [], met: 0, done: false, needed: 4 });
+      await demoCall("set_goal", { kind: { kind: "tier", tier: "coworker" }, target: 0 });
+      expect((await demoCall("progress", { filter: {} })).goal?.needed).toBe(0);
+      expect(await demoCall("clear_goal", undefined)).toBeNull();
+      expect((await demoCall("progress", { filter: {} })).goal).toBeNull();
+    });
+
+    it("can't grade a draft in the browser", async () => {
+      await expect(demoCall("check_brief", { text: "hi" })).rejects.toThrow("runs in the app");
+    });
+
+    it("remembers which lessons are done for the visit, once each", async () => {
+      expect(await demoCall("learned", undefined)).toEqual([]);
+      await demoCall("set_learned", { id: "a", done: true });
+      expect(await demoCall("set_learned", { id: "b", done: true })).toEqual(["a", "b"]);
+      expect(await demoCall("set_learned", { id: "a", done: true })).toEqual(["b", "a"]);
+      expect(await demoCall("set_learned", { id: "b", done: false })).toEqual(["a"]);
+    });
+
+    it("remembers the menu bar setting", async () => {
+      expect(await demoCall("get_menu_bar", undefined)).toBe(true);
+      await demoCall("set_menu_bar", { enabled: false });
+      expect(await demoCall("get_menu_bar", undefined)).toBe(false);
+    });
   });
 });

@@ -9,17 +9,17 @@
    {
     "id": "coworker",
     "name": "Coworker",
-    "floor": 3
+    "floor": 65
    },
    {
     "id": "sharp_eyed",
     "name": "Sharp-eyed",
-    "floor": 7
+    "floor": 80
    },
    {
     "id": "irreplaceable",
     "name": "Irreplaceable",
-    "floor": 15
+    "floor": 90
    }
   ],
   "categories": [
@@ -157,7 +157,13 @@
     "id": "redo",
     "title": "You started over"
    }
-  ]
+  ],
+  "direction_weight": 70,
+  "catch_proof": 3,
+  "min_week": 5,
+  "goal_weeks": 4,
+  "humbled_cost": 5,
+  "humbled_base": 30
  },
  "stats": {
   "first_day": "2026-04-01",
@@ -172,9 +178,6 @@
    "humbled": 3
   },
   "catches_last_7d": 17,
-  "tier": "irreplaceable",
-  "next_tier": null,
-  "verdict": "no",
   "messages_per_catch": 47,
   "real_chats": 152,
   "pct_real_chats_with_catch": 37.5,
@@ -308,7 +311,10 @@
     "version": "5",
     "messages": 2214,
     "catches": 62,
-    "humbled": 1
+    "humbled": 1,
+    "tasks": 57,
+    "continued": 37,
+    "landed": 32
    },
    {
     "provider": "Anthropic",
@@ -316,7 +322,10 @@
     "version": "5.5",
     "messages": 3279,
     "catches": 39,
-    "humbled": 1
+    "humbled": 1,
+    "tasks": 85,
+    "continued": 55,
+    "landed": 48
    },
    {
     "provider": "OpenAI",
@@ -324,7 +333,10 @@
     "version": "6",
     "messages": 1353,
     "catches": 34,
-    "humbled": 0
+    "humbled": 0,
+    "tasks": 35,
+    "continued": 23,
+    "landed": 20
    },
    {
     "provider": "Anthropic",
@@ -332,7 +344,10 @@
     "version": "4.8",
     "messages": 362,
     "catches": 17,
-    "humbled": 0
+    "humbled": 0,
+    "tasks": 9,
+    "continued": 6,
+    "landed": 5
    },
    {
     "provider": "Anthropic",
@@ -340,7 +355,10 @@
     "version": "5",
     "messages": 431,
     "catches": 11,
-    "humbled": 0
+    "humbled": 0,
+    "tasks": 11,
+    "continued": 7,
+    "landed": 6
    },
    {
     "provider": "OpenAI",
@@ -348,7 +366,10 @@
     "version": "5.6",
     "messages": 75,
     "catches": 8,
-    "humbled": 0
+    "humbled": 0,
+    "tasks": 2,
+    "continued": 1,
+    "landed": 1
    },
    {
     "provider": "Anthropic",
@@ -356,7 +377,10 @@
     "version": "5",
     "messages": 157,
     "catches": 3,
-    "humbled": 1
+    "humbled": 1,
+    "tasks": 4,
+    "continued": 3,
+    "landed": 2
    },
    {
     "provider": "Anthropic",
@@ -364,7 +388,10 @@
     "version": "5.1",
     "messages": 293,
     "catches": 1,
-    "humbled": 0
+    "humbled": 0,
+    "tasks": 8,
+    "continued": 5,
+    "landed": 4
    },
    {
     "provider": "OpenAI",
@@ -372,7 +399,10 @@
     "version": "6.1",
     "messages": 48,
     "catches": 1,
-    "humbled": 0
+    "humbled": 0,
+    "tasks": 1,
+    "continued": 1,
+    "landed": 1
    },
    {
     "provider": "OpenAI",
@@ -380,7 +410,10 @@
     "version": "6",
     "messages": 35,
     "catches": 1,
-    "humbled": 0
+    "humbled": 0,
+    "tasks": 1,
+    "continued": 1,
+    "landed": 1
    },
    {
     "provider": "No model recorded",
@@ -388,7 +421,10 @@
     "version": "",
     "messages": 18,
     "catches": 0,
-    "humbled": 0
+    "humbled": 0,
+    "tasks": 0,
+    "continued": 0,
+    "landed": 0
    },
    {
     "provider": "OpenAI",
@@ -396,7 +432,10 @@
     "version": "5.6",
     "messages": 7,
     "catches": 0,
-    "humbled": 0
+    "humbled": 0,
+    "tasks": 0,
+    "continued": 0,
+    "landed": 0
    },
    {
     "provider": "Anthropic",
@@ -404,7 +443,10 @@
     "version": "4.6",
     "messages": 5,
     "catches": 0,
-    "humbled": 0
+    "humbled": 0,
+    "tasks": 0,
+    "continued": 0,
+    "landed": 0
    },
    {
     "provider": "Anthropic",
@@ -412,7 +454,10 @@
     "version": "5.5",
     "messages": 5,
     "catches": 0,
-    "humbled": 0
+    "humbled": 0,
+    "tasks": 0,
+    "continued": 0,
+    "landed": 0
    }
   ],
   "hall_of_fame": [
@@ -504,6 +549,1032 @@
      82.7
     ]
    }
+  },
+  "overall": {
+   "score": 86,
+   "direction": 85,
+   "judgment": 88,
+   "tier": "sharp_eyed",
+   "next_tier": "irreplaceable",
+   "verdict": "no",
+   "catches": 52,
+   "humbled": 1,
+   "to_rank": 0
+  }
+ },
+ "progress": {
+  "weeks": [
+   {
+    "week": "2026-05-04",
+    "messages": 99,
+    "catches": 12,
+    "humbled": 1,
+    "tasks": 11,
+    "continued": 7,
+    "landed": 5,
+    "signals": {
+     "spot": 6,
+     "proof": 5,
+     "done": 3,
+     "limits": 0,
+     "why": 2
+    },
+    "grades": {
+     "thin": 6,
+     "solid": 4,
+     "sharp": 1
+    },
+    "steering": {
+     "ai_wrong": 1,
+     "added": 3,
+     "clarified": 2,
+     "redo": 0
+    },
+    "steered": {
+     "ai_wrong": 1,
+     "added": 3,
+     "clarified": 2,
+     "redo": 0
+    }
+   },
+   {
+    "week": "2026-05-11",
+    "messages": 81,
+    "catches": 4,
+    "humbled": 0,
+    "tasks": 9,
+    "continued": 6,
+    "landed": 4,
+    "signals": {
+     "spot": 5,
+     "proof": 4,
+     "done": 2,
+     "limits": 1,
+     "why": 2
+    },
+    "grades": {
+     "thin": 5,
+     "solid": 3,
+     "sharp": 1
+    },
+    "steering": {
+     "ai_wrong": 2,
+     "added": 3,
+     "clarified": 0,
+     "redo": 0
+    },
+    "steered": {
+     "ai_wrong": 2,
+     "added": 3,
+     "clarified": 0,
+     "redo": 0
+    }
+   },
+   {
+    "week": "2026-05-18",
+    "messages": 72,
+    "catches": 7,
+    "humbled": 0,
+    "tasks": 8,
+    "continued": 5,
+    "landed": 4,
+    "signals": {
+     "spot": 5,
+     "proof": 3,
+     "done": 2,
+     "limits": 1,
+     "why": 2
+    },
+    "grades": {
+     "thin": 4,
+     "solid": 3,
+     "sharp": 1
+    },
+    "steering": {
+     "ai_wrong": 1,
+     "added": 2,
+     "clarified": 2,
+     "redo": 0
+    },
+    "steered": {
+     "ai_wrong": 1,
+     "added": 2,
+     "clarified": 2,
+     "redo": 0
+    }
+   },
+   {
+    "week": "2026-05-25",
+    "messages": 108,
+    "catches": 8,
+    "humbled": 0,
+    "tasks": 12,
+    "continued": 8,
+    "landed": 6,
+    "signals": {
+     "spot": 6,
+     "proof": 5,
+     "done": 3,
+     "limits": 1,
+     "why": 3
+    },
+    "grades": {
+     "thin": 6,
+     "solid": 4,
+     "sharp": 2
+    },
+    "steering": {
+     "ai_wrong": 3,
+     "added": 3,
+     "clarified": 2,
+     "redo": 1
+    },
+    "steered": {
+     "ai_wrong": 3,
+     "added": 3,
+     "clarified": 2,
+     "redo": 1
+    }
+   },
+   {
+    "week": "2026-06-01",
+    "messages": 99,
+    "catches": 12,
+    "humbled": 0,
+    "tasks": 11,
+    "continued": 7,
+    "landed": 5,
+    "signals": {
+     "spot": 7,
+     "proof": 4,
+     "done": 4,
+     "limits": 1,
+     "why": 3
+    },
+    "grades": {
+     "thin": 5,
+     "solid": 4,
+     "sharp": 2
+    },
+    "steering": {
+     "ai_wrong": 1,
+     "added": 2,
+     "clarified": 2,
+     "redo": 0
+    },
+    "steered": {
+     "ai_wrong": 1,
+     "added": 2,
+     "clarified": 2,
+     "redo": 0
+    }
+   },
+   {
+    "week": "2026-06-08",
+    "messages": 126,
+    "catches": 11,
+    "humbled": 1,
+    "tasks": 14,
+    "continued": 9,
+    "landed": 7,
+    "signals": {
+     "spot": 8,
+     "proof": 6,
+     "done": 5,
+     "limits": 1,
+     "why": 4
+    },
+    "grades": {
+     "thin": 6,
+     "solid": 5,
+     "sharp": 3
+    },
+    "steering": {
+     "ai_wrong": 4,
+     "added": 2,
+     "clarified": 1,
+     "redo": 1
+    },
+    "steered": {
+     "ai_wrong": 4,
+     "added": 2,
+     "clarified": 1,
+     "redo": 1
+    }
+   },
+   {
+    "week": "2026-06-15",
+    "messages": 90,
+    "catches": 4,
+    "humbled": 0,
+    "tasks": 10,
+    "continued": 6,
+    "landed": 5,
+    "signals": {
+     "spot": 6,
+     "proof": 5,
+     "done": 3,
+     "limits": 1,
+     "why": 2
+    },
+    "grades": {
+     "thin": 4,
+     "solid": 4,
+     "sharp": 2
+    },
+    "steering": {
+     "ai_wrong": 3,
+     "added": 3,
+     "clarified": 1,
+     "redo": 1
+    },
+    "steered": {
+     "ai_wrong": 3,
+     "added": 3,
+     "clarified": 1,
+     "redo": 1
+    }
+   },
+   {
+    "week": "2026-06-22",
+    "messages": 81,
+    "catches": 10,
+    "humbled": 0,
+    "tasks": 9,
+    "continued": 6,
+    "landed": 5,
+    "signals": {
+     "spot": 6,
+     "proof": 4,
+     "done": 4,
+     "limits": 1,
+     "why": 2
+    },
+    "grades": {
+     "thin": 4,
+     "solid": 3,
+     "sharp": 2
+    },
+    "steering": {
+     "ai_wrong": 4,
+     "added": 3,
+     "clarified": 0,
+     "redo": 0
+    },
+    "steered": {
+     "ai_wrong": 4,
+     "added": 3,
+     "clarified": 0,
+     "redo": 0
+    }
+   },
+   {
+    "week": "2026-06-29",
+    "messages": 99,
+    "catches": 6,
+    "humbled": 0,
+    "tasks": 11,
+    "continued": 7,
+    "landed": 6,
+    "signals": {
+     "spot": 7,
+     "proof": 4,
+     "done": 4,
+     "limits": 1,
+     "why": 3
+    },
+    "grades": {
+     "thin": 5,
+     "solid": 4,
+     "sharp": 2
+    },
+    "steering": {
+     "ai_wrong": 1,
+     "added": 3,
+     "clarified": 0,
+     "redo": 0
+    },
+    "steered": {
+     "ai_wrong": 1,
+     "added": 3,
+     "clarified": 0,
+     "redo": 0
+    }
+   },
+   {
+    "week": "2026-07-06",
+    "messages": 72,
+    "catches": 12,
+    "humbled": 0,
+    "tasks": 8,
+    "continued": 5,
+    "landed": 4,
+    "signals": {
+     "spot": 5,
+     "proof": 4,
+     "done": 3,
+     "limits": 1,
+     "why": 3
+    },
+    "grades": {
+     "thin": 3,
+     "solid": 3,
+     "sharp": 2
+    },
+    "steering": {
+     "ai_wrong": 2,
+     "added": 2,
+     "clarified": 2,
+     "redo": 1
+    },
+    "steered": {
+     "ai_wrong": 2,
+     "added": 2,
+     "clarified": 2,
+     "redo": 1
+    }
+   },
+   {
+    "week": "2026-07-13",
+    "messages": 126,
+    "catches": 10,
+    "humbled": 1,
+    "tasks": 14,
+    "continued": 9,
+    "landed": 7,
+    "signals": {
+     "spot": 8,
+     "proof": 6,
+     "done": 5,
+     "limits": 2,
+     "why": 3
+    },
+    "grades": {
+     "thin": 6,
+     "solid": 5,
+     "sharp": 3
+    },
+    "steering": {
+     "ai_wrong": 4,
+     "added": 3,
+     "clarified": 1,
+     "redo": 0
+    },
+    "steered": {
+     "ai_wrong": 4,
+     "added": 3,
+     "clarified": 1,
+     "redo": 0
+    }
+   },
+   {
+    "week": "2026-07-20",
+    "messages": 54,
+    "catches": 7,
+    "humbled": 0,
+    "tasks": 6,
+    "continued": 4,
+    "landed": 3,
+    "signals": {
+     "spot": 3,
+     "proof": 3,
+     "done": 2,
+     "limits": 1,
+     "why": 1
+    },
+    "grades": {
+     "thin": 3,
+     "solid": 2,
+     "sharp": 1
+    },
+    "steering": {
+     "ai_wrong": 1,
+     "added": 0,
+     "clarified": 1,
+     "redo": 0
+    },
+    "steered": {
+     "ai_wrong": 1,
+     "added": 0,
+     "clarified": 1,
+     "redo": 0
+    }
+   },
+   {
+    "week": "2026-07-27",
+    "messages": 117,
+    "catches": 5,
+    "humbled": 1,
+    "tasks": 13,
+    "continued": 8,
+    "landed": 7,
+    "signals": {
+     "spot": 9,
+     "proof": 7,
+     "done": 5,
+     "limits": 2,
+     "why": 4
+    },
+    "grades": {
+     "thin": 5,
+     "solid": 5,
+     "sharp": 3
+    },
+    "steering": {
+     "ai_wrong": 3,
+     "added": 3,
+     "clarified": 1,
+     "redo": 1
+    },
+    "steered": {
+     "ai_wrong": 3,
+     "added": 3,
+     "clarified": 1,
+     "redo": 1
+    }
+   },
+   {
+    "week": "2026-08-03",
+    "messages": 81,
+    "catches": 5,
+    "humbled": 0,
+    "tasks": 9,
+    "continued": 6,
+    "landed": 5,
+    "signals": {
+     "spot": 5,
+     "proof": 4,
+     "done": 3,
+     "limits": 2,
+     "why": 3
+    },
+    "grades": {
+     "thin": 4,
+     "solid": 3,
+     "sharp": 2
+    },
+    "steering": {
+     "ai_wrong": 3,
+     "added": 2,
+     "clarified": 0,
+     "redo": 0
+    },
+    "steered": {
+     "ai_wrong": 3,
+     "added": 2,
+     "clarified": 0,
+     "redo": 0
+    }
+   },
+   {
+    "week": "2026-08-10",
+    "messages": 126,
+    "catches": 10,
+    "humbled": 0,
+    "tasks": 14,
+    "continued": 9,
+    "landed": 7,
+    "signals": {
+     "spot": 9,
+     "proof": 7,
+     "done": 5,
+     "limits": 2,
+     "why": 3
+    },
+    "grades": {
+     "thin": 5,
+     "solid": 5,
+     "sharp": 4
+    },
+    "steering": {
+     "ai_wrong": 2,
+     "added": 1,
+     "clarified": 2,
+     "redo": 0
+    },
+    "steered": {
+     "ai_wrong": 2,
+     "added": 1,
+     "clarified": 2,
+     "redo": 0
+    }
+   },
+   {
+    "week": "2026-08-17",
+    "messages": 90,
+    "catches": 9,
+    "humbled": 0,
+    "tasks": 10,
+    "continued": 6,
+    "landed": 5,
+    "signals": {
+     "spot": 6,
+     "proof": 5,
+     "done": 4,
+     "limits": 1,
+     "why": 3
+    },
+    "grades": {
+     "thin": 3,
+     "solid": 4,
+     "sharp": 3
+    },
+    "steering": {
+     "ai_wrong": 4,
+     "added": 1,
+     "clarified": 2,
+     "redo": 1
+    },
+    "steered": {
+     "ai_wrong": 4,
+     "added": 1,
+     "clarified": 2,
+     "redo": 1
+    }
+   },
+   {
+    "week": "2026-08-24",
+    "messages": 54,
+    "catches": 10,
+    "humbled": 0,
+    "tasks": 6,
+    "continued": 4,
+    "landed": 3,
+    "signals": {
+     "spot": 4,
+     "proof": 3,
+     "done": 2,
+     "limits": 1,
+     "why": 2
+    },
+    "grades": {
+     "thin": 2,
+     "solid": 2,
+     "sharp": 2
+    },
+    "steering": {
+     "ai_wrong": 1,
+     "added": 2,
+     "clarified": 2,
+     "redo": 0
+    },
+    "steered": {
+     "ai_wrong": 1,
+     "added": 2,
+     "clarified": 2,
+     "redo": 0
+    }
+   },
+   {
+    "week": "2026-08-31",
+    "messages": 108,
+    "catches": 6,
+    "humbled": 1,
+    "tasks": 12,
+    "continued": 8,
+    "landed": 7,
+    "signals": {
+     "spot": 8,
+     "proof": 6,
+     "done": 5,
+     "limits": 2,
+     "why": 4
+    },
+    "grades": {
+     "thin": 4,
+     "solid": 4,
+     "sharp": 4
+    },
+    "steering": {
+     "ai_wrong": 2,
+     "added": 0,
+     "clarified": 2,
+     "redo": 0
+    },
+    "steered": {
+     "ai_wrong": 2,
+     "added": 0,
+     "clarified": 2,
+     "redo": 0
+    }
+   },
+   {
+    "week": "2026-09-07",
+    "messages": 117,
+    "catches": 4,
+    "humbled": 0,
+    "tasks": 13,
+    "continued": 8,
+    "landed": 7,
+    "signals": {
+     "spot": 9,
+     "proof": 6,
+     "done": 6,
+     "limits": 2,
+     "why": 5
+    },
+    "grades": {
+     "thin": 4,
+     "solid": 5,
+     "sharp": 4
+    },
+    "steering": {
+     "ai_wrong": 1,
+     "added": 2,
+     "clarified": 0,
+     "redo": 0
+    },
+    "steered": {
+     "ai_wrong": 1,
+     "added": 2,
+     "clarified": 0,
+     "redo": 0
+    }
+   },
+   {
+    "week": "2026-09-14",
+    "messages": 81,
+    "catches": 8,
+    "humbled": 0,
+    "tasks": 9,
+    "continued": 6,
+    "landed": 5,
+    "signals": {
+     "spot": 6,
+     "proof": 4,
+     "done": 4,
+     "limits": 2,
+     "why": 2
+    },
+    "grades": {
+     "thin": 3,
+     "solid": 3,
+     "sharp": 3
+    },
+    "steering": {
+     "ai_wrong": 2,
+     "added": 1,
+     "clarified": 0,
+     "redo": 1
+    },
+    "steered": {
+     "ai_wrong": 2,
+     "added": 1,
+     "clarified": 0,
+     "redo": 1
+    }
+   },
+   {
+    "week": "2026-09-21",
+    "messages": 99,
+    "catches": 12,
+    "humbled": 0,
+    "tasks": 11,
+    "continued": 7,
+    "landed": 6,
+    "signals": {
+     "spot": 8,
+     "proof": 6,
+     "done": 5,
+     "limits": 3,
+     "why": 3
+    },
+    "grades": {
+     "thin": 3,
+     "solid": 4,
+     "sharp": 4
+    },
+    "steering": {
+     "ai_wrong": 2,
+     "added": 3,
+     "clarified": 2,
+     "redo": 0
+    },
+    "steered": {
+     "ai_wrong": 2,
+     "added": 3,
+     "clarified": 2,
+     "redo": 0
+    }
+   },
+   {
+    "week": "2026-09-28",
+    "messages": 72,
+    "catches": 12,
+    "humbled": 0,
+    "tasks": 8,
+    "continued": 5,
+    "landed": 4,
+    "signals": {
+     "spot": 5,
+     "proof": 5,
+     "done": 4,
+     "limits": 1,
+     "why": 2
+    },
+    "grades": {
+     "thin": 2,
+     "solid": 3,
+     "sharp": 3
+    },
+    "steering": {
+     "ai_wrong": 3,
+     "added": 0,
+     "clarified": 2,
+     "redo": 0
+    },
+    "steered": {
+     "ai_wrong": 3,
+     "added": 0,
+     "clarified": 2,
+     "redo": 0
+    }
+   },
+   {
+    "week": "2026-10-05",
+    "messages": 54,
+    "catches": 11,
+    "humbled": 0,
+    "tasks": 6,
+    "continued": 4,
+    "landed": 4,
+    "signals": {
+     "spot": 4,
+     "proof": 3,
+     "done": 2,
+     "limits": 1,
+     "why": 2
+    },
+    "grades": {
+     "thin": 2,
+     "solid": 2,
+     "sharp": 2
+    },
+    "steering": {
+     "ai_wrong": 1,
+     "added": 3,
+     "clarified": 2,
+     "redo": 0
+    },
+    "steered": {
+     "ai_wrong": 1,
+     "added": 3,
+     "clarified": 2,
+     "redo": 0
+    }
+   },
+   {
+    "week": "2026-10-12",
+    "messages": 117,
+    "catches": 11,
+    "humbled": 1,
+    "tasks": 13,
+    "continued": 8,
+    "landed": 7,
+    "signals": {
+     "spot": 8,
+     "proof": 7,
+     "done": 5,
+     "limits": 3,
+     "why": 4
+    },
+    "grades": {
+     "thin": 3,
+     "solid": 5,
+     "sharp": 5
+    },
+    "steering": {
+     "ai_wrong": 2,
+     "added": 1,
+     "clarified": 2,
+     "redo": 1
+    },
+    "steered": {
+     "ai_wrong": 2,
+     "added": 1,
+     "clarified": 2,
+     "redo": 1
+    }
+   },
+   {
+    "week": "2026-10-19",
+    "messages": 90,
+    "catches": 8,
+    "humbled": 0,
+    "tasks": 10,
+    "continued": 6,
+    "landed": 6,
+    "signals": {
+     "spot": 8,
+     "proof": 5,
+     "done": 5,
+     "limits": 2,
+     "why": 3
+    },
+    "grades": {
+     "thin": 2,
+     "solid": 4,
+     "sharp": 4
+    },
+    "steering": {
+     "ai_wrong": 2,
+     "added": 1,
+     "clarified": 2,
+     "redo": 1
+    },
+    "steered": {
+     "ai_wrong": 2,
+     "added": 1,
+     "clarified": 2,
+     "redo": 1
+    }
+   },
+   {
+    "week": "2026-10-26",
+    "messages": 27,
+    "catches": 2,
+    "humbled": 0,
+    "tasks": 3,
+    "continued": 2,
+    "landed": 2,
+    "signals": {
+     "spot": 2,
+     "proof": 2,
+     "done": 1,
+     "limits": 1,
+     "why": 1
+    },
+    "grades": {
+     "thin": 1,
+     "solid": 1,
+     "sharp": 1
+    },
+    "steering": {
+     "ai_wrong": 4,
+     "added": 1,
+     "clarified": 0,
+     "redo": 1
+    },
+    "steered": {
+     "ai_wrong": 2,
+     "added": 1,
+     "clarified": 0,
+     "redo": 1
+    }
+   }
+  ],
+  "goal": {
+   "goal": {
+    "id": 1,
+    "kind": "habit",
+    "signal": "limits",
+    "target": 20,
+    "start": "2026-10-05"
+   },
+   "weeks": [
+    {
+     "week": "2026-10-05",
+     "count": 6,
+     "value": 16,
+     "state": "missed"
+    },
+    {
+     "week": "2026-10-12",
+     "count": 13,
+     "value": 23,
+     "state": "met"
+    },
+    {
+     "week": "2026-10-19",
+     "count": 10,
+     "value": 20,
+     "state": "met"
+    },
+    {
+     "week": "2026-10-26",
+     "count": 3,
+     "value": 33,
+     "state": "open"
+    }
+   ],
+   "met": 2,
+   "streak": 2,
+   "needed": 4,
+   "done": false,
+   "need": 2,
+   "score": null
+  },
+  "suggestion": {
+   "id": 0,
+   "kind": "habit",
+   "signal": "limits",
+   "target": 25,
+   "start": "2026-10-28"
+  },
+  "options": [
+   {
+    "id": 0,
+    "kind": "habit",
+    "signal": "spot",
+    "target": 80,
+    "start": "2026-10-28"
+   },
+   {
+    "id": 0,
+    "kind": "habit",
+    "signal": "proof",
+    "target": 60,
+    "start": "2026-10-28"
+   },
+   {
+    "id": 0,
+    "kind": "habit",
+    "signal": "done",
+    "target": 50,
+    "start": "2026-10-28"
+   },
+   {
+    "id": 0,
+    "kind": "habit",
+    "signal": "limits",
+    "target": 25,
+    "start": "2026-10-28"
+   },
+   {
+    "id": 0,
+    "kind": "habit",
+    "signal": "why",
+    "target": 40,
+    "start": "2026-10-28"
+   },
+   {
+    "id": 0,
+    "kind": "steer",
+    "steer": "added",
+    "target": 15,
+    "start": "2026-10-28"
+   },
+   {
+    "id": 0,
+    "kind": "steer",
+    "steer": "clarified",
+    "target": 5,
+    "start": "2026-10-28"
+   },
+   {
+    "id": 0,
+    "kind": "steer",
+    "steer": "redo",
+    "target": 0,
+    "start": "2026-10-28"
+   },
+   {
+    "id": 0,
+    "kind": "tier",
+    "tier": "irreplaceable",
+    "target": 0,
+    "start": "2026-10-28"
+   }
+  ],
+  "trophies": [
+   {
+    "goal": {
+     "id": 0,
+     "kind": "habit",
+     "signal": "done",
+     "target": 30,
+     "start": "2026-08-03"
+    },
+    "done": "2026-08-31"
+   }
+  ],
+  "bests": {
+   "landed": [
+    91,
+    "2026-10-12"
+   ],
+   "sharp": [
+    42,
+    "2026-10-19"
+   ],
+   "goal_streak": 4
+  },
+  "insights": {
+   "signals": [
+    {
+     "signal": "done",
+     "pct_of_briefs": 31.5,
+     "landed_with_without": [
+      93.1,
+      79.4
+     ]
+    }
+   ],
+   "steer": [
+    "added",
+    58
+   ],
+   "models": []
   }
  }
 }

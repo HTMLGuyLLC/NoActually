@@ -3,13 +3,16 @@ import { api, demo } from "./api";
 import { captureFocus, must, restoreFocus } from "./dom";
 import { ago, errorText, isFiltered, listNames } from "./format";
 import { type Html, html } from "./html";
+import { refreshCheck } from "./learn/checker";
 import { closePicker } from "./picker/popover";
 import { createScheduler, isUserBusy } from "./scheduler";
 import { isGlance, setAllModels, setCurrent, setLastBriefTier, setLastVerdict, setMeta, state } from "./state";
 import { updateBanner, updateLine } from "./update";
 import { headerView, statusPillView } from "./views/chrome";
 import { emptyGlanceView, glanceView } from "./views/glance";
-import { onboardingView, scorecardView } from "./views/scorecard";
+import { improveView } from "./views/improve";
+import { learnView } from "./views/learn";
+import { onboardingView, scorecardView, subjectButton } from "./views/scorecard";
 import { settingsView } from "./views/settings";
 import { sourcesView, watchingNames } from "./views/sources";
 
@@ -27,17 +30,29 @@ async function view(): Promise<Html> {
   let body: Html;
   if (state.tab === "sources") body = sourcesView(await api.sources());
   else if (state.tab === "settings") {
-    const [retention, autostart] = await Promise.all([api.retention(), api.getAutostart().catch(() => false)]);
-    body = settingsView({ retention, autostart, update: state.update, status: state.status, demo });
+    const [retention, autostart, menuBar] = await Promise.all([api.retention(), api.getAutostart().catch(() => false), api.getMenuBar()]);
+    body = settingsView({ retention, autostart, menuBar, update: state.update, status: state.status, demo });
+  } else if (state.tab === "learn") {
+    body = learnView({ meta, briefs: s.messages ? s.briefs : null, done: await api.learned(), lesson: state.lesson, draft: state.draft, demo });
+  } else if (state.tab === "improve") {
+    const progress = await api.progress(state.filter);
+    body = improveView({
+      meta,
+      stats: s,
+      progress,
+      range: state.range,
+      subject: subjectButton({ filter: state.filter, meta }),
+      filtered: isFiltered(state.filter),
+    });
   } else if (s.messages) {
     body = scorecardView(s, {
       meta,
       filter: state.filter,
       view: state.view,
-      still: s.verdict === state.lastVerdict,
+      still: s.overall.verdict === state.lastVerdict,
       briefsStill: s.briefs.tier === state.lastBriefTier,
     });
-    setLastVerdict(s.verdict);
+    setLastVerdict(s.overall.verdict);
     setLastBriefTier(s.briefs.tier);
   } else body = onboardingView(await watching());
   const banner = state.update ? updateBanner(state.update, state.laterFor) : "";
@@ -61,6 +76,7 @@ async function draw(): Promise<void> {
   root.innerHTML = markup.value;
   applyBarWidths(root);
   restoreFocus(root, focus);
+  if (state.tab === "learn" && !isGlance) await refreshCheck(root);
 }
 
 export const scheduler = createScheduler({ isBusy: () => isUserBusy(root), draw });

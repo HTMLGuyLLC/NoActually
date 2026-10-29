@@ -1,7 +1,7 @@
 //! The store's behavior suite: ingest, sync, consent, retention and stats, end to end.
 
 use super::*;
-use engine::{Answer, BriefTier, Signal, Signals, Tier};
+use engine::{Answer, BriefTier, Signal, Signals};
 use sources::testing::{cc_ai, cc_catch, cc_user, set_mtime_ago};
 use sources::{FileScan, SourceTurn};
 use std::collections::BTreeMap;
@@ -76,7 +76,11 @@ fn counts_messages_catches_and_models() {
     let all = stats(&s);
     assert_eq!((all.messages, all.catches, all.catches_last_7d), (3, 2, 2));
     assert_eq!(all.categories.get("made_it_up"), Some(&1));
-    assert_eq!((all.tier, all.next_tier, all.verdict), (Tier::RubberStamp, Some((Tier::Coworker, 1)), Answer::Hmm));
+    assert_eq!(
+        (all.overall.tier, all.overall.verdict, all.overall.catches),
+        (None, Answer::Hmm, 2),
+        "too few tasks to score"
+    );
 
     let opus = s
         .stats(
@@ -101,9 +105,15 @@ fn stats_json_matches_the_ui_contract() {
         (0..7).map(|i| turn("that's not a real page", "You're right.", "m", &t, &i.to_string())).collect();
     ingest(&mut s, "f", catches);
     let v = serde_json::to_value(stats(&s)).unwrap();
-    assert_eq!(v["tier"], "sharp_eyed");
-    assert_eq!(v["next_tier"], serde_json::json!(["irreplaceable", 8]));
-    assert_eq!(v["verdict"], "no");
+    let o = &v["overall"];
+    assert_eq!((o["tier"].is_null(), o["score"].is_null(), &o["verdict"]), (true, true, &serde_json::json!("hmm")));
+    assert_eq!((o["catches"].as_i64(), &o["to_rank"]), (Some(7), &v["briefs"]["to_rank"]));
+    let per_model = |k: &str| v["models"].as_array().unwrap().iter().map(|m| m[k].as_i64().unwrap()).sum::<i64>();
+    assert_eq!(
+        (per_model("tasks"), per_model("continued")),
+        (v["briefs"]["tasks"].as_i64().unwrap(), v["briefs"]["continued"].as_i64().unwrap()),
+        "every task is under some model"
+    );
     let entry = &v["hall_of_fame"][0];
     assert_eq!(
         (entry["category"].as_str(), entry["category_title"].as_str()),
@@ -594,6 +604,9 @@ fn briefs_count_tasks_signals_and_steering() {
         [("ai_wrong", 1), ("added", 1), ("clarified", 0), ("redo", 0)].map(|(k, n)| (k.into(), n)).into();
     assert_eq!(b.steering, steering);
     assert_eq!((b.tasks_last_28d, b.tier, b.to_rank), (2, None, 8), "too few tasks to rank");
+    let models = stats(&s).models;
+    let sum = |f: fn(&ModelRow) -> i64| models.iter().map(f).sum::<i64>();
+    assert_eq!((sum(|m| m.tasks), sum(|m| m.continued), sum(|m| m.landed)), (3, 2, 1), "the picker's per-model briefs");
     let msgs: Vec<i64> = s
         .conn()
         .prepare("SELECT messages FROM tasks ORDER BY id")

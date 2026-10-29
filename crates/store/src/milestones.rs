@@ -1,7 +1,7 @@
 //! Moments worth a popup: catch counts, tier ups (catches and briefs), streaks. Pure decisions plus the stored
 //! baseline they're measured from; the app only shows what [`crossed`] returns.
 
-use crate::{Result, Stats, Store};
+use crate::{GoalWeek, Result, Stats, Store, GOAL_WEEKS};
 use engine::{BriefTier, Tier};
 
 /// Catch totals worth announcing.
@@ -10,7 +10,8 @@ pub const COUNTS: [i64; 9] = [1, 10, 25, 50, 100, 250, 500, 1000, 2500];
 pub const STREAKS: [i64; 5] = [3, 7, 14, 30, 100];
 
 const TOTAL_KEY: &str = "milestone.total";
-const TIER_KEY: &str = "milestone.tier";
+/// The overall tier. (Before the score existed, `milestone.tier` held a catch-count tier.)
+const TIER_KEY: &str = "milestone.score_tier";
 const STREAK_KEY: &str = "milestone.streak";
 const BRIEF_TIER_KEY: &str = "milestone.brief_tier";
 
@@ -21,8 +22,10 @@ pub struct Snapshot {
     pub catches: i64,
     /// Catches in the last 7 days.
     pub catches_last_7d: i64,
-    /// This week's tier.
-    pub tier: Tier,
+    /// The overall tier, once ranked.
+    pub tier: Option<Tier>,
+    /// The overall score (0 until ranked).
+    pub score: i64,
     /// Current streak, in days.
     pub streak: i64,
     /// This week's brief tier, once ranked.
@@ -38,7 +41,8 @@ impl Snapshot {
         Snapshot {
             catches: s.catches,
             catches_last_7d: s.catches_last_7d,
-            tier: s.tier,
+            tier: s.overall.tier,
+            score: s.overall.score.unwrap_or(0),
             streak: s.current_streak_days,
             brief_tier: b.tier,
             // Rounded down, like the tier floors, so the popup never says 95% for a Tech lead week.
@@ -76,10 +80,11 @@ pub fn crossed(prev: &Snapshot, now: &Snapshot) -> Vec<Milestone> {
             body: format!("You've caught your AI {m} times. Could it replace you? Not today."),
         });
     }
-    if now.tier > prev.tier {
+    // Like brief tiers: a first ranking at the bottom isn't news, climbing is.
+    if let Some(t) = now.tier.filter(|t| *t > Tier::RubberStamp && now.tier > prev.tier) {
         out.push(Milestone {
-            title: format!("New tier: {}", now.tier.name()),
-            body: format!("{} catches in the last 7 days. Open the scorecard to share it.", now.catches_last_7d),
+            title: format!("New tier: {}", t.name()),
+            body: format!("Could AI replace you? Your score is {}. Open the scorecard to share it.", now.score),
         });
     }
     // Getting ranked at the bottom isn't news; climbing is.
@@ -101,33 +106,66 @@ pub fn crossed(prev: &Snapshot, now: &Snapshot) -> Vec<Milestone> {
     out
 }
 
+/// The goal's popup after a sync froze its finished weeks: a finished goal, or else the latest
+/// week met. At most one, so catching up on several weeks never piles them up.
+pub fn goal_milestones(newly_met: &[GoalWeek], met: i64, finished: bool) -> Vec<Milestone> {
+    if finished {
+        return vec![Milestone {
+            title: "Goal done! 🏆".into(),
+            body: "It's on your trophy shelf. Open Improve to pick the next one.".into(),
+        }];
+    }
+    newly_met
+        .last()
+        .map(|w| Milestone {
+            title: "Goal week met 🎯".into(),
+            body: format!("{}% last week. That's {met} of {GOAL_WEEKS} weeks met.", w.value),
+        })
+        .into_iter()
+        .collect()
+}
+
+/// Saved instead of a tier id while unranked, so the first ranking is measured from "none".
+const UNRANKED: &str = "none";
+
+/// The best tier reached so far (`saved`) and what to save now. Tiers are announced only above
+/// the best: a 28-day score wobbling across a floor would otherwise announce it again and again.
+/// Never saved (first run, or an older version): today's tier is the baseline.
+fn best_tier<T: Copy + Ord + std::str::FromStr>(
+    saved: Option<String>,
+    now: Option<T>,
+    id: fn(T) -> &'static str,
+) -> (Option<T>, String) {
+    let prev = match saved.as_deref() {
+        None => now,
+        Some(UNRANKED) => None,
+        Some(v) => v.parse().ok(),
+    };
+    let best = prev.max(now);
+    (prev, best.map_or(UNRANKED, id).to_string())
+}
+
 impl Store {
     /// Records `now` as the milestone baseline and returns the previous one, or `None` the first
     /// time (nothing to compare against, so nothing to announce).
     pub fn advance_milestones(&self, now: &Snapshot) -> Result<Option<Snapshot>> {
         let total = self.get_setting(TOTAL_KEY)?;
         let first_run = total.is_none();
+        let (tier, save_tier) = best_tier(self.get_setting(TIER_KEY)?, now.tier, Tier::id);
+        let (brief_tier, save_brief_tier) = best_tier(self.get_setting(BRIEF_TIER_KEY)?, now.brief_tier, BriefTier::id);
         let prev = Snapshot {
             catches: total.and_then(|v| v.parse().ok()).unwrap_or(now.catches),
             catches_last_7d: now.catches_last_7d,
-            // Older versions saved the tier's display name; `Tier::from_str` reads both.
-            tier: self.get_setting(TIER_KEY)?.and_then(|v| v.parse().ok()).unwrap_or(now.tier),
+            tier,
+            score: now.score,
             streak: self.get_setting(STREAK_KEY)?.and_then(|v| v.parse().ok()).unwrap_or(now.streak),
-            // Never saved (first run, or a version without briefs): today's is the baseline.
-            brief_tier: match self.get_setting(BRIEF_TIER_KEY)? {
-                Some(v) => v.parse().ok(),
-                None => now.brief_tier,
-            },
+            brief_tier,
             landed_pct: now.landed_pct,
         };
         self.set_setting(TOTAL_KEY, &now.catches.to_string())?;
-        self.set_setting(TIER_KEY, now.tier.id())?;
+        self.set_setting(TIER_KEY, &save_tier)?;
         self.set_setting(STREAK_KEY, &now.streak.to_string())?;
-        // A quiet week (too few tasks to rank) keeps the last tier, so being ranked again at the
-        // same tier isn't announced as new.
-        if let Some(t) = now.brief_tier {
-            self.set_setting(BRIEF_TIER_KEY, t.id())?;
-        }
+        self.set_setting(BRIEF_TIER_KEY, &save_brief_tier)?;
         Ok((!first_run).then_some(prev))
     }
 }
@@ -137,11 +175,42 @@ mod tests {
     use super::*;
 
     fn snap(catches: i64, tier: Tier, streak: i64) -> Snapshot {
-        Snapshot { catches, catches_last_7d: 8, tier, streak, brief_tier: None, landed_pct: 0 }
+        Snapshot { catches, catches_last_7d: 8, tier: Some(tier), score: 84, streak, brief_tier: None, landed_pct: 0 }
     }
 
     fn briefs(tier: Option<BriefTier>) -> Snapshot {
         Snapshot { brief_tier: tier, landed_pct: 92, ..snap(30, Tier::Coworker, 0) }
+    }
+
+    #[test]
+    fn a_tier_is_announced_once_however_the_score_wobbles() {
+        let s = Store::open_in_memory().unwrap();
+        let at = |tier| Snapshot { tier, ..snap(30, Tier::Coworker, 0) };
+        let mut popups = 0;
+        s.advance_milestones(&at(None)).unwrap(); // first run: unranked
+        for tier in [
+            None,
+            Some(Tier::Coworker),
+            Some(Tier::SharpEyed),
+            Some(Tier::Coworker),
+            Some(Tier::SharpEyed),
+            None,
+            Some(Tier::SharpEyed),
+        ] {
+            let now = at(tier);
+            let prev = s.advance_milestones(&now).unwrap().unwrap();
+            popups += crossed(&prev, &now).iter().filter(|m| m.title.starts_with("New tier")).count();
+        }
+        assert_eq!(popups, 2, "Coworker once (the first ranking counts), Sharp-eyed once");
+    }
+
+    #[test]
+    fn goal_popups_are_one_at_most() {
+        let w = |value| GoalWeek { week: "2026-10-19".parse().unwrap(), count: 8, value, state: crate::WeekState::Met };
+        assert_eq!(goal_milestones(&[], 0, false), vec![]);
+        let m = goal_milestones(&[w(50), w(62)], 3, false);
+        assert_eq!((m.len(), m[0].body.as_str()), (1, "62% last week. That's 3 of 4 weeks met."));
+        assert_eq!(goal_milestones(&[w(50)], 4, true)[0].title, "Goal done! 🏆");
     }
 
     #[test]
@@ -170,8 +239,11 @@ mod tests {
         let m = crossed(&snap(30, Tier::Coworker, 6), &snap(30, Tier::SharpEyed, 7));
         let titles: Vec<&str> = m.iter().map(|m| m.title.as_str()).collect();
         assert_eq!(titles, ["New tier: Sharp-eyed", "7-day streak"]);
-        assert_eq!(m[0].body, "8 catches in the last 7 days. Open the scorecard to share it.");
+        assert_eq!(m[0].body, "Could AI replace you? Your score is 84. Open the scorecard to share it.");
         assert_eq!(crossed(&snap(30, Tier::SharpEyed, 7), &snap(30, Tier::Coworker, 7)), vec![], "never for a drop");
+        let unranked = Snapshot { tier: None, ..snap(30, Tier::Coworker, 7) };
+        assert_eq!(crossed(&unranked, &snap(30, Tier::RubberStamp, 7)), vec![], "a first ranking at the bottom");
+        assert_eq!(crossed(&unranked, &snap(30, Tier::Coworker, 7)).len(), 1);
     }
 
     #[test]
@@ -207,12 +279,19 @@ mod tests {
     }
 
     #[test]
-    fn baseline_starts_quiet_and_reads_old_tier_names() {
+    fn baseline_starts_quiet_and_ignores_the_old_catch_tier() {
         let s = Store::open_in_memory().unwrap();
+        // Written by a version whose tiers counted catches: never compared against the score's.
+        s.set_setting("milestone.tier", "rubber_stamp").unwrap();
         let now = snap(5, Tier::Coworker, 2);
         assert_eq!(s.advance_milestones(&now).unwrap(), None, "first run only sets the baseline");
-        assert_eq!(s.advance_milestones(&snap(11, Tier::SharpEyed, 3)).unwrap(), Some(now));
-        s.set_setting(TIER_KEY, "Sharp-eyed").unwrap(); // written by an older version
-        assert_eq!(s.advance_milestones(&now).unwrap().unwrap().tier, Tier::SharpEyed);
+        assert_eq!(s.advance_milestones(&snap(11, Tier::SharpEyed, 3)).unwrap().unwrap().tier, Some(Tier::Coworker));
+        let quiet = Snapshot { tier: None, ..now };
+        s.advance_milestones(&quiet).unwrap();
+        assert_eq!(
+            s.advance_milestones(&now).unwrap().unwrap().tier,
+            Some(Tier::SharpEyed),
+            "a quiet stretch keeps the tier"
+        );
     }
 }

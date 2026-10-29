@@ -1,8 +1,9 @@
-// The scorecard: verdict, tier ladder, weekly chart, model and category breakdowns, hall of fame.
-import type { Filter, HallEntry, Meta, Stats } from "../api";
+// The scorecard: the overall score and its two halves (briefs, who corrects whom), the weekly
+// chart, model and category breakdowns, and the hall of fame.
+import type { Filter, HallEntry, Meta, Overall, Stats } from "../api";
 import { filterLabel, isFiltered, shortSourceName, subjectLabel } from "../format";
 import { type Html, html, num, raw } from "../html";
-import { categoryTitle, tierName, tierRanges, topTier } from "../meta";
+import { categoryTitle, tierName, tierOf, tierRanges } from "../meta";
 import { catchRate, modelName } from "../picker/picker";
 import { SCORE_VIEWS, type ScoreView } from "../state";
 import { briefsSummaryView, briefsView } from "./briefs";
@@ -18,7 +19,7 @@ export type ScorecardContext = {
   view?: ScoreView;
 };
 
-const VIEW_TITLES: Record<ScoreView, string> = { overview: "Overview", catches: "Catches", briefs: "Briefs", hall: "Hall of fame" };
+const VIEW_TITLES: Record<ScoreView, string> = { overview: "Overview", briefs: "Briefs", catches: "Catches", hall: "Hall of fame" };
 
 const CHEVRON = raw(`<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>`);
 
@@ -32,79 +33,129 @@ export const subjectButton = (ctx: Pick<ScorecardContext, "filter" | "meta">): H
 /** "You caught it 17 times in the last 7 days." */
 const caughtLine = (s: Stats) => html`You caught it <b>${num(s.catches_last_7d)} ${s.catches_last_7d === 1 ? "time" : "times"}</b> in the last 7 days.`;
 
-function verdictView(s: Stats, ctx: ScorecardContext): Html {
-  const no = s.verdict === "no";
-  return html`
-    <div class="eyebrow">This week's verdict</div>
-    <h1 class="q">Could ${subjectButton(ctx)} replace you?</h1>
-    <div class="verdict">
-      <div class="no${no ? "" : " maybe"}${ctx.still ? " still" : ""}" aria-hidden="true">${no ? "No." : "Hmm."}</div>
-      <span class="sr-only">${no ? "No." : "Not yet."} Your tier is ${tierName(ctx.meta, s.tier)}.</span>
-      <div class="because">${caughtLine(s)}${
-        s.pct_real_chats_with_catch != null ? ` It slipped up in ${Math.round(s.pct_real_chats_with_catch)}% of your real chats.` : ""
-      }</div>
-    </div>
-    <div class="score">
+const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
+
+/** The hand-written answer, with a screen-reader version. */
+function answerView(o: Overall, meta: Meta, still: boolean, small = false): Html {
+  const no = o.verdict === "no";
+  return html`<div class="no${small ? " sm" : ""}${no ? "" : " maybe"}${still ? " still" : ""}" aria-hidden="true">${no ? "No." : "Hmm."}</div>
+    <span class="sr-only">${no ? "No." : "Not yet."} ${o.tier ? `Your tier is ${tierName(meta, o.tier)}, score ${o.score}.` : "Not scored yet."}</span>`;
+}
+
+/** Why the answer is what it is: the two parts, or how far a score is. */
+function scoreBecause(o: Overall, meta: Meta): Html {
+  if (o.score == null)
+    return html`Give it <b>${plural(o.to_rank, "more task")}</b> with a follow-up to get a score. One-shot tasks can't need steering, so they don't count.`;
+  return html`Score <b>${o.score}</b>. Your tasks landed <b>${o.direction}%</b> of the time, and you caught it ${plural(o.catches, "time")} to its ${num(o.humbled)} in ${meta.brief_window_days} days.`;
+}
+
+/** The next tier's target ("Irreplaceable at 90. You're at 86."). */
+function scoreNote(o: Overall, meta: Meta): string {
+  if (o.score == null) return `${plural(o.to_rank, "more task")} to get a score`;
+  const next = tierOf(meta, o.next_tier);
+  return next ? `${next.name} at ${next.floor}. You're at ${o.score}.` : "Top tier. Don't let it slip.";
+}
+
+/** The two parts of the score, as bars, with what each is worth. */
+function partsView(o: Overall, meta: Meta): Html {
+  const part = (label: string, value: number | null, weight: number, hint: string) =>
+    html`<div class="part"><span class="part-name">${label}<small class="muted">${hint} · ${weight}% of the score</small></span><span class="bar-bg"><i data-w="${value ?? 0}"></i></span><span class="n">${value ?? "–"}</span></div>`;
+  return html`<div class="parts" role="group" aria-label="What the score is made of">
+    ${part("Your briefs", o.direction, meta.direction_weight, "tasks that landed")}
+    ${part("Who corrects whom", o.judgment, 100 - meta.direction_weight, "how rarely it has to correct you")}
+  </div>`;
+}
+
+function ladderView(o: Overall, meta: Meta): Html {
+  return html`<ol class="ladder" aria-label="Tiers">${tierRanges(meta).map(
+    (t) => html`<li${t.id === o.tier ? raw(' class="on" aria-current="true"') : ""}><span>${t.name}</span><span>${t.range}</span></li>`,
+  )}</ol>`;
+}
+
+/** The headline: could it replace you? Both sides of working with AI, one score. */
+function heroView(s: Stats, ctx: ScorecardContext): Html {
+  const o = s.overall;
+  return html`<section class="card hero">
+      <div>
+        <div class="eyebrow">Last ${ctx.meta.brief_window_days} days</div>
+        <h1 class="q">Could ${subjectButton(ctx)} replace you?</h1>
+        <div class="verdict">${answerView(o, ctx.meta, ctx.still)}<div class="because">${scoreBecause(o, ctx.meta)}</div></div>
+        ${partsView(o, ctx.meta)}
+      </div>
+      <div class="meter">
+        ${ladderView(o, ctx.meta)}
+        <p class="hand-note">${scoreNote(o, ctx.meta)}</p>
+        ${o.tier ? html`<div class="share"><button data-action="open-share">Share your score</button></div>` : ""}
+      </div>
+    </section>`;
+}
+
+/** You vs it: all time, and in the window. */
+function versusView(s: Stats): Html {
+  return html`<div class="score">
       <div class="side you"><span class="eyebrow">You caught it</span><span class="n">${num(s.catches)}</span></div>
       <div class="vs">vs</div>
       <div class="side ai"><span class="eyebrow">It caught you</span><span class="n">${num(s.humbled)}</span></div>
     </div>`;
 }
 
-function ladderView(s: Stats, meta: Meta): Html {
-  return html`<ol class="ladder">${tierRanges(meta).map(
-    (t) => html`<li${t.id === s.tier ? raw(' class="on" aria-current="true"') : ""}><span>${t.name}</span><span>${t.range}</span></li>`,
-  )}</ol>`;
+/** Why fewer catches never costs points. */
+const proofNote = (meta: Meta) =>
+  html`<p class="muted small">${meta.catch_proof} catches in ${meta.brief_window_days} days show you check its work. Past that, more don't add points, so fewer catches because it's getting it right never costs you.</p>`;
+
+/** The overview's "Who corrects whom?" half. */
+function correctsSummaryView(s: Stats, ctx: ScorecardContext): Html {
+  return html`<article class="card mini">
+      <div class="eyebrow">Who corrects whom</div>
+      <h2 class="q">Do you catch its mistakes?</h2>
+      <p class="because">${caughtLine(s)}</p>
+      ${versusView(s)}
+      ${proofNote(ctx.meta)}
+      <div class="share"><button class="ghost" data-action="view" data-id="catches">See catches</button></div>
+    </article>`;
 }
 
 /** The weekly bar chart, with a text summary for screen readers. */
-export function chartView(s: Stats, meta: Meta): Html {
+export function chartView(s: Stats): Html {
   const weeks = s.weekly.slice(-20);
   if (!weeks.length) return html`<p class="muted">No weeks yet.</p>`;
-  const top = topTier(meta);
-  const line = top?.floor ?? Number.POSITIVE_INFINITY;
   const W = 900;
   const H = 240;
   const L = 34;
   const R = 10;
   const T = 26;
   const B = 30;
-  const max = Math.max(20, ...weeks.map((w) => w.catches));
+  const max = Math.max(10, ...weeks.map((w) => w.catches));
   const step = max > 40 ? 20 : max > 20 ? 10 : 5;
   const bw = (W - L - R) / weeks.length;
   const y = (v: number) => T + (H - T - B) * (1 - v / max);
+  const peak = Math.max(...weeks.map((w) => w.catches));
   const grid: Html[] = [];
   for (let g = 0; g <= max; g += step) {
     grid.push(html`<line x1="${L}" x2="${W - R}" y1="${y(g)}" y2="${y(g)}" class="grid"/><text x="${L - 8}" y="${y(g) + 4}" text-anchor="end">${g}</text>`);
   }
-  const topLine = top
-    ? html`<line x1="${L}" x2="${W - R}" y1="${y(line)}" y2="${y(line)}" class="line-top"/><text x="${W - R}" y="${y(line) - 6}" text-anchor="end" class="hand">${top.name.toLowerCase()} line</text>`
-    : "";
   const bars = weeks.map((w, i) => {
     const x = L + i * bw + bw * 0.18;
     const bwid = bw * 0.64;
     const barTop = y(w.catches);
-    const hot = w.catches >= line;
+    const hot = w.catches > 0 && w.catches === peak;
     const d = new Date(`${w.week}T00:00`);
     return html`<rect x="${x}" y="${barTop}" width="${bwid}" height="${y(0) - barTop}" rx="3" class="${hot ? "bar hot" : "bar"}"><title>Week of ${d.toLocaleDateString()}: ${w.catches} catches, ${w.messages} messages</title></rect>${
       hot ? html`<text x="${x + bwid / 2}" y="${barTop - 6}" text-anchor="middle" class="hotlabel">${w.catches}</text>` : ""
     }${i % 2 === 0 ? html`<text x="${x + bwid / 2}" y="${H - 10}" text-anchor="middle">${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</text>` : ""}`;
   });
-  return html`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Catches per week" aria-describedby="chart-summary">${grid}${topLine}${bars}</svg>
-    <p class="sr-only" id="chart-summary">${chartSummary(weeks, top?.name ?? null, line)}</p>`;
+  return html`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Catches per week" aria-describedby="chart-summary">${grid}${bars}</svg>
+    <p class="sr-only" id="chart-summary">${chartSummary(weeks)}</p>`;
 }
 
-/** One sentence for screen readers: span, peak week, and weeks over the top tier's line. */
-export function chartSummary(weeks: Stats["weekly"], topName: string | null, line: number): string {
+/** One sentence for screen readers: span and peak week. */
+export function chartSummary(weeks: Stats["weekly"]): string {
   const first = weeks[0];
   const peak = weeks.reduce<Stats["weekly"][number] | undefined>((p, w) => (!p || w.catches > p.catches ? w : p), undefined);
   if (!first || !peak) return "No weeks yet.";
   const fmt = (iso: string) => new Date(`${iso}T00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  const over = weeks.filter((w) => w.catches >= line).length;
-  const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
-  return `${plural(weeks.length, "week")} from ${fmt(first.week)}. Most catches: ${peak.catches}, the week of ${fmt(peak.week)}.${
-    topName ? ` ${plural(over, "week")} reached the ${topName.toLowerCase()} line of ${line}.` : ""
-  }`;
+  const weeksText = `${weeks.length} ${weeks.length === 1 ? "week" : "weeks"}`;
+  return `${weeksText} from ${fmt(first.week)}. Most catches: ${peak.catches}, the week of ${fmt(peak.week)}.`;
 }
 
 export function hallView(entries: HallEntry[]): Html {
@@ -134,24 +185,13 @@ function viewsNav(view: ScoreView): Html {
   )}</nav>`;
 }
 
-/** Both verdicts side by side, each linking to its details. */
+/** The headline score, then its two halves side by side, each linking to its details. */
 function overviewView(s: Stats, ctx: ScorecardContext): Html {
-  const no = s.verdict === "no";
-  const progress = s.next_tier ? `${s.next_tier[1]} more this week for ${tierName(ctx.meta, s.next_tier[0])}` : "Top tier";
   return html`
+    ${heroView(s, ctx)}
     <section class="duo">
-      <article class="card mini">
-        <div class="eyebrow">This week's verdict</div>
-        <h1 class="q">Could ${subjectButton(ctx)} replace you?</h1>
-        <div class="verdict">
-          <div class="no${no ? "" : " maybe"}${ctx.still ? " still" : ""}" aria-hidden="true">${no ? "No." : "Hmm."}</div>
-          <span class="sr-only">${no ? "No." : "Not yet."} Your tier is ${tierName(ctx.meta, s.tier)}.</span>
-          <div class="because">${caughtLine(s)}</div>
-        </div>
-        <p class="tier-line"><span class="tier-label"><span>Tier</span>${tierName(ctx.meta, s.tier)}</span><span class="hand-note">${progress}</span></p>
-        <div class="share"><button data-action="open-share">Share your score</button><button class="ghost" data-action="view" data-id="catches">See catches</button></div>
-      </article>
       ${briefsSummaryView(s.briefs, ctx.meta, ctx.briefsStill ?? false)}
+      ${correctsSummaryView(s, ctx)}
     </section>
     ${statsView(s)}`;
 }
@@ -184,14 +224,20 @@ function catchesView(s: Stats, ctx: ScorecardContext): Html {
     : html`<p class="muted">No catches yet.</p>`;
   return html`
     <section class="card">
-      <div>${verdictView(s, ctx)}</div>
+      <div>
+        <div class="eyebrow">Who corrects whom</div>
+        <h1 class="q">Do you catch ${subjectButton(ctx)}'s mistakes?</h1>
+        <p class="because">${caughtLine(s)}${
+          s.pct_real_chats_with_catch != null ? ` It slipped up in ${Math.round(s.pct_real_chats_with_catch)}% of your real chats.` : ""
+        }</p>
+        ${versusView(s)}
+      </div>
       <div class="meter">
-        ${ladderView(s, meta)}
-        ${s.next_tier ? html`<p class="hand-note">${s.next_tier[1]} more this week for ${tierName(meta, s.next_tier[0])}</p>` : ""}
-        <div class="share"><button data-action="open-share">Share your score</button></div>
+        <p class="big-stat"><span class="n">${s.overall.judgment ?? "–"}</span><span class="muted small">judgment, out of 100: you check its work, and it rarely has to correct you</span></p>
+        ${proofNote(meta)}
       </div>
     </section>
-    <section><div class="head"><h2>Catches per week</h2></div><div class="chart">${chartView(s, meta)}</div></section>
+    <section><div class="head"><h2>Catches per week</h2></div><div class="chart">${chartView(s)}</div></section>
     <section class="split">
       <div>
         <div class="head"><h2>By model</h2></div>

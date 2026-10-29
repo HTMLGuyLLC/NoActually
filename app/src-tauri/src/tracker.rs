@@ -96,9 +96,12 @@ fn sync_once(handle: &AppHandle, app: &App, quiet: bool) {
 
 /// Hovering the menu bar icon shows the score without opening anything.
 fn update_tray(handle: &AppHandle, app: &App) {
-    let Ok(s) = lock(&app.reader).stats(&store::Filter::default(), chrono::Local::now().date_naive()) else { return };
+    let Ok(o) = lock(&app.reader).overall(chrono::Local::now().date_naive()) else { return };
     if let Some(tray) = handle.tray_by_id("tray") {
-        let tip = format!("No, Actually... · {} catches this week · {}", s.catches_last_7d, s.tier.name());
+        let tip = match (o.score, o.tier) {
+            (Some(score), Some(tier)) => format!("No, Actually... · {} · score {score}", tier.name()),
+            _ => format!("No, Actually... · {} catches in {} days", o.catches, engine::WINDOW_DAYS),
+        };
         let _ = tray.set_tooltip(Some(tip));
     }
 }

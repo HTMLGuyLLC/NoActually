@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   pin: vi.fn(),
   setRetention: vi.fn(),
   setAutostart: vi.fn(),
+  getMenuBar: vi.fn(),
 }));
 vi.mock("./api", async (importOriginal) => ({ ...(await importOriginal<typeof import("./api")>()), api, demo: false }));
 
@@ -40,6 +41,7 @@ beforeEach(async () => {
   api.sources.mockResolvedValue([source(), source({ id: "codex", name: "Codex", state: allowed })]);
   api.retention.mockResolvedValue({ level: "snippet", full_days: 30, snippet_days: 365 });
   api.getAutostart.mockResolvedValue(false);
+  api.getMenuBar.mockResolvedValue(true);
   api.allow.mockResolvedValue(null);
   api.forget.mockResolvedValue(null);
   api.pin.mockResolvedValue(null);
@@ -63,6 +65,62 @@ const click = async (sel: string) => {
 const toTab = async (tab: string) => {
   await click(`[data-action="tab"][data-id="${tab}"]`);
 };
+
+describe("pickStatFor", () => {
+  it("shows both rates on the overview, and the page's own numbers elsewhere", async () => {
+    const { pickStatFor } = await import("./actions");
+    expect(pickStatFor("score", "overview")).toBe("both");
+    expect(pickStatFor("score", "briefs")).toBe("briefs");
+    expect(pickStatFor("score", "catches")).toBe("catches");
+    expect(pickStatFor("score", "hall")).toBe("catches");
+  });
+
+  it("shows both rates on Improve and Learn, whatever scorecard section was last open", async () => {
+    const { pickStatFor } = await import("./actions");
+    for (const tab of ["improve", "learn", "sources", "settings"] as const) expect(pickStatFor(tab, "briefs"), tab).toBe("both");
+  });
+});
+
+describe("parseGoalChoice", () => {
+  const parse = async (raw: string) => (await import("./actions")).parseGoalChoice(raw);
+
+  it("accepts each kind of goal with its target", async () => {
+    expect(await parse('{"kind":"habit","signal":"why","target":40}')).toEqual({ kind: { kind: "habit", signal: "why" }, target: 40 });
+    expect(await parse('{"kind":"steer","steer":"redo","target":0}')).toEqual({ kind: { kind: "steer", steer: "redo" }, target: 0 });
+    expect(await parse('{"kind":"tier","tier":"coworker","target":0}')).toEqual({ kind: { kind: "tier", tier: "coworker" }, target: 0 });
+  });
+
+  it("drops fields it doesn't know", async () => {
+    expect(await parse('{"kind":"tier","tier":"coworker","target":0,"extra":1}')).toEqual({ kind: { kind: "tier", tier: "coworker" }, target: 0 });
+  });
+
+  it("rejects junk, missing or non-numeric targets, and unknown kinds", async () => {
+    for (const bad of [
+      "",
+      "not json",
+      "null",
+      "[]",
+      "5",
+      '"habit"',
+      "{}",
+      '{"kind":"habit","signal":"why"}',
+      '{"kind":"habit","signal":"why","target":"40"}',
+      '{"kind":"habit","signal":"why","target":null}',
+      '{"kind":"habit","target":40}',
+      '{"kind":"habit","signal":7,"target":40}',
+      '{"kind":"steer","signal":"why","target":10}',
+      '{"kind":"tier","tier":"x"}',
+      '{"kind":"streak","tier":"x","target":1}',
+    ]) {
+      expect(await parse(bad), bad).toBeNull();
+    }
+  });
+
+  it("rejects a target that isn't finite", async () => {
+    // JSON can't carry NaN or Infinity, so a number too big for a double is the nearest thing.
+    expect(await parse('{"kind":"habit","signal":"why","target":1e999}')).toBeNull();
+  });
+});
 
 describe("delegated actions", () => {
   it("switches tabs, moving aria-current and keeping keyboard focus on the tab", async () => {

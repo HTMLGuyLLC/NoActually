@@ -2424,6 +2424,7 @@ version = "0.3.0"
 dependencies = [
  "chrono",
  "log",
+ "noactually-engine",
  "noactually-sources",
  "noactually-store",
  "notify",
