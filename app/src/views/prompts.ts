@@ -67,7 +67,7 @@ function ladderNote(b: Prompts, meta: Meta): string {
 function promptLadderView(b: Prompts, meta: Meta): Html {
   return html`
     ${ladderView({ label: "Prompt tiers", tiers: byAnswer(promptTierRanges(meta)), on: b.tier, at: b.tier ? `${landedPct(b)}%` : null, unranked: ladderNote(b, meta) })}
-    ${b.tier ? html`<div class="share">${shareButton("share-prompts")}</div>` : ""}`;
+    ${b.tier ? html`<div class="share">${shareButton("share-prompts", "Share your score")}</div>` : ""}`;
 }
 
 function signalsView(b: Prompts, meta: Meta): Html {

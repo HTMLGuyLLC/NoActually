@@ -286,7 +286,7 @@ function correctionsView(s: Stats, ctx: Ctx): Html {
       </div>
       <div class="meter">
         ${correctionLadderView(s.overall, meta)}
-        ${correctionTier(meta, s.overall.correction_tier) ? html`<div class="share">${shareButton("share-corrections")}</div>` : ""}
+        ${correctionTier(meta, s.overall.correction_tier) ? html`<div class="share">${shareButton("share-corrections", "Share your score")}</div>` : ""}
       </div>
     </section>
     <section><div class="head"><h2>Corrections per week</h2></div><div class="chart">${chartView(s, meta)}</div></section>

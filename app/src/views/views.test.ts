@@ -66,7 +66,7 @@ describe("scorecardView", () => {
     expect(m).toContain('<span>Religiously</span><span><b class="at">95</b>');
     expect(m).toContain("<span>Sometimes</span><span>50–74</span>");
     expect(m).toContain('<p class="tier-blurb"><b>Hawk-eyed.</b> You catch AI slipping nearly every time.</p>');
-    expect(m).toMatch(/data-action="share-corrections"><svg[^>]*>.*?<\/svg>Share<\/button>/);
+    expect(m).toMatch(/data-action="share-corrections"><svg[^>]*>.*?<\/svg>Share your score<\/button>/);
     const unranked = scorecardView(stats({ overall: overall({ judgment: null, correction_tier: null, to_rank: 3 }) }), { ...ctx, view: "corrections" }).value;
     expect(unranked).toContain(">Hmm.</div>");
     expect(unranked).not.toContain("share-corrections");
