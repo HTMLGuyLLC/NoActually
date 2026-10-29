@@ -30,10 +30,15 @@ async function view(): Promise<Html> {
   if (isGlance) return s.messages ? glanceView(s, meta) : emptyGlanceView(await watching());
 
   let body: Html;
-  if (state.tab === "sources") body = sourcesView(await api.sources());
-  else if (state.tab === "settings") {
-    const [retention, autostart, menuBar] = await Promise.all([api.retention(), api.getAutostart().catch(() => false), api.getMenuBar()]);
-    body = settingsView({ retention, autostart, menuBar, update: state.update, status: state.status, demo });
+  if (state.tab === "settings") {
+    // Sources lead Settings: you set them up once, beside the other privacy controls.
+    const [sources, retention, autostart, menuBar] = await Promise.all([
+      api.sources(),
+      api.retention(),
+      api.getAutostart().catch(() => false),
+      api.getMenuBar(),
+    ]);
+    body = html`${sourcesView(sources)}${settingsView({ retention, autostart, menuBar, update: state.update, status: state.status, demo })}`;
   } else if (state.tab === "learn") {
     body = learnView({ meta, briefs: s.messages ? s.briefs : null, done: await api.learned(), lesson: state.lesson, draft: state.draft, demo });
   } else if (state.tab === "improve") {

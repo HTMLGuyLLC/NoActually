@@ -128,8 +128,11 @@ describe("isDemoData", () => {
   it("accepts the shipped demo.json", () => {
     expect(isDemoData(shipped)).toBe(true);
     if (!isDemoData(shipped)) return;
-    // Every hall entry carries the display strings Rust now sends.
-    for (const h of shipped.stats.hall_of_fame) expect(h.category_title && h.source_name).toBeTruthy();
+    // Every hall entry carries the display strings Rust now sends (a catch of you has no category).
+    for (const h of shipped.stats.hall_of_fame) {
+      expect(h.source_name).toBeTruthy();
+      expect(Boolean(h.category_title)).toBe(Boolean(h.category));
+    }
     expect(shipped.meta.tiers.map((t) => t.id)).toContain(shipped.stats.overall.tier);
   });
 

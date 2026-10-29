@@ -162,9 +162,10 @@ export const clickActions = {
     setView("overview");
     return render();
   },
-  "go-sources": () => {
-    setTab("sources");
-    return render();
+  "go-sources": async () => {
+    setTab("settings");
+    await render();
+    document.getElementById("sources")?.scrollIntoView({ block: "start" });
   },
   tab: (b) => {
     const tab = data(b, "id");

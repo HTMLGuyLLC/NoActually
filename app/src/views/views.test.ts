@@ -205,14 +205,14 @@ describe("onboarding and glance", () => {
 
 describe("chrome", () => {
   it("marks the current tab for assistive tech", () => {
-    const m = headerView("sources", { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 }, false).value;
-    expect(m).toContain('data-id="sources" data-tip="Sources" aria-current="page"');
+    const m = headerView("settings", { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 }, false).value;
+    expect(m).toContain('data-id="settings" data-tip="Settings" aria-current="page"');
     expect(m.match(/aria-current/g)).toHaveLength(1);
   });
 
   it("gives every tab an icon and makes the logo a way home", () => {
     const m = headerView("settings", { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 }, false).value;
-    expect(m.match(/class="tab-icon"/g)).toHaveLength(5);
+    expect(m.match(/class="tab-icon"/g)).toHaveLength(4);
     expect(m).toContain('<button class="home" data-action="home"');
   });
 

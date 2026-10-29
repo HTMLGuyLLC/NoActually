@@ -11,7 +11,7 @@ const MARK = raw(
 
 export const wordmarkView = (cls = "brand"): Html => html`<span class="${cls}">${MARK}<span>No, Actually...</span></span>`;
 
-const TAB_TITLES: Record<Tab, string> = { score: "Scorecard", improve: "Improve", learn: "Learn", sources: "Sources", settings: "Settings" };
+const TAB_TITLES: Record<Tab, string> = { score: "Scorecard", improve: "Improve", learn: "Learn", settings: "Settings" };
 
 /** Small line icons beside each tab's name (decoration: the name is the label). */
 export const svg = (d: string) => raw(`<svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`);
@@ -22,8 +22,6 @@ const TAB_ICONS: Record<Tab, ReturnType<typeof raw>> = {
   improve: svg("M3 17l6-6 4 4 8-8M15 7h6v6"),
   // An open book.
   learn: svg("M2 5h6a4 4 0 0 1 4 4v11a3 3 0 0 0-3-3H2zM22 5h-6a4 4 0 0 0-4 4v11a3 3 0 0 1 3-3h7z"),
-  // Folders stacked: where the history comes from.
-  sources: svg("M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"),
   // Cog.
   settings: svg(
     "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z",
@@ -58,7 +56,7 @@ export function statusPillView(status: SyncStatus, demo: boolean, covers = ""): 
 }
 
 /** Set up once and rarely visited: icons only, so the main sections have room. */
-const UTILITY: readonly Tab[] = ["sources", "settings"];
+const UTILITY: readonly Tab[] = ["settings"];
 
 export function headerView(tab: Tab, status: SyncStatus, demo: boolean, covers = ""): Html {
   const button = (t: Tab) => {

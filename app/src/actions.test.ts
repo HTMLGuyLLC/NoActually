@@ -77,7 +77,7 @@ describe("pickStatFor", () => {
 
   it("shows both rates on Improve and Learn, whatever scorecard section was last open", async () => {
     const { pickStatFor } = await import("./actions");
-    for (const tab of ["improve", "learn", "sources", "settings"] as const) expect(pickStatFor(tab, "briefs"), tab).toBe("both");
+    for (const tab of ["improve", "learn", "settings"] as const) expect(pickStatFor(tab, "briefs"), tab).toBe("both");
   });
 });
 
@@ -124,16 +124,24 @@ describe("parseGoalChoice", () => {
 
 describe("delegated actions", () => {
   it("switches tabs, moving aria-current and keeping keyboard focus on the tab", async () => {
-    btn('[data-action="tab"][data-id="sources"]').focus();
-    await toTab("sources");
-    expect(state.state.tab).toBe("sources");
+    btn('[data-action="tab"][data-id="settings"]').focus();
+    await toTab("settings");
+    expect(state.state.tab).toBe("settings");
     expect(root.querySelector("h2")?.textContent).toBe("Sources");
-    expect(btn('[aria-current="page"]').dataset.id).toBe("sources");
-    expect(document.activeElement).toBe(btn('[data-action="tab"][data-id="sources"]'));
+    expect(btn('[aria-current="page"]').dataset.id).toBe("settings");
+    expect(document.activeElement).toBe(btn('[data-action="tab"][data-id="settings"]'));
+  });
+
+  it("opens Settings at Sources from Choose sources, with no Sources tab of its own", async () => {
+    expect(root.querySelector('[data-action="tab"][data-id="sources"]')).toBeNull();
+    root.insertAdjacentHTML("beforeend", '<button data-action="go-sources">Choose sources</button>');
+    await click('[data-action="go-sources"]');
+    expect(state.state.tab).toBe("settings");
+    expect(root.querySelector("section#sources h2")?.textContent).toBe("Sources");
   });
 
   it("takes two clicks to forget a source", async () => {
-    await toTab("sources");
+    await toTab("settings");
     await click('[data-action="forget"][data-id="codex"]');
     expect(api.forget).not.toHaveBeenCalled();
     expect(btn('[data-action="forget"]').textContent).toBe("Click again to delete its data");
@@ -142,7 +150,7 @@ describe("delegated actions", () => {
   });
 
   it("allows a source with the chosen start, then redraws", async () => {
-    await toTab("sources");
+    await toTab("settings");
     const select = root.querySelector<HTMLSelectElement>('select[data-since="claude-code"]');
     if (select) select.value = "none";
     await click('[data-action="allow"][data-id="claude-code"]');
@@ -150,7 +158,7 @@ describe("delegated actions", () => {
   });
 
   it("puts a failed Allow back and says why, instead of leaving it on Allowing…", async () => {
-    await toTab("sources");
+    await toTab("settings");
     api.allow.mockRejectedValueOnce("permission denied");
     await click('[data-action="allow"][data-id="claude-code"]');
     const b = btn('[data-action="allow"]');

@@ -1,7 +1,7 @@
 // The UI's state: one object, read anywhere, changed only through the named setters below.
 import type { Filter, Meta, ModelRow, Stats, SyncStatus, UpdateStatus, Verdict } from "./api";
 
-export const TABS = ["score", "improve", "learn", "sources", "settings"] as const;
+export const TABS = ["score", "improve", "learn", "settings"] as const;
 export type Tab = (typeof TABS)[number];
 export const isTab = (x: unknown): x is Tab => TABS.some((t) => t === x);
 
