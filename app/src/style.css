@@ -171,7 +171,7 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .views .tab { white-space: nowrap; flex: none }
 .view-body { display: grid; gap: inherit }
 .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 20px }
-.card.mini { grid-template-columns: 1fr; gap: 10px; align-content: start }
+.card.mini { grid-template-columns: minmax(0, 1fr); gap: 10px; align-content: start }
 .card.mini .no { font-size: clamp(64px, 8vw, 96px) }
 .card.mini.briefs .no { font-size: clamp(48px, 6vw, 72px) }
 .card.mini .verdict { margin-top: 22px }
@@ -345,8 +345,10 @@ button.link:hover { filter: none }
 .gw.missed { border-color: var(--muted) } .gw.open { border: 2px dashed var(--pen); color: var(--pen) }
 .goal details summary { cursor: pointer; font-weight: 600; font-size: 14px }
 .goal-pick { display: grid; gap: 10px; margin-top: 10px }
-.pick-label { display: grid; gap: 6px; font-size: 13px; color: var(--muted) }
-.pick-label select { max-width: 100% }
+.goal-pick, .pick-label { min-width: 0 }
+.pick-label { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; font-size: 13px; color: var(--muted) }
+/* Long goal names would size the select past the card; it fits the card and the text truncates. */
+.pick-label select { width: 100%; min-width: 0; text-overflow: ellipsis }
 .goal.finished { border: 2px solid var(--pen) }
 .recap-row { display: grid; grid-template-columns: 1fr auto 4em; align-items: baseline; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--rule) }
 .recap-row b { font: 800 24px/1 var(--display); font-variant-numeric: tabular-nums }
