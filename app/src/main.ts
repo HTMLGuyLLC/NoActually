@@ -4,10 +4,12 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { bindActions } from "./actions";
 import { api, demo } from "./api";
+import { bindChartTips } from "./charttip";
 import { paintStatus, paintUpdate, render, root, scheduler } from "./render";
 import { isGlance, isTab, setStatus, setSyncing, setTab, setUpdate, state } from "./state";
 
 bindActions(root);
+bindChartTips(root);
 // A field losing focus may be the moment a deferred redraw can land.
 root.addEventListener("focusout", () => setTimeout(scheduler.flush, 0));
 

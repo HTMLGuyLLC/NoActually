@@ -224,154 +224,407 @@
     "messages": 4,
     "corrections": 0,
     "continued": 0,
-    "landed": 0
+    "landed": 0,
+    "categories": {},
+    "humbled": 0,
+    "steering": {
+     "ai_wrong": 0,
+     "added": 0,
+     "clarified": 0,
+     "redo": 0
+    }
    },
    {
     "week": "2026-06-01",
     "messages": 1,
     "corrections": 0,
     "continued": 0,
-    "landed": 0
+    "landed": 0,
+    "categories": {},
+    "humbled": 0,
+    "steering": {
+     "ai_wrong": 0,
+     "added": 0,
+     "clarified": 0,
+     "redo": 0
+    }
    },
    {
     "week": "2026-06-08",
     "messages": 1,
     "corrections": 0,
     "continued": 0,
-    "landed": 0
+    "landed": 0,
+    "categories": {},
+    "humbled": 0,
+    "steering": {
+     "ai_wrong": 0,
+     "added": 0,
+     "clarified": 0,
+     "redo": 0
+    }
    },
    {
     "week": "2026-06-22",
     "messages": 86,
     "corrections": 7,
     "continued": 7,
-    "landed": 5
+    "landed": 5,
+    "categories": {
+     "made_it_up": 5,
+     "misread": 1,
+     "missed_something": 1
+    },
+    "humbled": 0,
+    "steering": {
+     "ai_wrong": 1,
+     "added": 1,
+     "clarified": 1,
+     "redo": 0
+    }
    },
    {
     "week": "2026-06-29",
     "messages": 38,
     "corrections": 0,
     "continued": 3,
-    "landed": 3
+    "landed": 3,
+    "categories": {},
+    "humbled": 1,
+    "steering": {
+     "ai_wrong": 0,
+     "added": 0,
+     "clarified": 0,
+     "redo": 0
+    }
    },
    {
     "week": "2026-07-06",
     "messages": 29,
     "corrections": 0,
     "continued": 2,
-    "landed": 2
+    "landed": 2,
+    "categories": {},
+    "humbled": 0,
+    "steering": {
+     "ai_wrong": 0,
+     "added": 0,
+     "clarified": 0,
+     "redo": 0
+    }
    },
    {
     "week": "2026-07-13",
     "messages": 84,
     "corrections": 7,
     "continued": 7,
-    "landed": 5
+    "landed": 5,
+    "categories": {
+     "made_it_up": 4,
+     "misread": 1,
+     "missed_something": 1,
+     "still_broken": 1
+    },
+    "humbled": 1,
+    "steering": {
+     "ai_wrong": 1,
+     "added": 1,
+     "clarified": 1,
+     "redo": 0
+    }
    },
    {
     "week": "2026-07-20",
     "messages": 303,
     "corrections": 5,
     "continued": 25,
-    "landed": 21
+    "landed": 21,
+    "categories": {
+     "made_it_up": 5
+    },
+    "humbled": 0,
+    "steering": {
+     "ai_wrong": 3,
+     "added": 3,
+     "clarified": 1,
+     "redo": 0
+    }
    },
    {
     "week": "2026-07-27",
     "messages": 748,
     "corrections": 19,
     "continued": 62,
-    "landed": 46
+    "landed": 46,
+    "categories": {
+     "made_it_up": 10,
+     "ignored_instructions": 2,
+     "misread": 2,
+     "missed_something": 4,
+     "still_broken": 1
+    },
+    "humbled": 0,
+    "steering": {
+     "ai_wrong": 7,
+     "added": 11,
+     "clarified": 5,
+     "redo": 0
+    }
    },
    {
     "week": "2026-08-03",
     "messages": 279,
     "corrections": 10,
     "continued": 23,
-    "landed": 19
+    "landed": 19,
+    "categories": {
+     "made_it_up": 5,
+     "misread": 5
+    },
+    "humbled": 0,
+    "steering": {
+     "ai_wrong": 3,
+     "added": 3,
+     "clarified": 1,
+     "redo": 0
+    }
    },
    {
     "week": "2026-08-10",
     "messages": 636,
     "corrections": 16,
     "continued": 53,
-    "landed": 40
+    "landed": 40,
+    "categories": {
+     "made_it_up": 2,
+     "ignored_instructions": 8,
+     "misread": 6
+    },
+    "humbled": 0,
+    "steering": {
+     "ai_wrong": 6,
+     "added": 9,
+     "clarified": 4,
+     "redo": 0
+    }
    },
    {
     "week": "2026-08-17",
     "messages": 178,
     "corrections": 12,
     "continued": 15,
-    "landed": 11
+    "landed": 11,
+    "categories": {
+     "made_it_up": 8,
+     "ignored_instructions": 1,
+     "misread": 1,
+     "missed_something": 1,
+     "still_broken": 1
+    },
+    "humbled": 1,
+    "steering": {
+     "ai_wrong": 2,
+     "added": 3,
+     "clarified": 1,
+     "redo": 0
+    }
    },
    {
     "week": "2026-08-24",
     "messages": 189,
     "corrections": 6,
     "continued": 16,
-    "landed": 13
+    "landed": 13,
+    "categories": {
+     "made_it_up": 1,
+     "ignored_instructions": 1,
+     "misread": 1,
+     "missed_something": 3
+    },
+    "humbled": 0,
+    "steering": {
+     "ai_wrong": 2,
+     "added": 2,
+     "clarified": 1,
+     "redo": 0
+    }
    },
    {
     "week": "2026-08-31",
     "messages": 245,
     "corrections": 1,
     "continued": 20,
-    "landed": 18
+    "landed": 18,
+    "categories": {
+     "made_it_up": 1
+    },
+    "humbled": 1,
+    "steering": {
+     "ai_wrong": 2,
+     "added": 1,
+     "clarified": 1,
+     "redo": 0
+    }
    },
    {
     "week": "2026-09-07",
     "messages": 405,
     "corrections": 8,
     "continued": 34,
-    "landed": 26
+    "landed": 26,
+    "categories": {
+     "made_it_up": 3,
+     "ignored_instructions": 1,
+     "misread": 2,
+     "still_broken": 2
+    },
+    "humbled": 0,
+    "steering": {
+     "ai_wrong": 4,
+     "added": 6,
+     "clarified": 2,
+     "redo": 0
+    }
    },
    {
     "week": "2026-09-14",
     "messages": 782,
     "corrections": 24,
     "continued": 65,
-    "landed": 51
+    "landed": 51,
+    "categories": {
+     "made_it_up": 5,
+     "ignored_instructions": 5,
+     "misread": 2,
+     "missed_something": 2,
+     "still_broken": 10
+    },
+    "humbled": 0,
+    "steering": {
+     "ai_wrong": 8,
+     "added": 10,
+     "clarified": 4,
+     "redo": 0
+    }
    },
    {
     "week": "2026-09-21",
     "messages": 2014,
     "corrections": 19,
     "continued": 168,
-    "landed": 143
+    "landed": 143,
+    "categories": {
+     "made_it_up": 4,
+     "ignored_instructions": 10,
+     "misread": 2,
+     "missed_something": 1,
+     "still_broken": 2
+    },
+    "humbled": 0,
+    "steering": {
+     "ai_wrong": 20,
+     "added": 18,
+     "clarified": 7,
+     "redo": 0
+    }
    },
    {
     "week": "2026-09-28",
     "messages": 681,
     "corrections": 15,
     "continued": 57,
-    "landed": 52
+    "landed": 52,
+    "categories": {
+     "made_it_up": 8,
+     "ignored_instructions": 3,
+     "misread": 3,
+     "missed_something": 1
+    },
+    "humbled": 0,
+    "steering": {
+     "ai_wrong": 7,
+     "added": 4,
+     "clarified": 1,
+     "redo": 0
+    }
    },
    {
     "week": "2026-10-05",
     "messages": 351,
     "corrections": 5,
     "continued": 29,
-    "landed": 24
+    "landed": 24,
+    "categories": {
+     "made_it_up": 2,
+     "ignored_instructions": 2,
+     "misread": 1
+    },
+    "humbled": 0,
+    "steering": {
+     "ai_wrong": 3,
+     "added": 4,
+     "clarified": 1,
+     "redo": 0
+    }
    },
    {
     "week": "2026-10-12",
     "messages": 742,
     "corrections": 6,
     "continued": 62,
-    "landed": 50
+    "landed": 50,
+    "categories": {
+     "ignored_instructions": 1,
+     "misread": 1,
+     "missed_something": 1,
+     "still_broken": 3
+    },
+    "humbled": 1,
+    "steering": {
+     "ai_wrong": 7,
+     "added": 8,
+     "clarified": 4,
+     "redo": 0
+    }
    },
    {
     "week": "2026-10-19",
     "messages": 262,
     "corrections": 9,
     "continued": 22,
-    "landed": 20
+    "landed": 20,
+    "categories": {
+     "made_it_up": 3,
+     "misread": 2,
+     "missed_something": 4
+    },
+    "humbled": 0,
+    "steering": {
+     "ai_wrong": 3,
+     "added": 1,
+     "clarified": 1,
+     "redo": 0
+    }
    },
    {
     "week": "2026-10-26",
     "messages": 224,
     "corrections": 8,
     "continued": 19,
-    "landed": 14
+    "landed": 14,
+    "categories": {
+     "ignored_instructions": 1,
+     "misread": 2,
+     "still_broken": 1,
+     "made_it_up": 4
+    },
+    "humbled": 0,
+    "steering": {
+     "ai_wrong": 2,
+     "added": 4,
+     "clarified": 1,
+     "redo": 0
+    }
    }
   ],
   "models": [

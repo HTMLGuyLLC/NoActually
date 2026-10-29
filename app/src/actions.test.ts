@@ -153,6 +153,27 @@ describe("delegated actions", () => {
     expect(api.openMain.mock.calls).toEqual([["settings"], [null]]);
   });
 
+  it("flips an award's entries in place and keeps the place across a redraw", async () => {
+    const { hallEntry } = await import("./test/fixtures");
+    api.stats.mockResolvedValue(
+      stats({
+        categories: { just_wrong: 2 },
+        hall_of_fame: [hallEntry({ id: 1, category: "just_wrong", human: "first" }), hallEntry({ id: 2, category: "just_wrong", human: "second" })],
+      }),
+    );
+    state.setView("hall");
+    await render();
+    const shown = () => root.querySelector('[data-award="just_wrong"] .slide:not([aria-hidden])')?.textContent ?? "";
+    expect(shown()).toContain("first");
+    await click('[data-award="just_wrong"] [data-action="award-slide"][data-step="1"]');
+    expect(shown()).toContain("second");
+    expect(root.querySelector('[data-award="just_wrong"] .slide-at')?.textContent).toBe("2");
+    await render();
+    expect(shown()).toContain("second");
+    await click('[data-award="just_wrong"] [data-action="award-slide"][data-step="1"]');
+    expect(shown()).toContain("first"); // wraps around
+  });
+
   it("takes two clicks to forget a source", async () => {
     await toTab("settings");
     await click('[data-action="forget"][data-id="codex"]');

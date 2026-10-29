@@ -1,6 +1,6 @@
 // The scorecard: the overall score and its two halves (prompts, who corrects whom), the weekly
 // chart, model and category breakdowns, and the hall of fame.
-import type { Filter, HallEntry, Meta, Overall, Stats } from "../api";
+import type { Filter, HallEntry, Meta, Overall, Stats, WeekRow } from "../api";
 import { fmtDay, plural, shortSourceName, subjectLabel, subjectText } from "../format";
 import { type Html, html, num, raw } from "../html";
 import { categoryTitle, correctionTier, correctionTierRanges, tierName, tierOf, tierRanges } from "../meta";
@@ -22,13 +22,14 @@ export type ScorecardContext = {
   view?: ScoreView;
   /** How far back the counts look (default: 28 days). */
   period?: Period;
+  /** Hall of fame: which entry each award shows (default: its best). */
+  awardSlide?: Record<string, number>;
 };
 
 /** The context with its defaults filled in once, for the views below. */
 type Ctx = ScorecardContext & { period: Period; when: string; promptsStill: boolean; correctionsStill: boolean };
 
 const PERIOD_TITLES: Record<Period, string> = { "7d": "7 days", "28d": "28 days", "90d": "90 days", all: "All time" };
-const PERIOD_EYEBROW: Record<Period, string> = { "7d": "Last 7 days", "28d": "Last 28 days", "90d": "Last 90 days", all: "All time" };
 
 /** The scorecard's time picker: how far back every count looks. Buttons on wide windows, a
  * dropdown on narrow ones (CSS shows one; the hidden one is out of the accessibility tree). */
@@ -107,7 +108,6 @@ function heroView(s: Stats, ctx: Ctx): Html {
   const o = s.overall;
   return html`<section class="card hero">
       <div>
-        <div class="eyebrow">${PERIOD_EYEBROW[ctx.period]}</div>
         <h1 class="q">Could ${subjectText(ctx.filter, ctx.meta)} replace you?</h1>
         <div class="verdict">${answerView(o, ctx.meta, ctx.still)}<div class="because">${scoreBecause(o, ctx.when)}</div></div>
         ${partsView(o, ctx.meta)}
@@ -170,7 +170,6 @@ function correctsSummaryView(s: Stats, ctx: Ctx): Html {
   const o = s.overall;
   const tier = correctionTier(ctx.meta, o.correction_tier);
   return html`<article class="card mini corrections">
-      <div class="eyebrow">Who corrects whom</div>
       <h2 class="q">Do you correct it?</h2>
       <div class="verdict">${correctionMark(o, ctx.meta, ctx.correctionsStill)}<div class="because">${correctionBecause(s, ctx.when)}</div></div>
       <p class="tier-line">${tier ? html`<span class="tier-label"><span>Tier</span>${tier.name}</span>` : ""}<span class="hand-note">${correctionNote(o, ctx.meta)}</span></p>
@@ -178,8 +177,19 @@ function correctsSummaryView(s: Stats, ctx: Ctx): Html {
     </article>`;
 }
 
+/** A week's tip: corrections by kind, most first, then the times it corrected you. */
+function correctionWeekTip(w: WeekRow, meta: Meta): string {
+  const lines = [`Week of ${fmtDay(w.week)}`, `${plural(w.corrections, "correction")} · ${plural(w.messages, "message")}`];
+  const kinds = Object.entries(w.categories)
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1]);
+  if (kinds.length) lines.push("", ...kinds.map(([id, n]) => `${categoryTitle(meta, id)} ${n}`));
+  if (w.humbled) lines.push("", `It corrected you ${plural(w.humbled, "time")}`);
+  return lines.join("\n");
+}
+
 /** The weekly bar chart, with a text summary for screen readers. */
-export function chartView(s: Stats): Html {
+export function chartView(s: Stats, meta: Meta): Html {
   const weeks = s.weekly.slice(-20);
   if (!weeks.length) return html`<p class="muted">No weeks yet.</p>`;
   const W = 900;
@@ -203,8 +213,7 @@ export function chartView(s: Stats): Html {
     const barTop = y(w.corrections);
     // The busiest week gets a label, not a color: more corrections isn't better, so no week stands out as the good one.
     const busiest = w.corrections > 0 && w.corrections === peak && weeks.findIndex((v) => v.corrections === peak) === i;
-    const d = new Date(`${w.week}T00:00`);
-    return html`<rect x="${x}" y="${barTop}" width="${bwid}" height="${y(0) - barTop}" rx="3" class="bar"><title>Week of ${d.toLocaleDateString()}: ${w.corrections} corrections, ${w.messages} messages</title></rect>${
+    return html`<rect x="${x}" y="${barTop}" width="${bwid}" height="${y(0) - barTop}" rx="3" class="bar" data-tip="${correctionWeekTip(w, meta)}"></rect>${
       busiest ? html`<text x="${x + bwid / 2}" y="${barTop - 6}" text-anchor="middle" class="peak-label">Most: ${w.corrections}</text>` : ""
     }${i % 2 === 0 ? html`<text x="${x + bwid / 2}" y="${H - 10}" text-anchor="middle">${fmtDay(w.week)}</text>` : ""}`;
   });
@@ -228,7 +237,7 @@ export function hallView(entries: HallEntry[]): Html {
     (e) => html`
       <article class="correction${e.pinned ? " pinned" : ""}">
         ${e.pinned ? html`<span class="pinned-tag">Pinned · kept forever</span>` : ""}
-        <div class="meta"><span class="chip">${e.category_title}</span><span class="chip conf">${e.label} · ${e.day}</span></div>
+        <div class="meta">${e.label} · ${e.day}</div>
         ${e.human ? html`<div class="you-said">“${e.human}”</div>` : ""}
         ${e.ai ? html`<div class="ai-said"><b>${e.model || shortSourceName(e.source_name)}:</b> ${e.ai}</div>` : ""}
         <div class="correction-actions">
@@ -287,7 +296,6 @@ function correctionsView(s: Stats, ctx: Ctx): Html {
   return html`
     <section class="card corrections">
       <div>
-        <div class="eyebrow">Who corrects whom</div>
         <h1 class="q">Do you correct ${subjectText(ctx.filter, ctx.meta)}?</h1>
         <div class="verdict">${correctionMark(s.overall, meta, ctx.correctionsStill)}<div class="because">${correctionBecause(s, ctx.when)}</div></div>
         ${versusView(s, subjectText(ctx.filter, ctx.meta))}
@@ -298,7 +306,7 @@ function correctionsView(s: Stats, ctx: Ctx): Html {
         ${correctionTier(meta, s.overall.correction_tier) ? html`<div class="share"><button data-action="share-corrections">Share your corrections</button></div>` : ""}
       </div>
     </section>
-    <section><div class="head"><h2>Corrections per week</h2></div><div class="chart">${chartView(s)}</div></section>
+    <section><div class="head"><h2>Corrections per week</h2></div><div class="chart">${chartView(s, meta)}</div></section>
     <section class="split">
       <div>
         <div class="head"><h2>By model</h2></div>
@@ -324,16 +332,31 @@ export const AWARDS: Record<string, { emoji: string; name: string; blurb: string
   "": { emoji: "🪞", name: "Touché", blurb: "The times it corrected you. Fair's fair." },
 };
 
-/** An award: its count, its best snippet, and the runners-up. Unearned awards wait, dimmed. */
-function awardView(key: string, count: number, entries: HallEntry[], meta: Meta): Html {
+/** An award's entries, best first, one at a time. All of them share one grid cell, so the card is as
+ * tall as the tallest and flipping never moves the page; prev/next flip in place (actions.ts). */
+function slidesView(key: string, entries: HallEntry[], at: number): Html {
+  const i = Math.min(Math.max(0, at), entries.length - 1);
+  const slides = html`<div class="slides">${entries.map(
+    (e, n) => html`<div class="slide"${n === i ? "" : raw(' aria-hidden="true" inert')}>${hallView([e])}</div>`,
+  )}</div>`;
+  if (entries.length < 2) return slides;
+  const nav = html`<div class="slide-nav">
+      <button class="ghost small" data-action="award-slide" data-id="${key}" data-step="-1" aria-label="Previous">‹</button>
+      <span class="muted small" aria-live="polite"><span class="slide-at">${i + 1}</span> of ${entries.length}</span>
+      <button class="ghost small" data-action="award-slide" data-id="${key}" data-step="1" aria-label="Next">›</button>
+    </div>`;
+  return html`${slides}${nav}`;
+}
+
+/** An award: its count and its snippets, best first. Unearned awards wait, dimmed. */
+function awardView(key: string, count: number, entries: HallEntry[], meta: Meta, at = 0): Html {
   const a = AWARDS[key] ?? { emoji: "🏅", name: categoryTitle(meta, key), blurb: "" };
-  const [best, ...rest] = entries;
   const body = !count
     ? html`<p class="muted small">Not earned yet.</p>`
-    : best
-      ? html`${hallView([best])}${rest.length ? html`<details class="runners-up"><summary>${rest.length} more</summary>${hallView(rest)}</details>` : ""}`
+    : entries.length
+      ? slidesView(key, entries, at)
       : html`<p class="muted small">No snippets kept. Your privacy setting may be “category only”, or the text has aged out.</p>`;
-  return html`<article class="award${count ? "" : " unearned"}">
+  return html`<article class="award${count ? "" : " unearned"}" data-award="${key}">
     <header><span class="award-emoji" aria-hidden="true">${a.emoji}</span><div><h3>${a.name}</h3><p class="muted small">${a.blurb}</p></div><span class="award-count" aria-label="${count} times">×${num(count)}</span></header>
     ${body}
   </article>`;
@@ -351,6 +374,7 @@ function hallSection(s: Stats, ctx: Ctx): Html {
         n,
         s.hall_of_fame.filter((e) => e.category === k),
         ctx.meta,
+        ctx.awardSlide?.[k],
       ),
     )}</div></section>`;
 }
@@ -370,7 +394,7 @@ export function scorecardView(s: Stats, input: ScorecardContext): Html {
     view === "corrections"
       ? correctionsView(s, ctx)
       : view === "prompts"
-        ? promptsView(s.prompts, meta, ctx.promptsStill, subjectText(ctx.filter, meta), ctx.when, s.weekly)
+        ? promptsView(s.prompts, meta, ctx.promptsStill, subjectText(ctx.filter, meta), ctx.period, s.weekly)
         : view === "hall"
           ? hallSection(s, ctx)
           : overviewView(s, ctx);

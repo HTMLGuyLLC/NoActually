@@ -56,7 +56,7 @@ export function lineChart(o: {
   const dots = o.points.map((p, i) => {
     const label = i % step === 0 || i === n - 1 ? xLabel(x(i), H - 10, p.label, i === n - 1 && n > 1) : "";
     if (p.value == null) return label;
-    return html`<circle cx="${x(i)}" cy="${y(p.value)}" r="${p.weak ? 4 : 4.5}" class="${p.weak ? "dot-weak" : "dot-strong"}"><title>${p.label}: ${Math.round(p.value)}${unit}${p.weak ? " (too few tasks to count)" : ""}</title></circle>${label}`;
+    return html`<circle cx="${x(i)}" cy="${y(p.value)}" r="${p.weak ? 4 : 4.5}" class="${p.weak ? "dot-weak" : "dot-strong"}" data-tip="${p.label}: ${Math.round(p.value)}${unit}${p.weak ? " (too few tasks to count)" : ""}"></circle>${label}`;
   });
   return html`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${o.label}" aria-describedby="${o.id}-summary">${grid}${bands}${path ? html`<path d="${path}" class="trend"/>` : ""}${dots}</svg>
     <p class="sr-only" id="${o.id}-summary">${o.summary}</p>`;
@@ -69,6 +69,8 @@ export function stackChart(o: {
   summary: string;
   labels: string[];
   series: { title: string; values: number[] }[];
+  /** One tip per bucket for the whole bar (its breakdown); without, each segment names itself. */
+  tips?: string[];
   width?: number;
   height?: number;
 }): Html {
@@ -87,11 +89,14 @@ export function stackChart(o: {
       const v = s.values[i] ?? 0;
       if (!v) return "";
       const top = y(acc + v);
-      const seg = html`<rect x="${L + i * bw + bw * 0.18}" y="${top}" width="${bw * 0.64}" height="${y(acc) - top}" class="seg s${si}"><title>${label}: ${s.title} ${v}</title></rect>`;
+      const own = o.tips ? "" : html` data-tip="${label}: ${s.title} ${v}"`;
+      const seg = html`<rect x="${L + i * bw + bw * 0.18}" y="${top}" width="${bw * 0.64}" height="${y(acc) - top}" class="seg s${si}"${own}></rect>`;
       acc += v;
       return seg;
     });
-    return html`${segs}${i % step === 0 || i === n - 1 ? xLabel(L + i * bw + bw / 2, H - 10, label, false) : ""}`;
+    const tip = o.tips?.[i];
+    const bar = tip ? html`<g class="bar-group" data-tip="${tip}">${segs}</g>` : segs;
+    return html`${bar}${i % step === 0 || i === n - 1 ? xLabel(L + i * bw + bw / 2, H - 10, label, false) : ""}`;
   });
   const grid = [0, max].map(
     (g) => html`<line x1="${L}" x2="${W - R}" y1="${y(g)}" y2="${y(g)}" class="grid"/><text x="${L - 8}" y="${y(g) + 4}" text-anchor="end">${g}</text>`,

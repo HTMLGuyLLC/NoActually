@@ -203,7 +203,7 @@ describe("improveView goal", () => {
     const st = status({ goal: goal({ kind: "tier", tier: "coworker", target: 0 } as Partial<Goal>), weeks: [], needed: 0, score: 70, need: null });
     const m = view(progress({ goal: st }));
     expect(m).toContain("Reach Coworker");
-    expect(m).toContain("Your score is 70. Coworker starts at 65.");
+    expect(m).not.toContain("Your score is"); // the meter already says "70 of 65 to reach …"
     expect(m).not.toContain("goal-weeks");
     expect(m).not.toContain("weeks met");
     expect(view(progress({ goal: { ...st, score: null } }))).toContain("Not scored yet: you need more tasks with a follow-up.");

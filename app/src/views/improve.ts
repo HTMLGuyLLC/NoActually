@@ -104,7 +104,7 @@ function goalWeeksView(st: GoalStatus, meta: Meta): Html {
   const unit = st.goal.kind === "habit" ? "prompts" : "tasks";
   return html`<ol class="goal-weeks" aria-label="Weeks so far">${st.weeks.map(
     (w) =>
-      html`<li class="gw ${w.state}" title="Week of ${fmtDay(w.week)}: ${w.value}% of ${w.count} ${unit} (${WEEK_WORD[w.state]})"><span aria-hidden="true">${WEEK_MARK[w.state]}</span><span class="sr-only">Week of ${fmtDay(w.week)}: ${w.value}% of ${w.count} ${unit}, ${WEEK_WORD[w.state]}.</span></li>`,
+      html`<li class="gw ${w.state}" data-tip="Week of ${fmtDay(w.week)}: ${w.value}% of ${w.count} ${unit} (${WEEK_WORD[w.state]})"><span aria-hidden="true">${WEEK_MARK[w.state]}</span><span class="sr-only">Week of ${fmtDay(w.week)}: ${w.value}% of ${w.count} ${unit}, ${WEEK_WORD[w.state]}.</span></li>`,
   )}</ol>
   <p class="muted small">Weeks with fewer than ${meta.min_week} ${unit} pause the goal instead of breaking the streak.</p>`;
 }
@@ -112,10 +112,8 @@ function goalWeeksView(st: GoalStatus, meta: Meta): Html {
 /** This week's progress in words. */
 function thisWeekLine(st: GoalStatus, meta: Meta): string {
   const g = st.goal;
-  if (g.kind === "tier")
-    return st.score == null
-      ? "Not scored yet: you need more tasks with a follow-up."
-      : `Your score is ${st.score}. ${tierName(meta, g.tier)} starts at ${tierOf(meta, g.tier)?.floor ?? "?"}.`;
+  // A tier goal's meter already says "87 of 90 to reach …"; only an unscored one needs words.
+  if (g.kind === "tier") return st.score == null ? "Not scored yet: you need more tasks with a follow-up." : "";
   const w = last(st.weeks);
   if (w?.state !== "open") return "";
   // The meter above already shows the percent; this says how many and what's left.
@@ -177,13 +175,14 @@ function goalView(p: Progress, meta: Meta, filtered: boolean): Html {
     g.kind === "tier"
       ? ""
       : html`<p class="goal-count"><b>${st.met}</b> of ${st.needed} weeks met${st.streak > 1 ? html` · <span class="hand">${st.streak} in a row</span>` : ""}</p>`;
+  const line = st.done ? "It's on your trophy shelf. Pick the next one." : thisWeekLine(st, meta);
   return html`<section class="card mini goal goal-hero${st.done ? " finished" : ""}">
     <div class="eyebrow">${st.done ? "Goal done 🏆" : `Your goal · since ${fmtDay(g.start)}`}${across}</div>
     <h2 class="goal-title">${goalTitle(g, meta)}</h2>
     ${st.done ? "" : goalMeter(st, meta)}
     ${progressLine}
     ${g.kind === "tier" ? "" : goalWeeksView(st, meta)}
-    <p>${st.done ? "It's on your trophy shelf. Pick the next one." : thisWeekLine(st, meta)}</p>
+    ${line ? html`<p>${line}</p>` : ""}
     <details${st.done ? raw(" open") : ""}><summary>${st.done ? "Next goal" : "Change goal"}</summary>${goalPickerView(p, meta, g)}</details>
   </section>`;
 }

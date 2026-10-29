@@ -69,6 +69,7 @@ async function view(): Promise<Html> {
       still: s.overall.verdict === state.lastVerdict,
       promptsStill: s.prompts.tier === state.lastPromptTier,
       correctionsStill: s.overall.correction_tier === state.lastCorrectionTier,
+      awardSlide: state.awardSlide,
     });
     setLastVerdict(s.overall.verdict);
     setLastPromptTier(s.prompts.tier);

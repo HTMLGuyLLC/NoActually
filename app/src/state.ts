@@ -64,6 +64,8 @@ export type AppState = {
   lesson: string | null;
   /** Learn: what's typed in the prompt checker. Never saved. */
   draft: string;
+  /** Hall of fame: which entry each award shows, by award key, so a redraw keeps your place. */
+  awardSlide: Record<string, number>;
 };
 
 const initial = (): AppState => ({
@@ -83,6 +85,7 @@ const initial = (): AppState => ({
   range: "12w",
   lesson: null,
   draft: "",
+  awardSlide: {},
 });
 
 const s: AppState = initial();
@@ -139,6 +142,9 @@ export function setRange(range: Range): void {
 }
 export function setLesson(id: string | null): void {
   s.lesson = id;
+}
+export function setAwardSlide(key: string, i: number): void {
+  s.awardSlide = { ...s.awardSlide, [key]: i };
 }
 export function setDraft(text: string): void {
   s.draft = text;

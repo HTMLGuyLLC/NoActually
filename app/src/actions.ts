@@ -21,6 +21,7 @@ import {
   isTab,
   PERIOD_WHEN,
   setAutoUpdate,
+  setAwardSlide,
   setDraft,
   setFilter,
   setLaterFor,
@@ -203,6 +204,21 @@ export const clickActions = {
     setTab("learn");
     setLesson(lessonById(id) ? id : null);
     return render().then(() => window.scrollTo({ top: 0 }));
+  },
+  // Flips an award's entry in place: no redraw, so the page doesn't move.
+  "award-slide": (b) => {
+    const award = b.closest<HTMLElement>("[data-award]");
+    const slides = award ? [...award.querySelectorAll<HTMLElement>(".slide")] : [];
+    if (!award || slides.length < 2) return;
+    const now = slides.findIndex((el) => !el.hasAttribute("aria-hidden"));
+    const next = (now + Number(data(b, "step")) + slides.length) % slides.length;
+    slides.forEach((el, n) => {
+      el.toggleAttribute("aria-hidden", n !== next);
+      el.toggleAttribute("inert", n !== next);
+    });
+    const at = award.querySelector(".slide-at");
+    if (at) at.textContent = String(next + 1);
+    setAwardSlide(data(b, "id"), next);
   },
   "lesson-done": (b) =>
     thenRender(b, async () => {

@@ -144,13 +144,12 @@ fn weekly_buckets_split_on_monday() {
     );
     let w = s.stats(&Filter::default(), "2026-10-27".parse().unwrap()).unwrap().weekly;
     let d = |s: &str| s.parse::<NaiveDate>().unwrap();
-    assert_eq!(
-        w,
-        vec![
-            WeekRow { week: d("2026-10-19"), messages: 1, corrections: 1, ..WeekRow::default() },
-            WeekRow { week: d("2026-10-26"), messages: 1, corrections: 0, ..WeekRow::default() }
-        ]
-    );
+    let row = |w: &WeekRow| (w.week, w.messages, w.corrections);
+    assert_eq!(w.iter().map(row).collect::<Vec<_>>(), vec![(d("2026-10-19"), 1, 1), (d("2026-10-26"), 1, 0)]);
+    // The week's breakdown: which kind of correction it was, and steering on that week's tasks.
+    assert_eq!(w[0].categories, [("just_wrong".to_string(), 1)].into());
+    assert!(w[1].categories.is_empty());
+    assert!(w.iter().all(|w| w.steering.values().all(|n| *n == 0)), "first messages have no steering");
 }
 
 #[test]

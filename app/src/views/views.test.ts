@@ -143,7 +143,7 @@ describe("overview hero", () => {
 
   it("shows the score, the tier and why, with a share button once scored", () => {
     const m = hero();
-    expect(m).toContain("Last 28 days");
+    expect(m).not.toContain('class="eyebrow"'); // the picker and the sentence already say the window
     expect(m).toContain("Score <b>86</b>. Your tasks landed <b>83%</b> of the time, and you corrected it <b>41 times</b> to its 2 in the last 28 days.");
     expect(m).toContain("Your tier is Sharp-eyed, score 86.");
     expect(m).not.toContain("Irreplaceable at 90. You&#39;re at 86."); // the row says it
@@ -207,7 +207,8 @@ describe("overview hero", () => {
 describe("hallView", () => {
   it("uses Rust's category title, never the label, and the source name when no model was recorded", () => {
     const m = hallView([hallEntry({ category_title: "Made it up", label: "confirmed", model: "", source_name: "ChatGPT (export)" })]).value;
-    expect(m).toContain('<span class="chip">Made it up</span>');
+    expect(m).not.toContain("Made it up"); // the award names the kind
+    expect(m).toContain('<div class="meta">confirmed · ');
     expect(m).toContain("<b>ChatGPT:</b>");
   });
 
@@ -225,15 +226,21 @@ describe("hallView", () => {
 
 describe("chartView", () => {
   it("labels the busiest week once without coloring it as the good one", () => {
-    const m = chartView(stats()).value;
+    const m = chartView(stats(), meta).value;
     expect(m).not.toContain("hot");
     expect(m.match(/class="peak-label">Most: /g)).toHaveLength(1);
     expect(m).toContain('aria-label="Corrections per week"');
     expect(m).toContain('aria-describedby="chart-summary"');
   });
 
+  it("gives each week's bar its breakdown: corrections by kind, most first, and the times it corrected you", () => {
+    const m = chartView(stats(), meta).value;
+    expect(m).toContain('data-tip="Week of Oct 19\n16 corrections · 200 messages\n\nFlat-out wrong 10\nMade it up 6\n\nIt corrected you 1 time"');
+    expect(m).not.toContain("<title>");
+  });
+
   it("says when there are no weeks", () => {
-    expect(chartView(stats({ weekly: [] })).value).toContain("No weeks yet.");
+    expect(chartView(stats({ weekly: [] }), meta).value).toContain("No weeks yet.");
   });
 
   it("summarises the chart in words for screen readers", () => {
@@ -421,9 +428,9 @@ describe("scorecard period picker", () => {
     expect(week).toContain('data-action="period" data-id="7d" aria-current="true"');
     expect(week).toContain("you corrected it <b>37 times</b> to its 2 in the last 7 days.");
     // Everything follows the period, the score included: no disclaimer needed.
-    expect(week).toContain('<div class="eyebrow">Last 7 days</div>');
+    expect(week).not.toContain('<div class="eyebrow">');
     expect(week).not.toContain("always uses");
-    expect(view("all")).toContain('<div class="eyebrow">All time</div>');
+    expect(view("all")).toContain("ever.");
     expect(view("all")).toContain("<b>37 times</b> to its 2 ever.");
   });
 });
@@ -476,7 +483,10 @@ describe("hall of fame awards", () => {
     const big = m.indexOf(AWARDS.just_wrong?.name ?? "?");
     expect(big).toBeGreaterThan(-1);
     expect(big).toBeLessThan(m.indexOf(AWARDS.made_it_up?.name ?? "?"));
-    expect(m).toContain("<summary>1 more</summary>");
+    // Entries flip in place: the best shows, the rest wait in the same cell, with "1 of 2" arrows.
+    expect(m).toContain('<span class="slide-at">1</span> of 2');
+    expect(m).toContain('data-action="award-slide"');
+    expect(m).toContain('class="slide" aria-hidden="true" inert');
     expect(m.indexOf("best one")).toBeLessThan(m.indexOf("runner up"));
     expect(m).toContain('class="award unearned"');
     expect(m).toContain(AWARDS[""]?.name ?? "?");

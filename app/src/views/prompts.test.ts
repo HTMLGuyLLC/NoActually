@@ -93,13 +93,15 @@ describe("prompts on the scorecard and the glance", () => {
 
   it("charts tasks per week as landed vs needed more, adding up to each week's tasks", () => {
     const weekly = stats().weekly;
-    const m = promptsView(prompts(), meta, true, "AI", "in the last 28 days", weekly).value;
+    const m = promptsView(prompts(), meta, true, "AI", "28d", weekly).value;
     expect(m).toContain("<h2>Tasks per week</h2>");
     expect(m).toContain("Landed without more from you");
     expect(m).toContain("Needed more from you");
-    expect(m).toContain(": Landed without more from you 17</title>");
-    expect(m).toContain(": Needed more from you 3</title>");
+    // One tip per week's bar: its tasks, what landed, and what the rest needed.
+    expect(m).toContain(
+      'class="bar-group" data-tip="Week of Oct 19\n20 tasks · 17 landed (85%)\n\nNeeded more from you:\nYou added more 2\nYou clarified 1\n\nIt got it wrong 4 (not on you)"',
+    );
     expect(m).toContain("17 of 20 tasks landed without more from you.");
-    expect(promptsView(prompts(), meta, true, "AI", "in the last 28 days", []).value).toContain("No tasks with a follow-up yet.");
+    expect(promptsView(prompts(), meta, true, "AI", "28d", []).value).toContain("No tasks with a follow-up yet.");
   });
 });

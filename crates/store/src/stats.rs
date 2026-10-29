@@ -139,6 +139,12 @@ pub struct WeekRow {
     pub continued: i64,
     /// Of those, the ones nothing on you steered.
     pub landed: i64,
+    /// Times it corrected you that week.
+    pub humbled: i64,
+    /// Corrections that week by category id, for the week's breakdown.
+    pub categories: BTreeMap<String, i64>,
+    /// Steering on that week's tasks by cause id.
+    pub steering: BTreeMap<String, i64>,
 }
 
 /// One correction (or humbled moment) shown in the hall of fame.
@@ -413,7 +419,8 @@ pub(crate) fn monday_of(d: NaiveDate) -> NaiveDate {
 
 fn weekly(v: &View) -> Result<Vec<WeekRow>> {
     let sql = format!(
-        "SELECT day, SUM(CASE WHEN kind = 'message' THEN n ELSE 0 END), SUM(CASE WHEN kind IN {} THEN n ELSE 0 END)
+        "SELECT day, SUM(CASE WHEN kind = 'message' THEN n ELSE 0 END), SUM(CASE WHEN kind IN {} THEN n ELSE 0 END),
+                SUM(CASE WHEN kind = 'humbled' THEN n ELSE 0 END)
          FROM daily WHERE 1=1 {} GROUP BY day",
         *CORRECTION_KINDS, v.clause
     );
@@ -424,24 +431,42 @@ fn weekly(v: &View) -> Result<Vec<WeekRow>> {
             f(weeks.entry(week).or_insert_with(|| WeekRow { week, ..WeekRow::default() }));
         }
     };
-    for (day, m, k) in v.rows(&sql, &[], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?)))? {
+    let day_counts =
+        |r: &rusqlite::Row| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?, r.get::<_, i64>(3)?));
+    for (day, m, k, h) in v.rows(&sql, &[], day_counts)? {
         add(day, &mut |w| {
             w.messages += m;
             w.corrections += k;
+            w.humbled += h;
         });
+    }
+    let by_category = format!(
+        "SELECT day, category, SUM(n) FROM daily WHERE kind IN {} {} GROUP BY day, category",
+        *CORRECTION_KINDS, v.clause
+    );
+    for (day, category, n) in
+        v.rows(&by_category, &[], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?)))?
+    {
+        add(day, &mut |w| *w.categories.entry(category.clone()).or_insert(0) += n);
     }
     // Tasks by the day they started, so "landed per week" reads the same tasks the prompt tier does.
     let tasks = format!(
-        "SELECT day, COALESCE(SUM({CONTINUED}), 0), COALESCE(SUM({}), 0) FROM tasks WHERE 1=1 {} GROUP BY day",
+        "SELECT day, COALESCE(SUM({CONTINUED}), 0), COALESCE(SUM({}), 0), {} FROM tasks WHERE 1=1 {} GROUP BY day",
         LANDED.as_str(),
+        steer_sums(),
         v.clause
     );
-    for (day, c, l) in
-        v.rows(&tasks, &[], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?)))?
-    {
+    let task_counts = |r: &rusqlite::Row| {
+        let steer = (0..Steer::ALL.len()).map(|i| r.get::<_, i64>(3 + i)).collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?, steer))
+    };
+    for (day, c, l, steer) in v.rows(&tasks, &[], task_counts)? {
         add(day, &mut |w| {
             w.continued += c;
             w.landed += l;
+            for (cause, n) in Steer::ALL.iter().zip(&steer) {
+                *w.steering.entry(cause.as_str().to_string()).or_insert(0) += n;
+            }
         });
     }
     Ok(weeks.into_values().collect())
@@ -590,9 +615,13 @@ pub(crate) fn task_groups(v: &View) -> Result<Vec<Group>> {
 }
 
 /// Times each steering cause happened across the view's tasks, in [`Steer::ALL`] order.
+/// `COALESCE(SUM(cause), 0)` for every steering cause, in `Steer::ALL` order.
+fn steer_sums() -> String {
+    Steer::ALL.iter().map(|c| format!("COALESCE(SUM({}), 0)", c.as_str())).collect::<Vec<_>>().join(", ")
+}
+
 pub(crate) fn steer_totals(v: &View) -> Result<Vec<(Steer, i64)>> {
-    let sums: Vec<String> = Steer::ALL.iter().map(|c| format!("COALESCE(SUM({}), 0)", c.as_str())).collect();
-    let sql = format!("SELECT {} FROM tasks WHERE 1=1 {}", sums.join(", "), v.clause);
+    let sql = format!("SELECT {} FROM tasks WHERE 1=1 {}", steer_sums(), v.clause);
     let row =
         v.rows(&sql, &[], |r| (0..Steer::ALL.len()).map(|i| r.get::<_, i64>(i)).collect::<rusqlite::Result<Vec<_>>>())?;
     Ok(Steer::ALL.into_iter().zip(row.into_iter().flatten()).collect())
