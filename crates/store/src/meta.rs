@@ -35,7 +35,7 @@ pub struct Meta {
     pub prompt_window_days: i64,
     /// What a prompt can carry, in display order.
     pub signals: Vec<SignalInfo>,
-    /// Signals a prompt needs to be sharp.
+    /// Signals a prompt needs to be specific.
     pub sharp_signals: u32,
     /// Prompt grades, lowest first.
     pub grades: Vec<Titled>,
@@ -169,7 +169,7 @@ mod tests {
             serde_json::json!({"id":"tech_lead","name":"Tech lead","floor":80,"verdict":"Sometimes.","blurb":"Clear most of the time, with a few gaps."})
         );
         assert_eq!(m["signals"][0]["id"], "spot");
-        assert_eq!(m["grades"][2], serde_json::json!({"id":"sharp","title":"Sharp"}));
+        assert_eq!(m["grades"][2], serde_json::json!({"id":"sharp","title":"Specific"}));
         assert_eq!(m["steers"][0], serde_json::json!({"id":"ai_wrong","title":"It got it wrong"}));
         assert_eq!((m["min_prompts"].as_i64(), m["sharp_signals"].as_u64()), (Some(10), Some(3)));
         assert_eq!(m["prompt_window_days"], 28);

@@ -655,7 +655,7 @@ fn a_tip_quotes_the_gap_only_when_history_backs_it() {
     let mut s = Store::open_in_memory().unwrap();
     let t = now_ts(0);
     let mut turns = Vec::new();
-    // Prompts that say why always land; those that don't are steered half the time.
+    // Prompts with a purpose always land; those that don't are steered half the time.
     for i in 0..30 {
         let why = i < 10;
         let human = if why { "add a CSV export because finance needs it" } else { "add a CSV export" };

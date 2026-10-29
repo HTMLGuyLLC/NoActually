@@ -43,7 +43,7 @@ export type Meta = {
   prompt_window_days: number;
   /** What a prompt can carry, in display order. */
   signals: (Titled & { hint: string })[];
-  /** Signals a prompt needs to be sharp. */
+  /** Signals a prompt needs to be specific. */
   sharp_signals: number;
   /** Lowest first. */
   grades: Titled[];

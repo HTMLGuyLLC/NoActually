@@ -4,7 +4,7 @@ import type { Goal, GoalKind, GoalStatus, GoalWeek, HistoryWeek, Meta, Progress,
 import { fmtDay, last, plural } from "../format";
 import { type Html, html, raw } from "../html";
 import { lessonFor } from "../learn/lessons";
-import { floorPercent, signalTitle, steerTitle, tierName, tierOf } from "../meta";
+import { floorPercent, signalNoun, steerTitle, tierName, tierOf } from "../meta";
 import { RANGES, type Range } from "../state";
 import { lineChart, type Point, sparkline, stackChart } from "./charts";
 
@@ -25,6 +25,8 @@ const RATE_MIN_MESSAGES = 50;
 
 /** The clear-the-first-time chart starts at 50% so the tier bands (70/80/90) have room, lower when a week was lower. */
 /** Follow-up reasons' colors: blue is the AI's side, red is yours. */
+/** Vague is muted: blue means the AI. */
+const GRADE_SEG: Record<string, string> = { sharp: "s0", solid: "s1", thin: "s3" };
 const STEER_SEG: Record<string, string> = { ai_wrong: "s2", added: "s0", clarified: "s1", redo: "s3" };
 
 const landedFloor = (points: Point[]) => Math.min(50, ...points.filter((p) => p.value != null && !p.weak).map((p) => Math.floor((p.value ?? 0) / 10) * 10));
@@ -84,14 +86,10 @@ export function buckets(weeks: HistoryWeek[], range: Range, minWeek: number): { 
 
 const pctOf = (n: number, total: number) => (total > 0 ? floorPercent(n, total) : null);
 
-/** "Says why" → "say why", for "Prompts that say why were clear the first time…". */
-const verbPhrase = (title: string) => title.toLowerCase().replace(/^(\w+?)s\b/, "$1");
-
 /** What a goal asks, in a sentence. */
 export function goalTitle(g: GoalKind & { target: number }, meta: Meta): string {
   if (g.kind === "habit") {
-    const phrase = verbPhrase(signalTitle(meta, g.signal));
-    return `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)} in ${g.target}% of your prompts each week`;
+    return `Include ${signalNoun(meta, g.signal)} in ${g.target}% of your prompts each week`;
   }
   if (g.kind === "steer") {
     const steer = `“${steerTitle(meta, g.steer).toLowerCase()}”`;
@@ -123,9 +121,7 @@ function thisWeekLine(st: GoalStatus, meta: Meta): string {
   const so = `${plural(w.count, g.kind === "habit" ? "prompt" : "task")} so far.`;
   if (g.kind === "habit") {
     if (st.need == null) return `${so} Out of reach this week; next week starts fresh.`;
-    return st.need
-      ? `${so} ${plural(st.need, "more prompt", "more prompts")} that ${verbPhrase(signalTitle(meta, g.signal))} would hit it.`
-      : `${so} On track.`;
+    return st.need ? `${so} ${plural(st.need, "more prompt", "more prompts")} with ${signalNoun(meta, g.signal)} would hit it.` : `${so} On track.`;
   }
   return w.count >= meta.min_week && w.value <= g.target ? `${so} On track.` : so;
 }
@@ -206,7 +202,7 @@ function recapView(weeks: HistoryWeek[], meta: Meta): Html | "" {
   };
   return html`<section class="recap"><div class="eyebrow">Last week · ${fmtDay(latest.week)}</div>
     ${row("Clear the first time", landed(latest), landed(before))}
-    ${row("Sharp prompts", sharp(latest), sharp(before))}
+    ${row("Specific prompts", sharp(latest), sharp(before))}
     ${row("Corrections", latest.corrections, before.corrections, "", true)}
     <p class="muted small">Compared with the week before.</p>
   </section>`;
@@ -234,7 +230,7 @@ function trendsView(ctx: ImproveContext): Html {
   const labels = points.map((b) => b.label);
   // The AI's mistakes in its blue, the ones on you in your red and the rest muted, as on Prompting.
   const steerSeries = meta.steers.map((s) => ({ title: s.title, values: points.map((b) => b.steering[s.id] ?? 0), seg: STEER_SEG[s.id] }));
-  const gradeSeries = [...meta.grades].reverse().map((g) => ({ title: g.title, values: points.map((b) => b.grades[g.id] ?? 0) }));
+  const gradeSeries = [...meta.grades].reverse().map((g) => ({ title: g.title, values: points.map((b) => b.grades[g.id] ?? 0), seg: GRADE_SEG[g.id] }));
   const rate: Point[] = points.map((b) => ({
     label: b.label,
     value: b.messages ? (100 * b.corrections) / b.messages : null,
@@ -261,7 +257,7 @@ function bestsView(p: Progress, filtered: boolean): Html {
   const stat = (v: string, l: string) => html`<div class="stat"><span class="v">${v}</span><span class="l">${l}${filtered ? " · all AI" : ""}</span></div>`;
   return html`<section class="stats">
     ${stat(b.landed ? `${b.landed[0]}%` : "–", b.landed ? `best 4 weeks clear the first time · to ${fmtDay(b.landed[1])}` : "best 4 weeks clear the first time")}
-    ${stat(b.sharp ? `${b.sharp[0]}%` : "–", b.sharp ? `sharpest week · ${fmtDay(b.sharp[1])}` : "sharpest week")}
+    ${stat(b.sharp ? `${b.sharp[0]}%` : "–", b.sharp ? `most specific week · ${fmtDay(b.sharp[1])}` : "most specific week")}
     ${stat(plural(b.goal_streak, "week"), "longest goal streak")}
     ${stat(`${p.trophies.length}`, p.trophies.length === 1 ? "trophy" : "trophies")}
   </section>`;
@@ -283,7 +279,7 @@ function insightsView(p: Progress, meta: Meta): Html {
     const [w, wo] = t.landed_with_without;
     const l = lessonFor("signal", t.signal);
     items.push(
-      html`<li>Prompts that ${verbPhrase(signalTitle(meta, t.signal))} were clear the first time <b>${Math.round(w)}%</b> of the time, vs ${Math.round(wo)}% without.${l ? html` <button class="link" data-action="open-lesson" data-id="${l.id}">${l.title} →</button>` : ""}</li>`,
+      html`<li>Prompts with ${signalNoun(meta, t.signal)} were clear the first time <b>${Math.round(w)}%</b> of the time, vs ${Math.round(wo)}% without.${l ? html` <button class="link" data-action="open-lesson" data-id="${l.id}">${l.title} →</button>` : ""}</li>`,
     );
   }
   if (i.steer) {

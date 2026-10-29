@@ -329,13 +329,15 @@ type PromptsCard = Pick<Prompts, "window_landed" | "window_tasks" | "grades" | "
 const PROMPT_QUESTION = "Do I make my AI guess?";
 export const promptLines = (b: PromptsCard, when = PERIOD_WHEN["28d"]): [string, string] => [
   `${landedPct(b)}% of my prompts ${when} were clear the first time.`,
-  `${percent(b.grades.sharp ?? 0, b.tasks)}% of all my prompts were sharp.`,
+  `${percent(b.grades.sharp ?? 0, b.tasks)}% of all my prompts were specific.`,
 ];
 
-/** "SHARP 20% · SOLID 24% · THIN 56%": the bar's key. */
-export const gradeKey = (b: PromptsCard) => ["sharp", "solid", "thin"].map((id) => `${id.toUpperCase()} ${percent(b.grades[id] ?? 0, b.tasks)}%`).join("  ·  ");
+/** "SPECIFIC 20% · DECENT 24% · VAGUE 56%": the bar's key. */
+const GRADE_WORD = { sharp: "SPECIFIC", solid: "DECENT", thin: "VAGUE" };
+export const gradeKey = (b: PromptsCard) =>
+  (["sharp", "solid", "thin"] as const).map((id) => `${GRADE_WORD[id]} ${percent(b.grades[id] ?? 0, b.tasks)}%`).join("  ·  ");
 
-/** Sharp / solid / thin as one bar, sharp first, `w` wide with its top-left at (x, y). */
+/** Specific / decent / vague as one bar, specific first, `w` wide with its top-left at (x, y). */
 function drawGradeBar(g: CanvasRenderingContext2D, b: PromptsCard, x: number, y: number, w: number, h: number) {
   const parts: [string, string][] = [
     ["sharp", CARD_THEME.pen],

@@ -51,6 +51,10 @@ export const hasSignal = (bits: number, i: number): boolean => (bits & (1 << i))
 
 export const signalTitle = (meta: Meta, id: string): string => meta.signals.find((s) => s.id === id)?.title ?? id;
 
+/** A signal as an object: "a target", "evidence", "a purpose", for "Include a purpose" and "prompts with a purpose". */
+const SIGNAL_NOUN: Record<string, string> = { spot: "a target", proof: "evidence", done: "a finish line", limits: "guardrails", why: "a purpose" };
+export const signalNoun = (meta: Meta, id: string): string => SIGNAL_NOUN[id] ?? signalTitle(meta, id).toLowerCase();
+
 export const categoryTitle = (meta: Meta, id: string): string => meta.categories.find((c) => c.id === id)?.title ?? id;
 
 export const sourceName = (meta: Meta, id: string): string => meta.sources.find((s) => s.id === id)?.name ?? id;

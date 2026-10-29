@@ -206,7 +206,7 @@ pub struct Trophy {
 pub struct Bests {
     /// Best landed percent over any 4 weeks with enough tasks, and the last Monday of them.
     pub landed: Option<(i64, NaiveDate)>,
-    /// Best share of sharp prompts in a week with enough of them.
+    /// Best share of specific prompts in a week with enough of them.
     pub sharp: Option<(i64, NaiveDate)>,
     /// Longest run of goal weeks met.
     pub goal_streak: i64,
@@ -498,7 +498,7 @@ fn suggest(weeks: &[HistoryWeek], today: NaiveDate, tier: Option<Tier>) -> Goal 
 /// A percent and the week it happened.
 type Best = Option<(i64, NaiveDate)>;
 
-/// Best 4-week landed rate and best sharp week.
+/// Best 4-week landed rate and best specific week.
 fn bests(weeks: &[HistoryWeek]) -> (Best, Best) {
     let landed = weeks
         .windows(4)
@@ -1019,7 +1019,7 @@ mod tests {
             ..HistoryWeek::default()
         };
         let weeks = [
-            w("2026-09-28", 3, 3, 3, 3), // too few for a sharp best
+            w("2026-09-28", 3, 3, 3, 3), // too few for a specific best
             w("2026-10-05", 3, 2, 5, 2),
             w("2026-10-12", 3, 3, 5, 1),
             w("2026-10-19", 3, 3, 5, 0),

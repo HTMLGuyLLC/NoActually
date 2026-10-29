@@ -2,7 +2,7 @@
 import type { Meta, Prompts, WeekRow } from "../api";
 import { fmtDay, plural } from "../format";
 import { type Html, html, num } from "../html";
-import { landedPct, percent, promptTier, promptTierRanges, steerTitle } from "../meta";
+import { landedPct, percent, promptTier, promptTierRanges, signalNoun, steerTitle } from "../meta";
 import { PERIOD_WHEN, type Period } from "../state";
 import { stackChart } from "./charts";
 import { answerWord, byAnswer, ladderView, shareButton, tierBlurb, verdictMark } from "./chrome";
@@ -45,7 +45,7 @@ function verdictView(b: Prompts, meta: Meta, still: boolean, subject: string, pe
     ${tierBlurb(promptTier(meta, b.tier))}`;
 }
 
-/** One bar split into sharp / solid / thin, with the numbers spelled out beside it. */
+/** One bar split into specific / decent / vague, with the numbers spelled out beside it. */
 function gradesView(b: Prompts, meta: Meta): Html {
   const top = [...meta.grades].reverse();
   const parts = top.map((g) => ({ ...g, pct: percent(b.grades[g.id] ?? 0, b.tasks) }));
@@ -53,7 +53,7 @@ function gradesView(b: Prompts, meta: Meta): Html {
   return html`<div class="grades">
     <div class="grade-bar" role="img" aria-label="Your prompts: ${label}">${parts.map((p) => html`<i class="g-${p.id}" data-w="${p.pct}"></i>`)}</div>
     <ul class="grade-key">${parts.map((p) => html`<li><i class="g-${p.id}" aria-hidden="true"></i>${p.title} <b>${p.pct}%</b></li>`)}</ul>
-    <p class="muted small">Sharp prompts include ${meta.sharp_signals}+ of the ${meta.signals.length} things below. Questions aren't graded.</p>
+    <p class="muted small">Specific prompts include ${meta.sharp_signals}+ of the ${meta.signals.length} things below. Questions aren't graded.</p>
   </div>`;
 }
 
@@ -83,9 +83,9 @@ function tipView(b: Prompts, meta: Meta): Html | "" {
   const s = tip && meta.signals.find((x) => x.id === tip.signal);
   if (!tip || !s) return "";
   const proof = tip.landed_with_without
-    ? html` Your prompts that do were clear the first time <b>${Math.round(tip.landed_with_without[0])}%</b> of the time, vs ${Math.round(tip.landed_with_without[1])}% without.`
+    ? html` Your prompts with ${signalNoun(meta, s.id)} were clear the first time <b>${Math.round(tip.landed_with_without[0])}%</b> of the time, vs ${Math.round(tip.landed_with_without[1])}% without.`
     : "";
-  return html`<p class="tip"><span class="hand">Try this:</span> <b>${s.title.toLowerCase()}</b> (${s.hint}). Only ${Math.round(tip.pct_of_prompts)}% of your prompts do.${proof}</p>`;
+  return html`<p class="tip"><span class="hand">Try this:</span> include <b>${signalNoun(meta, s.id)}</b> (${s.hint}). Only ${Math.round(tip.pct_of_prompts)}% of your prompts do.${proof}</p>`;
 }
 
 function steeringView(b: Prompts, meta: Meta): Html {

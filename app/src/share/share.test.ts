@@ -48,9 +48,9 @@ describe("promptShareText", () => {
   });
 
   it("matches the card's lines", () => {
-    expect(promptLines(prompts())).toEqual(["95% of my prompts in the last 28 days were clear the first time.", "20% of all my prompts were sharp."]);
+    expect(promptLines(prompts())).toEqual(["95% of my prompts in the last 28 days were clear the first time.", "20% of all my prompts were specific."]);
     expect(promptLines(prompts(), "ever")[0]).toBe("95% of my prompts ever were clear the first time.");
-    expect(gradeKey(prompts())).toBe("SHARP 20%  ·  SOLID 30%  ·  THIN 50%");
+    expect(gradeKey(prompts())).toBe("SPECIFIC 20%  ·  DECENT 30%  ·  VAGUE 50%");
   });
 });
 

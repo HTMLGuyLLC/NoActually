@@ -105,43 +105,43 @@
   "signals": [
    {
     "id": "spot",
-    "title": "Points at it",
-    "hint": "a file, function, link or code"
+    "title": "Target",
+    "hint": "a file, function, page or link"
    },
    {
     "id": "proof",
-    "title": "Shows it",
+    "title": "Evidence",
     "hint": "an error, the output or an example"
    },
    {
     "id": "done",
-    "title": "Says what done is",
+    "title": "Finish line",
     "hint": "the expected result, a test or a format"
    },
    {
     "id": "limits",
-    "title": "Sets limits",
+    "title": "Guardrails",
     "hint": "don't, only, keep, without"
    },
    {
     "id": "why",
-    "title": "Says why",
-    "hint": "the goal or the context"
+    "title": "Purpose",
+    "hint": "who it's for or what it's part of"
    }
   ],
   "sharp_signals": 3,
   "grades": [
    {
     "id": "thin",
-    "title": "Thin"
+    "title": "Vague"
    },
    {
     "id": "solid",
-    "title": "Solid"
+    "title": "Decent"
    },
    {
     "id": "sharp",
-    "title": "Sharp"
+    "title": "Specific"
    }
   ],
   "steers": [

@@ -42,21 +42,21 @@ describe("promptsView", () => {
   });
 
   it("spells out the grade mix for screen readers, sharp first", () => {
-    expect(view()).toContain('aria-label="Your prompts: 20% sharp, 30% solid, 50% thin"');
+    expect(view()).toContain('aria-label="Your prompts: 20% specific, 30% decent, 50% vague"');
     expect(view()).toContain('class="g-sharp" data-w="20"');
   });
 
   it("lists every signal with its share and hint", () => {
     const m = view();
-    expect(m).toContain('Points at it<small class="muted">a file, function, link or code</small>');
+    expect(m).toContain('Target<small class="muted">a file, function, page or link</small>');
     expect(m).toContain('<span class="n">45%</span>'); // done: 90 of 200
   });
 
   it("tips the weakest signal, quoting the gap only when Rust found one", () => {
-    expect(view()).toContain("<b>sets limits</b> (don&#39;t, only, keep, without). Only 10% of your prompts do.");
+    expect(view()).toContain("include <b>guardrails</b> (don&#39;t, only, keep, without). Only 10% of your prompts do.");
     expect(view()).not.toContain("were clear the first time <b>");
     const m = view({ tip: { signal: "why", pct_of_prompts: 20, landed_with_without: [93.3, 80] } });
-    expect(m).toContain("Your prompts that do were clear the first time <b>93%</b> of the time, vs 80% without.");
+    expect(m).toContain("Your prompts with a purpose were clear the first time <b>93%</b> of the time, vs 80% without.");
     expect(view({ tip: null })).not.toContain("Try this");
     expect(view({ tip: { signal: "gone", pct_of_prompts: 1, landed_with_without: null } })).not.toContain("Try this");
   });

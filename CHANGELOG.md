@@ -16,11 +16,12 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ### Changed
 
+- Plainer names for what a prompt includes (Target, Evidence, Finish line, Guardrails, Purpose) and its grade (Vague, Decent, Specific).
 - "Landed" now reads as "clear the first time": 82% of your prompts were clear the first time.
 - The app says **prompts** and **corrections** instead of briefs and catches, everywhere you read it. The code, database and settings use the same words: the database migrates in place, and history is re-read once (rules version 6).
 - A time picker on the scorecard (7 days, 28 days, 90 days, all time) sets how far back the whole scorecard looks: the score and tiers, corrections, you vs it, prompts, the chart, models, categories and the hall of fame. Popups, goals, the quick glance and the tray stay on the last 28 days. `noactually stats --since YYYY-MM-DD` does the same.
-- The Prompts page leads with its answer and one line of why; the sharp/solid/thin bar moved down to What your prompts carry.
-- Prompt rules: "you'll know it's fixed when…" and "done once…" say what done is; "no error in the logs" is no longer proof; "we want them to come back" says why. History is re-read once to apply them. A route on its own ("/hi", "/api/users") points at it (rules version 7).
+- The Prompts page leads with its answer and one line of why; the specific/decent/vague bar moved down to What your prompts carry.
+- Prompt rules: "you'll know it's fixed when…" and "done once…" give a finish line; "no error in the logs" is no longer proof; "we want them to come back" gives a purpose. History is re-read once to apply them. A route on its own ("/hi", "/api/users") is a target (rules version 7).
 - **Check for updates** (new chats) moved to Sources; the updater's button is now **Check for app updates**.
 - The model picker sits beside the time range (on the scorecard and Improve), so it's clear it filters the whole page; the questions name the model in plain text ("Could AI replace you?"). The "Showing … only" chip is gone: pick All AI to go back.
 - Tier ladders show your number in your tier's row, instead of a note below. Prompting and Corrections label their rows by the answer (Rarely, Sometimes, Often, Religiously); the tier's name and a line on what it means sit under the answer ("Hawk-eyed. You catch AI slipping nearly every time.").

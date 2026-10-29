@@ -1,10 +1,10 @@
 {
   "signal_hints": {
-    "spot": "Point at it: name the file, function or doc. 'In checkout.ts, the total is wrong.'",
-    "proof": "Show it: paste the error, the output or an example. 'It says: Card declined.'",
-    "done": "Say what done looks like: 'Done when the tests pass.'",
-    "limits": "Set limits: say what to leave alone. 'Don't change the API.'",
-    "why": "Say why: share the goal. 'Our customers need this before tax season.'"
+    "spot": "Target: name the file, function or page. 'In checkout.ts, the total is wrong.'",
+    "proof": "Evidence: paste the error, the output or an example. 'It says: Card declined.'",
+    "done": "Finish line: say what done looks like. 'Done when the tests pass.'",
+    "limits": "Guardrails: say what to leave alone. 'Don't change the API.'",
+    "why": "Purpose: say who it's for or what it's part of. 'Our customers need this before tax season.'"
   },
   "tracks": [
     {
@@ -14,7 +14,7 @@
       "lessons": [
         {
           "id": "point-at-it",
-          "title": "Point at it",
+          "title": "Target",
           "reviewed": "2026-10",
           "teaches": { "signal": "spot" },
           "why": "When you name the place, nobody has to go hunting for it.",
@@ -26,7 +26,7 @@
             "text": "The invoice date from formatDate in dates.ts is a day off. It should show the order date, not the day before.",
             "signals": ["spot", "done"]
           },
-          "template": "In <file, function or doc>, <what's wrong>. It should <what you want instead>.",
+          "template": "In <file, function or page>, <what's wrong>. It should <what you want instead>.",
           "tips": [
             "Use the real name of the file, the function or the doc.",
             "Wrap exact names in backticks so they stand out.",
@@ -35,7 +35,7 @@
           "quiz": [
             {
               "kind": "sharper",
-              "question": "Which prompt is sharper?",
+              "question": "Which prompt is more specific?",
               "options": ["Fix the slow search.", "The search in `searchProducts` is slow. It should return in under 200ms."],
               "answer": 1,
               "explain": "It names the exact function, so there's no hunt and no guess."
@@ -52,7 +52,7 @@
         },
         {
           "id": "show-it",
-          "title": "Show it",
+          "title": "Evidence",
           "reviewed": "2026-10",
           "teaches": { "signal": "proof" },
           "why": "The exact error or output says more than any description of it.",
@@ -73,7 +73,7 @@
           "quiz": [
             {
               "kind": "sharper",
-              "question": "Which prompt is sharper?",
+              "question": "Which prompt is more specific?",
               "options": ["Expected the order date, but every row in the CSV export shows 1970-01-01.", "The CSV export gives weird dates."],
               "answer": 0,
               "explain": "It shows what you saw and what you wanted, so the gap is plain."
@@ -90,7 +90,7 @@
         },
         {
           "id": "say-what-done-is",
-          "title": "Say what done is",
+          "title": "Finish line",
           "reviewed": "2026-10",
           "teaches": { "signal": "done" },
           "why": "If you don't say what finished looks like, you get someone else's idea of it.",
@@ -111,7 +111,7 @@
           "quiz": [
             {
               "kind": "sharper",
-              "question": "Which prompt is sharper?",
+              "question": "Which prompt is more specific?",
               "options": ["Make the Q3 report better.", "Update the Q3 report so the summary fits on one page, as a bulleted list."],
               "answer": 1,
               "explain": "You'll know it's done when it fits on one page as a list."
@@ -128,10 +128,10 @@
         },
         {
           "id": "set-limits",
-          "title": "Set limits",
+          "title": "Guardrails",
           "reviewed": "2026-10",
           "teaches": { "signal": "limits" },
-          "why": "Limits stop the extra changes you'd have to find and undo later.",
+          "why": "Guardrails stop the extra changes you'd have to find and undo later.",
           "before": {
             "text": "Clean up the styles on the pricing page.",
             "signals": []
@@ -144,12 +144,12 @@
           "tips": [
             "Say what's off limits: other files, the public API, the wording.",
             "Name the scope: only this page, only this function.",
-            "A limit is cheaper than a cleanup."
+            "A guardrail is cheaper than a cleanup."
           ],
           "quiz": [
             {
               "kind": "sharper",
-              "question": "Which prompt is sharper?",
+              "question": "Which prompt is more specific?",
               "options": ["Tidy up checkout.ts.", "Tidy up checkout.ts. Don't rename anything and don't add new packages."],
               "answer": 1,
               "explain": "Same task, but now the names and the packages are safe."
@@ -166,7 +166,7 @@
         },
         {
           "id": "say-why",
-          "title": "Say why",
+          "title": "Purpose",
           "reviewed": "2026-10",
           "teaches": { "signal": "why" },
           "why": "The goal answers all the small questions you didn't think to spell out.",
@@ -179,11 +179,11 @@
             "signals": ["limits", "why"]
           },
           "template": "<the task>. The goal is <what this is for, or who it's for>.",
-          "tips": ["Share the goal, not just the task.", "Say who it's for: your team, a customer, a demo.", "One sentence of why is plenty."],
+          "tips": ["Share the purpose, not just the task.", "Say who it's for: your team, a customer, a demo.", "One sentence of purpose is plenty."],
           "quiz": [
             {
               "kind": "sharper",
-              "question": "Which prompt is sharper?",
+              "question": "Which prompt is more specific?",
               "options": ["Cache the price list because the supplier lets us call them once a minute.", "Cache the price list."],
               "answer": 0,
               "explain": "Knowing the reason tells you how long the cache can last."
@@ -228,7 +228,7 @@
           "quiz": [
             {
               "kind": "sharper",
-              "question": "Which prompt is sharper?",
+              "question": "Which prompt is more specific?",
               "options": ["Add a search box to the help page.", "Add a search box to help.html. It should search titles only, and it must work on phones."],
               "answer": 1,
               "explain": "The phone part is said up front, not sent later as an 'also'."
@@ -266,7 +266,7 @@
           "quiz": [
             {
               "kind": "sharper",
-              "question": "Which prompt is sharper?",
+              "question": "Which prompt is more specific?",
               "options": ["Make the button bigger.", "Make the Save button on the settings page 48px tall. Leave the Cancel button alone."],
               "answer": 1,
               "explain": "Which button, how big, and which one to skip. Nothing left to guess."
@@ -296,7 +296,7 @@
           "quiz": [
             {
               "kind": "sharper",
-              "question": "Which prompt is sharper?",
+              "question": "Which prompt is more specific?",
               "options": [
                 "Rewrite the billing module.",
                 "Rewrite the billing module. First give me the plan as a list, and don't change any files until I approve it."
@@ -337,7 +337,7 @@
           "quiz": [
             {
               "kind": "sharper",
-              "question": "Which prompt is sharper?",
+              "question": "Which prompt is more specific?",
               "options": [
                 "Plan the offsite for my team of 12. Ask me questions first if anything is unclear. Don't book anything yet.",
                 "Plan the team offsite."
@@ -384,7 +384,7 @@
             },
             {
               "kind": "sharper",
-              "question": "Which prompt is sharper?",
+              "question": "Which prompt is more specific?",
               "options": [
                 "Use the parseCsv helper for the import.",
                 "Use the parseCsv helper for the import. First show me the file where parseCsv is defined, and don't write a new one."
@@ -424,7 +424,7 @@
             },
             {
               "kind": "sharper",
-              "question": "Which prompt is sharper?",
+              "question": "Which prompt is more specific?",
               "options": ["Fix the login timeout.", "Fix the login timeout in session.ts. Make sure the tests pass, and add one for an expired session."],
               "answer": 1,
               "explain": "It says where, and how you'll both know it works."

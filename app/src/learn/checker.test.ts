@@ -28,10 +28,10 @@ describe("refreshCheck", () => {
     const first = refreshCheck(root);
     state.setDraft("new draft");
     await refreshCheck(root);
-    expect(root.textContent).toContain("Sharp");
+    expect(root.textContent).toContain("Specific");
     finishOld(check(0));
     await first;
-    expect(root.textContent).toContain("Sharp");
+    expect(root.textContent).toContain("Specific");
     expect(checkPrompt.mock.calls.map((c) => c[0])).toEqual(["old draft", "new draft"]);
   });
 

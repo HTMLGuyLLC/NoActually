@@ -17,15 +17,15 @@ const PROMPT: usize = 4000; // chars of a prompt searched for signals (a long pa
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Signal {
-    /// Names the place: a file, function, link or `code`.
+    /// Names the target: a file, function, page or link.
     Spot,
-    /// Shows the problem: an error, the output, an example.
+    /// Gives evidence: an error, the output, an example.
     Proof,
-    /// Says what done looks like: the expected result, a test, a format.
+    /// Gives the finish line: the expected result, a test, a format.
     Done,
-    /// Sets limits: don't, only, keep, without.
+    /// Sets guardrails: don't, only, keep, without.
     Limits,
-    /// Says why: the goal or the context.
+    /// Gives the purpose: who it's for or what it's part of.
     Why,
 }
 
@@ -44,25 +44,25 @@ impl Signal {
         }
     }
 
-    /// Display title ("Points at it").
+    /// Display title ("Target").
     pub fn title(self) -> &'static str {
         match self {
-            Signal::Spot => "Points at it",
-            Signal::Proof => "Shows it",
-            Signal::Done => "Says what done is",
-            Signal::Limits => "Sets limits",
-            Signal::Why => "Says why",
+            Signal::Spot => "Target",
+            Signal::Proof => "Evidence",
+            Signal::Done => "Finish line",
+            Signal::Limits => "Guardrails",
+            Signal::Why => "Purpose",
         }
     }
 
     /// What counts, in a few words.
     pub fn hint(self) -> &'static str {
         match self {
-            Signal::Spot => "a file, function, link or code",
+            Signal::Spot => "a file, function, page or link",
             Signal::Proof => "an error, the output or an example",
             Signal::Done => "the expected result, a test or a format",
             Signal::Limits => "don't, only, keep, without",
-            Signal::Why => "the goal or the context",
+            Signal::Why => "who it's for or what it's part of",
         }
     }
 
@@ -119,7 +119,7 @@ impl Grade {
     /// Every grade, lowest first.
     pub const ALL: [Grade; 3] = [Grade::Thin, Grade::Solid, Grade::Sharp];
 
-    /// Signals a prompt needs to be sharp.
+    /// Signals a prompt needs to be specific.
     pub const SHARP: u32 = 3;
 
     /// The grade these signals earn.
@@ -143,9 +143,9 @@ impl Grade {
     /// Display title.
     pub fn title(self) -> &'static str {
         match self {
-            Grade::Thin => "Thin",
-            Grade::Solid => "Solid",
-            Grade::Sharp => "Sharp",
+            Grade::Thin => "Vague",
+            Grade::Solid => "Decent",
+            Grade::Sharp => "Specific",
         }
     }
 }
@@ -454,7 +454,7 @@ static SPOT: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     ]
 });
 
-/// Shows the problem.
+/// Gives evidence.
 static PROOF: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![
         rule(
@@ -482,13 +482,13 @@ static PROOF: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     ]
 });
 
-/// Says what done looks like.
+/// Gives the finish line.
 static DONE: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![
         rule_unless(
             "prompt.done.should",
             r"\b(?:should|must|needs? to|has to)\b",
-            // "should I…?" asks; "should be fine" shrugs. Neither says what done is.
+            // "should I…?" asks; "should be fine" shrugs. Neither gives a finish line.
             // "has to do with" and "needs to be fixed" say nothing about the result either.
             r"(?:should|must|needs? to|has to)\s+(?:i|we|you)\b|(?:should|must)\s+(?:probably\s+)?be\s+(?:fine|ok|okay|good|easy|simple)\b|has to do with\b|needs? to be (?:fixed|done|changed|updated|looked at|addressed|sorted|handled)\b",
         ),
@@ -516,7 +516,7 @@ static DONE: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     ]
 });
 
-/// Sets limits.
+/// Sets guardrails.
 static LIMITS: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![
         rule_unless(
@@ -548,7 +548,7 @@ static LIMITS: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     ]
 });
 
-/// Says why.
+/// Gives the purpose.
 static WHY: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![
         rule(

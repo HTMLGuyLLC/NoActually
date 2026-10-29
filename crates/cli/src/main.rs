@@ -363,7 +363,7 @@ fn prompt_lines(p: &store::Prompts, window: &str) -> Vec<String> {
             p.continued
         ),
         format!(
-            "  Sharp prompts    {}%  ({}+ of the {} signals)",
+            "  Specific prompts {}%  ({}+ of the {} things a prompt can include)",
             pct(p.grades.get("sharp").copied().unwrap_or(0), p.tasks),
             engine::Grade::SHARP,
             engine::Signal::ALL.len()
@@ -434,9 +434,9 @@ mod tests {
         assert_eq!(parse("check --fix the thing").unwrap(), Command::Check { text: "--fix the thing".into() });
         assert!(err("check").starts_with("missing prompt"));
         let lines = check_lines("Fix the crash in `checkout.ts`. Done when the tests pass. Don't touch the API.");
-        assert_eq!(lines[0], "Sharp (3 of 5 things a prompt can include)");
-        assert!(lines.iter().any(|l| l.starts_with("  ✓ Points at it")));
-        assert!(lines.iter().any(|l| l.starts_with("  · Says why")));
+        assert_eq!(lines[0], "Specific (3 of 5 things a prompt can include)");
+        assert!(lines.iter().any(|l| l.starts_with("  ✓ Target")));
+        assert!(lines.iter().any(|l| l.starts_with("  · Purpose")));
         assert!(check_lines("how does this work?").last().unwrap().contains("question"));
     }
 
@@ -496,8 +496,8 @@ mod tests {
         let text = prompt_lines(&b, &window_label(None)).join("\n");
         assert!(text.contains("Do you make it guess? Hmm. 2 more tasks with a follow-up to get ranked"), "{text}");
         assert!(text.contains("Clear first time 75% of 8 prompts with a follow-up"), "{text}");
-        assert!(text.contains("Sharp prompts    30%"), "{text}");
-        assert!(text.contains("Says why              50%"), "{text}");
+        assert!(text.contains("Specific prompts 30%"), "{text}");
+        assert!(text.contains("Purpose               50%"), "{text}");
         assert!(text.contains("You added more       1"), "{text}");
         b.tier = Some(engine::PromptTier::TechLead);
         b.next_tier = Some(engine::PromptTier::Architect);

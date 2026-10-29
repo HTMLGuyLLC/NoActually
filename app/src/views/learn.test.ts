@@ -75,14 +75,14 @@ describe("learnView lesson", () => {
     expect(m).toContain('<div class="eyebrow">Before</div>');
     expect(m).toContain('<div class="eyebrow">After</div>');
     expect(m).toContain("Nothing specific"); // the before example carries nothing
-    expect(m).toContain('<span class="chip sig-on">Points at it</span>');
-    expect(m).toContain('<span class="chip sig-on">Says what done is</span>');
+    expect(m).toContain('<span class="chip sig-on">Target</span>');
+    expect(m).toContain('<span class="chip sig-on">Finish line</span>');
     expect(m).toContain("The date is wrong on the invoice page.");
   });
 
   it("shows the template, escaped, with a way to try it", () => {
     const m = lesson(l.id);
-    expect(m).toContain('<p class="template mono">In &lt;file, function or doc&gt;');
+    expect(m).toContain('<p class="template mono">In &lt;file, function or page&gt;');
     expect(m).toContain(`data-action="try-template" data-id="${l.id}"`);
   });
 
@@ -102,8 +102,8 @@ describe("learnView lesson", () => {
   it("titles a 'missing' question's options by signal and quotes the prompt", () => {
     const m = lesson(l.id);
     expect(m).toContain("<blockquote");
-    expect(m).toContain("<span>Points at it</span></label>");
-    expect(m).toContain("<span>Sets limits</span></label>");
+    expect(m).toContain("<span>Target</span></label>");
+    expect(m).toContain("<span>Guardrails</span></label>");
   });
 
   it("numbers the questions by lesson position, so two lessons never share a radio group", () => {
@@ -147,19 +147,19 @@ describe("checkResultView", () => {
 
   it("lights up the signals in a sharp check, and says there's nothing missing at five", () => {
     const m = checkResultView(meta, check({ signals: 0b111, grade: "sharp" }), false).value;
-    expect(m).toContain('class="check-grade is-sharp"><b>Sharp</b> · includes 3 of 5');
+    expect(m).toContain('class="check-grade is-sharp"><b>Specific</b> · includes 3 of 5');
     expect(m.match(/<li class="on">/g)).toHaveLength(3);
-    expect(m).toContain('<li class="on"><span aria-hidden="true">✓</span> Points at it<span class="sr-only">: yes</span>');
-    expect(m).toContain('<li class=""><span aria-hidden="true">·</span> Sets limits<span class="sr-only">: not yet</span>');
+    expect(m).toContain('<li class="on"><span aria-hidden="true">✓</span> Target<span class="sr-only">: yes</span>');
+    expect(m).toContain('<li class=""><span aria-hidden="true">·</span> Guardrails<span class="sr-only">: not yet</span>');
     expect(checkResultView(meta, check({ signals: 0b11111, grade: "sharp" }), false).value).toContain("Nothing left to guess.");
   });
 
   it("nudges at most the first two missing signals, from the hints", () => {
     const m = checkResultView(meta, check({ signals: 0b00011 }), false).value; // spot and proof; done, limits and why missing
-    expect(m).toContain("Say what done looks like");
-    expect(m).toContain("Set limits");
-    expect(m).not.toContain("Say why:");
-    expect(m.match(/<li>Say|<li>Set/g)).toHaveLength(2);
+    expect(m).toContain("Finish line: say what done looks like");
+    expect(m).toContain("Guardrails: say what to leave alone");
+    expect(m).not.toContain("Purpose:");
+    expect(m.match(/<li>Finish|<li>Guardrails/g)).toHaveLength(2);
     expect(m).not.toContain("Nothing left to guess.");
   });
 

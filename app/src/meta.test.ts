@@ -80,7 +80,7 @@ describe("lookups", () => {
     expect(tierOf(meta, "coworker")?.floor).toBe(65);
     expect(tierOf(meta, null)).toBeUndefined();
     expect(tierOf(meta, "legend")).toBeUndefined();
-    expect(signalTitle(meta, "why")).toBe("Says why");
+    expect(signalTitle(meta, "why")).toBe("Purpose");
     expect(signalTitle(meta, "unknown")).toBe("unknown");
   });
 });

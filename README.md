@@ -53,7 +53,7 @@ Better prompts mean fewer mistakes to correct, and that never costs you: once yo
 
 - **A verdict and a score.** "Could Claude replace you? **No.** Score 86, Sharp-eyed." Updated as you work, over the last 28 days.
 - **A prompt score.** "Do you make it guess? **Sometimes.** 85% of your prompts were clear the first time." Plus what your prompts include, why you followed up, and one tip backed by your own history.
-- **Improve.** One weekly goal picked from your own numbers ("Set limits in 25% of your prompts"), streaks, trophies, personal bests, last week's recap, and charts of how you're trending.
+- **Improve.** One weekly goal picked from your own numbers ("Include guardrails in 25% of your prompts"), streaks, trophies, personal bests, last week's recap, and charts of how you're trending.
 - **Learn.** 12 one-minute lessons in three tracks (the 5 habits, steer less, correct more), quick quizzes, and a prompt checker that grades a draft as you type, with the same rules as your score.
 - **Any time window.** 7 days, 28 days, 90 days or all time: the whole scorecard follows the picker, score included. Every part of the score is a rate, so tiers mean the same thing in any window.
 - **Every model, side by side.** All AI, one provider, one family, or one exact version (say, Claude Opus 5.5). The picker shows the numbers that page is about.
@@ -98,7 +98,7 @@ Claude Code, Claude Cowork and Codex live, plus ChatGPT and Claude.ai through th
 <details>
 <summary><b>Will the lessons go out of date?</b></summary>
 
-They're written not to. They teach habits that work with any collaborator, human or AI (point at it, show it, say what done is, set limits, say why), never tool tricks or magic phrases. A test fails the build if a lesson names a product, a model or a version, and the real scoring rules grade every example, so a lesson can never disagree with your score.
+They're written not to. They teach habits that work with any collaborator, human or AI (name a target, give evidence, set a finish line, add guardrails, share the purpose), never tool tricks or magic phrases. A test fails the build if a lesson names a product, a model or a version, and the real scoring rules grade every example, so a lesson can never disagree with your score.
 </details>
 
 <details>
@@ -198,21 +198,21 @@ Adding context ("also", "fyi", "I forgot to mention") never counts against the A
 
 - **A task** starts with a chat's first message, or a later one that opens with "now…", "next:" or "new task". Hellos, "continue" and questions ("what does this do?") aren't tasks.
 - **A prompt's grade** counts what it includes, never its length:
-  - **points at it**: a file, function, link or `code`
-  - **shows it**: an error, output, an example, anything pasted
-  - **says what done is**: the expected result, tests, a format
-  - **sets limits**: don't, only, keep, without
-  - **says why**: the goal or context
+  - **Target**: a file, function, page or link
+  - **Evidence**: an error, output, an example, anything pasted
+  - **Finish line**: the expected result, tests, a format
+  - **Guardrails**: don't, only, keep, without
+  - **Purpose**: who it's for or what it's part of
 
-  Three or more is **sharp**, two is **solid**, fewer is **thin**. Pasted blocks count as showing it, but their words aren't graded as yours.
+  Three or more is **specific**, two is **decent**, fewer is **vague**. Pasted blocks count as evidence, but their words aren't graded as yours.
 - **A follow-up** is a later message that redirects the task. Either the AI got it wrong (a correction), or it's on you: **added more** ("also…", "I forgot to mention"), **clarified** ("I meant…", "to be clear") or **started over** ("scrap that", "revert it").
 - **A prompt is clear the first time** when nothing on you followed it. The tier is the share of prompts with a follow-up that were clear the first time over the last 28 days (at least 10 of them): Vibes only, Ticket writer 70%+, Tech lead 80%+, Architect 90%+.
 
-The tip names the thing your prompts include least. It only quotes "prompts that do were clear the first time X% vs Y%" when your own history shows a real gap.
+The tip names the thing your prompts include least. It only quotes "prompts with guardrails were clear the first time X% vs Y%" when your own history shows a real gap.
 
 ### How goals work
 
-- **One goal at a time**, across all AI: a habit ("set limits in 25% of your prompts"), a ceiling on one kind of follow-up ("keep 'you added more' to 15% of tasks"), or a tier to reach.
+- **One goal at a time**, across all AI: a habit ("include guardrails in 25% of your prompts"), a ceiling on one kind of follow-up ("keep 'you added more' to 15% of tasks"), or a tier to reach.
 - **Suggested from your numbers.** A habit goal asks for 15 points more than your last 8 weeks, capped at 80%, so it's a stretch, not a wall.
 - **Weeks run Monday to Sunday**, local time, counting only tasks from the day you set the goal. A week needs 5 prompts to count; quieter weeks pause the goal instead of breaking your streak.
 - **Met 4 weeks, it's done**, and it goes on your trophy shelf. Finished weeks are frozen, so a rules update or an import can't take back a week you earned.

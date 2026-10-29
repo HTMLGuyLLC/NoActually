@@ -35,7 +35,7 @@ use Signal::{Done, Limits, Proof, Spot, Why};
 
 /// (prompt, the signals it carries). Each row is one way a person writes; the set must be exact.
 const EXAMPLES: &[(&str, &[Signal])] = &[
-    // Thin: the AI has to guess.
+    // Vague: the AI has to guess.
     ("fix it", &[]),
     ("make the login page better", &[]),
     ("clean this up", &[]),
@@ -66,7 +66,7 @@ const EXAMPLES: &[(&str, &[Signal])] = &[
     ("the login needs to be fixed", &[]),
     ("when the user clicks save, the client sends a bad request", &[]),
     ("Since the last update the app is slow", &[]),
-    // Points at it.
+    // Target.
     ("fix the crash in src/auth/session.ts", &[Spot]),
     ("rename getUser to fetchUser", &[Spot]),
     ("bump NODE_ENV handling in the config", &[Spot]),
@@ -78,7 +78,7 @@ const EXAMPLES: &[(&str, &[Signal])] = &[
     ("the Dockerfile is too slow to build", &[Spot]),
     ("read the .env and wire up the keys", &[Spot]),
     ("rename UserProfile to Account", &[Spot]),
-    // Shows it.
+    // Evidence.
     // Pasted blocks show the problem; their words aren't graded as yours.
     ("fix this:\n```\nthread 'main' panicked at src/lib.rs:10, don't panic\n```", &[Proof]),
     ("is this phishing? <pasted_content id=\"1\">Your account.ts must be verified because</pasted_content>", &[Proof]),
@@ -89,7 +89,7 @@ const EXAMPLES: &[(&str, &[Signal])] = &[
     ("expected the total to update but it stays at zero", &[Proof]),
     ("make the dates look like this: Oct 28, 2026", &[Proof]),
     ("see the screenshot, the header overlaps", &[Proof]),
-    // Says what done is.
+    // Finish line.
     ("the button should redirect to the dashboard", &[Done]),
     ("add a unit test for the parser", &[Done]),
     ("make sure the tests pass", &[Done]),
@@ -97,7 +97,7 @@ const EXAMPLES: &[(&str, &[Signal])] = &[
     ("keep the summary under 50 words", &[Done, Limits]),
     ("load in under 200ms", &[Done]),
     ("plan:\n- add the flag\n- wire it to settings\n- document it", &[Done]),
-    // Sets limits.
+    // Guardrails.
     ("refactor the parser, don't change the public API", &[Limits]),
     ("Do not add new dependencies.", &[Limits]),
     ("only change the CSS", &[Limits]),
@@ -106,14 +106,14 @@ const EXAMPLES: &[(&str, &[Signal])] = &[
     ("no new dependencies please", &[Limits]),
     ("I don't want any new dependencies", &[Limits]),
     ("Don't work on main, use a branch", &[Limits]),
-    // Says why.
+    // Purpose.
     ("cache the results because the API is rate limited", &[Why]),
     ("our users can't find the export button", &[Why]),
     ("cache it since we rely on a slow API", &[Why]),
     ("I'm trying to cut the bundle size for the launch", &[Why]),
     ("Goal: one place to see every invoice", &[Why]),
     ("currently the report takes a minute to open", &[Why]),
-    // Sharp: several at once.
+    // Specific: several at once.
     (
         "In src/checkout.ts the total should include tax. Don't touch the cart API, our customers depend on it.",
         &[Spot, Done, Limits, Why],

@@ -137,9 +137,9 @@ describe("sparkline", () => {
         { label: "b", value: 90, weak: true },
         { label: "c", value: 60 },
       ],
-      "Says why per week",
+      "Purpose per week",
     ).value;
-    expect(m).toContain('role="img" aria-label="Says why per week"');
+    expect(m).toContain('role="img" aria-label="Purpose per week"');
     expect(count(m, "L")).toBe(1); // the weak middle point is skipped
   });
 
