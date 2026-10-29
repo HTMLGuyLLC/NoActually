@@ -306,10 +306,11 @@ export function parseGoalChoice(raw: string): { kind: GoalKind; target: number }
   return null;
 }
 
-type InputHandler = (el: HTMLInputElement) => unknown;
+type InputHandler = (el: HTMLInputElement | HTMLSelectElement) => unknown;
 
 /** Undoes a checkbox the backend refused, so it never shows a setting that isn't saved. */
-const toggle = (save: (on: boolean) => Promise<unknown>, saved?: (on: boolean) => void) => async (box: HTMLInputElement) => {
+const toggle = (save: (on: boolean) => Promise<unknown>, saved?: (on: boolean) => void) => async (box: HTMLInputElement | HTMLSelectElement) => {
+  if (!(box instanceof HTMLInputElement)) return;
   try {
     await save(box.checked);
     saved?.(box.checked);
@@ -329,7 +330,12 @@ export const changeActions = {
     (on) => api.setMenuBar(on),
     () => void render(),
   ),
-  quiz: (r) => judgeQuiz(r),
+  quiz: (r) => r instanceof HTMLInputElement && judgeQuiz(r),
+  "period-pick": (sel) => {
+    if (!isPeriod(sel.value)) return;
+    setPeriod(sel.value);
+    return render();
+  },
 } satisfies Record<string, InputHandler>;
 
 const has = <T extends object>(map: T, key: string): key is Extract<keyof T, string> => Object.keys(map).includes(key);
@@ -360,7 +366,7 @@ export function bindActions(root: HTMLElement): void {
   root.addEventListener("change", (e) => {
     const el = actionTarget(e);
     const name = el?.dataset.action;
-    if (!(el instanceof HTMLInputElement) || !name || !has(changeActions, name)) return;
+    if (!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement) || !name || !has(changeActions, name)) return;
     Promise.resolve(changeActions[name](el)).catch(report);
   });
 }

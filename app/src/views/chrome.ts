@@ -49,5 +49,5 @@ export function headerView(tab: Tab, status: SyncStatus, demo: boolean): Html {
   const tabs = html`${TABS.filter((t) => !UTILITY.includes(t)).map(button)}<span class="nav-gap" aria-hidden="true"></span>${UTILITY.map(button)}`;
   // The logo goes home: the scorecard's overview.
   const home = html`<button class="home" data-action="home" title="Go to the scorecard">${wordmarkView()}<span class="sr-only">, go to the scorecard</span></button>`;
-  return html`<header class="top">${home}<div class="top-right">${statusPillView(status, demo)}<nav aria-label="Main">${tabs}</nav></div></header>`;
+  return html`<header class="top">${home}<div class="top-right"><nav aria-label="Main">${tabs}</nav>${statusPillView(status, demo)}</div></header>`;
 }

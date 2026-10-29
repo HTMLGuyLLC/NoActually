@@ -25,12 +25,15 @@ const PERIOD_TITLES: Record<Period, string> = { "7d": "7 days", "28d": "28 days"
 /** "in the last 28 days", for sentences about the period's counts. */
 export const PERIOD_TEXT: Record<Period, string> = { "7d": "in the last 7 days", "28d": "in the last 28 days", "90d": "in the last 90 days", all: "in all" };
 
-/** The scorecard's time picker: how far back every count looks. */
+/** The scorecard's time picker: how far back every count looks. Buttons on wide windows, a
+ * dropdown on narrow ones (CSS shows one; the hidden one is out of the accessibility tree). */
 function periodNav(period: Period): Html {
   return html`<nav class="views period" aria-label="Time period">${PERIODS.map(
     (p) =>
       html`<button class="tab${p === period ? " on" : ""}" data-action="period" data-id="${p}"${p === period ? raw(' aria-current="true"') : ""}>${PERIOD_TITLES[p]}</button>`,
-  )}</nav>`;
+  )}</nav><select class="period-select" data-action="period-pick" aria-label="Time period">${PERIODS.map(
+    (p) => html`<option value="${p}"${p === period ? raw(" selected") : ""}>${PERIOD_TITLES[p]}</option>`,
+  )}</select>`;
 }
 
 const VIEW_TITLES: Record<ScoreView, string> = { overview: "Overview", briefs: "Briefs", catches: "Catches", hall: "Hall of fame" };
@@ -287,10 +290,8 @@ export function scorecardView(s: Stats, ctx: ScorecardContext): Html {
           ? hallSection(s, ctx)
           : overviewView(s, ctx);
   return html`
-    <section class="toolbar">${toolbar}<div class="period-box">${periodNav(ctx.period ?? "28d")}<span class="muted small">${
-      s.first_day ? `${s.first_day} – ${s.last_day ?? ""} · ` : ""
-    }${num(s.messages)} messages</span></div></section>
-    ${viewsNav(view)}
+    <section class="toolbar">${toolbar}<span class="muted small">${s.first_day ? `${s.first_day} – ${s.last_day ?? ""} · ` : ""}${num(s.messages)} messages</span></section>
+    <div class="views-row">${viewsNav(view)}${periodNav(ctx.period ?? "28d")}</div>
     <div class="view-body">${body}</div>`;
 }
 
