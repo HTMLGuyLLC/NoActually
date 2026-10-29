@@ -6,21 +6,16 @@
 
 <p align="center">
   <b>Could AI replace you? No, actually.</b><br>
-  A private scorecard for how you work with AI: every time you caught it being wrong, and how well you brief it.
+  It counts every time you catch your AI being wrong, and grades how well you brief it.
 </p>
 
 <p align="center">
-  <a href="https://github.com/HTMLGuyLLC/NoActually/actions/workflows/ci.yml"><img src="https://github.com/HTMLGuyLLC/NoActually/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-e0322b" alt="MIT license"></a>
-  <img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-3b5bdb" alt="macOS, Windows, Linux">
-  <img src="https://img.shields.io/badge/built%20with-Tauri%202%20%2B%20Rust-141a2e" alt="Built with Tauri 2 and Rust">
-  <img src="https://img.shields.io/badge/telemetry-none-2f9e44" alt="No telemetry">
-  <img src="https://img.shields.io/badge/API%20cost-%240-2f9e44" alt="API cost: $0">
+  <a href="https://github.com/HTMLGuyLLC/NoActually/releases/latest"><img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8E_Download-Mac_%C2%B7_Windows_%C2%B7_Linux-e0322b?style=for-the-badge" alt="Download for Mac, Windows or Linux"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/HTMLGuyLLC/NoActually/releases/latest"><img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8E_Download-Mac_%C2%B7_Windows_%C2%B7_Linux-e0322b?style=for-the-badge" alt="Download for Mac, Windows or Linux"></a><br>
-  <sub>Free and open source · $0 to run, no AI calls · Your chats never leave your computer · <a href="#get-started-in-a-minute">Get started</a></sub>
+  🔒 Private: your chats never leave your computer<br>
+  💸 Free: no AI calls, so nothing to pay for
 </p>
 
 <p align="center">
@@ -204,6 +199,13 @@ The other files are for special cases:
 The app updates itself (signed updates) unless you turn that off in Settings.
 
 ## For developers
+
+<p>
+  <a href="https://github.com/HTMLGuyLLC/NoActually/actions/workflows/ci.yml"><img src="https://github.com/HTMLGuyLLC/NoActually/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-e0322b" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/built%20with-Tauri%202%20%2B%20Rust-141a2e" alt="Built with Tauri 2 and Rust">
+  <img src="https://img.shields.io/badge/telemetry-none-2f9e44" alt="No telemetry">
+</p>
 
 ### Build from source
 
