@@ -89,6 +89,13 @@ describe("overview hero", () => {
     expect(m).toContain("Your tier is Sharp-eyed, score 86.");
     expect(m).toContain("Irreplaceable at 90. You&#39;re at 86.");
     expect(m).toContain('data-action="open-share"');
+    expect(m).toContain('<button class="ghost" data-action="share-briefs">Share your briefs</button>');
+  });
+
+  it("offers the brief share up top on its own once only the briefs are ranked", () => {
+    const m = scorecardView(stats({ overall: overall({ score: null, tier: null, next_tier: null, verdict: "hmm" }) }), ctx).value;
+    expect(m).not.toContain('data-action="open-share"');
+    expect(m).toContain('<div class="share"><button data-action="share-briefs">Share your briefs</button>');
   });
 
   it("shows the two parts as bars with their weights from meta", () => {

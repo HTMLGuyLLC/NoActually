@@ -101,6 +101,13 @@ function ladderView(o: Overall, meta: Meta): Html {
   )}</ol>`;
 }
 
+/** Each ranked score gets its own share: the overall one first, your brief tier beside it. */
+function shareRow(s: Stats): Html | "" {
+  const score = s.overall.tier ? html`<button data-action="open-share">Share your score</button>` : "";
+  const briefs = s.briefs.tier ? html`<button${score ? raw(' class="ghost"') : ""} data-action="share-briefs">Share your briefs</button>` : "";
+  return score || briefs ? html`<div class="share">${score}${briefs}</div>` : "";
+}
+
 /** The headline: could it replace you? Both sides of working with AI, one score. */
 function heroView(s: Stats, ctx: ScorecardContext): Html {
   const o = s.overall;
@@ -114,7 +121,7 @@ function heroView(s: Stats, ctx: ScorecardContext): Html {
       <div class="meter">
         ${ladderView(o, ctx.meta)}
         <p class="hand-note">${scoreNote(o, ctx.meta)}</p>
-        ${o.tier ? html`<div class="share"><button data-action="open-share">Share your score</button></div>` : ""}
+        ${shareRow(s)}
       </div>
     </section>`;
 }
