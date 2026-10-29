@@ -46,7 +46,7 @@ async function view(): Promise<Html> {
       api.getAutostart().catch(() => false),
       api.getMenuBar(),
     ]);
-    body = html`${sourcesView(sources)}${settingsView({ retention, autostart, menuBar, update: state.update, status: state.status, demo })}`;
+    body = html`${sourcesView(sources, state.status)}${settingsView({ retention, autostart, menuBar, update: state.update, demo })}`;
   } else if (state.tab === "learn") {
     body = learnView({ meta, briefs: s.messages ? s.briefs : null, done: await api.learned(), lesson: state.lesson, draft: state.draft, demo });
   } else if (state.tab === "improve") {
@@ -107,7 +107,7 @@ export function paintStatus(): void {
     if (hadFocus) root.querySelector<HTMLElement>(".sync-pill")?.focus();
   }
   const line = root.querySelector("#sync-line");
-  if (line) line.textContent = `Last checked ${ago(state.status.last_sync)}.`;
+  if (line) line.textContent = `New chats last checked ${ago(state.status.last_sync)}.`;
 }
 
 /** Redraws only the update banner and the Settings line, so a check never interrupts anything. */

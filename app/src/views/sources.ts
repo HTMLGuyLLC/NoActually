@@ -1,6 +1,6 @@
 // Sources: which tools the app may read, and the controls to allow, pause, import or forget them.
-import type { SourceInfo } from "../api";
-import { localIsoDate, shortSourceName } from "../format";
+import type { SourceInfo, SyncStatus } from "../api";
+import { ago, localIsoDate, shortSourceName } from "../format";
 import { type Html, html } from "../html";
 
 /** The "how far back" choices offered before allowing a live source. */
@@ -53,11 +53,16 @@ function sourceRow(s: SourceInfo): Html {
     </div>`;
 }
 
-export function sourcesView(list: SourceInfo[]): Html {
+/** `status` dates the last check for new chats; Check for updates runs one now. */
+export function sourcesView(list: SourceInfo[], status: SyncStatus): Html {
   return html`
     <section id="sources"><div class="head"><h2>Sources</h2>
       <p class="muted">Nothing is read until you allow it. No, Actually... reads your messages and the AI's replies on this computer to count catches. Nothing leaves this machine.</p></div>
       <div class="sources">${list.map(sourceRow)}</div>
       <p class="muted small">Stop reading keeps your scores. Forget also deletes everything that source produced.</p>
+      <div class="settings-row">
+        <button class="ghost" data-action="sync-now">Check for updates</button>
+        <span class="muted small" id="sync-line">New chats last checked ${ago(status.last_sync)}.</span>
+      </div>
     </section>`;
 }

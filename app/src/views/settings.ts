@@ -1,6 +1,5 @@
 // Settings: launch at login, updates, sync, and what's kept for the Hall of Fame.
-import { isLevel, type Level, type Retention, type SyncStatus, type UpdateStatus } from "../api";
-import { ago } from "../format";
+import { isLevel, type Level, type Retention, type UpdateStatus } from "../api";
 import { type Html, html, raw } from "../html";
 import { updateLine } from "../update";
 
@@ -25,11 +24,11 @@ export function parseRetention(f: RetentionFields): Retention {
   return { level: f.level, full_days: days(f.fullDays, DEFAULT_FULL_DAYS), snippet_days: days(f.snippetDays, DEFAULT_SNIPPET_DAYS) };
 }
 
-export type SettingsContext = { retention: Retention; autostart: boolean; menuBar: boolean; update: UpdateStatus | null; status: SyncStatus; demo: boolean };
+export type SettingsContext = { retention: Retention; autostart: boolean; menuBar: boolean; update: UpdateStatus | null; demo: boolean };
 
 const attr = (on: boolean, name: string) => (on ? raw(` ${name}`) : "");
 
-export function settingsView({ retention: r, autostart, menuBar, update, status, demo }: SettingsContext): Html {
+export function settingsView({ retention: r, autostart, menuBar, update, demo }: SettingsContext): Html {
   const opt = (level: Level, title: string, body: string) =>
     html`<label class="level${r.level === level ? " on" : ""}"><input type="radio" name="level" value="${level}" data-action="level"${attr(
       r.level === level,
@@ -47,16 +46,12 @@ export function settingsView({ retention: r, autostart, menuBar, update, status,
         <span class="muted small">${menuBar ? "Starts quietly in the menu bar so new catches are counted." : "Opens the app when you log in."}</span>
       </div>
       <div class="settings-row">
-        <label class="toggle"><input id="auto-update" data-action="auto-update" type="checkbox"${attr(!!update?.auto, "checked")}${off}/><span>Check for updates automatically</span></label>
+        <label class="toggle"><input id="auto-update" data-action="auto-update" type="checkbox"${attr(!!update?.auto, "checked")}${off}/><span>Check for app updates automatically</span></label>
         <span class="muted small">Asks GitHub for the latest version number at launch and every 6 hours. Sends nothing about you.</span>
       </div>
       <div class="settings-row">
-        <button class="ghost" data-action="check-update"${off}>Check for updates</button>
+        <button class="ghost" data-action="check-update"${off}>Check for app updates</button>
         <span class="muted small" id="update-line" aria-live="polite">${update ? updateLine(update) : ""}</span>
-      </div>
-      <div class="settings-row">
-        <button class="ghost" data-action="sync-now">Check now</button>
-        <span class="muted small" id="sync-line">Last checked ${ago(status.last_sync)}.</span>
       </div>
     </section>
     <section><div class="head"><h2>Privacy</h2>

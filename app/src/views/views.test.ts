@@ -234,9 +234,26 @@ describe("chrome", () => {
   });
 });
 
+const status = { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 };
+
 describe("sourcesView", () => {
+  it("checks for new chats from Sources, and leaves app updates to General", () => {
+    const m = sourcesView([source()], status).value;
+    expect(m).toContain('data-action="sync-now">Check for updates</button>');
+    expect(m).toContain('id="sync-line">New chats last checked');
+    const g = settingsView({
+      retention: { level: "snippet", full_days: 30, snippet_days: 365 },
+      autostart: false,
+      menuBar: true,
+      update: null,
+      demo: false,
+    }).value;
+    expect(g).toContain(">Check for app updates</button>");
+    expect(g).not.toContain("sync-now");
+  });
+
   it("offers Allow with a how-far-back choice for a found, unallowed source", () => {
-    const m = sourcesView([source()]).value;
+    const m = sourcesView([source()], status).value;
     expect(m).toContain('data-action="allow" data-id="claude-code"');
     expect(m).toContain('<option value="none">From now on</option>');
     expect(m).not.toContain('data-action="forget"');
@@ -244,18 +261,18 @@ describe("sourcesView", () => {
 
   it("offers pause, stop and forget once allowed", () => {
     const state = { id: "claude-code", allowed: true, paused: true, backfill_since: null, granted_at: null, start_after: null, paths: [] };
-    const m = sourcesView([source({ state })]).value;
+    const m = sourcesView([source({ state })], status).value;
     expect(m).toContain(">Resume<");
     expect(m).toContain('data-paused="true"');
     expect(m).toContain('data-action="forget"');
   });
 
   it("explains how to get an export", () => {
-    expect(sourcesView([source({ id: "chatgpt-export", kind: "import", roots: [] })]).value).toContain("Settings → Data controls → Export data.");
+    expect(sourcesView([source({ id: "chatgpt-export", kind: "import", roots: [] })], status).value).toContain("Settings → Data controls → Export data.");
   });
 
   it("escapes names and paths", () => {
-    safe(sourcesView([source({ name: HOSTILE, roots: [[HOSTILE, true]] })]).value);
+    safe(sourcesView([source({ name: HOSTILE, roots: [[HOSTILE, true]] })], status).value);
   });
 
   it("lists what's being read right now", () => {
@@ -306,7 +323,6 @@ describe("settingsView", () => {
     autostart: true,
     menuBar: true,
     update: null,
-    status: { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 },
     demo: false,
   };
 
@@ -315,7 +331,6 @@ describe("settingsView", () => {
     expect(m).toContain('value="snippet" data-action="level" checked');
     expect(m).toContain('id="autostart" data-action="autostart" type="checkbox" checked');
     expect(m).toContain('max="3650"');
-    expect(m).toContain("Last checked never.");
   });
 
   it("checks the menu-bar toggle when it's on, and leaves it clear when off", () => {
