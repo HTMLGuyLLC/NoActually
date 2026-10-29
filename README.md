@@ -15,11 +15,12 @@
   <img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-3b5bdb" alt="macOS, Windows, Linux">
   <img src="https://img.shields.io/badge/built%20with-Tauri%202%20%2B%20Rust-141a2e" alt="Built with Tauri 2 and Rust">
   <img src="https://img.shields.io/badge/telemetry-none-2f9e44" alt="No telemetry">
+  <img src="https://img.shields.io/badge/API%20cost-%240-2f9e44" alt="API cost: $0">
 </p>
 
 <p align="center">
   <a href="https://github.com/HTMLGuyLLC/NoActually/releases/latest"><img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8E_Download-Mac_%C2%B7_Windows_%C2%B7_Linux-e0322b?style=for-the-badge" alt="Download for Mac, Windows or Linux"></a><br>
-  <sub>Free and open source · Your chats never leave your computer · <a href="#get-started-in-a-minute">Get started</a></sub>
+  <sub>Free and open source · $0 to run, no AI calls · Your chats never leave your computer · <a href="#get-started-in-a-minute">Get started</a></sub>
 </p>
 
 <p align="center">
@@ -37,7 +38,7 @@ You correct your AI all day: the function that doesn't exist, the instruction it
 | 🧠 | **Could AI replace you?** | Times you caught it being wrong | Rubber stamp → Coworker → Sharp-eyed → **Irreplaceable** |
 | 🎯 | **Do you make it guess?** | How often your tasks landed without you adding, clarifying or starting over | Vibes only → Ticket writer → Tech lead → **Architect** |
 
-No AI does the judging. Fixed, readable rules do, so the same history always gives the same score. Nothing is uploaded, ever.
+> **💸 Costs nothing to run.** No AI does the judging, so there's no API key, no tokens spent and no subscription. Fixed, readable rules score your chats right on your computer: the same history always gives the same score, and nothing is uploaded, ever.
 
 ## Get started in a minute
 
@@ -123,9 +124,9 @@ Click **Forget** on a source to delete everything read from it. Uninstalling the
 </details>
 
 <details>
-<summary><b>Is it really free?</b></summary>
+<summary><b>Is it really free? What does it cost to run?</b></summary>
 
-Yes. MIT licensed, no paid tier, no ads.
+Free, and it costs nothing to run. It never calls an AI, so there's no API key to add and no tokens on your bill, however much history you have. MIT licensed, no paid tier, no ads.
 </details>
 
 ---
