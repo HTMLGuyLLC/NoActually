@@ -3,8 +3,8 @@
 use crate::{Result, Store};
 use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, Timelike};
 use engine::{
-    Answer, BriefTier, CatchTier, Category, Grade, Label, Score, Signal, Signals, Steer, Tier, Window, MIN_BRIEFS,
-    WINDOW_DAYS,
+    Answer, Category, CorrectionTier, Grade, Label, PromptTier, Score, Signal, Signals, Steer, Tier, Window,
+    MIN_PROMPTS, WINDOW_DAYS,
 };
 use rusqlite::{params_from_iter, Connection};
 use serde::{Deserialize, Serialize};
@@ -13,20 +13,21 @@ use std::sync::LazyLock;
 
 /// A chat with at least this many messages counts as a real one.
 const REAL_CHAT: i64 = 10;
-/// Hall of fame entries per award (one award per catch category, and one for being humbled).
+/// Hall of fame entries per award (one award per correction category, and one for being humbled).
 const HALL_PER_AWARD: i64 = 5;
 /// A punchy line is about this long; much shorter says little, much longer rambles.
 const HALL_SWEET_SPOT: i64 = 60;
 /// A tip only quotes "with vs without" when both groups have this many continued tasks.
 const TIP_MIN_GROUP: i64 = 10;
-/// ...and briefs carrying the signal landed at least this many points more often.
+/// ...and prompts carrying the signal landed at least this many points more often.
 const TIP_MIN_LIFT: f64 = 10.0;
-/// No tip once even the least-carried signal is in at least this share of briefs.
+/// No tip once even the least-carried signal is in at least this share of prompts.
 const TIP_MAX_PCT: f64 = 50.0;
 
-/// The labels that count as catches, as an SQL list: `('confirmed','admitted','claimed')`.
-pub(crate) static CATCH_KINDS: LazyLock<String> = LazyLock::new(|| {
-    let ids: Vec<String> = Label::ALL.iter().filter(|l| l.is_catch()).map(|l| format!("'{}'", l.as_str())).collect();
+/// The labels that count as corrections, as an SQL list: `('confirmed','admitted','claimed')`.
+pub(crate) static CORRECTION_KINDS: LazyLock<String> = LazyLock::new(|| {
+    let ids: Vec<String> =
+        Label::ALL.iter().filter(|l| l.is_correction()).map(|l| format!("'{}'", l.as_str())).collect();
     format!("({})", ids.join(","))
 });
 
@@ -85,9 +86,9 @@ pub struct ModelRow {
     pub version: String,
     /// Messages sent to it.
     pub messages: i64,
-    /// Times you caught it.
-    pub catches: i64,
-    /// Times it caught you.
+    /// Times you corrected it.
+    pub corrections: i64,
+    /// Times it corrected you.
     pub humbled: i64,
     /// Tasks given to it.
     pub tasks: i64,
@@ -113,13 +114,13 @@ pub struct Overall {
     pub next_tier: Option<Tier>,
     /// The headline answer.
     pub verdict: Answer,
-    /// "Do you catch its mistakes?", from judgment.
-    pub catch_tier: Option<CatchTier>,
-    /// The catch tier above it.
-    pub next_catch_tier: Option<CatchTier>,
-    /// Times you caught it in the window.
-    pub catches: i64,
-    /// Times it caught you in the window.
+    /// "Do you correction its mistakes?", from judgment.
+    pub correction_tier: Option<CorrectionTier>,
+    /// The correction tier above it.
+    pub next_correction_tier: Option<CorrectionTier>,
+    /// Times you corrected it in the window.
+    pub corrections: i64,
+    /// Times it corrected you in the window.
     pub humbled: i64,
     /// More continued tasks before a score is given (0 once ranked).
     pub to_rank: i64,
@@ -132,11 +133,11 @@ pub struct WeekRow {
     pub week: NaiveDate,
     /// Messages that week.
     pub messages: i64,
-    /// Catches that week.
-    pub catches: i64,
+    /// Corrections that week.
+    pub corrections: i64,
 }
 
-/// One catch (or humbled moment) shown in the hall of fame.
+/// One correction (or humbled moment) shown in the hall of fame.
 #[derive(Debug, Default, Serialize)]
 pub struct HallEntry {
     /// Event id, for pinning.
@@ -172,45 +173,45 @@ pub struct Stats {
     pub last_day: Option<String>,
     /// Messages ever.
     pub messages: i64,
-    /// Catches ever.
-    pub catches: i64,
-    /// Times the AI caught you.
+    /// Corrections ever.
+    pub corrections: i64,
+    /// Times the AI corrected you.
     pub humbled: i64,
     /// Count per label id.
     pub labels: BTreeMap<String, i64>,
-    /// Catches in the 7 days ending today.
-    pub catches_last_7d: i64,
+    /// Corrections in the 7 days ending today.
+    pub corrections_last_7d: i64,
     /// "Could AI replace you?"
     pub overall: Overall,
-    /// One catch every this many messages.
-    pub messages_per_catch: Option<i64>,
+    /// One correction every this many messages.
+    pub messages_per_correction: Option<i64>,
     /// Chats with at least 10 messages.
     pub real_chats: i64,
-    /// Share of real chats with at least one catch, one decimal.
-    pub pct_real_chats_with_catch: Option<f64>,
-    /// Longest run of days with a catch.
+    /// Share of real chats with at least one correction, one decimal.
+    pub pct_real_chats_with_correction: Option<f64>,
+    /// Longest run of days with a correction.
     pub best_streak_days: i64,
     /// The run ending today or yesterday.
     pub current_streak_days: i64,
-    /// Local hour (0–23) with the most catches.
+    /// Local hour (0–23) with the most corrections.
     pub peak_hour: Option<u32>,
-    /// Catches per category id.
+    /// Corrections per category id.
     pub categories: BTreeMap<String, i64>,
     /// Per week, oldest first.
     pub weekly: Vec<WeekRow>,
-    /// Per model, most caught first.
+    /// Per model, most corrected first.
     pub models: Vec<ModelRow>,
-    /// The best few per award (catch category, or "" for being humbled), best first in each.
+    /// The best few per award (correction category, or "" for being humbled), best first in each.
     pub hall_of_fame: Vec<HallEntry>,
-    /// How you brief it.
-    pub briefs: Briefs,
+    /// How you prompt it.
+    pub prompts: Prompts,
 }
 
-/// How you brief the AI: your tasks, what their briefs carried, and what it took to land them.
+/// How you prompt the AI: your tasks, what their prompts carried, and what it took to land them.
 /// Only tasks that continued past their first message can need steering, so only they count
 /// toward `landed` and the tier.
 #[derive(Debug, Default, PartialEq, Serialize)]
-pub struct Briefs {
+pub struct Prompts {
     /// Tasks ever (questions and chatter aren't tasks).
     pub tasks: i64,
     /// Of those, the ones that went past their first message.
@@ -222,30 +223,30 @@ pub struct Briefs {
     /// Of those, how many landed.
     pub window_landed: i64,
     /// The tier those reach; `None` until there are enough of them.
-    pub tier: Option<BriefTier>,
+    pub tier: Option<PromptTier>,
     /// The tier above it (its floor is the target to show).
-    pub next_tier: Option<BriefTier>,
+    pub next_tier: Option<PromptTier>,
     /// More continued tasks before a tier is given (0 once ranked).
     pub to_rank: i64,
-    /// Briefs per grade id.
+    /// Prompts per grade id.
     pub grades: BTreeMap<String, i64>,
-    /// Briefs carrying each signal, by signal id.
+    /// Prompts carrying each signal, by signal id.
     pub signals: BTreeMap<String, i64>,
     /// Steering messages per cause id.
     pub steering: BTreeMap<String, i64>,
-    /// What to try next, once there are briefs.
+    /// What to try next, once there are prompts.
     pub tip: Option<Tip>,
 }
 
-/// The signal your briefs carry least, and (when your own history backs it up) how much more
-/// often continued tasks whose briefs carry it landed.
+/// The signal your prompts carry least, and (when your own history backs it up) how much more
+/// often continued tasks whose prompts carry it landed.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct Tip {
     /// Signal id.
     pub signal: String,
-    /// Percent of briefs carrying it, one decimal.
-    pub pct_of_briefs: f64,
-    /// Percent of briefs carrying it that landed, and of those that didn't; only when the gap
+    /// Percent of prompts carrying it, one decimal.
+    pub pct_of_prompts: f64,
+    /// Percent of prompts carrying it that landed, and of those that didn't; only when the gap
     /// is real (see `TIP_MIN_GROUP`, `TIP_MIN_LIFT`).
     pub landed_with_without: Option<(f64, f64)>,
 }
@@ -283,10 +284,10 @@ impl View<'_> {
 /// Headline counts.
 struct Totals {
     messages: i64,
-    catches: i64,
+    corrections: i64,
     humbled: i64,
-    catches_last_7d: i64,
-    window_catches: i64,
+    corrections_last_7d: i64,
+    window_corrections: i64,
     window_humbled: i64,
 }
 
@@ -298,15 +299,15 @@ fn score_start(since: Option<NaiveDate>, today: NaiveDate) -> NaiveDate {
 /// Counts over `v`; "this week" and the score's window (from `start`) over `scope`, the same
 /// filter without `since`.
 fn totals(v: &View, scope: &View, today: NaiveDate, start: NaiveDate) -> Result<Totals> {
-    let kinds = CATCH_KINDS.as_str();
+    let kinds = CORRECTION_KINDS.as_str();
     let week_ago = (today - Duration::days(6)).to_string();
     let window = start.to_string();
     Ok(Totals {
         messages: v.sum("AND kind = 'message'", &[])?,
-        catches: v.sum(&format!("AND kind IN {kinds}"), &[])?,
+        corrections: v.sum(&format!("AND kind IN {kinds}"), &[])?,
         humbled: v.sum("AND kind = 'humbled'", &[])?,
-        catches_last_7d: scope.sum(&format!("AND kind IN {kinds} AND day >= ?"), &[&week_ago])?,
-        window_catches: scope.sum(&format!("AND kind IN {kinds} AND day >= ?"), &[&window])?,
+        corrections_last_7d: scope.sum(&format!("AND kind IN {kinds} AND day >= ?"), &[&week_ago])?,
+        window_corrections: scope.sum(&format!("AND kind IN {kinds} AND day >= ?"), &[&window])?,
         window_humbled: scope.sum("AND kind = 'humbled' AND day >= ?", &[&window])?,
     })
 }
@@ -316,7 +317,7 @@ fn day_range(v: &View) -> Result<(Option<String>, Option<String>)> {
     Ok(v.rows(&sql, &[], |r| Ok((r.get(0)?, r.get(1)?)))?.pop().unwrap_or_default())
 }
 
-/// Counts per label, and per category for catches.
+/// Counts per label, and per category for corrections.
 fn labels_and_categories(v: &View) -> Result<(BTreeMap<String, i64>, BTreeMap<String, i64>)> {
     let sql = format!(
         "SELECT kind, category, SUM(n) FROM daily WHERE kind != 'message' {} GROUP BY kind, category",
@@ -335,20 +336,20 @@ fn labels_and_categories(v: &View) -> Result<(BTreeMap<String, i64>, BTreeMap<St
     Ok((labels, categories))
 }
 
-/// (real chats, real chats with a catch). Chats only know their source, not a model, so this
+/// (real chats, real chats with a correction). Chats only know their source, not a model, so this
 /// respects the source filter alone, plus `since` (chats still going on or after it).
 fn real_chats(conn: &Connection, source: Option<&str>, since: Option<NaiveDate>) -> Result<(i64, i64)> {
     Ok(conn.query_row(
-        "SELECT COUNT(*), COALESCE(SUM(catches > 0), 0) FROM sessions
+        "SELECT COUNT(*), COALESCE(SUM(corrections > 0), 0) FROM sessions
          WHERE messages >= ?1 AND (?2 IS NULL OR source = ?2) AND (?3 IS NULL OR last_day >= ?3)",
         rusqlite::params![REAL_CHAT, source, since.map(|d| d.to_string())],
         |r| Ok((r.get(0)?, r.get(1)?)),
     )?)
 }
 
-/// Sorted days that had at least one catch.
-fn catch_days(v: &View) -> Result<Vec<NaiveDate>> {
-    let sql = format!("SELECT DISTINCT day FROM daily WHERE kind IN {} {} ORDER BY day", *CATCH_KINDS, v.clause);
+/// Sorted days that had at least one correction.
+fn correction_days(v: &View) -> Result<Vec<NaiveDate>> {
+    let sql = format!("SELECT DISTINCT day FROM daily WHERE kind IN {} {} ORDER BY day", *CORRECTION_KINDS, v.clause);
     let mut days: Vec<NaiveDate> =
         v.rows(&sql, &[], |r| r.get::<_, String>(0))?.into_iter().filter_map(|d| d.parse().ok()).collect();
     days.dedup();
@@ -370,9 +371,9 @@ fn streaks(days: &[NaiveDate], today: NaiveDate) -> (i64, i64) {
     (best, current)
 }
 
-/// Catches per local hour of day.
-fn catch_hours(v: &View) -> Result<[i64; 24]> {
-    let sql = format!("SELECT ts FROM events WHERE label IN {} {}", *CATCH_KINDS, v.clause);
+/// Corrections per local hour of day.
+fn correction_hours(v: &View) -> Result<[i64; 24]> {
+    let sql = format!("SELECT ts FROM events WHERE label IN {} {}", *CORRECTION_KINDS, v.clause);
     let mut hours = [0i64; 24];
     for ts in v.rows(&sql, &[], |r| r.get::<_, String>(0))? {
         if let Ok(t) = DateTime::parse_from_rfc3339(&ts) {
@@ -382,7 +383,7 @@ fn catch_hours(v: &View) -> Result<[i64; 24]> {
     Ok(hours)
 }
 
-/// The busiest hour; on a tie, the later one. `None` with no catches.
+/// The busiest hour; on a tie, the later one. `None` with no corrections.
 fn peak_hour(hours: &[i64; 24]) -> Option<u32> {
     hours.iter().any(|n| *n > 0).then(|| (0..24).max_by_key(|h| hours[*h as usize]).unwrap_or(0))
 }
@@ -396,7 +397,7 @@ fn weekly(v: &View) -> Result<Vec<WeekRow>> {
     let sql = format!(
         "SELECT day, SUM(CASE WHEN kind = 'message' THEN n ELSE 0 END), SUM(CASE WHEN kind IN {} THEN n ELSE 0 END)
          FROM daily WHERE 1=1 {} GROUP BY day",
-        *CATCH_KINDS, v.clause
+        *CORRECTION_KINDS, v.clause
     );
     let mut weeks: BTreeMap<NaiveDate, (i64, i64)> = BTreeMap::new();
     for (day, m, k) in v.rows(&sql, &[], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?)))? {
@@ -405,7 +406,7 @@ fn weekly(v: &View) -> Result<Vec<WeekRow>> {
         e.0 += m;
         e.1 += k;
     }
-    Ok(weeks.into_iter().map(|(week, (messages, catches))| WeekRow { week, messages, catches }).collect())
+    Ok(weeks.into_iter().map(|(week, (messages, corrections))| WeekRow { week, messages, corrections }).collect())
 }
 
 fn models(v: &View) -> Result<Vec<ModelRow>> {
@@ -436,7 +437,7 @@ fn model_counts(v: &View) -> Result<Vec<ModelRow>> {
             SUM(CASE WHEN kind IN {} THEN n ELSE 0 END),
             SUM(CASE WHEN kind = 'humbled' THEN n ELSE 0 END)
          FROM daily WHERE 1=1 {} GROUP BY provider, family, version ORDER BY 5 DESC, 4 DESC",
-        *CATCH_KINDS, v.clause
+        *CORRECTION_KINDS, v.clause
     );
     v.rows(&sql, &[], |r| {
         Ok(ModelRow {
@@ -444,7 +445,7 @@ fn model_counts(v: &View) -> Result<Vec<ModelRow>> {
             family: r.get(1)?,
             version: r.get(2)?,
             messages: r.get(3)?,
-            catches: r.get(4)?,
+            corrections: r.get(4)?,
             humbled: r.get(5)?,
             ..ModelRow::default()
         })
@@ -453,7 +454,7 @@ fn model_counts(v: &View) -> Result<Vec<ModelRow>> {
 
 fn hall_of_fame(v: &View) -> Result<Vec<HallEntry>> {
     let names: HashMap<&str, &str> = SOURCE_NAMES.iter().copied().collect();
-    // The best few per award: pinned first, then the catches the AI owned up to, then ones that
+    // The best few per award: pinned first, then the corrections the AI owned up to, then ones that
     // kept both sides, then the punchiest line, then the newest. Same history, same picks.
     let sql = format!(
         "SELECT id, day, source, model, label, category, human, ai, pinned FROM (
@@ -508,18 +509,18 @@ static ON_YOU: LazyLock<String> = LazyLock::new(|| {
 /// A continued task that nothing on you steered, as SQL over `tasks`.
 pub(crate) static LANDED: LazyLock<String> = LazyLock::new(|| format!("(messages >= 2 AND {} = 0)", ON_YOU.as_str()));
 
-/// One group of tasks: the signals their brief carried, whether they continued, whether they landed.
+/// One group of tasks: the signals their prompt carried, whether they continued, whether they landed.
 pub(crate) type Group = (Signals, bool, bool, i64);
 
 /// Counts over `v`; the tier's window (from `start`) over `scope`, the same filter without `since`.
-fn briefs(v: &View, scope: &View, start: NaiveDate) -> Result<Briefs> {
+fn prompts(v: &View, scope: &View, start: NaiveDate) -> Result<Prompts> {
     let landed = LANDED.as_str();
     // At most 32 masks x 3 outcomes, so the per-signal math happens here, not in SQL.
     let sql =
         format!("SELECT signals, messages >= 2, {landed}, COUNT(*) FROM tasks WHERE 1=1 {} GROUP BY 1, 2, 3", v.clause);
     let groups: Vec<Group> =
         v.rows(&sql, &[], |r| Ok((Signals(r.get::<_, u8>(0)?), r.get(1)?, r.get(2)?, r.get(3)?)))?;
-    let mut b = Briefs::default();
+    let mut b = Prompts::default();
     for (signals, continued, landed, n) in &groups {
         b.tasks += n;
         if *continued {
@@ -541,9 +542,9 @@ fn briefs(v: &View, scope: &View, start: NaiveDate) -> Result<Briefs> {
         b.steering.insert(c.as_str().to_string(), n);
     }
     (b.window_tasks, b.window_landed) = window_counts(scope, start)?;
-    b.tier = BriefTier::for_tasks(b.window_landed, b.window_tasks);
-    b.next_tier = b.tier.and_then(BriefTier::next);
-    b.to_rank = (MIN_BRIEFS - b.window_tasks).max(0);
+    b.tier = PromptTier::for_tasks(b.window_landed, b.window_tasks);
+    b.next_tier = b.tier.and_then(PromptTier::next);
+    b.to_rank = (MIN_PROMPTS - b.window_tasks).max(0);
     b.tip = tip(&groups, b.tasks);
     Ok(b)
 }
@@ -559,7 +560,7 @@ fn window_counts(v: &View, start: NaiveDate) -> Result<(i64, i64)> {
     Ok(v.rows(&sql, &[&since], |r| Ok((r.get(0)?, r.get(1)?)))?.pop().unwrap_or_default())
 }
 
-/// The signal carried least (ties: display order), unless your briefs mostly carry it already.
+/// The signal carried least (ties: display order), unless your prompts mostly carry it already.
 /// Quotes its lift only when it's real.
 fn tip(groups: &[Group], tasks: i64) -> Option<Tip> {
     if tasks == 0 {
@@ -567,10 +568,10 @@ fn tip(groups: &[Group], tasks: i64) -> Option<Tip> {
     }
     let carried = |s: Signal| -> i64 { groups.iter().filter(|g| g.0.has(s)).map(|g| g.3).sum() };
     let s = Signal::ALL.into_iter().min_by_key(|s| carried(*s))?;
-    Some(tip_for(groups, s)).filter(|t| t.pct_of_briefs < TIP_MAX_PCT)
+    Some(tip_for(groups, s)).filter(|t| t.pct_of_prompts < TIP_MAX_PCT)
 }
 
-/// The tip for `s`: the share of all briefs carrying it, and how often continued tasks with and
+/// The tip for `s`: the share of all prompts carrying it, and how often continued tasks with and
 /// without it landed, when the gap is real.
 pub(crate) fn tip_for(groups: &[Group], s: Signal) -> Tip {
     let n = |has: bool, f: fn(&Group) -> bool| -> i64 {
@@ -581,7 +582,7 @@ pub(crate) fn tip_for(groups: &[Group], s: Signal) -> Tip {
     let real = with >= TIP_MIN_GROUP && without >= TIP_MIN_GROUP && rate_with - rate_without >= TIP_MIN_LIFT;
     Tip {
         signal: s.as_str().to_string(),
-        pct_of_briefs: pct(n(true, |_| true), n(true, |_| true) + n(false, |_| true)),
+        pct_of_prompts: pct(n(true, |_| true), n(true, |_| true) + n(false, |_| true)),
         landed_with_without: real.then_some((rate_with, rate_without)),
     }
 }
@@ -591,14 +592,14 @@ static SOURCE_NAMES: LazyLock<Vec<(&'static str, &'static str)>> =
     LazyLock::new(|| sources::all().iter().map(|s| (s.id(), s.name())).collect());
 
 /// The overall score from the window's tasks (already in `b`) and corrections.
-fn overall(b: &Briefs, catches: i64, humbled: i64) -> Overall {
-    overall_of(b.window_tasks, b.window_landed, catches, humbled)
+fn overall(b: &Prompts, corrections: i64, humbled: i64) -> Overall {
+    overall_of(b.window_tasks, b.window_landed, corrections, humbled)
 }
 
-fn overall_of(continued: i64, landed: i64, catches: i64, humbled: i64) -> Overall {
-    let score = Score::of(Window { continued, landed, catches, humbled });
+fn overall_of(continued: i64, landed: i64, corrections: i64, humbled: i64) -> Overall {
+    let score = Score::of(Window { continued, landed, corrections, humbled });
     let tier = score.map(|s| s.tier);
-    let catch_tier = score.map(|s| CatchTier::for_judgment(s.judgment));
+    let correction_tier = score.map(|s| CorrectionTier::for_judgment(s.judgment));
     Overall {
         score: score.map(|s| s.score),
         direction: score.map(|s| s.direction),
@@ -606,11 +607,11 @@ fn overall_of(continued: i64, landed: i64, catches: i64, humbled: i64) -> Overal
         tier,
         next_tier: tier.and_then(Tier::next),
         verdict: Answer::for_tier(tier),
-        catch_tier,
-        next_catch_tier: catch_tier.and_then(CatchTier::next),
-        catches,
+        correction_tier,
+        next_correction_tier: correction_tier.and_then(CorrectionTier::next),
+        corrections,
         humbled,
-        to_rank: (MIN_BRIEFS - continued).max(0),
+        to_rank: (MIN_PROMPTS - continued).max(0),
     }
 }
 
@@ -621,9 +622,9 @@ impl Store {
         let start = score_start(None, today);
         let (continued, landed) = window_counts(&v, start)?;
         let window = start.to_string();
-        let catches = v.sum(&format!("AND kind IN {} AND day >= ?", *CATCH_KINDS), &[&window])?;
+        let corrections = v.sum(&format!("AND kind IN {} AND day >= ?", *CORRECTION_KINDS), &[&window])?;
         let humbled = v.sum("AND kind = 'humbled' AND day >= ?", &[&window])?;
-        Ok(overall_of(continued, landed, catches, humbled))
+        Ok(overall_of(continued, landed, corrections, humbled))
     }
 
     /// The scorecard for `f`, with "this week" ending on `today`.
@@ -636,29 +637,30 @@ impl Store {
         let t = totals(&v, &scope, today, start)?;
         let (first_day, last_day) = day_range(&v)?;
         let (labels, categories) = labels_and_categories(&v)?;
-        let (real_chats, real_with_catch) = real_chats(self.conn(), f.source.as_deref(), f.since)?;
-        let (best_streak_days, current_streak_days) = streaks(&catch_days(&v)?, today);
-        let briefs = briefs(&v, &scope, start)?;
+        let (real_chats, real_with_correction) = real_chats(self.conn(), f.source.as_deref(), f.since)?;
+        let (best_streak_days, current_streak_days) = streaks(&correction_days(&v)?, today);
+        let prompts = prompts(&v, &scope, start)?;
         Ok(Stats {
             first_day,
             last_day,
             messages: t.messages,
-            catches: t.catches,
+            corrections: t.corrections,
             humbled: t.humbled,
             labels,
-            catches_last_7d: t.catches_last_7d,
-            overall: overall(&briefs, t.window_catches, t.window_humbled),
-            messages_per_catch: (t.catches > 0).then(|| (t.messages as f64 / t.catches as f64).round() as i64),
+            corrections_last_7d: t.corrections_last_7d,
+            overall: overall(&prompts, t.window_corrections, t.window_humbled),
+            messages_per_correction: (t.corrections > 0)
+                .then(|| (t.messages as f64 / t.corrections as f64).round() as i64),
             real_chats,
-            pct_real_chats_with_catch: (real_chats > 0).then(|| pct(real_with_catch, real_chats)),
+            pct_real_chats_with_correction: (real_chats > 0).then(|| pct(real_with_correction, real_chats)),
             best_streak_days,
             current_streak_days,
-            peak_hour: if t.catches > 0 { peak_hour(&catch_hours(&v)?) } else { None },
+            peak_hour: if t.corrections > 0 { peak_hour(&correction_hours(&v)?) } else { None },
             categories,
             weekly: weekly(&v)?,
             models: models(&v)?,
             hall_of_fame: hall_of_fame(&v)?,
-            briefs,
+            prompts,
         })
     }
 }
@@ -672,8 +674,8 @@ mod tests {
     }
 
     #[test]
-    fn catch_kinds_come_from_the_labels() {
-        assert_eq!(CATCH_KINDS.as_str(), "('confirmed','admitted','claimed')");
+    fn correction_kinds_come_from_the_labels() {
+        assert_eq!(CORRECTION_KINDS.as_str(), "('confirmed','admitted','claimed')");
     }
 
     #[test]
@@ -686,7 +688,7 @@ mod tests {
     }
 
     #[test]
-    fn peak_hour_prefers_the_later_tie_and_needs_a_catch() {
+    fn peak_hour_prefers_the_later_tie_and_needs_a_correction() {
         let mut h = [0i64; 24];
         assert_eq!(peak_hour(&h), None);
         h[9] = 2;
@@ -704,11 +706,11 @@ mod tests {
 
     #[test]
     fn overall_mixes_the_window_and_waits_for_enough_tasks() {
-        let b = |continued, landed| Briefs {
+        let b = |continued, landed| Prompts {
             window_tasks: continued,
             window_landed: landed,
-            to_rank: (MIN_BRIEFS - continued).max(0),
-            ..Briefs::default()
+            to_rank: (MIN_PROMPTS - continued).max(0),
+            ..Prompts::default()
         };
         let o = overall(&b(150, 125), 41, 2);
         assert_eq!(
@@ -716,7 +718,10 @@ mod tests {
             (Some(86), Some(Tier::SharpEyed), Some(Tier::Irreplaceable), Answer::No)
         );
         let o = overall(&b(4, 4), 9, 0);
-        assert_eq!((o.score, o.tier, o.verdict, o.to_rank, o.catches), (None, None, Answer::Hmm, MIN_BRIEFS - 4, 9));
+        assert_eq!(
+            (o.score, o.tier, o.verdict, o.to_rank, o.corrections),
+            (None, None, Answer::Hmm, MIN_PROMPTS - 4, 9)
+        );
     }
 
     #[test]

@@ -1,5 +1,5 @@
 //! Claude.ai data export (Settings → Privacy → Export data): `conversations.json`.
-//! The export doesn't record which model replied, so these catches roll up under "Claude".
+//! The export doesn't record which model replied, so these corrections roll up under "Claude".
 
 use crate::export::scan_export;
 use crate::{parse_ts, walk, Event, FileScan, Kind, Result, Source};

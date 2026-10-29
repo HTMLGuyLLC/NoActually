@@ -2,13 +2,13 @@
 // on <body> so the card can't clip it. Follows the ARIA combobox pattern: focus stays in the search
 // field and the highlighted option is announced through aria-activedescendant.
 import { type Html, html, num } from "../html";
-import { catchRate, landedRate, matchPickItems, type PickItem, type PickStat } from "./picker";
+import { correctionRate, landedRate, matchPickItems, type PickItem, type PickStat } from "./picker";
 
 /** The numbers beside one model, for what the page is about. */
 export function pickStatView(i: PickItem, stat: PickStat): Html {
-  if (stat === "briefs") return html`<b>${landedRate(i.landed, i.continued)}</b> landed · ${num(i.tasks)} tasks`;
-  if (stat === "both") return html`<b>${catchRate(i.catches, i.messages)}</b> corrected · <b>${landedRate(i.landed, i.continued)}</b> landed`;
-  return html`<b>${num(i.catches)}</b> corrections · ${catchRate(i.catches, i.messages)}`;
+  if (stat === "prompts") return html`<b>${landedRate(i.landed, i.continued)}</b> landed · ${num(i.tasks)} tasks`;
+  if (stat === "both") return html`<b>${correctionRate(i.corrections, i.messages)}</b> corrected · <b>${landedRate(i.landed, i.continued)}</b> landed`;
+  return html`<b>${num(i.corrections)}</b> corrections · ${correctionRate(i.corrections, i.messages)}`;
 }
 
 export type PickerOptions = {

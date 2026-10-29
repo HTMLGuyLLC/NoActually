@@ -1,5 +1,5 @@
 // Shared test data, shaped like the Rust side's output.
-import type { Briefs, HallEntry, Meta, ModelRow, Overall, Progress, SourceInfo, Stats } from "../api";
+import type { HallEntry, Meta, ModelRow, Overall, Progress, Prompts, SourceInfo, Stats } from "../api";
 
 export const meta: Meta = {
   tiers: [
@@ -9,7 +9,7 @@ export const meta: Meta = {
     { id: "irreplaceable", name: "Irreplaceable", floor: 90 },
   ],
   direction_weight: 70,
-  catch_proof: 3,
+  correction_proof: 3,
   humbled_cost: 5,
   humbled_base: 30,
   categories: [
@@ -20,20 +20,20 @@ export const meta: Meta = {
     { id: "claude-code", name: "Claude Code" },
     { id: "chatgpt-export", name: "ChatGPT (export)" },
   ],
-  brief_tiers: [
+  prompt_tiers: [
     { id: "vibes_only", name: "Vibes only", floor: 0, verdict: "Constantly." },
     { id: "ticket_writer", name: "Ticket writer", floor: 70, verdict: "Often." },
     { id: "tech_lead", name: "Tech lead", floor: 80, verdict: "Sometimes." },
     { id: "architect", name: "Architect", floor: 90, verdict: "Rarely." },
   ],
-  catch_tiers: [
+  correction_tiers: [
     { id: "autopilot", name: "Autopilot", floor: 0, verdict: "Rarely." },
     { id: "spot_checker", name: "Spot-checker", floor: 50, verdict: "Sometimes." },
     { id: "reviewer", name: "Reviewer", floor: 75, verdict: "Often." },
     { id: "hawk_eyed", name: "Hawk-eyed", floor: 90, verdict: "Usually." },
   ],
-  min_briefs: 10,
-  brief_window_days: 28,
+  min_prompts: 10,
+  prompt_window_days: 28,
   signals: [
     { id: "spot", title: "Points at it", hint: "a file, function, link or code" },
     { id: "proof", title: "Shows it", hint: "an error, the output or an example" },
@@ -57,7 +57,7 @@ export const meta: Meta = {
   goal_weeks: 4,
 };
 
-export const briefs = (over: Partial<Briefs> = {}): Briefs => ({
+export const prompts = (over: Partial<Prompts> = {}): Prompts => ({
   tasks: 200,
   continued: 120,
   landed: 108,
@@ -69,17 +69,17 @@ export const briefs = (over: Partial<Briefs> = {}): Briefs => ({
   grades: { thin: 100, solid: 60, sharp: 40 },
   signals: { spot: 80, proof: 50, done: 90, limits: 20, why: 40 },
   steering: { ai_wrong: 12, added: 9, clarified: 3, redo: 1 },
-  tip: { signal: "limits", pct_of_briefs: 10, landed_with_without: null },
+  tip: { signal: "limits", pct_of_prompts: 10, landed_with_without: null },
   ...over,
 });
 
 export const HOSTILE = `<img src=x onerror="alert(1)">&'"`;
 
-export const row = (provider: string, family: string, version: string, catches: number, messages = 100, tasks = 20): ModelRow => ({
+export const row = (provider: string, family: string, version: string, corrections: number, messages = 100, tasks = 20): ModelRow => ({
   provider,
   family,
   version,
-  catches,
+  corrections,
   messages,
   humbled: 0,
   tasks,
@@ -94,9 +94,9 @@ export const overall = (over: Partial<Overall> = {}): Overall => ({
   tier: "sharp_eyed",
   next_tier: "irreplaceable",
   verdict: "no",
-  catch_tier: "hawk_eyed",
-  next_catch_tier: null,
-  catches: 41,
+  correction_tier: "hawk_eyed",
+  next_correction_tier: null,
+  corrections: 41,
   humbled: 2,
   to_rank: 0,
   ...over,
@@ -105,7 +105,7 @@ export const overall = (over: Partial<Overall> = {}): Overall => ({
 export const week = (day: string, over: Partial<Progress["weeks"][number]> = {}): Progress["weeks"][number] => ({
   week: day,
   messages: 200,
-  catches: 8,
+  corrections: 8,
   humbled: 0,
   tasks: 20,
   continued: 12,
@@ -151,25 +151,25 @@ export const stats = (over: Partial<Stats> = {}): Stats => ({
   first_day: "2026-09-01",
   last_day: "2026-10-27",
   messages: 1000,
-  catches: 177,
+  corrections: 177,
   humbled: 3,
   labels: {},
-  catches_last_7d: 17,
+  corrections_last_7d: 17,
   overall: overall(),
-  messages_per_catch: 47,
+  messages_per_correction: 47,
   real_chats: 100,
-  pct_real_chats_with_catch: 37.6,
+  pct_real_chats_with_correction: 37.6,
   best_streak_days: 14,
   current_streak_days: 3,
   peak_hour: 21,
   categories: { just_wrong: 10, made_it_up: 2 },
   weekly: [
-    { week: "2026-10-12", messages: 100, catches: 4 },
-    { week: "2026-10-19", messages: 200, catches: 16 },
+    { week: "2026-10-12", messages: 100, corrections: 4 },
+    { week: "2026-10-19", messages: 200, corrections: 16 },
   ],
   models: [row("Anthropic", "Claude Opus", "5", 120), row("OpenAI", "GPT Astra", "6", 57)],
   hall_of_fame: [hallEntry()],
-  briefs: briefs(),
+  prompts: prompts(),
   ...over,
 });
 

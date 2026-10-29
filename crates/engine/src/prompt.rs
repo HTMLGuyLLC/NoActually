@@ -1,9 +1,9 @@
-//! How you brief the AI. [`read_prompt`] says whether a message starts a task (a brief), steers
-//! the task already under way, or neither; for a brief it lists which specifics it carries.
+//! How you prompt the AI. [`read_prompt`] says whether a message starts a task (a prompt), steers
+//! the task already under way, or neither; for a prompt it lists which specifics it carries.
 //! Same rules as [`crate::classify`]: pure, deterministic, every decision names its rule.
 //!
-//! A brief's grade counts its [`Signal`]s, never its length, so padding a prompt earns nothing.
-//! Questions aren't briefs: asking how something works is not handing over a task.
+//! A prompt's grade counts its [`Signal`]s, never its length, so padding a prompt earns nothing.
+//! Questions aren't prompts: asking how something works is not handing over a task.
 
 use crate::rules::{first, rule, rule_unless, Rule};
 use crate::{head_chars, normalize_quotes, Label, Turn, Verdict};
@@ -11,9 +11,9 @@ use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
 
 const HEAD: usize = 300; // chars checked for steering and task openers
-const BRIEF: usize = 4000; // chars of a brief searched for signals (a long paste rarely adds more)
+const PROMPT: usize = 4000; // chars of a prompt searched for signals (a long paste rarely adds more)
 
-/// One kind of specific a brief can carry.
+/// One kind of specific a prompt can carry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Signal {
@@ -82,12 +82,12 @@ impl Signal {
     }
 }
 
-/// The signals one brief carries, as a bit mask (stored as is).
+/// The signals one prompt carries, as a bit mask (stored as is).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Signals(pub u8);
 
 impl Signals {
-    /// True if the brief carries `s`.
+    /// True if the prompt carries `s`.
     pub fn has(self, s: Signal) -> bool {
         self.0 & s.bit() != 0
     }
@@ -103,7 +103,7 @@ impl Signals {
     }
 }
 
-/// How specific a brief is, from how many signals it carries.
+/// How specific a prompt is, from how many signals it carries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Grade {
@@ -119,7 +119,7 @@ impl Grade {
     /// Every grade, lowest first.
     pub const ALL: [Grade; 3] = [Grade::Thin, Grade::Solid, Grade::Sharp];
 
-    /// Signals a brief needs to be sharp.
+    /// Signals a prompt needs to be sharp.
     pub const SHARP: u32 = 3;
 
     /// The grade these signals earn.
@@ -150,11 +150,11 @@ impl Grade {
     }
 }
 
-/// Why a task needed another message: the AI was wrong, or the brief left something out.
+/// Why a task needed another message: the AI was wrong, or the prompt left something out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Steer {
-    /// You corrected it (any catch).
+    /// You corrected it (any correction).
     AiWrong,
     /// You added a requirement after the fact ("also…", "I forgot to mention…").
     Added,
@@ -188,7 +188,7 @@ impl Steer {
         }
     }
 
-    /// True when the brief, not the AI, caused it.
+    /// True when the prompt, not the AI, caused it.
     pub fn is_on_you(self) -> bool {
         !matches!(self, Steer::AiWrong)
     }
@@ -198,7 +198,7 @@ impl Steer {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum Prompt {
     /// Started a task.
-    Brief {
+    Prompt {
         /// The specifics it carries.
         signals: Signals,
         /// Ids of the rules that fired: what started the task, then one per signal.
@@ -215,18 +215,18 @@ pub enum Prompt {
     Other,
 }
 
-/// Reads one message. `verdict` is [`crate::classify`]'s for the same turn: a catch is steering.
+/// Reads one message. `verdict` is [`crate::classify`]'s for the same turn: a correction is steering.
 /// `has_task` says whether this chat already has a task; until it does, the first real request
-/// (not a hello or a question) is the brief, wherever it falls.
+/// (not a hello or a question) is the prompt, wherever it falls.
 pub fn read_prompt(turn: &Turn, verdict: &Verdict, has_task: bool) -> Prompt {
     let norm = normalize_quotes(turn.human.trim());
     let t = norm.as_str();
     if t.is_empty() || t.starts_with('<') || SLASH_COMMAND.is_match(t) {
-        return Prompt::Other; // tool payloads and slash commands: nobody wrote these as a brief
+        return Prompt::Other; // tool payloads and slash commands: nobody wrote these as a prompt
     }
     let head = head_chars(t, HEAD);
-    if verdict.label.is_some_and(Label::is_catch) {
-        return Prompt::Steer { cause: Steer::AiWrong, rule: verdict.rules.first().copied().unwrap_or("catch") };
+    if verdict.label.is_some_and(Label::is_correction) {
+        return Prompt::Steer { cause: Steer::AiWrong, rule: verdict.rules.first().copied().unwrap_or("correction") };
     }
     // A chat's very first message can't steer anything, so it's never read as steering.
     if turn.prev_ai.is_some() {
@@ -234,7 +234,7 @@ pub fn read_prompt(turn: &Turn, verdict: &Verdict, has_task: bool) -> Prompt {
             .into_iter()
             .find_map(|(cause, rules)| first(rules, head).map(|m| Prompt::Steer { cause, rule: m.rule }));
         if let Some(steer) = steer {
-            // With no task yet there's nothing to steer ("I meant…" about an answer): not a brief either.
+            // With no task yet there's nothing to steer ("I meant…" about an answer): not a prompt either.
             return if has_task { steer } else { Prompt::Other };
         }
     }
@@ -242,15 +242,15 @@ pub fn read_prompt(turn: &Turn, verdict: &Verdict, has_task: bool) -> Prompt {
         if first(&CHATTER, t).is_some() || is_question(t) {
             return Prompt::Other;
         }
-        return brief(t, "task.first");
+        return prompt(t, "task.first");
     }
     if let Some(m) = first(&NEW_TASK, head) {
-        return brief(t, m.rule);
+        return prompt(t, m.rule);
     }
     Prompt::Other
 }
 
-/// A draft brief checked on its own, for practice: what it carries and how it grades.
+/// A draft prompt checked on its own, for practice: what it carries and how it grades.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Check {
     /// The specifics it carries.
@@ -259,28 +259,30 @@ pub struct Check {
     pub grade: Grade,
     /// Ids of the rules that fired, one per signal.
     pub rules: Vec<&'static str>,
-    /// True when it reads as a question or a hello, which isn't graded as a brief in your history.
-    pub not_a_brief: bool,
+    /// True when it reads as a question or a hello, which isn't graded as a prompt in your history.
+    pub not_a_prompt: bool,
 }
 
 /// Grades `text` as if it were a chat's first message, with the same rules scoring uses.
 pub fn check(text: &str) -> Check {
     let norm = normalize_quotes(text.trim());
     let t = norm.as_str();
-    let not_a_brief = t.is_empty() || first(&CHATTER, t).is_some() || is_question(t);
-    let Prompt::Brief { signals, mut rules } = brief(t, "task.first") else { unreachable!("brief() always briefs") };
+    let not_a_prompt = t.is_empty() || first(&CHATTER, t).is_some() || is_question(t);
+    let Prompt::Prompt { signals, mut rules } = prompt(t, "task.first") else {
+        unreachable!("prompt() always prompts")
+    };
     rules.remove(0);
-    Check { signals, grade: Grade::of(signals), rules, not_a_brief }
+    Check { signals, grade: Grade::of(signals), rules, not_a_prompt }
 }
 
-fn brief(t: &str, started_by: &'static str) -> Prompt {
+fn prompt(t: &str, started_by: &'static str) -> Prompt {
     let mut signals = Signals::default();
     let mut rules = vec![started_by];
     // Pasted material shows the problem, but its words aren't yours: the rest is graded without it.
-    let own = PASTED.replace_all(head_chars(t, BRIEF), " ");
-    if own.len() < head_chars(t, BRIEF).len() {
+    let own = PASTED.replace_all(head_chars(t, PROMPT), " ");
+    if own.len() < head_chars(t, PROMPT).len() {
         signals.insert(Signal::Proof);
-        rules.push("brief.proof.pasted");
+        rules.push("prompt.proof.pasted");
     }
     let text = own.as_ref();
     for s in Signal::ALL {
@@ -292,7 +294,7 @@ fn brief(t: &str, started_by: &'static str) -> Prompt {
             rules.push(m.rule);
         }
     }
-    Prompt::Brief { signals, rules }
+    Prompt::Prompt { signals, rules }
 }
 
 /// "What does this do?" and "explain X": asking, not handing over work.
@@ -310,7 +312,7 @@ static PASTED: LazyLock<regex::Regex> = LazyLock::new(|| {
 });
 
 /// Wrapping-up steps ("also commit and push", "make sure to run the tests"): routine, not
-/// something the brief left out.
+/// something the prompt left out.
 const WORKFLOW: &str = r"(?:please\s+)?(?:commit|push|merge|deploy|ship|release|publish|run (?:the )?(?:tests?|build|lint|checks?)|test (?:it|this|that)|open (?:a |the )?(?:pr|pull request)|create (?:a |the )?(?:pr|pull request))\b";
 
 /// An optional acknowledgement before the words that matter: "ok, also…", "thanks! now…".
@@ -370,7 +372,7 @@ static CLARIFY: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     ]
 });
 
-/// You added a requirement the brief left out.
+/// You added a requirement the prompt left out.
 static ADDED: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![
         rule_unless(
@@ -424,23 +426,23 @@ static NEW_TASK: LazyLock<Vec<Rule>> = LazyLock::new(|| {
 static SPOT: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![
         rule(
-            "brief.spot.file",
+            "prompt.spot.file",
             r"\b[\w-]+\.(?:rs|ts|tsx|js|jsx|mjs|cjs|py|go|java|kt|kts|swift|rb|php|cs|cpp|cc|c|h|hpp|css|scss|sass|less|html?|md|mdx|json|jsonl|ya?ml|toml|ini|cfg|conf|sql|sh|bash|zsh|ps1|vue|svelte|astro|lock|env|txt|csv|tsv|xml|gradle|tf|proto|graphql|gql|ipynb|plist|xcconfig|dart|lua|ex|exs|scala)\b|(?:^|[\s(`'])\.(?:env|gitignore|npmrc|nvmrc|eslintrc|prettierrc|editorconfig|github|vscode)\b|(?-i:\b(?:Dockerfile|Makefile|Justfile|justfile|Gemfile|Procfile|README|CHANGELOG)\b)",
         ),
-        rule("brief.spot.dir", r"(?:^|[\s(\[`'])(?:~|\.{1,2})?/?[A-Za-z_][\w.-]*/[\w.-]+/"),
-        rule("brief.spot.mention", r"(?:^|\s)@[\w-]*[/.][\w./-]+"),
-        rule("brief.spot.url", r"\bhttps?://\S+|\blocalhost:\d+|\bwww\.\S+\.\w+"),
-        rule("brief.spot.code", r"`[^`\n]{2,80}`"),
+        rule("prompt.spot.dir", r"(?:^|[\s(\[`'])(?:~|\.{1,2})?/?[A-Za-z_][\w.-]*/[\w.-]+/"),
+        rule("prompt.spot.mention", r"(?:^|\s)@[\w-]*[/.][\w./-]+"),
+        rule("prompt.spot.url", r"\bhttps?://\S+|\blocalhost:\d+|\bwww\.\S+\.\w+"),
+        rule("prompt.spot.code", r"`[^`\n]{2,80}`"),
         rule_unless(
-            "brief.spot.ident",
+            "prompt.spot.ident",
             r"(?-i:\b[a-z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b|\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b|\b[a-z][a-z0-9]*_[a-z0-9_]+\b|\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b)|\w\(\)|\.\w+\(",
             // An error's name ("TypeError") shows the problem, and a product's name ("GitHub") is
             // a word; neither points at a place in the code.
             r"(?-i:[A-Z]\w*(?:Error|Exception)\b|(?:TypeScript|JavaScript|CoffeeScript|GitHub|GitLab|BitBucket|YouTube|LinkedIn|WhatsApp|PowerPoint|PostgreSQL|MySQL|MongoDB|DynamoDB|WordPress|PayPal|ChatGPT|OpenAI|DeepSeek|FaceTime|AirPods|AirDrop|DevTools|VSCode|IntelliJ|PyCharm|WebStorm|TikTok|HubSpot|QuickBooks|SharePoint|OneDrive|DropBox|DoorDash|StackOverflow|CloudFlare|DigitalOcean|SoundCloud|MacBook|AppleScript|PlayStation)\b)",
         ),
-        rule("brief.spot.line", r"\blines? \d+\b"),
+        rule("prompt.spot.line", r"\blines? \d+\b"),
         rule(
-            "brief.spot.cli",
+            "prompt.spot.cli",
             r"(?:^|\s)--[a-z][\w-]+|\b(?:npm|pnpm|yarn|bun|cargo|git|pip3?|brew|docker|kubectl|npx|uv|gh|terraform|rustup|deno) (?:install|i|run|test|build|add|remove|publish|init|ci|exec|start|dev|update|upgrade|status|log|diff|commit|push|pull|rebase|merge|checkout|switch|branch|stash|reset|clone|fetch|tag|cherry-pick|bisect|blame|compose|ps|logs|apply|get|describe|plan|fmt|clippy|check|doc|bench|lint|pr|issue|release|login|tap|outdated|audit|why|dlx|link)\b|\b(?:pytest|jest|vitest) ",
         ),
     ]
@@ -450,24 +452,24 @@ static SPOT: LazyLock<Vec<Rule>> = LazyLock::new(|| {
 static PROOF: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![
         rule(
-            "brief.proof.error",
+            "prompt.proof.error",
             r"(?-i:\b[A-Z]\w*(?:Error|Exception)\b)|(?m:^\s*(?:error|warning|fatal|panic|exception|traceback|caused by|err!?)\b[^\n]{0,40}:)|\berror\[E\d{3,4}\]|\bTS\d{4}\b",
         ),
         rule(
-            "brief.proof.trace",
+            "prompt.proof.trace",
             r"\bat [\w.<>$]+ \(?[^\s()]+:\d+(?::\d+)?\)?|\bpanicked at\b|\btraceback \(most recent call last\)|\bline \d+, in\b|\bexit (?:code|status) \d+|\bstatus (?:code )?[1-5]\d\d\b|\b[45]\d\d (?:error|response|bad request|not found|unauthorized|forbidden)\b|\bsegmentation fault\b|\bcommand not found\b|\bno such file or directory\b|\bcannot find module\b|\bundefined is not\b|\bis not defined\b|\bis not a function\b|\bnull pointer\b|\bpermission denied\b",
         ),
         rule(
-            "brief.proof.expected",
+            "prompt.proof.expected",
             r"\bexpected\b[^.\n]{1,120}\b(?:but|got|instead)\b|\bbut (?:it |instead )?(?:got|gets|shows|returns|says|prints|gives|outputs|displays|renders|throws)\b|\b(?:actual|current) (?:result|output|behaviou?r)\b",
         ),
         rule(
-            "brief.proof.example",
+            "prompt.proof.example",
             r"\be\.g\.|\b(?:for example|for instance|such as|like this|example:|sample:|here'?s (?:an|the|my) (?:example|output|error|log|screenshot|trace)|here is (?:an|the|my) (?:example|output|error|log|screenshot|trace))",
         ),
-        rule("brief.proof.quote", r#""[^"\n]{6,200}""#),
+        rule("prompt.proof.quote", r#""[^"\n]{6,200}""#),
         rule(
-            "brief.proof.attached",
+            "prompt.proof.attached",
             // "No error in the logs" says where to look when it's done, not what went wrong.
             r"\[(?:image|pasted text) #\d+|\b(?:see|attached) (?:the )?(?:screenshot|image|screen ?shot|logs?|output|trace)\b|\bin (?:the )?(?:screenshot|image|screen ?shot)\b",
         ),
@@ -478,31 +480,31 @@ static PROOF: LazyLock<Vec<Rule>> = LazyLock::new(|| {
 static DONE: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![
         rule_unless(
-            "brief.done.should",
+            "prompt.done.should",
             r"\b(?:should|must|needs? to|has to)\b",
             // "should I…?" asks; "should be fine" shrugs. Neither says what done is.
             // "has to do with" and "needs to be fixed" say nothing about the result either.
             r"(?:should|must|needs? to|has to)\s+(?:i|we|you)\b|(?:should|must)\s+(?:probably\s+)?be\s+(?:fine|ok|okay|good|easy|simple)\b|has to do with\b|needs? to be (?:fixed|done|changed|updated|looked at|addressed|sorted|handled)\b",
         ),
         rule(
-            "brief.done.criteria",
+            "prompt.done.criteria",
             r"\b(?:done when|is done when|definition of done|acceptance criteria|success (?:looks like|means|criteria)|the result should|end result|expected (?:output|result|behaviou?r)|desired (?:output|result|behaviou?r)|so (?:that )?(?:i|we|users?|people) can)\b",
         ),
         rule(
-            "brief.done.know",
+            "prompt.done.know",
             r"\b(?:you|we|i)(?:['’]ll| will) know\b[^.\n]{0,60}\b(?:when|once|if)\b|\b(?:fixed|done|working|works|finished) (?:when|once) (?:there|it|the|no|all|every|you|i|we)\b",
         ),
         rule(
-            "brief.done.tests",
+            "prompt.done.tests",
             r"\b(?:add|write|update|include|with) (?:a |an |some |the |new )?(?:unit |integration |e2e |regression |snapshot )?tests?\b|\btests? (?:pass|passes|passing|green|still pass)\b|\b(?:build|ci|lint|typecheck|type-check|checks?) (?:pass|passes|is green|are green|succeeds?|clean)\b|\bmake sure (?:it|that|the|all|tests?|nothing|everything)\b|\bverify (?:that|it|the)\b|\bconfirm (?:that|it)\b|\buntil (?:it|the tests?|all|everything) (?:pass|passes|works|is green)\b",
         ),
         rule(
-            "brief.done.format",
+            "prompt.done.format",
             r"\bas an? (?:table|list|bulleted list|json|csv|markdown|diagram|chart|pr|pull request|single commit|commit|script|function|component|class|hook|module|cli|one-liner|checklist|summary)\b|\bin (?:json|yaml|csv|markdown|a table|one file|a single file|bullet points)\b|\b(?:one|a single|separate) (?:pr|pull request|commit|file|function|component)\b|\b(?:under|less than|fewer than|at most|no more than|max(?:imum)?|exactly|within) \d+(?:\.\d+)?\b|\b\d+(?:\.\d+)? ?(?:ms|px|rem|kb|mb|gb|fps)\b",
         ),
         // Two list items close together: a list of requirements.
         rule(
-            "brief.done.list",
+            "prompt.done.list",
             r"(?m)^[ \t]*(?:[-*•]|\d{1,2}[.)])[ \t]+\S[^\n]*\n(?:[^\n]*\n){0,5}?[ \t]*(?:[-*•]|\d{1,2}[.)])[ \t]+\S",
         ),
     ]
@@ -512,29 +514,29 @@ static DONE: LazyLock<Vec<Rule>> = LazyLock::new(|| {
 static LIMITS: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![
         rule_unless(
-            "brief.limits.dont",
+            "prompt.limits.dont",
             r"(?m)(?:^|[.!?;:,(—–-]\s*|\b(?:please|but|and|just|also|then|so)\s+)(?:don'?t|do not|never|avoid|no need to)\s",
             // "…, don't know why": a shrug, not a rule.
             r"[^a-z]*(?:\w+\s+)?(?:don'?t|do not)\s+(?:know|understand|think|remember|seem|get it|work(?:\s*(?:[.!,;)]|$)|\s+(?:anymore|right|properly|well|at all|for me)))",
         ),
         rule(
-            "brief.limits.dont_want",
+            "prompt.limits.dont_want",
             r"\bi (?:don'?t|do not) want (?:any|you to|it to|a |an |the |new|extra|to)|\b(?:don'?t|do not) (?:want|need) (?:any|new|extra|another)\b",
         ),
         rule(
-            "brief.limits.only",
+            "prompt.limits.only",
             r"\bonly (?:change|touch|modify|edit|update|use|return|show|include|fix|add|affect|apply|target)\b|\b(?:change|touch|modify|edit|fix|update) only\b|\bjust (?:the|this|that) (?:one|file|function|part|section|page|line)\b|\bnothing else\b",
         ),
         rule(
-            "brief.limits.keep",
+            "prompt.limits.keep",
             r"\b(?:keep|preserve|retain|maintain|leave) (?:the|it|this|that|existing|current|all|everything|any|its|our|my|them|backwards?|api|tests?|behaviou?r|style|format|formatting|layout|order|names?|signatures?)\b|\bleave [^.\n]{1,30} alone\b|\bas[- ]is\b|\bunchanged\b|\bbackwards?[- ]compatib",
         ),
         rule(
-            "brief.limits.without",
+            "prompt.limits.without",
             r"\bwithout (?:breaking|changing|touching|adding|removing|using|modifying|affecting|introducing|rewriting|losing|a new|new|any|extra|another)\b",
         ),
         rule(
-            "brief.limits.no",
+            "prompt.limits.no",
             r"\bno (?:new |extra |additional |external |third[- ]party )?(?:dependencies|deps|packages|libraries|libs|frameworks|breaking changes|migrations|comments|emojis?|placeholders|mocks|todos?)\b|\b(?:must not|mustn'?t|should not|shouldn'?t|cannot|can'?t|may not) (?:change|break|touch|use|add|remove|affect|modify|rely|depend|exceed|call|import|be)\b|\b(?:out of scope|scope (?:it|this) to|limit(?:ed)? (?:it |this |the change )?to|stick (?:to|with)|stay within|no more than)\b",
         ),
     ]
@@ -544,31 +546,31 @@ static LIMITS: LazyLock<Vec<Rule>> = LazyLock::new(|| {
 static WHY: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![
         rule(
-            "brief.why.because",
+            "prompt.why.because",
             r"\b(?:because|since (?:we|i|they|users?|our \w+) (?:need|want|can'?t|cannot|don'?t|use|have|rely|depend|ship|support)|so that|in order to|that way)\b",
         ),
         rule(
-            "brief.why.goal",
+            "prompt.why.goal",
             r"\b(?:the|my|our) (?:goal|point|reason|idea|aim|purpose|plan|intent|use case|problem|issue) (?:is|was|here)\b|(?m:^\s*(?:goal|context|background|why|problem|motivation|use case)\s*:)|\b(?:i'?m|we'?re) trying to\b|\bi want (?:to be able|users|people|it to)\b|\bwe (?:want|need) (?:this|it|to)\b|\b(?:we|i) (?:want|need) (?:them|everyone|people|customers|visitors|readers|folks) to\b|\bi need (?:this|it) (?:to|for|so)\b",
         ),
         rule(
-            "brief.why.who",
+            "prompt.why.who",
             r"\b(?:our|my) (?:users?|customers?|clients?|team|boss|manager|designer|pm|stakeholders?|visitors|readers|audience)\b|\b(?:users?|customers?|people) (?:need|want|can'?t|cannot|keep|report|complain|expect)\b|\bfor (?:the|our|a|my) (?:demo|launch|release|client|customer|presentation|meeting|deadline|portfolio|interview)\b",
         ),
-        rule("brief.why.now", r"\b(?:currently|at the moment|as of now)\b"),
+        rule("prompt.why.now", r"\b(?:currently|at the moment|as of now)\b"),
     ]
 });
 
-/// How well your briefs land: of the tasks in the last [`WINDOW_DAYS`] that went past their first
+/// How well your prompts land: of the tasks in the last [`WINDOW_DAYS`] that went past their first
 /// message, the share you never had to add to, clarify or redo. A one-message task can't need
 /// steering, so it doesn't count either way. The AI getting it wrong doesn't count against you
-/// (that's a catch). Ordered lowest first.
+/// (that's a correction). Ordered lowest first.
 ///
 /// The floors come from one heavy user's history (tasks that continued landed 83–90% of the time
 /// over 28 days, typically 86%). Public chat logs can't set them: casual chats almost never steer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum BriefTier {
+pub enum PromptTier {
     /// Under 70% landed.
     VibesOnly,
     /// 70% or more.
@@ -579,84 +581,84 @@ pub enum BriefTier {
     Architect,
 }
 
-/// Days of tasks a brief tier looks at: long enough that one "also…" doesn't swing it.
+/// Days of tasks a prompt tier looks at: long enough that one "also…" doesn't swing it.
 pub const WINDOW_DAYS: i64 = 28;
 
 /// Tasks that continued, in the window, needed before a tier is given; fewer says too little.
-pub const MIN_BRIEFS: i64 = 10;
+pub const MIN_PROMPTS: i64 = 10;
 
-impl BriefTier {
+impl PromptTier {
     /// Every tier, ascending by floor.
-    pub const ALL: [BriefTier; 4] =
-        [BriefTier::VibesOnly, BriefTier::TicketWriter, BriefTier::TechLead, BriefTier::Architect];
+    pub const ALL: [PromptTier; 4] =
+        [PromptTier::VibesOnly, PromptTier::TicketWriter, PromptTier::TechLead, PromptTier::Architect];
 
     /// Percent of the window's continued tasks that must land.
     pub const fn floor(self) -> i64 {
         match self {
-            BriefTier::VibesOnly => 0,
-            BriefTier::TicketWriter => 70,
-            BriefTier::TechLead => 80,
-            BriefTier::Architect => 90,
+            PromptTier::VibesOnly => 0,
+            PromptTier::TicketWriter => 70,
+            PromptTier::TechLead => 80,
+            PromptTier::Architect => 90,
         }
     }
 
     /// Stable id, as stored and serialized.
     pub const fn id(self) -> &'static str {
         match self {
-            BriefTier::VibesOnly => "vibes_only",
-            BriefTier::TicketWriter => "ticket_writer",
-            BriefTier::TechLead => "tech_lead",
-            BriefTier::Architect => "architect",
+            PromptTier::VibesOnly => "vibes_only",
+            PromptTier::TicketWriter => "ticket_writer",
+            PromptTier::TechLead => "tech_lead",
+            PromptTier::Architect => "architect",
         }
     }
 
     /// Display name.
     pub const fn name(self) -> &'static str {
         match self {
-            BriefTier::VibesOnly => "Vibes only",
-            BriefTier::TicketWriter => "Ticket writer",
-            BriefTier::TechLead => "Tech lead",
-            BriefTier::Architect => "Architect",
+            PromptTier::VibesOnly => "Vibes only",
+            PromptTier::TicketWriter => "Ticket writer",
+            PromptTier::TechLead => "Tech lead",
+            PromptTier::Architect => "Architect",
         }
     }
 
     /// The answer to "Do you make it guess?" at this tier.
     pub const fn verdict(self) -> &'static str {
         match self {
-            BriefTier::VibesOnly => "Constantly.",
-            BriefTier::TicketWriter => "Often.",
-            BriefTier::TechLead => "Sometimes.",
-            BriefTier::Architect => "Rarely.",
+            PromptTier::VibesOnly => "Constantly.",
+            PromptTier::TicketWriter => "Often.",
+            PromptTier::TechLead => "Sometimes.",
+            PromptTier::Architect => "Rarely.",
         }
     }
 
-    /// The tier reached when `landed` of `tasks` landed, or `None` below [`MIN_BRIEFS`] tasks.
-    pub fn for_tasks(landed: i64, tasks: i64) -> Option<BriefTier> {
-        (tasks >= MIN_BRIEFS)
-            .then(|| BriefTier::ALL.into_iter().rev().find(|t| landed * 100 >= t.floor() * tasks))
+    /// The tier reached when `landed` of `tasks` landed, or `None` below [`MIN_PROMPTS`] tasks.
+    pub fn for_tasks(landed: i64, tasks: i64) -> Option<PromptTier> {
+        (tasks >= MIN_PROMPTS)
+            .then(|| PromptTier::ALL.into_iter().rev().find(|t| landed * 100 >= t.floor() * tasks))
             .flatten()
     }
 
     /// The tier above this one, if any.
-    pub fn next(self) -> Option<BriefTier> {
-        BriefTier::ALL.into_iter().find(|t| *t > self)
+    pub fn next(self) -> Option<PromptTier> {
+        PromptTier::ALL.into_iter().find(|t| *t > self)
     }
 }
 
-impl std::fmt::Display for BriefTier {
+impl std::fmt::Display for PromptTier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.name())
     }
 }
 
-impl std::str::FromStr for BriefTier {
+impl std::str::FromStr for PromptTier {
     type Err = crate::UnknownTier;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        BriefTier::ALL.into_iter().find(|t| t.id() == s).ok_or_else(|| crate::UnknownTier(s.to_string()))
+        PromptTier::ALL.into_iter().find(|t| t.id() == s).ok_or_else(|| crate::UnknownTier(s.to_string()))
     }
 }
 
 #[cfg(test)]
-#[path = "brief_tests.rs"]
+#[path = "prompt_tests.rs"]
 mod tests;

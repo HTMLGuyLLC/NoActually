@@ -15,7 +15,7 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ### Changed
 
-- The app says **prompts** and **corrections** instead of briefs and catches, everywhere you read it.
+- The app says **prompts** and **corrections** instead of briefs and catches, everywhere you read it. The code, database and settings use the same words: the database migrates in place, and history is re-read once (rules version 6).
 - A time picker on the scorecard (7 days, 28 days, 90 days, all time) sets how far back the whole scorecard looks: the score and tiers, corrections, you vs it, prompts, the chart, models, categories and the hall of fame. Popups, goals, the quick glance and the tray stay on the last 28 days. `noactually stats --since YYYY-MM-DD` does the same.
 - The Prompts page leads with its answer and one line of why; the sharp/solid/thin bar moved down to What your prompts carry.
 - Prompt rules: "you'll know it's fixed when…" and "done once…" say what done is; "no error in the logs" is no longer proof; "we want them to come back" says why. History is re-read once to apply them.

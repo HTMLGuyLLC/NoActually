@@ -1,16 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import shipped from "../public/demo.json";
 import { demoCall, demoStats, isDemoData, judge } from "./api.demo";
-import { briefs, hallEntry, meta, progress, row, stats } from "./test/fixtures";
+import { hallEntry, meta, progress, prompts, row, stats } from "./test/fixtures";
 
 const base = stats({
-  catches: 100,
-  catches_last_7d: 20,
+  corrections: 100,
+  corrections_last_7d: 20,
   messages: 400,
   models: [row("Anthropic", "Claude Opus", "5", 75, 300, 200), row("OpenAI", "GPT Astra", "6", 25, 100)],
-  briefs: briefs({ continued: 110, window_tasks: 40, window_landed: 38 }),
+  prompts: prompts({ continued: 110, window_tasks: 40, window_landed: 38 }),
   categories: { just_wrong: 8, made_it_up: 1 },
-  weekly: [{ week: "2026-10-19", messages: 40, catches: 12 }],
+  weekly: [{ week: "2026-10-19", messages: 40, corrections: 12 }],
   hall_of_fame: [hallEntry({ id: 1, model: "Claude Opus 5" }), hallEntry({ id: 2, model: "GPT Astra 6" })],
 });
 const data = { meta, stats: base, progress: progress() };
@@ -21,13 +21,13 @@ describe("demoStats", () => {
     expect(demoStats(data, { source: null })).toBe(base);
   });
 
-  it("narrows to the picked models and scales the rest by their share of catches", () => {
+  it("narrows to the picked models and scales the rest by their share of corrections", () => {
     const s = demoStats(data, { provider: "OpenAI" });
     expect(s.models.map((m) => m.family)).toEqual(["GPT Astra"]);
-    expect(s.catches).toBe(25);
+    expect(s.corrections).toBe(25);
     expect(s.messages).toBe(100);
-    expect(s.catches_last_7d).toBe(5); // 20 × 25%
-    expect(s.weekly[0]).toMatchObject({ catches: 3, messages: 10 });
+    expect(s.corrections_last_7d).toBe(5); // 20 × 25%
+    expect(s.weekly[0]).toMatchObject({ corrections: 3, messages: 10 });
     expect(s.categories).toEqual({ just_wrong: 2 }); // made_it_up rounds to 0 and is dropped
     expect(s.hall_of_fame.map((h) => h.id)).toEqual([2]);
   });
@@ -35,8 +35,8 @@ describe("demoStats", () => {
   it("scores the narrowed window the way Rust would", () => {
     // Opus holds 100 of the 110 tasks with a follow-up, so 36 of the window's 40 and 35 of its 38 landed.
     const s = demoStats(data, { provider: "Anthropic" });
-    expect(s.briefs).toMatchObject({ tasks: 200, continued: 100, landed: 80, window_tasks: 36, window_landed: 35 });
-    expect(s.overall).toEqual(judge(meta, { continued: 36, landed: 35, catches: 31, humbled: 2 }));
+    expect(s.prompts).toMatchObject({ tasks: 200, continued: 100, landed: 80, window_tasks: 36, window_landed: 35 });
+    expect(s.overall).toEqual(judge(meta, { continued: 36, landed: 35, corrections: 31, humbled: 2 }));
     // 2 corrections on 36 tasks (5.6%) cost 28 judgment points: Sharp-eyed, not Irreplaceable.
     expect(s.overall).toMatchObject({ score: 89, judgment: 72, tier: "sharp_eyed", verdict: "no", next_tier: "irreplaceable" });
   });
@@ -47,16 +47,16 @@ describe("demoStats", () => {
   });
 
   it("matches on family and version too", () => {
-    expect(demoStats(data, { family: "Claude Opus", version: "5" }).catches).toBe(75);
-    expect(demoStats(data, { family: "Claude Opus", version: "9" }).catches).toBe(0);
+    expect(demoStats(data, { family: "Claude Opus", version: "5" }).corrections).toBe(75);
+    expect(demoStats(data, { family: "Claude Opus", version: "9" }).corrections).toBe(0);
   });
 });
 
 describe("judge", () => {
-  const w = (continued: number, landed: number, catches: number, humbled: number) => ({ continued, landed, catches, humbled });
+  const w = (continued: number, landed: number, corrections: number, humbled: number) => ({ continued, landed, corrections, humbled });
 
   it("matches the Rust score for the author's month", () => {
-    // engine/src/tier.rs: 125 of 150 landed, 41 catches to 2.
+    // engine/src/tier.rs: 125 of 150 landed, 41 corrections to 2.
     expect(judge(meta, w(150, 125, 41, 2))).toEqual({
       score: 86,
       direction: 83,
@@ -64,9 +64,9 @@ describe("judge", () => {
       tier: "sharp_eyed",
       next_tier: "irreplaceable",
       verdict: "no",
-      catch_tier: "hawk_eyed",
-      next_catch_tier: null,
-      catches: 41,
+      correction_tier: "hawk_eyed",
+      next_correction_tier: null,
+      corrections: 41,
       humbled: 2,
       to_rank: 0,
     });
@@ -74,7 +74,7 @@ describe("judge", () => {
 
   it("matches the other Rust cases", () => {
     expect(judge(meta, w(100, 92, 10, 0))).toMatchObject({ tier: "irreplaceable", next_tier: null });
-    // Landing everything but never catching anything: no proof you check its work.
+    // Landing everything but never correcting anything: no proof you check its work.
     expect(judge(meta, w(50, 50, 0, 0))).toMatchObject({ judgment: 0, score: 70, tier: "coworker" });
     // The AI keeps correcting you: on 18% of tasks, 10 points are left.
     expect(judge(meta, w(50, 40, 3, 9)).judgment).toBe(10);
@@ -83,30 +83,30 @@ describe("judge", () => {
     expect(judge(meta, w(10, 99, 3, 0)).direction).toBe(100);
   });
 
-  it("gives nulls and the tasks still needed below min_briefs", () => {
-    expect(judge(meta, w(meta.min_briefs - 1, 9, 50, 0))).toEqual({
+  it("gives nulls and the tasks still needed below min_prompts", () => {
+    expect(judge(meta, w(meta.min_prompts - 1, 9, 50, 0))).toEqual({
       score: null,
       direction: null,
       judgment: null,
       tier: null,
       next_tier: null,
       verdict: "hmm",
-      catch_tier: null,
-      next_catch_tier: null,
-      catches: 50,
+      correction_tier: null,
+      next_correction_tier: null,
+      corrections: 50,
       humbled: 0,
       to_rank: 1,
     });
-    expect(judge(meta, w(0, 0, 0, 0)).to_rank).toBe(meta.min_briefs);
-    expect(judge(meta, w(meta.min_briefs, 0, 0, 0)).score).toBe(0);
+    expect(judge(meta, w(0, 0, 0, 0)).to_rank).toBe(meta.min_prompts);
+    expect(judge(meta, w(meta.min_prompts, 0, 0, 0)).score).toBe(0);
   });
 
-  it("scores the same with fewer catches once past the proof", () => {
+  it("scores the same with fewer corrections once past the proof", () => {
     const many = judge(meta, w(100, 85, 40, 0));
-    const few = judge(meta, w(100, 85, meta.catch_proof, 0));
+    const few = judge(meta, w(100, 85, meta.correction_proof, 0));
     expect(few.score).toBe(many.score);
-    // Even when it has corrected you: judgment never compares catches with corrections.
-    for (const humbled of [1, 2, 5]) expect(judge(meta, w(100, 85, meta.catch_proof, humbled)).score).toBe(judge(meta, w(100, 85, 40, humbled)).score);
+    // Even when it has corrected you: judgment never compares corrections with corrections.
+    for (const humbled of [1, 2, 5]) expect(judge(meta, w(100, 85, meta.correction_proof, humbled)).score).toBe(judge(meta, w(100, 85, 40, humbled)).score);
     const one = judge(meta, w(100, 85, 1, 0)).score ?? -1;
     const two = judge(meta, w(100, 85, 2, 0)).score ?? -1;
     expect(one).toBeLessThan(two);
@@ -132,7 +132,7 @@ describe("isDemoData", () => {
   it("accepts the shipped demo.json", () => {
     expect(isDemoData(shipped)).toBe(true);
     if (!isDemoData(shipped)) return;
-    // Every hall entry carries the display strings Rust now sends (a catch of you has no category).
+    // Every hall entry carries the display strings Rust now sends (a correction of you has no category).
     for (const h of shipped.stats.hall_of_fame) {
       expect(h.source_name).toBeTruthy();
       expect(Boolean(h.category_title)).toBe(Boolean(h.category));
@@ -156,7 +156,7 @@ describe("demoCall", () => {
       vi.fn(async () => ({ json: async () => data })),
     );
     expect(await demoCall("meta", undefined)).toBe(meta);
-    expect((await demoCall("stats", { filter: {} })).catches).toBe(100);
+    expect((await demoCall("stats", { filter: {} })).corrections).toBe(100);
     expect(await demoCall("allow_source", { id: "codex", since: null, fromNow: true })).toBeNull();
     expect((await demoCall("get_retention", undefined)).level).toBe("snippet");
     expect((await demoCall("list_sources", undefined)).length).toBeGreaterThan(0);
@@ -185,7 +185,7 @@ describe("demoCall", () => {
     });
 
     it("can't grade a draft in the browser", async () => {
-      await expect(demoCall("check_brief", { text: "hi" })).rejects.toThrow("runs in the app");
+      await expect(demoCall("check_prompt", { text: "hi" })).rejects.toThrow("runs in the app");
     });
 
     it("remembers which lessons are done for the visit, once each", async () => {
@@ -212,8 +212,10 @@ describe("withSince", () => {
     const last = s.weekly.at(-1)?.week ?? "";
     const p = withSince(meta, s, last);
     expect(p.weekly).toHaveLength(1);
-    expect(p.catches).toBeLessThan(s.catches);
-    expect(p.overall).toEqual(judge(meta, { continued: p.briefs.window_tasks, landed: p.briefs.window_landed, catches: p.catches, humbled: p.humbled }));
+    expect(p.corrections).toBeLessThan(s.corrections);
+    expect(p.overall).toEqual(
+      judge(meta, { continued: p.prompts.window_tasks, landed: p.prompts.window_landed, corrections: p.corrections, humbled: p.humbled }),
+    );
     expect(withSince(meta, s, null)).toBe(s);
   });
 });

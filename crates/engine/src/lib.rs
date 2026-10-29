@@ -1,27 +1,30 @@
-//! Deterministic catch detection. Pure functions only: no I/O, no clock, no network,
+//! Deterministic correction detection. Pure functions only: no I/O, no clock, no network,
 //! so the same history always produces the same score (and this crate builds for WASM).
 //!
 //! [`classify`] labels one [`Turn`]; [`normalize_model`] splits a raw model id into
 //! provider / family / version; [`redact`] and [`snippet`] decide what text may be kept;
-//! [`Tier`] and [`Answer`] turn a week's catches into the headline. [`read_prompt`] reads the
-//! same turn for how you brief: a new task, steering, or neither, and a brief's [`Signals`].
+//! [`Tier`] and [`Answer`] turn a week's corrections into the headline. [`read_prompt`] reads the
+//! same turn for how you prompt: a new task, steering, or neither, and a prompt's [`Signals`].
 //!
 //! Tests: each module keeps its unit tests inline in `mod tests`; the rule book's behavior
 //! suite lives in `src/tests.rs` because it exercises the whole crate.
 
 #![warn(missing_docs)]
 
-mod brief;
 mod model;
+mod prompt;
 mod redact;
 mod rules;
 mod tier;
 
-pub use brief::{check, read_prompt, BriefTier, Check, Grade, Prompt, Signal, Signals, Steer, MIN_BRIEFS, WINDOW_DAYS};
 pub use model::{normalize_model, Model};
+pub use prompt::{
+    check, read_prompt, Check, Grade, Prompt, PromptTier, Signal, Signals, Steer, MIN_PROMPTS, WINDOW_DAYS,
+};
 pub use redact::{redact, snippet, SNIPPET_CHARS};
 pub use tier::{
-    Answer, CatchTier, Score, Tier, UnknownTier, Window, CATCH_PROOF, DIRECTION_WEIGHT, HUMBLED_BASE, HUMBLED_COST,
+    Answer, CorrectionTier, Score, Tier, UnknownTier, Window, CORRECTION_PROOF, DIRECTION_WEIGHT, HUMBLED_BASE,
+    HUMBLED_COST,
 };
 
 use serde::{Deserialize, Serialize};
@@ -50,7 +53,7 @@ pub struct Turn {
     pub chat_model: Option<String>,
 }
 
-/// What a turn was: one of three kinds of catch, or the AI catching you.
+/// What a turn was: one of three kinds of correction, or the AI catching you.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Label {
@@ -69,7 +72,7 @@ impl Label {
     pub const ALL: [Label; 4] = [Label::Confirmed, Label::Admitted, Label::Claimed, Label::Humbled];
 
     /// True for the labels that count toward your score (everything but `Humbled`).
-    pub fn is_catch(self) -> bool {
+    pub fn is_correction(self) -> bool {
         !matches!(self, Label::Humbled)
     }
 
@@ -84,7 +87,7 @@ impl Label {
     }
 }
 
-/// What kind of mistake a catch was.
+/// What kind of mistake a correction was.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Category {
@@ -149,7 +152,7 @@ impl Category {
 pub struct Verdict {
     /// `None` for an ordinary message.
     pub label: Option<Label>,
-    /// Set for catches only.
+    /// Set for corrections only.
     pub category: Option<Category>,
     /// Ids of the rules that fired.
     pub rules: Vec<&'static str>,
@@ -160,7 +163,7 @@ pub struct Verdict {
 }
 
 impl Verdict {
-    /// The model to charge: the reply you corrected for a catch, the reply that corrected you
+    /// The model to charge: the reply you corrected for a correction, the reply that corrected you
     /// for a humbled event.
     pub fn blamed_model<'a>(&self, turn: &'a Turn) -> Option<&'a str> {
         let real = |m: Option<&'a AiMsg>| m.and_then(|m| m.model.as_deref()).filter(|id| is_real_model(id));
@@ -177,10 +180,11 @@ impl Verdict {
 /// rebuild their scores from the history files when it changes.
 /// 2: placeholder replies are skipped and messages fall back to the chat's model.
 /// 3: approvals ("No, that's fine") aren't pushback; the AI's admission no longer picks the category.
-/// 4: briefs and steering are counted (see [`read_prompt`]), so history is re-read to fill them in.
+/// 4: prompts and steering are counted (see [`read_prompt`]), so history is re-read to fill them in.
 /// 5: "you'll know it's fixed when…" says what done is; "in the logs" alone no longer shows proof;
 ///    "we want them to come back" says why.
-pub const RULES_VERSION: u32 = 5;
+/// 6: rule ids say prompt, not brief (history is re-read so stored ids match).
+pub const RULES_VERSION: u32 = 6;
 
 /// Tools write placeholder ids for replies no model wrote (Claude Code's "<synthetic>" for errors,
 /// interruptions and "No response requested").

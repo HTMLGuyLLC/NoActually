@@ -86,7 +86,7 @@ No. Everything is read and scored on your computer, and the results live in a lo
 <details>
 <summary><b>Does it use AI to judge my chats?</b></summary>
 
-No. Using an AI to grade AI would mean uploading your chats and getting a different answer each run. Scoring is plain pattern rules you can read in [`rules.rs`](crates/engine/src/rules.rs) and [`brief.rs`](crates/engine/src/brief.rs).
+No. Using an AI to grade AI would mean uploading your chats and getting a different answer each run. Scoring is plain pattern rules you can read in [`rules.rs`](crates/engine/src/rules.rs) and [`prompt.rs`](crates/engine/src/prompt.rs).
 </details>
 
 <details>

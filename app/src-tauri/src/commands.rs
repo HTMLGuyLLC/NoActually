@@ -73,13 +73,13 @@ pub fn clear_goal(app: State<Arc<App>>) -> Res<()> {
     lock(&app.writer).clear_goal().map_err(err)
 }
 
-/// Longest draft the brief checker grades. The engine reads the first 4,000 characters anyway;
+/// Longest draft the prompt checker grades. The engine reads the first 4,000 characters anyway;
 /// this just keeps a giant paste from crossing the bridge.
 const CHECK_MAX_BYTES: usize = 64 * 1024;
 
-/// Grades a draft brief with the same rules scoring uses. Nothing is stored or logged.
+/// Grades a draft prompt with the same rules scoring uses. Nothing is stored or logged.
 #[tauri::command]
-pub fn check_brief(text: String) -> engine::Check {
+pub fn check_prompt(text: String) -> engine::Check {
     let mut end = text.len().min(CHECK_MAX_BYTES);
     while !text.is_char_boundary(end) {
         end -= 1;
@@ -353,8 +353,8 @@ mod tests {
     #[test]
     fn the_checker_cuts_giant_drafts_on_a_char_boundary() {
         let huge = "é".repeat(CHECK_MAX_BYTES); // two bytes each: the cut lands mid-character
-        assert_eq!(check_brief(huge).grade, engine::Grade::Thin);
-        assert_eq!(check_brief("Fix `a.ts`. Done when tests pass. Don't touch b.".into()).grade, engine::Grade::Sharp);
+        assert_eq!(check_prompt(huge).grade, engine::Grade::Thin);
+        assert_eq!(check_prompt("Fix `a.ts`. Done when tests pass. Don't touch b.".into()).grade, engine::Grade::Sharp);
     }
 
     #[test]
@@ -392,10 +392,14 @@ mod tests {
             ("models", serde_json::to_value(store::ModelRow::default()).unwrap()),
             ("weekly", serde_json::to_value(store::WeekRow::default()).unwrap()),
         ];
-        let briefs =
-            serde_json::to_value(store::Briefs { tip: Some(store::Tip::default()), ..Default::default() }).unwrap();
-        assert_eq!(keys(&demo["stats"]["briefs"]), keys(&briefs), "demo.json `briefs` keys differ from `Briefs`");
-        assert_eq!(keys(&demo["stats"]["briefs"]["tip"]), keys(&briefs["tip"]), "demo.json `briefs.tip` keys differ");
+        let prompts =
+            serde_json::to_value(store::Prompts { tip: Some(store::Tip::default()), ..Default::default() }).unwrap();
+        assert_eq!(keys(&demo["stats"]["prompts"]), keys(&prompts), "demo.json `prompts` keys differ from `Prompts`");
+        assert_eq!(
+            keys(&demo["stats"]["prompts"]["tip"]),
+            keys(&prompts["tip"]),
+            "demo.json `prompts.tip` keys differ"
+        );
         assert_eq!(keys(&demo["stats"]["overall"]), keys(&stats["overall"]), "demo.json `overall` keys differ");
         let progress =
             serde_json::to_value(db.progress(&Filter::default(), Local::now().date_naive()).unwrap()).unwrap();

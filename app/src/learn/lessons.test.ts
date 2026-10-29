@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { briefs, meta } from "../test/fixtures";
+import { meta, prompts } from "../test/fixtures";
 import { answerIndex, LESSONS, lessonById, recommended, SIGNAL_HINTS, TRACKS, trackOf } from "./lessons";
 
 const ids = LESSONS.map((l) => l.id);
@@ -7,7 +7,7 @@ const signalIds = meta.signals.map((s) => s.id);
 
 describe("lessons data", () => {
   it("has three tracks, and every lesson belongs to one", () => {
-    expect(TRACKS.map((t) => t.id)).toEqual(["habits", "steer", "catch"]);
+    expect(TRACKS.map((t) => t.id)).toEqual(["habits", "steer", "correction"]);
     expect(LESSONS).toHaveLength(TRACKS.reduce((n, t) => n + t.lessons.length, 0));
     for (const l of LESSONS) expect(trackOf(l.id)?.lessons).toContain(l);
   });
@@ -66,7 +66,7 @@ describe("answerIndex", () => {
   it("reads the number as is, and finds a 'missing' answer's place in its options", () => {
     expect(answerIndex({ kind: "sharper", question: "q", options: ["a", "b"], answer: 1, explain: "" })).toBe(1);
     expect(answerIndex({ kind: "pick", question: "q", options: ["a", "b"], answer: 0, explain: "" })).toBe(0);
-    expect(answerIndex({ kind: "missing", question: "q", brief: "b", options: ["spot", "done", "why"], answer: "why", explain: "" })).toBe(2);
+    expect(answerIndex({ kind: "missing", question: "q", prompt: "b", options: ["spot", "done", "why"], answer: "why", explain: "" })).toBe(2);
   });
 });
 
@@ -82,8 +82,8 @@ describe("lessonById / trackOf", () => {
 
 describe("recommended", () => {
   // 100 tasks. Carried: spot 90, proof 50, done 90, limits 20, why 40; steering is mostly "clarified".
-  const b = (over: Parameters<typeof briefs>[0] = {}) =>
-    briefs({
+  const b = (over: Parameters<typeof prompts>[0] = {}) =>
+    prompts({
       tasks: 100,
       signals: { spot: 90, proof: 50, done: 90, limits: 20, why: 40 },
       steering: { ai_wrong: 50, added: 3, clarified: 9, redo: 0 },

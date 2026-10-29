@@ -73,7 +73,7 @@ fn sync_once(handle: &AppHandle, app: &App, quiet: bool) {
                     "synced {} files: {} messages, {} corrections in {:?}",
                     r.files_read,
                     r.messages,
-                    r.catches,
+                    r.corrections,
                     started.elapsed()
                 );
             }
@@ -84,7 +84,7 @@ fn sync_once(handle: &AppHandle, app: &App, quiet: bool) {
             status.files_with_errors = r.errors.len();
             drop(status);
             let _ = handle.emit("stats-changed", &r);
-            // A big pass is history arriving, not new catches: don't celebrate old milestones.
+            // A big pass is history arriving, not new corrections: don't celebrate old milestones.
             let backfill = quiet || r.rescored || r.messages > BACKFILL_MESSAGES;
             milestones::check(handle, app, backfill);
             update_tray(handle, app);
@@ -104,7 +104,7 @@ fn update_tray(handle: &AppHandle, app: &App) {
     if let Some(tray) = handle.tray_by_id("tray") {
         let tip = match (o.score, o.tier) {
             (Some(score), Some(tier)) => format!("No, Actually... · {} · score {score}", tier.name()),
-            _ => format!("No, Actually... · {} corrections in {} days", o.catches, engine::WINDOW_DAYS),
+            _ => format!("No, Actually... · {} corrections in {} days", o.corrections, engine::WINDOW_DAYS),
         };
         let _ = tray.set_tooltip(Some(tip));
     }
@@ -122,7 +122,7 @@ pub fn spawn(handle: AppHandle, app: Arc<App>, tx: mpsc::Sender<Msg>, rx: mpsc::
                     lock(&app.status).syncing = false;
                 }
             };
-            guarded(false); // catch up on anything written while the app was closed
+            guarded(false); // correction up on anything written while the app was closed
             let mut last = std::time::Instant::now();
             loop {
                 let mut sources_changed = false;

@@ -1,7 +1,7 @@
 //! The local database. Everything the app knows lives here, and only here.
 //!
 //! [`Store`] owns one SQLite connection: consent and settings, per-file checkpoints, daily
-//! counts, and catch events whose text obeys the [`Retention`] level. [`sync`] reads whatever
+//! counts, and correction events whose text obeys the [`Retention`] level. [`sync`] reads whatever
 //! changed in the allowed sources; [`Store::stats`] answers every view; [`milestones`] decides
 //! which moments deserve a popup.
 //!
@@ -19,12 +19,12 @@ mod stats;
 mod sync;
 
 pub use error::{Error, Result};
-pub use meta::{meta, BriefTierInfo, CategoryInfo, Meta, SignalInfo, SourceInfo, TierInfo, Titled};
+pub use meta::{meta, CategoryInfo, Meta, PromptTierInfo, SignalInfo, SourceInfo, TierInfo, Titled};
 pub use progress::{
     Bests, Goal, GoalKind, GoalNews, GoalStatus, GoalWeek, HistoryWeek, Insights, ModelLanded, Progress, Trophy,
     WeekState, GOAL_WEEKS, MIN_WEEK,
 };
-pub use stats::{Briefs, Filter, HallEntry, ModelRow, Overall, Stats, Tip, WeekRow};
+pub use stats::{Filter, HallEntry, ModelRow, Overall, Prompts, Stats, Tip, WeekRow};
 pub use sync::{sync, SyncReport};
 
 use chrono::{DateTime, Duration, Local, NaiveDate, Utc};
@@ -71,7 +71,7 @@ fn resolve_db_path(env: impl Fn(&str) -> Option<OsString>, data_dir: Option<Path
     Ok(dir.join(APP_ID).join(DB_FILE))
 }
 
-/// How much catch text to keep. Levels only ever step down as events age.
+/// How much correction text to keep. Levels only ever step down as events age.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Level {
@@ -111,10 +111,10 @@ impl FromStr for Level {
     }
 }
 
-/// How long catch text is kept, and at what level.
+/// How long correction text is kept, and at what level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Retention {
-    /// The level new catches start at.
+    /// The level new corrections start at.
     pub level: Level,
     /// Days full text is kept before it drops to a snippet.
     pub full_days: u32,
@@ -398,7 +398,7 @@ impl Store {
     }
 
     /// Clears every score and checkpoint so history is re-read under new rules. Consent,
-    /// settings and pinned catches stay: a pin is often the only copy left once its history file
+    /// settings and pinned corrections stay: a pin is often the only copy left once its history file
     /// is gone. Other scores only come back for history files that still exist.
     pub fn reset_scores(&mut self) -> Result<()> {
         let tx = self.conn.transaction()?;
@@ -453,7 +453,7 @@ impl Store {
     /// Writes one file's turns and its new checkpoint in a single transaction, so a crash
     /// can never count a turn without moving the checkpoint (or the reverse). Turns the
     /// source's consent skips are left out entirely, so allowing more history later still
-    /// counts them. Returns (messages, catches) counted.
+    /// counts them. Returns (messages, corrections) counted.
     pub(crate) fn ingest(
         &mut self,
         state: &SourceState,
@@ -464,7 +464,7 @@ impl Store {
         let source = state.id.as_str();
         let retention = self.retention()?;
         let tx = self.conn.transaction()?;
-        let (mut messages, mut catches) = (0, 0);
+        let (mut messages, mut corrections) = (0, 0);
         for st in scan.turns.iter().filter(|st| state.wants(st.ts)) {
             let human_head = engine::head_chars(&st.turn.human, 200);
             let key = match &st.key {
@@ -490,19 +490,19 @@ impl Store {
             bump("message", "")?;
             messages += 1;
             let session = hash(&[source, &st.session]);
-            let is_catch = v.label.is_some_and(Label::is_catch);
+            let is_correction = v.label.is_some_and(Label::is_correction);
             tx.execute(
-                "INSERT INTO sessions (id, source, first_day, last_day, messages, catches) VALUES (?1,?2,?3,?3,1,?4)
-                 ON CONFLICT(id) DO UPDATE SET messages = messages + 1, catches = catches + excluded.catches,
+                "INSERT INTO sessions (id, source, first_day, last_day, messages, corrections) VALUES (?1,?2,?3,?3,1,?4)
+                 ON CONFLICT(id) DO UPDATE SET messages = messages + 1, corrections = corrections + excluded.corrections,
                    first_day = min(first_day, excluded.first_day), last_day = max(last_day, excluded.last_day)",
-                params![session, source, day, i64::from(is_catch)],
+                params![session, source, day, i64::from(is_correction)],
             )?;
-            // Briefs: a new task gets a row; steering and other replies count toward the chat's latest.
+            // Prompts: a new task gets a row; steering and other replies count toward the chat's latest.
             let latest = "id = (SELECT MAX(id) FROM tasks WHERE session = ?1)";
             let has_task: bool =
                 tx.query_row("SELECT EXISTS(SELECT 1 FROM tasks WHERE session = ?1)", [&session], |r| r.get(0))?;
             match read_prompt(&st.turn, &v, has_task) {
-                Prompt::Brief { signals, .. } => tx.execute(
+                Prompt::Prompt { signals, .. } => tx.execute(
                     "INSERT INTO tasks (day, source, session, provider, family, version, signals) VALUES (?1,?2,?3,?4,?5,?6,?7)",
                     params![day, source, session, provider, family, version, signals.0],
                 )?,
@@ -515,10 +515,10 @@ impl Store {
             let Some(label) = v.label else { continue };
             let category = v.category.map_or("", engine::Category::as_str);
             bump(label.as_str(), category)?;
-            catches += usize::from(is_catch);
+            corrections += usize::from(is_correction);
 
             let text = EventText::new(&st.turn, &v, retention.level);
-            // A pinned catch kept through a rules rebuild is already here; keep it as pinned.
+            // A pinned correction kept through a rules rebuild is already here; keep it as pinned.
             tx.execute(
                 "INSERT INTO events (ts, day, source, session, provider, family, version, model_raw, label, category, rules,
                     level, human_full, ai_full, human_snip, ai_snip, seen_key)
@@ -547,7 +547,7 @@ impl Store {
         }
         upsert_file(&tx, path, source, scan.checkpoint, meta)?;
         tx.commit()?;
-        Ok((messages, catches))
+        Ok((messages, corrections))
     }
 
     // ---- retention ---------------------------------------------------------------------
@@ -594,7 +594,7 @@ impl Store {
         Ok(())
     }
 
-    /// Pins (or unpins) a catch, keeping its text past the retention period.
+    /// Pins (or unpins) a correction, keeping its text past the retention period.
     pub fn pin(&self, event_id: i64, pinned: bool) -> Result<()> {
         self.conn.execute("UPDATE events SET pinned = ?2 WHERE id = ?1", params![event_id, pinned])?;
         Ok(())
@@ -606,7 +606,7 @@ impl Store {
 }
 
 /// The text kept for one event at a retention level. Always redacted. The next reply holds the
-/// admission (catch) or the correction (humbled).
+/// admission (correction) or the correction (humbled).
 struct EventText {
     human_full: Option<String>,
     ai_full: Option<String>,

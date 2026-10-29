@@ -1,21 +1,21 @@
-// The scorecard: the overall score and its two halves (briefs, who corrects whom), the weekly
+// The scorecard: the overall score and its two halves (prompts, who corrects whom), the weekly
 // chart, model and category breakdowns, and the hall of fame.
 import type { Filter, HallEntry, Meta, Overall, Stats } from "../api";
 import { filterLabel, isFiltered, shortSourceName, subjectLabel } from "../format";
 import { type Html, html, num, raw } from "../html";
-import { catchTier, catchTierRanges, categoryTitle, tierName, tierOf, tierRanges } from "../meta";
-import { catchRate, modelName } from "../picker/picker";
+import { categoryTitle, correctionTier, correctionTierRanges, tierName, tierOf, tierRanges } from "../meta";
+import { correctionRate, modelName } from "../picker/picker";
 import { PERIOD_WHEN, PERIODS, type Period, SCORE_VIEWS, type ScoreView } from "../state";
-import { briefsSummaryView, briefsView } from "./briefs";
 import { ladderView, svg } from "./chrome";
+import { promptsSummaryView, promptsView } from "./prompts";
 
 export type ScorecardContext = {
   meta: Meta;
   filter: Filter;
   /** The verdict is the same one already drawn, so its scrawl doesn't replay. */
   still: boolean;
-  /** The same, for the briefs verdict. */
-  briefsStill?: boolean;
+  /** The same, for the prompts verdict. */
+  promptsStill?: boolean;
   /** Which section is showing (default: the overview). */
   view?: ScoreView;
   /** How far back the counts look (default: 28 days). */
@@ -36,16 +36,16 @@ function periodNav(period: Period): Html {
   )}</select>`;
 }
 
-const VIEW_TITLES: Record<ScoreView, string> = { overview: "Overview", briefs: "Prompts", catches: "Corrections", hall: "Hall of fame" };
+const VIEW_TITLES: Record<ScoreView, string> = { overview: "Overview", prompts: "Prompts", corrections: "Corrections", hall: "Hall of fame" };
 
 /** Line icons beside each section's name (decoration: the name is the label). */
 const VIEW_ICONS: Record<ScoreView, Html> = {
   // A dashboard: four panels.
   overview: svg("M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z"),
   // A page with lines: what you wrote.
-  briefs: svg("M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5"),
+  prompts: svg("M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5"),
   // A check in a circle: a mistake corrected.
-  catches: svg("M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12l3 3 5-6"),
+  corrections: svg("M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12l3 3 5-6"),
   // A star.
   hall: svg("M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"),
 };
@@ -77,7 +77,7 @@ function answerView(o: Overall, meta: Meta, still: boolean, small = false): Html
 function scoreBecause(o: Overall, when: string): Html {
   if (o.score == null)
     return html`Give it <b>${plural(o.to_rank, "more task")}</b> with a follow-up to get a score. One-shot tasks can't need steering, so they don't count.`;
-  return html`Score <b>${o.score}</b>. Your tasks landed <b>${o.direction}%</b> of the time, and you corrected it <b>${plural(o.catches, "time")}</b> to its ${num(o.humbled)} ${when}.`;
+  return html`Score <b>${o.score}</b>. Your tasks landed <b>${o.direction}%</b> of the time, and you corrected it <b>${plural(o.corrections, "time")}</b> to its ${num(o.humbled)} ${when}.`;
 }
 
 /** The next tier's target ("Irreplaceable at 90. You're at 86."). */
@@ -121,57 +121,57 @@ function heroView(s: Stats, ctx: ScorecardContext): Html {
 /** You vs it: all time, and in the window. */
 function versusView(s: Stats): Html {
   return html`<div class="score">
-      <div class="side you"><span class="eyebrow">You corrected it</span><span class="n">${num(s.catches)}</span></div>
+      <div class="side you"><span class="eyebrow">You corrected it</span><span class="n">${num(s.corrections)}</span></div>
       <div class="vs">vs</div>
       <div class="side ai"><span class="eyebrow">It corrected you</span><span class="n">${num(s.humbled)}</span></div>
     </div>`;
 }
 
-/** Why fewer catches never costs points. */
+/** Why fewer corrections never costs points. */
 const proofNote = (meta: Meta) =>
-  html`<p class="muted small">${meta.catch_proof} corrections prove you check its work. Correcting it less because it got it right never costs you.</p>`;
+  html`<p class="muted small">${meta.correction_proof} corrections prove you check its work. Correcting it less because it got it right never costs you.</p>`;
 
 /** "Usually.", hand-written, with a screen-reader version. */
-function catchMark(o: Overall, meta: Meta, still: boolean, small = false): Html {
-  const tier = catchTier(meta, o.catch_tier);
+function correctionMark(o: Overall, meta: Meta, still: boolean, small = false): Html {
+  const tier = correctionTier(meta, o.correction_tier);
   return html`<div class="no${small ? " sm" : ""}${tier ? "" : " maybe"}${still ? " still" : ""}" aria-hidden="true">${tier?.verdict ?? "Hmm."}</div>
       <span class="sr-only">${tier ? `${tier.verdict} Your correction tier is ${tier.name}.` : "Not ranked yet."}</span>`;
 }
 
 /** Why: who corrected whom, in one line, with the same counts as "you vs it" beside it. */
-function catchBecause(s: Stats, when: string): Html {
+function correctionBecause(s: Stats, when: string): Html {
   if (s.overall.judgment == null) return html`Give it <b>${plural(s.overall.to_rank, "more task")}</b> with a follow-up to get ranked.`;
-  if (!s.catches) return html`You haven't corrected it ${when}, so there's no proof yet that you check its work.`;
-  return html`You corrected it <b>${plural(s.catches, "time")}</b> ${when}. It corrected you ${s.humbled ? plural(s.humbled, "time") : "never"}.`;
+  if (!s.corrections) return html`You haven't corrected it ${when}, so there's no proof yet that you check its work.`;
+  return html`You corrected it <b>${plural(s.corrections, "time")}</b> ${when}. It corrected you ${s.humbled ? plural(s.humbled, "time") : "never"}.`;
 }
 
 /** The next correction tier's target ("Hawk-eyed at 90. You're at 88."). */
-function catchNote(o: Overall, meta: Meta): string {
+function correctionNote(o: Overall, meta: Meta): string {
   if (o.judgment == null) return `${plural(o.to_rank, "more task")} to get ranked`;
-  const next = catchTier(meta, o.next_catch_tier);
+  const next = correctionTier(meta, o.next_correction_tier);
   return next ? `${next.name} at ${next.floor}. You're at ${o.judgment}.` : "Top tier. Keep checking.";
 }
 
-function catchLadderView(o: Overall, meta: Meta): Html {
+function correctionLadderView(o: Overall, meta: Meta): Html {
   return ladderView({
     label: "Correction tiers",
-    tiers: catchTierRanges(meta),
-    on: o.catch_tier,
+    tiers: correctionTierRanges(meta),
+    on: o.correction_tier,
     at: o.judgment == null ? null : String(o.judgment),
-    unranked: catchNote(o, meta),
+    unranked: correctionNote(o, meta),
   });
 }
 
 /** The overview's "Who corrects whom?" half: the answer, the tier, and a way to the details. */
 function correctsSummaryView(s: Stats, ctx: ScorecardContext): Html {
   const o = s.overall;
-  const tier = catchTier(ctx.meta, o.catch_tier);
-  return html`<article class="card mini catches">
+  const tier = correctionTier(ctx.meta, o.correction_tier);
+  return html`<article class="card mini corrections">
       <div class="eyebrow">Who corrects whom</div>
       <h2 class="q">Do you correct its mistakes?</h2>
-      <div class="verdict">${catchMark(o, ctx.meta, ctx.still)}<div class="because">${catchBecause(s, PERIOD_WHEN[ctx.period ?? "28d"])}</div></div>
-      <p class="tier-line">${tier ? html`<span class="tier-label"><span>Tier</span>${tier.name}</span>` : ""}<span class="hand-note">${catchNote(o, ctx.meta)}</span></p>
-      <div class="share"><button class="ghost" data-action="view" data-id="catches">See corrections</button></div>
+      <div class="verdict">${correctionMark(o, ctx.meta, ctx.still)}<div class="because">${correctionBecause(s, PERIOD_WHEN[ctx.period ?? "28d"])}</div></div>
+      <p class="tier-line">${tier ? html`<span class="tier-label"><span>Tier</span>${tier.name}</span>` : ""}<span class="hand-note">${correctionNote(o, ctx.meta)}</span></p>
+      <div class="share"><button class="ghost" data-action="view" data-id="corrections">See corrections</button></div>
     </article>`;
 }
 
@@ -185,11 +185,11 @@ export function chartView(s: Stats): Html {
   const R = 10;
   const T = 26;
   const B = 30;
-  const max = Math.max(10, ...weeks.map((w) => w.catches));
+  const max = Math.max(10, ...weeks.map((w) => w.corrections));
   const step = max > 40 ? 20 : max > 20 ? 10 : 5;
   const bw = (W - L - R) / weeks.length;
   const y = (v: number) => T + (H - T - B) * (1 - v / max);
-  const peak = Math.max(...weeks.map((w) => w.catches));
+  const peak = Math.max(...weeks.map((w) => w.corrections));
   const grid: Html[] = [];
   for (let g = 0; g <= max; g += step) {
     grid.push(html`<line x1="${L}" x2="${W - R}" y1="${y(g)}" y2="${y(g)}" class="grid"/><text x="${L - 8}" y="${y(g) + 4}" text-anchor="end">${g}</text>`);
@@ -197,12 +197,12 @@ export function chartView(s: Stats): Html {
   const bars = weeks.map((w, i) => {
     const x = L + i * bw + bw * 0.18;
     const bwid = bw * 0.64;
-    const barTop = y(w.catches);
-    // The busiest week gets a label, not a color: more catches isn't better, so no week stands out as the good one.
-    const busiest = w.catches > 0 && w.catches === peak && weeks.findIndex((v) => v.catches === peak) === i;
+    const barTop = y(w.corrections);
+    // The busiest week gets a label, not a color: more corrections isn't better, so no week stands out as the good one.
+    const busiest = w.corrections > 0 && w.corrections === peak && weeks.findIndex((v) => v.corrections === peak) === i;
     const d = new Date(`${w.week}T00:00`);
-    return html`<rect x="${x}" y="${barTop}" width="${bwid}" height="${y(0) - barTop}" rx="3" class="bar"><title>Week of ${d.toLocaleDateString()}: ${w.catches} corrections, ${w.messages} messages</title></rect>${
-      busiest ? html`<text x="${x + bwid / 2}" y="${barTop - 6}" text-anchor="middle" class="peak-label">Most: ${w.catches}</text>` : ""
+    return html`<rect x="${x}" y="${barTop}" width="${bwid}" height="${y(0) - barTop}" rx="3" class="bar"><title>Week of ${d.toLocaleDateString()}: ${w.corrections} corrections, ${w.messages} messages</title></rect>${
+      busiest ? html`<text x="${x + bwid / 2}" y="${barTop - 6}" text-anchor="middle" class="peak-label">Most: ${w.corrections}</text>` : ""
     }${i % 2 === 0 ? html`<text x="${x + bwid / 2}" y="${H - 10}" text-anchor="middle">${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</text>` : ""}`;
   });
   return html`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Corrections per week" aria-describedby="chart-summary">${grid}${bars}</svg>
@@ -212,11 +212,11 @@ export function chartView(s: Stats): Html {
 /** One sentence for screen readers: span and peak week. */
 export function chartSummary(weeks: Stats["weekly"]): string {
   const first = weeks[0];
-  const peak = weeks.reduce<Stats["weekly"][number] | undefined>((p, w) => (!p || w.catches > p.catches ? w : p), undefined);
+  const peak = weeks.reduce<Stats["weekly"][number] | undefined>((p, w) => (!p || w.corrections > p.corrections ? w : p), undefined);
   if (!first || !peak) return "No weeks yet.";
   const fmt = (iso: string) => new Date(`${iso}T00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   const weeksText = `${weeks.length} ${weeks.length === 1 ? "week" : "weeks"}`;
-  return `${weeksText} from ${fmt(first.week)}. Most corrections: ${peak.catches}, the week of ${fmt(peak.week)}.`;
+  return `${weeksText} from ${fmt(first.week)}. Most corrections: ${peak.corrections}, the week of ${fmt(peak.week)}.`;
 }
 
 export function hallView(entries: HallEntry[]): Html {
@@ -225,13 +225,13 @@ export function hallView(entries: HallEntry[]): Html {
   }
   return html`<div class="fame">${entries.map(
     (e) => html`
-      <article class="catch${e.pinned ? " pinned" : ""}">
+      <article class="correction${e.pinned ? " pinned" : ""}">
         ${e.pinned ? html`<span class="pinned-tag">Pinned · kept forever</span>` : ""}
         <div class="meta"><span class="chip">${e.category_title}</span><span class="chip conf">${e.label} · ${e.day}</span></div>
         ${e.human ? html`<div class="you-said">“${e.human}”</div>` : ""}
         ${e.ai ? html`<div class="ai-said"><b>${e.model || shortSourceName(e.source_name)}:</b> ${e.ai}</div>` : ""}
-        <div class="catch-actions">
-          <button class="ghost small" data-action="share-catch" data-id="${e.id}">Share</button>
+        <div class="correction-actions">
+          <button class="ghost small" data-action="share-correction" data-id="${e.id}">Share</button>
           <button class="ghost small" data-action="pin" data-id="${e.id}" data-pinned="${String(e.pinned)}">${e.pinned ? "Unpin" : "Pin, keep forever"}</button>
         </div>
       </article>`,
@@ -251,7 +251,7 @@ function overviewView(s: Stats, ctx: ScorecardContext): Html {
   return html`
     ${heroView(s, ctx)}
     <section class="duo">
-      ${briefsSummaryView(s.briefs, ctx.meta, ctx.briefsStill ?? false, PERIOD_WHEN[ctx.period ?? "28d"])}
+      ${promptsSummaryView(s.prompts, ctx.meta, ctx.promptsStill ?? false, PERIOD_WHEN[ctx.period ?? "28d"])}
       ${correctsSummaryView(s, ctx)}
     </section>
     ${statsView(s)}`;
@@ -260,14 +260,14 @@ function overviewView(s: Stats, ctx: ScorecardContext): Html {
 function statsView(s: Stats): Html {
   const peak = s.peak_hour == null ? "–" : new Date(2000, 0, 1, s.peak_hour).toLocaleTimeString(undefined, { hour: "numeric" });
   return html`<section class="stats">
-      <div class="stat"><span class="v">${num(s.catches)}</span><span class="l">corrections</span></div>
-      <div class="stat"><span class="v">${s.pct_real_chats_with_catch != null ? `${Math.round(s.pct_real_chats_with_catch)}%` : "–"}</span><span class="l">of real chats had a correction</span></div>
+      <div class="stat"><span class="v">${num(s.corrections)}</span><span class="l">corrections</span></div>
+      <div class="stat"><span class="v">${s.pct_real_chats_with_correction != null ? `${Math.round(s.pct_real_chats_with_correction)}%` : "–"}</span><span class="l">of real chats had a correction</span></div>
       <div class="stat"><span class="v">${s.best_streak_days} days</span><span class="l">best streak · now ${s.current_streak_days}</span></div>
-      <div class="stat"><span class="v">${s.messages_per_catch ? `1 in ${s.messages_per_catch}` : "–"}</span><span class="l">messages is a correction · peak ${peak}</span></div>
+      <div class="stat"><span class="v">${s.messages_per_correction ? `1 in ${s.messages_per_correction}` : "–"}</span><span class="l">messages is a correction · peak ${peak}</span></div>
     </section>`;
 }
 
-function catchesView(s: Stats, ctx: ScorecardContext): Html {
+function correctionsView(s: Stats, ctx: ScorecardContext): Html {
   const { meta } = ctx;
   const cats = Object.entries(s.categories).sort((a, b) => b[1] - a[1]);
   const topCat = cats[0]?.[1] ?? 1;
@@ -275,7 +275,7 @@ function catchesView(s: Stats, ctx: ScorecardContext): Html {
     .filter((m) => m.messages > 0)
     .map(
       (m) =>
-        html`<tr><td>${modelName(m)}</td><td class="n">${num(m.catches)}</td><td class="n">${num(m.messages)}</td><td class="n">${catchRate(m.catches, m.messages)}</td></tr>`,
+        html`<tr><td>${modelName(m)}</td><td class="n">${num(m.corrections)}</td><td class="n">${num(m.messages)}</td><td class="n">${correctionRate(m.corrections, m.messages)}</td></tr>`,
     );
   const catRows = cats.length
     ? cats.map(
@@ -284,17 +284,17 @@ function catchesView(s: Stats, ctx: ScorecardContext): Html {
       )
     : html`<p class="muted">No corrections yet.</p>`;
   return html`
-    <section class="card catches">
+    <section class="card corrections">
       <div>
         <div class="eyebrow">Who corrects whom</div>
         <h1 class="q">Do you correct <span class="nowrap">${subjectText(ctx)}'s</span> mistakes?</h1>
-        <div class="verdict">${catchMark(s.overall, meta, ctx.still)}<div class="because">${catchBecause(s, PERIOD_WHEN[ctx.period ?? "28d"])}</div></div>
+        <div class="verdict">${correctionMark(s.overall, meta, ctx.still)}<div class="because">${correctionBecause(s, PERIOD_WHEN[ctx.period ?? "28d"])}</div></div>
         ${versusView(s)}
       </div>
       <div class="meter">
-        ${catchLadderView(s.overall, meta)}
+        ${correctionLadderView(s.overall, meta)}
         ${proofNote(meta)}
-        ${catchTier(meta, s.overall.catch_tier) ? html`<div class="share"><button data-action="share-catches">Share your corrections</button></div>` : ""}
+        ${correctionTier(meta, s.overall.correction_tier) ? html`<div class="share"><button data-action="share-corrections">Share your corrections</button></div>` : ""}
       </div>
     </section>
     <section><div class="head"><h2>Corrections per week</h2></div><div class="chart">${chartView(s)}</div></section>
@@ -312,7 +312,7 @@ function catchesView(s: Stats, ctx: ScorecardContext): Html {
     </section>`;
 }
 
-/** One award per kind of catch, plus one for the times it corrected you. Keys are category ids ("" is humbled). */
+/** One award per kind of correction, plus one for the times it corrected you. Keys are category ids ("" is humbled). */
 export const AWARDS: Record<string, { emoji: string; name: string; blurb: string }> = {
   made_it_up: { emoji: "🦄", name: "The Fabulist", blurb: "Made it up with a straight face." },
   ignored_instructions: { emoji: "🙉", name: "Selective Hearing", blurb: "You said it. It heard something else." },
@@ -358,10 +358,10 @@ export function scorecardView(s: Stats, ctx: ScorecardContext): Html {
   const { meta } = ctx;
   const view = ctx.view ?? "overview";
   const body =
-    view === "catches"
-      ? catchesView(s, ctx)
-      : view === "briefs"
-        ? briefsView(s.briefs, meta, ctx.briefsStill ?? false, subjectText(ctx), PERIOD_WHEN[ctx.period ?? "28d"])
+    view === "corrections"
+      ? correctionsView(s, ctx)
+      : view === "prompts"
+        ? promptsView(s.prompts, meta, ctx.promptsStill ?? false, subjectText(ctx), PERIOD_WHEN[ctx.period ?? "28d"])
         : view === "hall"
           ? hallSection(s, ctx)
           : overviewView(s, ctx);

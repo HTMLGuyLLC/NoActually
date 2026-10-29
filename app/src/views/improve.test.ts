@@ -30,7 +30,7 @@ describe("buckets", () => {
     const w = weeks(14);
     const { points, monthly } = buckets(w, "12w", meta.min_week);
     expect(monthly).toBe(false);
-    expect(points[0]).toMatchObject({ tasks: 20, continued: 10, landed: 6, catches: 8, signals: { spot: 12 } });
+    expect(points[0]).toMatchObject({ tasks: 20, continued: 10, landed: 6, corrections: 8, signals: { spot: 12 } });
     expect(points[0]).not.toHaveProperty("week");
     expect(points[0]?.label).toBeTruthy();
   });
@@ -48,7 +48,7 @@ describe("buckets", () => {
 
   it("sums every number and every per-signal count into its month", () => {
     const { points } = buckets(weeks(12, 2), "all", meta.min_week);
-    expect(points[0]).toMatchObject({ messages: 1000, catches: 40, humbled: 0, continued: 5, landed: 0 });
+    expect(points[0]).toMatchObject({ messages: 1000, corrections: 40, humbled: 0, continued: 5, landed: 0 });
     expect(points[0]?.signals).toEqual({ spot: 60, proof: 40, done: 30, limits: 15, why: 20 });
     expect(points[0]?.grades).toEqual({ thin: 40, solid: 35, sharp: 25 });
     expect(points[0]?.steering).toEqual({ ai_wrong: 15, added: 10, clarified: 5, redo: 0 });
@@ -176,7 +176,7 @@ describe("improveView goal", () => {
     expect(m).toContain("Switch to");
   });
 
-  it("says how many more briefs would hit a habit goal this week", () => {
+  it("says how many more prompts would hit a habit goal this week", () => {
     expect(view(progress({ goal: status({ need: 2 }) }))).toContain("12 prompts so far. 2 more prompts that say why would hit it.");
     expect(view(progress({ goal: status({ need: 1 }) }))).toContain("1 more prompt that say why would hit it.");
     expect(view(progress({ goal: status({ need: 0 }) }))).toContain("12 prompts so far. On track.");
@@ -313,8 +313,8 @@ describe("improveView insights", () => {
 
   it("reports a signal only when its history backs the with/without rates, and links its lesson", () => {
     const signals = [
-      { signal: "why", pct_of_briefs: 20, landed_with_without: [93.3, 80] as [number, number] },
-      { signal: "limits", pct_of_briefs: 10, landed_with_without: null },
+      { signal: "why", pct_of_prompts: 20, landed_with_without: [93.3, 80] as [number, number] },
+      { signal: "limits", pct_of_prompts: 10, landed_with_without: null },
     ];
     const m = view(progress({ insights: { signals, steer: null, models: [] } }));
     expect(m).toContain('<ul class="insights">');
@@ -350,14 +350,14 @@ describe("improveView escaping", () => {
       steers: meta.steers.map((s) => ({ ...s, title: HOSTILE })),
       tiers: meta.tiers.map((t) => ({ ...t, name: HOSTILE })),
       grades: meta.grades.map((g) => ({ ...g, title: HOSTILE })),
-      brief_tiers: meta.brief_tiers.map((t) => ({ ...t, name: HOSTILE })),
+      prompt_tiers: meta.prompt_tiers.map((t) => ({ ...t, name: HOSTILE })),
     };
     const p = progress({
       weeks: weeks(10),
       goal: status(),
       trophies: [{ goal: goal(), done: "2026-10-01" }],
       insights: {
-        signals: [{ signal: HOSTILE, pct_of_briefs: 1, landed_with_without: [1, 2] }],
+        signals: [{ signal: HOSTILE, pct_of_prompts: 1, landed_with_without: [1, 2] }],
         steer: [HOSTILE, 50],
         models: [
           { family: HOSTILE, landed: 1, continued: 1 },

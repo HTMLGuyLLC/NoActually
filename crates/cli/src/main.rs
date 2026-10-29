@@ -185,7 +185,7 @@ fn run(cmd: Command, store: &mut Store, all: &[Box<dyn sources::Source>]) -> Res
                 "Read {} files: {} messages, {} corrections ({:.1}s)",
                 r.files_read,
                 r.messages,
-                r.catches,
+                r.corrections,
                 t.elapsed().as_secs_f64()
             );
             for e in r.errors.iter().take(5) {
@@ -250,25 +250,25 @@ fn print_card(s: &store::Stats) {
     for line in overall_lines(&s.overall) {
         println!("{line}");
     }
-    println!("  You vs AI       {} – {}  (all time)", s.catches, s.humbled);
+    println!("  You vs AI       {} – {}  (all time)", s.corrections, s.humbled);
     println!(
         "  Messages        {}  ({} to {})",
         s.messages,
         s.first_day.as_deref().unwrap_or("?"),
         s.last_day.as_deref().unwrap_or("?")
     );
-    if let Some(n) = s.messages_per_catch {
+    if let Some(n) = s.messages_per_correction {
         println!("  1 correction every {n} messages");
     }
-    if let Some(p) = s.pct_real_chats_with_catch {
+    if let Some(p) = s.pct_real_chats_with_correction {
         println!("  Real chats      {p}% of {} had a correction", s.real_chats);
     }
     println!("  Streak          {} days now, best {}", s.current_streak_days, s.best_streak_days);
     println!("\n  By model");
     for m in s.models.iter().filter(|m| m.messages > 0).take(10) {
         let name = if m.version.is_empty() { m.family.clone() } else { format!("{} {}", m.family, m.version) };
-        let rate = 100.0 * m.catches as f64 / m.messages as f64;
-        println!("    {:<24} {:>5} corrections  {:>6} msgs  {:>4.1}%", name, m.catches, m.messages, rate);
+        let rate = 100.0 * m.corrections as f64 / m.messages as f64;
+        println!("    {:<24} {:>5} corrections  {:>6} msgs  {:>4.1}%", name, m.corrections, m.messages, rate);
     }
     println!("\n  Corrections by kind");
     for c in engine::Category::ALL {
@@ -276,7 +276,7 @@ fn print_card(s: &store::Stats) {
             println!("    {:<24} {n}", c.title());
         }
     }
-    for line in brief_lines(&s.briefs) {
+    for line in prompt_lines(&s.prompts) {
         println!("{line}");
     }
 }
@@ -301,9 +301,9 @@ fn overall_lines(o: &store::Overall) -> Vec<String> {
             ),
             format!(
                 "  Who corrects    you {} · it {} in {days} days → {judgment}{} ({}% of the score)",
-                o.catches,
+                o.corrections,
                 o.humbled,
-                o.catch_tier.map_or(String::new(), |t| format!(", {}", t.name())),
+                o.correction_tier.map_or(String::new(), |t| format!(", {}", t.name())),
                 100 - engine::DIRECTION_WEIGHT
             ),
         ],
@@ -327,14 +327,14 @@ fn check_lines(text: &str) -> Vec<String> {
         let mark = if c.signals.has(s) { "✓" } else { "·" };
         out.push(format!("  {mark} {:<18} {}", s.title(), s.hint()));
     }
-    if c.not_a_brief {
+    if c.not_a_prompt {
         out.push("  (Reads as a question or a hello: your history doesn't grade those as prompts.)".into());
     }
     out
 }
 
 /// The "Do you make it guess?" half of the card.
-fn brief_lines(b: &store::Briefs) -> Vec<String> {
+fn prompt_lines(b: &store::Prompts) -> Vec<String> {
     if b.tasks == 0 {
         return Vec::new();
     }
@@ -425,7 +425,7 @@ mod tests {
     }
 
     #[test]
-    fn check_reads_the_whole_rest_as_the_brief() {
+    fn check_reads_the_whole_rest_as_the_prompt() {
         assert_eq!(parse("check --fix the thing").unwrap(), Command::Check { text: "--fix the thing".into() });
         assert!(err("check").starts_with("missing prompt"));
         let lines = check_lines("Fix the crash in `checkout.ts`. Done when the tests pass. Don't touch the API.");
@@ -444,9 +444,9 @@ mod tests {
             tier: Some(engine::Tier::SharpEyed),
             next_tier: Some(engine::Tier::Irreplaceable),
             verdict: Answer::No,
-            catch_tier: Some(engine::CatchTier::HawkEyed),
-            next_catch_tier: None,
-            catches: 41,
+            correction_tier: Some(engine::CorrectionTier::HawkEyed),
+            next_correction_tier: None,
+            corrections: 41,
             humbled: 2,
             to_rank: 0,
         };
@@ -473,22 +473,22 @@ mod tests {
     }
 
     #[test]
-    fn brief_lines_say_the_tier_or_how_far_off_it_is() {
-        assert!(brief_lines(&store::Briefs::default()).is_empty(), "nothing before the first task");
-        let mut b = store::Briefs { tasks: 10, continued: 8, landed: 6, to_rank: 2, ..Default::default() };
+    fn prompt_lines_say_the_tier_or_how_far_off_it_is() {
+        assert!(prompt_lines(&store::Prompts::default()).is_empty(), "nothing before the first task");
+        let mut b = store::Prompts { tasks: 10, continued: 8, landed: 6, to_rank: 2, ..Default::default() };
         b.grades.insert("sharp".into(), 3);
         b.signals.insert("why".into(), 5);
         b.steering.insert("added".into(), 1);
-        let text = brief_lines(&b).join("\n");
+        let text = prompt_lines(&b).join("\n");
         assert!(text.contains("Do you make it guess? Hmm. 2 more tasks with a follow-up to get ranked"), "{text}");
         assert!(text.contains("Landed           75% of 8 tasks with a follow-up"), "{text}");
         assert!(text.contains("Sharp prompts    30%"), "{text}");
         assert!(text.contains("Says why              50%"), "{text}");
         assert!(text.contains("You added more       1"), "{text}");
-        b.tier = Some(engine::BriefTier::TechLead);
-        b.next_tier = Some(engine::BriefTier::Architect);
+        b.tier = Some(engine::PromptTier::TechLead);
+        b.next_tier = Some(engine::PromptTier::Architect);
         (b.window_tasks, b.window_landed) = (40, 34);
-        assert!(brief_lines(&b)[1].ends_with("Sometimes. Tech lead  (85% landed in 28 days; Architect at 90%)"));
+        assert!(prompt_lines(&b)[1].ends_with("Sometimes. Tech lead  (85% landed in 28 days; Architect at 90%)"));
     }
 
     #[test]

@@ -8,17 +8,17 @@ import { closePicker, openPicker, pickerOpen, pickStatView } from "./popover";
 const items = buildPickItems([row("Anthropic", "Claude Opus", "5", 60), row("OpenAI", "GPT Astra", "6", 34)]);
 
 describe("pickStatView", () => {
-  const item: PickItem = { filter: {}, label: "x", path: "", depth: 0, catches: 60, messages: 100, tasks: 1200, continued: 10, landed: 8 };
-  const none: PickItem = { ...item, catches: 0, messages: 0, tasks: 0, continued: 0, landed: 0 };
+  const item: PickItem = { filter: {}, label: "x", path: "", depth: 0, corrections: 60, messages: 100, tasks: 1200, continued: 10, landed: 8 };
+  const none: PickItem = { ...item, corrections: 0, messages: 0, tasks: 0, continued: 0, landed: 0 };
 
   it("shows corrections for the corrections pages", () => {
-    expect(pickStatView(item, "catches").value).toBe("<b>60</b> corrections · 60.0%");
-    expect(pickStatView(none, "catches").value).toBe("<b>0</b> corrections · –");
+    expect(pickStatView(item, "corrections").value).toBe("<b>60</b> corrections · 60.0%");
+    expect(pickStatView(none, "corrections").value).toBe("<b>0</b> corrections · –");
   });
 
-  it("shows landed and tasks for the briefs page", () => {
-    expect(pickStatView(item, "briefs").value).toBe(`<b>80%</b> landed · ${(1200).toLocaleString()} tasks`);
-    expect(pickStatView(none, "briefs").value).toBe("<b>–</b> landed · 0 tasks");
+  it("shows landed and tasks for the prompts page", () => {
+    expect(pickStatView(item, "prompts").value).toBe(`<b>80%</b> landed · ${(1200).toLocaleString()} tasks`);
+    expect(pickStatView(none, "prompts").value).toBe("<b>–</b> landed · 0 tasks");
   });
 
   it("shows both rates for the overview", () => {
@@ -31,7 +31,7 @@ describe("model picker popover", () => {
   let trigger: HTMLButtonElement;
   const onChoose = vi.fn<(i: PickItem) => void>();
   const onClose = vi.fn<(flush: boolean) => void>();
-  const open = (list = items) => openPicker(trigger, { items: list, stat: "catches", isSelected: (i) => i.label === "All AI", onChoose, onClose });
+  const open = (list = items) => openPicker(trigger, { items: list, stat: "corrections", isSelected: (i) => i.label === "All AI", onChoose, onClose });
   const input = () => must<HTMLInputElement>(".pick-search");
   const key = (k: string) => input().dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
 
@@ -112,7 +112,7 @@ describe("model picker popover", () => {
   });
 
   it("shows the chosen stat beside each model", () => {
-    openPicker(trigger, { items, stat: "briefs", isSelected: () => false, onChoose, onClose });
+    openPicker(trigger, { items, stat: "prompts", isSelected: () => false, onChoose, onClose });
     expect(must("#pick-opt-0").textContent).toContain("landed");
     expect(must("#pick-opt-0").textContent).not.toContain("corrections");
     closePicker(false);

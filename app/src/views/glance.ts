@@ -2,7 +2,7 @@
 // for (could it replace you, do you make it guess, do you correct it) and your goal, nothing more.
 import type { GoalStatus, Meta, Stats } from "../api";
 import { type Html, html, num } from "../html";
-import { briefTier, catchTier, landedPct, tierName } from "../meta";
+import { correctionTier, landedPct, promptTier, tierName } from "../meta";
 import { TAB_ICONS, wordmarkView } from "./chrome";
 import { goalTitle } from "./improve";
 
@@ -21,14 +21,14 @@ const answerView = (ask: string, word: string | null, why: string) =>
 function answersView(s: Stats, meta: Meta): Html {
   const o = s.overall;
   const replace = o.score == null ? `${plural(o.to_rank, "more task")} to get a score` : `Score ${o.score} · ${tierName(meta, o.tier)}`;
-  const brief = briefTier(meta, s.briefs.tier);
-  const guess = brief ? `${landedPct(s.briefs)}% landed · ${brief.name}` : `${plural(s.briefs.to_rank, "more task")} to get ranked`;
-  const caught = catchTier(meta, o.catch_tier);
-  const check = caught ? `You ${num(o.catches)} vs it ${num(o.humbled)} · ${caught.name}` : `${plural(o.to_rank, "more task")} to get ranked`;
+  const prompt = promptTier(meta, s.prompts.tier);
+  const guess = prompt ? `${landedPct(s.prompts)}% landed · ${prompt.name}` : `${plural(s.prompts.to_rank, "more task")} to get ranked`;
+  const corrected = correctionTier(meta, o.correction_tier);
+  const check = corrected ? `You ${num(o.corrections)} vs it ${num(o.humbled)} · ${corrected.name}` : `${plural(o.to_rank, "more task")} to get ranked`;
   return html`<div class="g-answers">
     ${answerView("Could AI replace you?", o.score == null ? null : o.verdict === "no" ? "No." : "Hmm.", replace)}
-    ${answerView("Do you make it guess?", brief?.verdict ?? null, guess)}
-    ${answerView("Do you correct its mistakes?", caught?.verdict ?? null, check)}
+    ${answerView("Do you make it guess?", prompt?.verdict ?? null, guess)}
+    ${answerView("Do you correct its mistakes?", corrected?.verdict ?? null, check)}
   </div>`;
 }
 

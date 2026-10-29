@@ -1,19 +1,19 @@
 // What every control does. Views mark controls with data-action="…" (and data-id for the thing
 // acted on); one delegated listener per event type on the root dispatches through the maps below,
 // so nothing is re-bound on each redraw.
-import { api, type BriefTier, type GoalKind, type HallEntry, type Meta, type Stats } from "./api";
+import { api, type GoalKind, type HallEntry, type Meta, type PromptTier, type Stats } from "./api";
 import { data, say } from "./dom";
 import { errorText, filterLabel } from "./format";
 import { scheduleCheck } from "./learn/checker";
 import { lessonById } from "./learn/lessons";
-import { briefTier, catchTier, tierName } from "./meta";
+import { correctionTier, promptTier, tierName } from "./meta";
 import type { PickStat } from "./picker/picker";
 import { buildPickItems, sameFilter } from "./picker/picker";
 import { closePicker, openPicker, pickerOpen } from "./picker/popover";
 import { paintUpdate, render, scheduler } from "./render";
-import { drawBriefCard, drawCatchCard, drawCatchesCard, drawShareCard } from "./share/cards";
+import { drawCorrectionCard, drawCorrectionsCard, drawPromptCard, drawShareCard } from "./share/cards";
 import { openShareDialog, type Post } from "./share/dialog";
-import { briefShareText, catchesShareText, catchShareText, shareText } from "./share/share";
+import { correctionShareText, correctionsShareText, promptShareText, shareText } from "./share/share";
 import {
   isPeriod,
   isRange,
@@ -73,22 +73,22 @@ const scorePost = (s: Stats, meta: Meta): Post => {
   return { title: "Share your score", text: shareText(s, who, tier, w), image: (shape) => drawShareCard(s, who, tier, shape, w) };
 };
 
-const briefsPost = (s: Stats, tier: BriefTier): Post => ({
+const promptsPost = (s: Stats, tier: PromptTier): Post => ({
   title: "Share your prompts",
-  text: briefShareText(s.briefs, tier, when()),
-  image: (shape) => drawBriefCard(s.briefs, tier, shape, when()),
+  text: promptShareText(s.prompts, tier, when()),
+  image: (shape) => drawPromptCard(s.prompts, tier, shape, when()),
 });
 
-const catchesPost = (s: Stats, tier: BriefTier): Post => ({
+const correctionsPost = (s: Stats, tier: PromptTier): Post => ({
   title: "Share your corrections",
-  text: catchesShareText(s.overall, tier, when()),
-  image: (shape) => drawCatchesCard(s.overall, tier, shape, when()),
+  text: correctionsShareText(s.overall, tier, when()),
+  image: (shape) => drawCorrectionsCard(s.overall, tier, shape, when()),
 });
 
-const catchPost = (e: HallEntry): Post => ({
+const correctionPost = (e: HallEntry): Post => ({
   title: "Share this correction",
-  text: catchShareText(e),
-  image: (shape) => drawCatchCard(e, shape),
+  text: correctionShareText(e),
+  image: (shape) => drawCorrectionCard(e, shape),
   quotesChat: !!(e.human || e.ai),
 });
 
@@ -113,7 +113,7 @@ function drawn(): { s: Stats; meta: Meta } {
 /** The picker shows the numbers the page is about. */
 export function pickStatFor(tab: typeof state.tab, view: typeof state.view): PickStat {
   if (tab !== "score" || view === "overview") return "both";
-  return view === "briefs" ? "briefs" : "catches";
+  return view === "prompts" ? "prompts" : "corrections";
 }
 
 function togglePicker(trigger: HTMLButtonElement) {
@@ -139,20 +139,20 @@ export const clickActions = {
     const { s, meta } = drawn();
     openShareDialog(scorePost(s, meta), b, scheduler.flush);
   },
-  "share-briefs": (b) => {
+  "share-prompts": (b) => {
     const { s, meta } = drawn();
-    const tier = briefTier(meta, s.briefs.tier);
-    if (tier) openShareDialog(briefsPost(s, tier), b, scheduler.flush);
+    const tier = promptTier(meta, s.prompts.tier);
+    if (tier) openShareDialog(promptsPost(s, tier), b, scheduler.flush);
   },
-  "share-catches": (b) => {
+  "share-corrections": (b) => {
     const { s, meta } = drawn();
-    const tier = catchTier(meta, s.overall.catch_tier);
-    if (tier) openShareDialog(catchesPost(s, tier), b, scheduler.flush);
+    const tier = correctionTier(meta, s.overall.correction_tier);
+    if (tier) openShareDialog(correctionsPost(s, tier), b, scheduler.flush);
   },
-  "share-catch": (b) => {
+  "share-correction": (b) => {
     const id = Number(data(b, "id"));
     const e = drawn().s.hall_of_fame.find((h) => h.id === id);
-    if (e) openShareDialog(catchPost(e), b, scheduler.flush);
+    if (e) openShareDialog(correctionPost(e), b, scheduler.flush);
   },
   "open-main": (b) => {
     const tab = b.dataset.id;

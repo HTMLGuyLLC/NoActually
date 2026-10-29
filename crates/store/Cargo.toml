@@ -1,6 +1,6 @@
 [package]
 name = "noactually-store"
-description = "Local SQLite store: consent, checkpoints, daily aggregates, catch events, retention."
+description = "Local SQLite store: consent, checkpoints, daily aggregates, correction events, retention."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

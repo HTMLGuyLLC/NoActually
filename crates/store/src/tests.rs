@@ -1,8 +1,8 @@
 //! The store's behavior suite: ingest, sync, consent, retention and stats, end to end.
 
 use super::*;
-use engine::{Answer, BriefTier, Signal, Signals};
-use sources::testing::{cc_ai, cc_catch, cc_user, set_mtime_ago};
+use engine::{Answer, PromptTier, Signal, Signals};
+use sources::testing::{cc_ai, cc_correction, cc_user, set_mtime_ago};
 use sources::{FileScan, SourceTurn};
 use std::collections::BTreeMap;
 use std::io::Write;
@@ -61,7 +61,7 @@ fn append(path: &Path, text: &str) {
 }
 
 #[test]
-fn counts_messages_catches_and_models() {
+fn counts_messages_corrections_and_models() {
     let mut s = Store::open_in_memory().unwrap();
     let t = now_ts(0);
     ingest(
@@ -74,10 +74,10 @@ fn counts_messages_catches_and_models() {
         ],
     );
     let all = stats(&s);
-    assert_eq!((all.messages, all.catches, all.catches_last_7d), (3, 2, 2));
+    assert_eq!((all.messages, all.corrections, all.corrections_last_7d), (3, 2, 2));
     assert_eq!(all.categories.get("made_it_up"), Some(&1));
     assert_eq!(
-        (all.overall.tier, all.overall.verdict, all.overall.catches),
+        (all.overall.tier, all.overall.verdict, all.overall.corrections),
         (None, Answer::Hmm, 2),
         "too few tasks to score"
     );
@@ -88,30 +88,30 @@ fn counts_messages_catches_and_models() {
             today(),
         )
         .unwrap();
-    assert_eq!((opus.messages, opus.catches), (2, 1));
+    assert_eq!((opus.messages, opus.corrections), (2, 1));
     let family = s.stats(&Filter { family: Some("Claude Opus".into()), ..Default::default() }, today()).unwrap();
     assert_eq!(family.messages, 2);
     let none = s.stats(&Filter { version: Some("9.9".into()), ..Default::default() }, today()).unwrap();
     assert_eq!((none.messages, none.first_day), (0, None));
     let openai = s.stats(&Filter { provider: Some("OpenAI".into()), ..Default::default() }, today()).unwrap();
-    assert_eq!((openai.messages, openai.catches), (1, 1));
+    assert_eq!((openai.messages, openai.corrections), (1, 1));
 }
 
 #[test]
 fn stats_json_matches_the_ui_contract() {
     let mut s = Store::open_in_memory().unwrap();
     let t = now_ts(0);
-    let catches: Vec<_> =
+    let corrections: Vec<_> =
         (0..7).map(|i| turn("that's not a real page", "You're right.", "m", &t, &i.to_string())).collect();
-    ingest(&mut s, "f", catches);
+    ingest(&mut s, "f", corrections);
     let v = serde_json::to_value(stats(&s)).unwrap();
     let o = &v["overall"];
     assert_eq!((o["tier"].is_null(), o["score"].is_null(), &o["verdict"]), (true, true, &serde_json::json!("hmm")));
-    assert_eq!((o["catches"].as_i64(), &o["to_rank"]), (Some(7), &v["briefs"]["to_rank"]));
+    assert_eq!((o["corrections"].as_i64(), &o["to_rank"]), (Some(7), &v["prompts"]["to_rank"]));
     let per_model = |k: &str| v["models"].as_array().unwrap().iter().map(|m| m[k].as_i64().unwrap()).sum::<i64>();
     assert_eq!(
         (per_model("tasks"), per_model("continued")),
-        (v["briefs"]["tasks"].as_i64().unwrap(), v["briefs"]["continued"].as_i64().unwrap()),
+        (v["prompts"]["tasks"].as_i64().unwrap(), v["prompts"]["continued"].as_i64().unwrap()),
         "every task is under some model"
     );
     let entry = &v["hall_of_fame"][0];
@@ -147,18 +147,18 @@ fn weekly_buckets_split_on_monday() {
     assert_eq!(
         w,
         vec![
-            WeekRow { week: d("2026-10-19"), messages: 1, catches: 1 },
-            WeekRow { week: d("2026-10-26"), messages: 1, catches: 0 }
+            WeekRow { week: d("2026-10-19"), messages: 1, corrections: 1 },
+            WeekRow { week: d("2026-10-26"), messages: 1, corrections: 0 }
         ]
     );
 }
 
 #[test]
-fn streaks_and_peak_hour_come_from_stored_catches() {
+fn streaks_and_peak_hour_come_from_stored_corrections() {
     let mut s = Store::open_in_memory().unwrap();
     let at = |days_ago: i64| (Utc::now() - Duration::days(days_ago)).to_rfc3339();
-    let catches = [0, 1, 2, 5].map(|d| turn("no, that's wrong", "You're right.", "m", &at(d), &d.to_string()));
-    ingest(&mut s, "f", catches.into());
+    let corrections = [0, 1, 2, 5].map(|d| turn("no, that's wrong", "You're right.", "m", &at(d), &d.to_string()));
+    ingest(&mut s, "f", corrections.into());
     let st = stats(&s);
     assert_eq!((st.current_streak_days, st.best_streak_days), (3, 3));
     assert!(st.peak_hour.is_some());
@@ -172,7 +172,7 @@ fn copies_are_never_counted_twice() {
     let one = || vec![turn("no, that's wrong", "You're right.", "claude-opus-5-5", &t, "same-id")];
     ingest(&mut s, "f1", one());
     ingest(&mut s, "f2", one());
-    assert_eq!(stats(&s).catches, 1);
+    assert_eq!(stats(&s).corrections, 1);
 }
 
 #[test]
@@ -241,7 +241,7 @@ fn category_level_keeps_no_text_from_the_start() {
     let text: (Option<String>, Option<String>) =
         s.conn.query_row("SELECT human_full, human_snip FROM events", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
     assert_eq!(text, (None, None));
-    assert_eq!(stats(&s).catches, 1, "still counted");
+    assert_eq!(stats(&s).corrections, 1, "still counted");
 }
 
 #[test]
@@ -302,7 +302,7 @@ fn imports_are_read_from_their_paths() {
     let mut s = Store::open_in_memory().unwrap();
     s.import("claude-ai-export", &p.to_string_lossy()).unwrap();
     let r = sync(&mut s, &sources::all()).unwrap();
-    assert_eq!((r.files_read, r.catches), (1, 1));
+    assert_eq!((r.files_read, r.corrections), (1, 1));
     assert_eq!(sync(&mut s, &sources::all()).unwrap().files_read, 0, "unchanged exports aren't re-read");
 }
 
@@ -325,10 +325,10 @@ fn nothing_is_read_without_consent_and_live_appends_count_once() {
 
     append(&path, &cc_ai("claude-opus-5-5", &ts, "You're right, my mistake."));
     let r = sync(&mut s, &all).unwrap();
-    assert_eq!((r.messages, r.catches), (1, 1));
+    assert_eq!((r.messages, r.corrections), (1, 1));
     let again = sync(&mut s, &all).unwrap();
     assert_eq!((again.files_read, again.messages), (0, 0));
-    assert_eq!(stats(&s).catches, 1);
+    assert_eq!(stats(&s).corrections, 1);
 }
 
 #[test]
@@ -344,7 +344,7 @@ fn quiet_files_count_their_last_unanswered_message() {
     assert_eq!(sync(&mut s, &all).unwrap().messages, 0, "still being written");
     set_mtime_ago(&path, StdDuration::from_secs(20 * 60));
     let r = sync(&mut s, &all).unwrap();
-    assert_eq!((r.messages, r.catches), (1, 1), "a quiet file is final");
+    assert_eq!((r.messages, r.corrections), (1, 1), "a quiet file is final");
     assert_eq!(sync(&mut s, &all).unwrap().files_read, 0);
 }
 
@@ -371,14 +371,14 @@ fn rewritten_or_shrunk_files_never_double_count() {
     assert_eq!(sync(&mut s, &all).unwrap().files_read, 1);
 
     let st = stats(&s);
-    assert_eq!((st.messages, st.catches), (1, 1));
+    assert_eq!((st.messages, st.corrections), (1, 1));
 }
 
 #[test]
 fn unreadable_files_are_reported_not_fatal() {
     let dir = tempfile::tempdir().unwrap();
     let ts = Utc::now().to_rfc3339();
-    std::fs::write(dir.path().join("a.jsonl"), cc_catch("u", &ts)).unwrap();
+    std::fs::write(dir.path().join("a.jsonl"), cc_correction("u", &ts)).unwrap();
     let mut s = Store::open_in_memory().unwrap();
     s.import("chatgpt-export", &dir.path().join("conversations.json").to_string_lossy()).unwrap();
     std::fs::write(dir.path().join("conversations.json"), "{not json").unwrap();
@@ -386,7 +386,7 @@ fn unreadable_files_are_reported_not_fatal() {
     let mut all = sources::all();
     all[0] = sources::claude_code_at(dir.path().to_path_buf());
     let r = sync(&mut s, &all).unwrap();
-    assert_eq!(r.catches, 1, "the good file still counts");
+    assert_eq!(r.corrections, 1, "the good file still counts");
     assert_eq!(r.errors.len(), 1);
     assert!(r.errors[0].contains("conversations.json"), "{:?}", r.errors);
 }
@@ -395,7 +395,7 @@ fn unreadable_files_are_reported_not_fatal() {
 fn paused_and_revoked_sources_are_not_read() {
     let dir = tempfile::tempdir().unwrap();
     let ts = Utc::now().to_rfc3339();
-    std::fs::write(dir.path().join("a.jsonl"), cc_catch("u", &ts)).unwrap();
+    std::fs::write(dir.path().join("a.jsonl"), cc_correction("u", &ts)).unwrap();
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
     s.allow("claude-code", None).unwrap();
@@ -405,14 +405,15 @@ fn paused_and_revoked_sources_are_not_read() {
     s.revoke("claude-code").unwrap();
     assert_eq!(sync(&mut s, &all).unwrap().files_read, 0);
     s.allow("claude-code", None).unwrap();
-    assert_eq!(sync(&mut s, &all).unwrap().catches, 1);
+    assert_eq!(sync(&mut s, &all).unwrap().corrections, 1);
 }
 
 #[test]
 fn rule_changes_rebuild_scores_but_keep_consent() {
     let dir = tempfile::tempdir().unwrap();
     let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
-    std::fs::write(dir.path().join("a.jsonl"), cc_ai("<synthetic>", &ts, "API Error") + &cc_catch("u", &ts)).unwrap();
+    std::fs::write(dir.path().join("a.jsonl"), cc_ai("<synthetic>", &ts, "API Error") + &cc_correction("u", &ts))
+        .unwrap();
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
     s.allow("claude-code", None).unwrap();
@@ -422,10 +423,10 @@ fn rule_changes_rebuild_scores_but_keep_consent() {
     s.set_setting("rules_version", "1").unwrap();
     let r = sync(&mut s, &all).unwrap();
     assert!(r.rescored);
-    assert_eq!(r.catches, 1, "history was re-read");
+    assert_eq!(r.corrections, 1, "history was re-read");
     assert!(s.source_state("claude-code").unwrap().unwrap().allowed, "consent survives");
     let st = stats(&s);
-    assert_eq!(st.catches, 1);
+    assert_eq!(st.corrections, 1);
     assert_eq!(
         (st.models[0].family.as_str(), st.models[0].version.as_str()),
         ("Claude Opus", "5.5"),
@@ -439,28 +440,28 @@ fn from_now_on_skips_existing_history_but_counts_new_messages() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("a.jsonl");
     // Written earlier today: must not count when the person picks "From now on".
-    std::fs::write(&path, cc_catch("old", &(Utc::now() - Duration::minutes(30)).to_rfc3339())).unwrap();
+    std::fs::write(&path, cc_correction("old", &(Utc::now() - Duration::minutes(30)).to_rfc3339())).unwrap();
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
     s.allow("claude-code", None).unwrap();
     assert_eq!(s.start_from_now(all[0].as_ref()).unwrap(), 1);
     assert_eq!(sync(&mut s, &all).unwrap().messages, 0);
 
-    append(&path, &cc_catch("new", &Utc::now().to_rfc3339()));
+    append(&path, &cc_correction("new", &Utc::now().to_rfc3339()));
     let r = sync(&mut s, &all).unwrap();
-    assert_eq!((r.messages, r.catches), (1, 1), "only the new message counts");
+    assert_eq!((r.messages, r.corrections), (1, 1), "only the new message counts");
 }
 
 #[test]
 fn from_now_on_survives_a_rules_rebuild() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("a.jsonl");
-    std::fs::write(&path, cc_catch("old", &(Utc::now() - Duration::hours(3)).to_rfc3339())).unwrap();
+    std::fs::write(&path, cc_correction("old", &(Utc::now() - Duration::hours(3)).to_rfc3339())).unwrap();
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
     s.allow("claude-code", None).unwrap();
     s.start_from_now(all[0].as_ref()).unwrap();
-    append(&path, &cc_catch("new", &Utc::now().to_rfc3339()));
+    append(&path, &cc_correction("new", &Utc::now().to_rfc3339()));
     sync(&mut s, &all).unwrap();
     assert_eq!(stats(&s).messages, 1);
 
@@ -497,8 +498,8 @@ fn pins_survive_a_rules_rebuild() {
     let dir = tempfile::tempdir().unwrap();
     let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
     let file = dir.path().join("a.jsonl");
-    let catch = |n: &str| cc_ai("claude-opus-5-5", &ts, "hi") + &cc_catch(n, &ts);
-    std::fs::write(&file, catch("u1") + &catch("u2")).unwrap();
+    let correction = |n: &str| cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction(n, &ts);
+    std::fs::write(&file, correction("u1") + &correction("u2")).unwrap();
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
     s.allow("claude-code", None).unwrap();
@@ -513,19 +514,19 @@ fn pins_survive_a_rules_rebuild() {
 
     s.set_setting("rules_version", "1").unwrap(); // pretend older rules
     assert!(sync(&mut s, &all).unwrap().rescored);
-    assert_eq!(pins(&s), (2, 1), "both catches are back, and the pinned one isn't counted twice");
+    assert_eq!(pins(&s), (2, 1), "both corrections are back, and the pinned one isn't counted twice");
     let still: i64 = s.conn.query_row("SELECT id FROM events WHERE pinned = 1", [], |r| r.get(0)).unwrap();
-    assert_eq!(still, pinned_id, "the pinned catch was kept, not re-created");
+    assert_eq!(still, pinned_id, "the pinned correction was kept, not re-created");
 
     std::fs::remove_file(&file).unwrap(); // the tool cleaned up old history
     s.set_setting("rules_version", "1").unwrap();
     assert!(sync(&mut s, &all).unwrap().rescored);
-    assert_eq!(pins(&s), (1, 1), "only the pinned catch outlives its deleted history file");
+    assert_eq!(pins(&s), (1, 1), "only the pinned correction outlives its deleted history file");
     let text: Option<String> = s.conn.query_row("SELECT human_snip FROM events", [], |r| r.get(0)).unwrap();
     assert!(text.is_some(), "and it keeps its text");
 
     s.forget("claude-code").unwrap();
-    assert_eq!(pins(&s), (0, 0), "forgetting a source deletes its pinned catches too");
+    assert_eq!(pins(&s), (0, 0), "forgetting a source deletes its pinned corrections too");
 }
 
 #[test]
@@ -538,7 +539,7 @@ fn an_unreadable_retention_setting_keeps_no_text() {
     }
     ingest(&mut s, "f", vec![turn("no, that's wrong", "You're right.", "m", &now_ts(1), "k")]);
     let text: Option<String> = s.conn.query_row("SELECT human_snip FROM events", [], |r| r.get(0)).unwrap();
-    assert!(text.is_none(), "new catches keep no text while the setting is unreadable");
+    assert!(text.is_none(), "new corrections keep no text while the setting is unreadable");
 }
 
 #[test]
@@ -577,7 +578,7 @@ fn reply(human: &str, session: &str, ts: &str, key: &str) -> SourceTurn {
 }
 
 #[test]
-fn briefs_count_tasks_signals_and_steering() {
+fn prompts_count_tasks_signals_and_steering() {
     let mut s = Store::open_in_memory().unwrap();
     let t = now_ts(0);
     let sharp = "In src/app.ts the button should open settings. Don't touch the router.";
@@ -595,7 +596,7 @@ fn briefs_count_tasks_signals_and_steering() {
             reply("I meant the other file", "c", &t, "8"), // no task in this chat: not counted
         ],
     );
-    let b = stats(&s).briefs;
+    let b = stats(&s).prompts;
     // The CSV export got no reply yet, so it can't have needed steering: it doesn't count either way.
     assert_eq!((b.tasks, b.continued, b.landed), (3, 2, 1), "only the added requirement counts against you");
     assert_eq!(b.grades, BTreeMap::from([("thin".into(), 2), ("sharp".into(), 1)]));
@@ -606,7 +607,11 @@ fn briefs_count_tasks_signals_and_steering() {
     assert_eq!((b.window_tasks, b.tier, b.to_rank), (2, None, 8), "too few tasks to rank");
     let models = stats(&s).models;
     let sum = |f: fn(&ModelRow) -> i64| models.iter().map(f).sum::<i64>();
-    assert_eq!((sum(|m| m.tasks), sum(|m| m.continued), sum(|m| m.landed)), (3, 2, 1), "the picker's per-model briefs");
+    assert_eq!(
+        (sum(|m| m.tasks), sum(|m| m.continued), sum(|m| m.landed)),
+        (3, 2, 1),
+        "the picker's per-model prompts"
+    );
     let msgs: Vec<i64> = s
         .conn()
         .prepare("SELECT messages FROM tasks ORDER BY id")
@@ -619,7 +624,7 @@ fn briefs_count_tasks_signals_and_steering() {
 }
 
 #[test]
-fn brief_tiers_come_from_the_last_28_days_of_tasks_that_continued() {
+fn prompt_tiers_come_from_the_last_28_days_of_tasks_that_continued() {
     let mut s = Store::open_in_memory().unwrap();
     let (now, old) = (now_ts(0), now_ts(40));
     let mut turns = Vec::new();
@@ -638,12 +643,12 @@ fn brief_tiers_come_from_the_last_28_days_of_tasks_that_continued() {
         turns.push(reply("scrap that", &format!("o{i}"), &old, &format!("ox{i}")));
     }
     ingest(&mut s, "f", turns);
-    let b = stats(&s).briefs;
+    let b = stats(&s).prompts;
     assert_eq!((b.tasks, b.continued, b.landed), (20, 17, 11));
     assert_eq!((b.window_tasks, b.window_landed), (12, 11));
-    assert_eq!((b.tier, b.next_tier, b.to_rank), (Some(BriefTier::Architect), None, 0));
+    assert_eq!((b.tier, b.next_tier, b.to_rank), (Some(PromptTier::Architect), None, 0));
     let tip = b.tip.unwrap();
-    assert_eq!((tip.signal.as_str(), tip.pct_of_briefs, tip.landed_with_without), ("spot", 0.0, None));
+    assert_eq!((tip.signal.as_str(), tip.pct_of_prompts, tip.landed_with_without), ("spot", 0.0, None));
 }
 
 #[test]
@@ -651,7 +656,7 @@ fn a_tip_quotes_the_gap_only_when_history_backs_it() {
     let mut s = Store::open_in_memory().unwrap();
     let t = now_ts(0);
     let mut turns = Vec::new();
-    // Briefs that say why always land; those that don't are steered half the time.
+    // Prompts that say why always land; those that don't are steered half the time.
     for i in 0..30 {
         let why = i < 10;
         let human = if why { "add a CSV export because finance needs it" } else { "add a CSV export" };
@@ -661,10 +666,10 @@ fn a_tip_quotes_the_gap_only_when_history_backs_it() {
         }
     }
     ingest(&mut s, "f", turns);
-    let tip = stats(&s).briefs.tip.unwrap();
+    let tip = stats(&s).prompts.tip.unwrap();
     // "spot" is carried least (never), so it's the tip; "why" would be the one with a real gap.
     assert_eq!(tip.signal, "spot");
-    assert_eq!(tip.landed_with_without, None, "no briefs carried it, so there's nothing to compare");
+    assert_eq!(tip.landed_with_without, None, "no prompts carried it, so there's nothing to compare");
     let groups =
         [(Signals(Signal::Why.bit()), true, true, 10), (Signals(0), true, true, 10), (Signals(0), true, false, 10)];
     let why_tip = super::stats::tip_for(&groups, Signal::Why);
@@ -674,20 +679,20 @@ fn a_tip_quotes_the_gap_only_when_history_backs_it() {
 }
 
 #[test]
-fn briefs_follow_the_filter_and_are_forgotten_and_rebuilt() {
+fn prompts_follow_the_filter_and_are_forgotten_and_rebuilt() {
     let mut s = Store::open_in_memory().unwrap();
     let t = now_ts(0);
     let mut gpt = opener("add a CSV export", "g", &t, "g");
     gpt.turn.next_ai.as_mut().unwrap().model = Some("gpt-5.1".into());
     ingest(&mut s, "f", vec![opener("add a CSV export", "a", &t, "a"), gpt]);
     let only = |provider: &str| Filter { provider: Some(provider.into()), ..Default::default() };
-    assert_eq!(s.stats(&only("OpenAI"), today()).unwrap().briefs.tasks, 1);
-    assert_eq!(stats(&s).briefs.tasks, 2);
+    assert_eq!(s.stats(&only("OpenAI"), today()).unwrap().prompts.tasks, 1);
+    assert_eq!(stats(&s).prompts.tasks, 2);
     s.reset_scores().unwrap();
-    assert_eq!(stats(&s).briefs.tasks, 0, "a rules rebuild clears tasks with the other scores");
+    assert_eq!(stats(&s).prompts.tasks, 0, "a rules rebuild clears tasks with the other scores");
     ingest(&mut s, "f", vec![opener("add a CSV export", "a", &t, "a")]);
     s.forget("test").unwrap();
-    let b = stats(&s).briefs;
+    let b = stats(&s).prompts;
     assert_eq!((b.tasks, b.to_rank, b.steering.values().sum::<i64>(), b.tip), (0, 10, 0, None));
 }
 
@@ -700,7 +705,7 @@ fn every_steer_cause_is_a_tasks_column() {
 }
 
 #[test]
-fn live_tracking_reads_briefs_like_a_full_rebuild() {
+fn live_tracking_reads_prompts_like_a_full_rebuild() {
     // Synced after every reply, as the app does: each follow-up must still know what it answered.
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("live.jsonl");
@@ -722,7 +727,7 @@ fn live_tracking_reads_briefs_like_a_full_rebuild() {
     let mut whole = Store::open_in_memory().unwrap();
     whole.allow("claude-code", None).unwrap();
     sync(&mut whole, &all).unwrap();
-    for b in [stats(&live).briefs, stats(&whole).briefs] {
+    for b in [stats(&live).prompts, stats(&whole).prompts] {
         assert_eq!((b.tasks, b.landed), (1, 0));
         assert_eq!((b.steering["ai_wrong"], b.steering["added"]), (1, 1));
     }
@@ -734,7 +739,7 @@ fn no_tip_once_every_signal_is_common() {
     let t = now_ts(0);
     let all_five = "In `src/a.ts` it says \"Bad thing happened\" but should return 200. Don't touch the API because our users rely on it.";
     ingest(&mut s, "f", (0..4).map(|i| opener(all_five, &format!("c{i}"), &t, &format!("c{i}"))).collect());
-    let b = stats(&s).briefs;
+    let b = stats(&s).prompts;
     assert_eq!(b.grades.get("sharp"), Some(&4));
     assert_eq!(b.tip, None);
 }
@@ -768,16 +773,16 @@ fn a_window_moves_the_counts_and_the_score() {
     let all = s.stats(&Filter::default(), today()).unwrap();
     let week =
         s.stats(&Filter { since: Some(today() - chrono::Duration::days(6)), ..Default::default() }, today()).unwrap();
-    assert_eq!((all.messages, all.catches, all.briefs.tasks), (30, 6, 12));
-    assert_eq!((week.messages, week.catches, week.briefs.tasks), (10, 2, 2), "counts follow the window");
+    assert_eq!((all.messages, all.corrections, all.prompts.tasks), (30, 6, 12));
+    assert_eq!((week.messages, week.corrections, week.prompts.tasks), (10, 2, 2), "counts follow the window");
     assert_eq!(week.weekly.len(), 1);
     // The score follows the window too: 2 tasks this week, too few to score.
-    assert_eq!((week.briefs.window_tasks, week.overall.score, week.overall.catches), (2, None, 2));
-    assert_eq!(all.briefs.window_tasks, 11, "no window: the last 28 days");
+    assert_eq!((week.prompts.window_tasks, week.overall.score, week.overall.corrections), (2, None, 2));
+    assert_eq!(all.prompts.window_tasks, 11, "no window: the last 28 days");
     let year =
         s.stats(&Filter { since: Some(today() - chrono::Duration::days(364)), ..Default::default() }, today()).unwrap();
-    assert_eq!((year.briefs.window_tasks, year.overall.catches), (12, 6));
-    assert_eq!(week.catches_last_7d, all.catches_last_7d, "this week never moves");
+    assert_eq!((year.prompts.window_tasks, year.overall.corrections), (12, 6));
+    assert_eq!(week.corrections_last_7d, all.corrections_last_7d, "this week never moves");
 }
 
 #[test]

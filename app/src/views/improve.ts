@@ -19,7 +19,7 @@ export type ImproveContext = {
   filtered: boolean;
 };
 
-/** Fewer messages than this in a week and its catch rate is too noisy to put on the line. */
+/** Fewer messages than this in a week and its correction rate is too noisy to put on the line. */
 const RATE_MIN_MESSAGES = 50;
 
 /** The landed chart starts at 50% so the tier bands (70/80/90) have room, lower when a week was lower. */
@@ -65,7 +65,7 @@ export function buckets(weeks: HistoryWeek[], range: Range, minWeek: number): { 
         ? {
             label: m.label,
             messages: m.messages + w.messages,
-            catches: m.catches + w.catches,
+            corrections: m.corrections + w.corrections,
             humbled: m.humbled + w.humbled,
             tasks: m.tasks + w.tasks,
             continued: m.continued + w.continued,
@@ -199,7 +199,7 @@ function recapView(weeks: HistoryWeek[], meta: Meta): Html | "" {
   if (!last || !before || last.tasks < meta.min_week) return "";
   const landed = (w: HistoryWeek) => pctOf(w.landed, w.continued);
   const sharp = (w: HistoryWeek) => pctOf(w.grades.sharp ?? 0, w.tasks);
-  // Fewer catches isn't worse (it may be getting things right), so that row's change isn't colored.
+  // Fewer corrections isn't worse (it may be getting things right), so that row's change isn't colored.
   const row = (name: string, a: number | null, b: number | null, unit = "%", neutral = false) => {
     const diff = a != null && b != null ? a - b : null;
     const arrow = diff == null || diff === 0 ? "" : diff > 0 ? `▲ ${diff}` : `▼ ${-diff}`;
@@ -208,7 +208,7 @@ function recapView(weeks: HistoryWeek[], meta: Meta): Html | "" {
   return html`<section class="recap"><div class="eyebrow">Last week · ${fmtDay(last.week)}</div>
     ${row("Tasks landed", landed(last), landed(before))}
     ${row("Sharp prompts", sharp(last), sharp(before))}
-    ${row("Corrections", last.catches, before.catches, "", true)}
+    ${row("Corrections", last.corrections, before.corrections, "", true)}
     <p class="muted small">Compared with the week before.</p>
   </section>`;
 }
@@ -226,7 +226,7 @@ function trendsView(ctx: ImproveContext): Html {
     firstStrong && lastStrong
       ? `Tasks landed went from ${firstStrong.value}% (${firstStrong.label}) to ${lastStrong.value}% (${lastStrong.label}).`
       : "Not enough tasks yet to show a trend.";
-  const bands = meta.brief_tiers.slice(1).map((t) => ({ from: t.floor, name: t.name }));
+  const bands = meta.prompt_tiers.slice(1).map((t) => ({ from: t.floor, name: t.name }));
   const signals = meta.signals.map((s) => {
     const pts = points.map((b) => ({ label: b.label, value: pctOf(b.signals[s.id] ?? 0, b.tasks), weak: weak(b.tasks) }));
     const now = pts.filter((x) => x.value != null && !x.weak).at(-1)?.value;
@@ -237,7 +237,7 @@ function trendsView(ctx: ImproveContext): Html {
   const gradeSeries = [...meta.grades].reverse().map((g) => ({ title: g.title, values: points.map((b) => b.grades[g.id] ?? 0) }));
   const rate: Point[] = points.map((b) => ({
     label: b.label,
-    value: b.messages ? (100 * b.catches) / b.messages : null,
+    value: b.messages ? (100 * b.corrections) / b.messages : null,
     weak: b.messages < RATE_MIN_MESSAGES,
   }));
   const rateMax = Math.max(5, ...rate.map((r) => Math.ceil(r.value ?? 0)));

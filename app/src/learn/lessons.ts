@@ -1,13 +1,13 @@
 // The Learn tab's lessons, from lessons.json. crates/engine/tests/lessons.rs grades every example
 // and quiz answer with the real rules and lints the copy so it never names a tool or goes stale.
-import type { Briefs, Meta } from "../api";
+import type { Meta, Prompts } from "../api";
 import data from "./lessons.json";
 
 export type Example = { text: string; signals: string[] };
-export type Teaches = { signal: string } | { steer: string } | { catch: true };
+export type Teaches = { signal: string } | { steer: string } | { correction: true };
 export type Question =
   | { kind: "sharper"; question: string; options: string[]; answer: number; explain: string }
-  | { kind: "missing"; question: string; brief: string; options: string[]; answer: string; explain: string }
+  | { kind: "missing"; question: string; prompt: string; options: string[]; answer: string; explain: string }
   | { kind: "pick"; question: string; options: string[]; answer: number; explain: string };
 export type Lesson = {
   id: string;
@@ -43,7 +43,7 @@ const HABIT_PCT = 60;
  * The lesson to do next: the habit your prompts carry least (one you don't have yet), then the
  * steering you do most, then anything left in order. Lessons already done are skipped.
  */
-export function recommended(b: Briefs | null, meta: Meta, done: readonly string[]): Lesson | undefined {
+export function recommended(b: Prompts | null, meta: Meta, done: readonly string[]): Lesson | undefined {
   const left = LESSONS.filter((l) => !done.includes(l.id));
   if (!b?.tasks) return left[0];
   const share = (signal: string) => (100 * (b.signals[signal] ?? 0)) / b.tasks;

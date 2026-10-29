@@ -2,15 +2,15 @@
 //! bests, and what works for you. Read side, plus the goal you set and the weeks it already
 //! closed (frozen, so a later rebuild or import can't take back a week you earned).
 
-use crate::stats::{monday_of, tip_for, Group, View, CATCH_KINDS, LANDED};
+use crate::stats::{monday_of, tip_for, Group, View, CORRECTION_KINDS, LANDED};
 use crate::{Error, Filter, Result, Store, Tip};
 use chrono::{Duration, NaiveDate};
-use engine::{Grade, Signal, Signals, Steer, Tier, MIN_BRIEFS};
+use engine::{Grade, Signal, Signals, Steer, Tier, MIN_PROMPTS};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-/// Briefs (or, for a steering goal, continued tasks) a week needs before it counts: for a chart
+/// Prompts (or, for a steering goal, continued tasks) a week needs before it counts: for a chart
 /// point, a goal week or a personal best. Fewer and one task swings it to 0% or 100%.
 pub const MIN_WEEK: i64 = 5;
 /// Weeks a habit or steering goal has to be met to be done.
@@ -23,7 +23,7 @@ const GOAL_STEP: i64 = 15;
 const GOAL_CAP: i64 = 80;
 /// The highest ceiling a steering goal can have (more is no goal at all).
 const STEER_CAP: i64 = 50;
-/// "N more briefs" past this many (or past this week's count, if bigger) isn't reachable in a
+/// "N more prompts" past this many (or past this week's count, if bigger) isn't reachable in a
 /// week; it isn't shown.
 const NEED_MAX: i64 = 50;
 /// "What works for you" compares models only when each has this many continued tasks...
@@ -46,9 +46,9 @@ pub struct HistoryWeek {
     pub week: NaiveDate,
     /// Messages sent.
     pub messages: i64,
-    /// Times you caught it.
-    pub catches: i64,
-    /// Times it caught you.
+    /// Times you corrected it.
+    pub corrections: i64,
+    /// Times it corrected you.
     pub humbled: i64,
     /// Tasks started.
     pub tasks: i64,
@@ -56,9 +56,9 @@ pub struct HistoryWeek {
     pub continued: i64,
     /// Continued tasks nothing on you steered.
     pub landed: i64,
-    /// Briefs carrying each signal, by signal id.
+    /// Prompts carrying each signal, by signal id.
     pub signals: BTreeMap<String, i64>,
-    /// Briefs per grade id.
+    /// Prompts per grade id.
     pub grades: BTreeMap<String, i64>,
     /// Steering messages per cause id.
     pub steering: BTreeMap<String, i64>,
@@ -70,7 +70,7 @@ pub struct HistoryWeek {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum GoalKind {
-    /// At least `target`% of a week's briefs carry `signal`.
+    /// At least `target`% of a week's prompts carry `signal`.
     Habit {
         /// The signal.
         signal: Signal,
@@ -151,7 +151,7 @@ impl WeekState {
 pub struct GoalWeek {
     /// The week's Monday.
     pub week: NaiveDate,
-    /// Briefs (habit) or continued tasks (steering) counted.
+    /// Prompts (habit) or continued tasks (steering) counted.
     pub count: i64,
     /// Percent of them that carried the signal (habit) or got that steering (steering).
     pub value: i64,
@@ -174,7 +174,7 @@ pub struct GoalStatus {
     pub needed: i64,
     /// Finished: met enough weeks, or the tier was reached.
     pub done: bool,
-    /// Habit goals: more briefs carrying the signal this week would reach the target (none when
+    /// Habit goals: more prompts carrying the signal this week would reach the target (none when
     /// that's out of reach this week).
     pub need: Option<i64>,
     /// Tier goals: the overall score now.
@@ -206,7 +206,7 @@ pub struct Trophy {
 pub struct Bests {
     /// Best landed percent over any 4 weeks with enough tasks, and the last Monday of them.
     pub landed: Option<(i64, NaiveDate)>,
-    /// Best share of sharp briefs in a week with enough of them.
+    /// Best share of sharp prompts in a week with enough of them.
     pub sharp: Option<(i64, NaiveDate)>,
     /// Longest run of goal weeks met.
     pub goal_streak: i64,
@@ -226,7 +226,7 @@ pub struct ModelLanded {
 /// What your own history says works, each only when there's enough of it.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct Insights {
-    /// Signals whose briefs landed clearly more often than briefs without them.
+    /// Signals whose prompts landed clearly more often than prompts without them.
     pub signals: Vec<Tip>,
     /// The kind of steering that was on you most often, and its share of that steering.
     pub steer: Option<(Steer, i64)>,
@@ -302,15 +302,15 @@ fn history(v: &View, today: NaiveDate) -> Result<Vec<HistoryWeek>> {
         "SELECT day, SUM(CASE WHEN kind = 'message' THEN n ELSE 0 END), SUM(CASE WHEN kind IN {} THEN n ELSE 0 END),
             SUM(CASE WHEN kind = 'humbled' THEN n ELSE 0 END)
          FROM daily WHERE 1=1 {} GROUP BY day",
-        *CATCH_KINDS, v.clause
+        *CORRECTION_KINDS, v.clause
     );
     let days: Vec<(String, i64, i64, i64)> = v.rows(&sql, &[], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
-    for (day, messages, catches, humbled) in days {
+    for (day, messages, corrections, humbled) in days {
         let Ok(d) = day.parse::<NaiveDate>() else { continue };
         let w =
             weeks.entry(monday_of(d)).or_insert_with(|| HistoryWeek { week: monday_of(d), ..HistoryWeek::default() });
         w.messages += messages;
-        w.catches += catches;
+        w.corrections += corrections;
         w.humbled += humbled;
     }
     let this_week = monday_of(today);
@@ -375,10 +375,10 @@ fn week_state(goal: &Goal, count: i64, value: i64, closed: bool) -> WeekState {
     }
 }
 
-/// More briefs carrying the signal this week that would reach a habit target (and the week's
+/// More prompts carrying the signal this week that would reach a habit target (and the week's
 /// minimum): the smallest `x` with `(k + x) / (n + x) >= target` and `n + x >= MIN_WEEK`, or
 /// `None` past [`NEED_MAX`].
-fn briefs_needed(target: i64, n: i64, k: i64) -> Option<i64> {
+fn prompts_needed(target: i64, n: i64, k: i64) -> Option<i64> {
     let gap = target * n - 100 * k;
     let for_target = if gap <= 0 { 0 } else { (gap + (100 - target) - 1) / (100 - target).max(1) };
     let x = for_target.max(MIN_WEEK - n).max(0);
@@ -423,7 +423,7 @@ fn longest_streak(states: impl IntoIterator<Item = WeekState>) -> i64 {
     best
 }
 
-/// The last [`BASELINE_WEEKS`] weeks' share of briefs carrying each signal, and of continued
+/// The last [`BASELINE_WEEKS`] weeks' share of prompts carrying each signal, and of continued
 /// tasks steered each way.
 struct Baseline {
     tasks: i64,
@@ -463,7 +463,7 @@ fn options(weeks: &[HistoryWeek], today: NaiveDate, tier: Option<Tier>) -> Vec<G
     habits.chain(steers).chain(tiers).collect()
 }
 
-/// A goal to try: the habit your briefs carry least (if any has room to grow), else the steering
+/// A goal to try: the habit your prompts carry least (if any has room to grow), else the steering
 /// that's on you most, else the next tier, else saying what done is.
 fn suggest(weeks: &[HistoryWeek], today: NaiveDate, tier: Option<Tier>) -> Goal {
     let b = baseline(weeks);
@@ -492,7 +492,7 @@ fn bests(weeks: &[HistoryWeek]) -> (Best, Best) {
         .windows(4)
         .filter_map(|ws| {
             let (c, l): (i64, i64) = ws.iter().fold((0, 0), |(c, l), w| (c + w.continued, l + w.landed));
-            (c >= MIN_BRIEFS).then(|| (floor_pct(l, c), ws[3].week))
+            (c >= MIN_PROMPTS).then(|| (floor_pct(l, c), ws[3].week))
         })
         // Ties: the most recent, so beating your best by matching it today still shows today.
         .max_by_key(|(p, d)| (*p, *d));
@@ -637,7 +637,7 @@ impl Store {
                 let empty = HistoryWeek::default();
                 let lw = live.get(&last.week).unwrap_or(&empty);
                 status.need =
-                    briefs_needed(goal.target, lw.tasks, lw.signals.get(signal.as_str()).copied().unwrap_or(0));
+                    prompts_needed(goal.target, lw.tasks, lw.signals.get(signal.as_str()).copied().unwrap_or(0));
             }
         }
         Ok(status)
@@ -761,7 +761,7 @@ mod tests {
         s.parse().unwrap()
     }
 
-    /// One task: its day, the signals its brief carried, messages, and "also…" steering.
+    /// One task: its day, the signals its prompt carried, messages, and "also…" steering.
     fn task(s: &Store, day: &str, signals: u8, messages: i64, added: i64) {
         s.conn()
             .execute(
@@ -807,7 +807,7 @@ mod tests {
         let g = habit(&s, 50, "2026-10-06");
         tasks(&s, "2026-10-07", 3, DONE, 1, 0);
         tasks(&s, "2026-10-08", 2, 0, 1, 0); // week of Oct 5: 3 of 5 = 60%, met
-        tasks(&s, "2026-10-13", 2, DONE, 1, 0); // week of Oct 12: only 2 briefs, paused
+        tasks(&s, "2026-10-13", 2, DONE, 1, 0); // week of Oct 12: only 2 prompts, paused
         tasks(&s, "2026-10-20", 1, DONE, 1, 0);
         tasks(&s, "2026-10-21", 5, 0, 1, 0); // week of Oct 19: 1 of 6, missed
         tasks(&s, "2026-10-26", 1, DONE, 1, 0); // this week, open
@@ -816,7 +816,7 @@ mod tests {
         assert_eq!(states, [WeekState::Met, WeekState::Paused, WeekState::Missed, WeekState::Open]);
         assert_eq!((st.weeks[0].count, st.weeks[0].value), (5, 60));
         assert_eq!((st.met, st.streak, st.done), (1, 0, false));
-        // This week: 1 of 1 so far, so 4 more briefs with it reach both 50% and the minimum.
+        // This week: 1 of 1 so far, so 4 more prompts with it reach both 50% and the minimum.
         assert_eq!(st.need, Some(4));
     }
 
@@ -905,16 +905,16 @@ mod tests {
     }
 
     #[test]
-    fn briefs_needed_reaches_the_target_and_the_minimum() {
-        assert_eq!(briefs_needed(50, 0, 0), Some(MIN_WEEK));
-        assert_eq!(briefs_needed(50, 10, 5), Some(0));
-        assert_eq!(briefs_needed(50, 10, 3), Some(4)); // 7 of 14
-        assert_eq!(briefs_needed(80, 6, 0), Some(24)); // 24 of 30
-        assert_eq!(briefs_needed(95, 100, 0), None, "1,900 more isn't happening this week");
-        assert_eq!(briefs_needed(60, 200, 100), Some(50), "a big week can need more than 50");
-        assert_eq!(briefs_needed(60, 200, 0), None);
+    fn prompts_needed_reaches_the_target_and_the_minimum() {
+        assert_eq!(prompts_needed(50, 0, 0), Some(MIN_WEEK));
+        assert_eq!(prompts_needed(50, 10, 5), Some(0));
+        assert_eq!(prompts_needed(50, 10, 3), Some(4)); // 7 of 14
+        assert_eq!(prompts_needed(80, 6, 0), Some(24)); // 24 of 30
+        assert_eq!(prompts_needed(95, 100, 0), None, "1,900 more isn't happening this week");
+        assert_eq!(prompts_needed(60, 200, 100), Some(50), "a big week can need more than 50");
+        assert_eq!(prompts_needed(60, 200, 0), None);
         for (target, n, k) in [(35, 7, 2), (80, 13, 9), (5, 1, 0)] {
-            let x = briefs_needed(target, n, k).unwrap();
+            let x = prompts_needed(target, n, k).unwrap();
             assert!(n + x >= MIN_WEEK && 100 * (k + x) >= target * (n + x), "{target} {n} {k}");
             assert!(
                 x == 0 || n + x - 1 < MIN_WEEK || 100 * (k + x - 1) < target * (n + x - 1),
@@ -933,7 +933,7 @@ mod tests {
             signals: signals.iter().map(|(k, v)| ((*k).to_string(), *v)).collect(),
             ..HistoryWeek::default()
         };
-        // "why" in 2 of 10 briefs (20%): aim for 35%.
+        // "why" in 2 of 10 prompts (20%): aim for 35%.
         let g = suggest(&[week(&[("spot", 9), ("proof", 9), ("done", 9), ("limits", 9), ("why", 2)], 10)], today, None);
         assert_eq!((g.kind, g.target), (GoalKind::Habit { signal: Signal::Why }, 35));
         assert!(g.validate().is_ok());
@@ -971,7 +971,7 @@ mod tests {
     #[test]
     fn a_tier_you_already_have_isnt_a_goal() {
         let s = Store::open_in_memory().unwrap();
-        // 10 landed tasks today and 3 catches: score 100.
+        // 10 landed tasks today and 3 corrections: score 100.
         tasks(&s, "2026-10-28", 10, 0, 2, 0);
         s.conn()
             .execute(

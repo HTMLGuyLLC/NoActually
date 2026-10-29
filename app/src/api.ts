@@ -17,15 +17,15 @@ export type Retention = { level: Level; full_days: number; snippet_days: number 
 /** Static app data from Rust: the one place tiers, category titles and source names are defined. */
 export type Tier = { id: string; name: string; floor: number };
 /** A prompt tier: `floor` is the percent of the week's tasks that must land. */
-export type BriefTier = Tier & { verdict: string };
+export type PromptTier = Tier & { verdict: string };
 export type Titled = { id: string; title: string };
 export type Meta = {
   /** Overall tiers, ascending by floor (an overall score, 0 to 100). */
   tiers: Tier[];
   /** Percent of the overall score from landed tasks; the rest is who corrects whom. */
   direction_weight: number;
-  /** Catches in the window that fully show you check its work. */
-  catch_proof: number;
+  /** Corrections in the window that fully show you check its work. */
+  correction_proof: number;
   /** Judgment points lost per 1% of tasks the AI had to correct you on. */
   humbled_cost: number;
   /** Fewest tasks corrections are counted against (so a thin month isn't wiped out). */
@@ -33,22 +33,22 @@ export type Meta = {
   categories: Titled[];
   sources: { id: string; name: string }[];
   /** Ascending by floor. */
-  brief_tiers: BriefTier[];
+  prompt_tiers: PromptTier[];
   /** "Do you correct its mistakes?" tiers, by judgment, ascending. */
-  catch_tiers: BriefTier[];
+  correction_tiers: PromptTier[];
   /** Tasks with a follow-up, in the window, before a prompt tier is given. */
-  min_briefs: number;
+  min_prompts: number;
   /** Days of tasks a prompt tier looks at. */
-  brief_window_days: number;
-  /** What a brief can carry, in display order. */
+  prompt_window_days: number;
+  /** What a prompt can carry, in display order. */
   signals: (Titled & { hint: string })[];
-  /** Signals a brief needs to be sharp. */
+  /** Signals a prompt needs to be sharp. */
   sharp_signals: number;
   /** Lowest first. */
   grades: Titled[];
   /** Why a task was steered, in display order. */
   steers: Titled[];
-  /** Briefs a week needs before it counts toward a chart point, goal or best. */
+  /** Prompts a week needs before it counts toward a chart point, goal or best. */
   min_week: number;
   /** Weeks a habit or steering goal must be met. */
   goal_weeks: number;
@@ -60,7 +60,7 @@ export type ModelRow = {
   family: string;
   version: string;
   messages: number;
-  catches: number;
+  corrections: number;
   humbled: number;
   /** Tasks given to it, the ones that continued, and of those the ones that landed. */
   tasks: number;
@@ -80,21 +80,21 @@ export type HallEntry = {
   ai: string | null;
   pinned: boolean;
 };
-export type WeekRow = { week: string; messages: number; catches: number };
+export type WeekRow = { week: string; messages: number; corrections: number };
 /** The signal your prompts carry least; the with/without rates only when your history backs them. */
-export type Tip = { signal: string; pct_of_briefs: number; landed_with_without: [number, number] | null };
+export type Tip = { signal: string; pct_of_prompts: number; landed_with_without: [number, number] | null };
 /**
  * How you prompt it. A task "landed" when you never had to add to, clarify or redo it. Only tasks
  * with a follow-up (`continued`) count toward landing: a one-shot task can't need steering.
  */
-export type Briefs = {
+export type Prompts = {
   tasks: number;
   continued: number;
   landed: number;
-  /** Continued tasks in the last `Meta.brief_window_days` days, and how many of them landed. */
+  /** Continued tasks in the last `Meta.prompt_window_days` days, and how many of them landed. */
   window_tasks: number;
   window_landed: number;
-  /** A prompt tier id from `Meta.brief_tiers`, or null until there are enough tasks. */
+  /** A prompt tier id from `Meta.prompt_tiers`, or null until there are enough tasks. */
   tier: string | null;
   /** The tier above it; its floor is the target to show. */
   next_tier: string | null;
@@ -102,14 +102,14 @@ export type Briefs = {
   to_rank: number;
   /** Keyed by grade id. */
   grades: Record<string, number>;
-  /** Briefs carrying each signal, keyed by signal id. */
+  /** Prompts carrying each signal, keyed by signal id. */
   signals: Record<string, number>;
   /** Steering messages, keyed by steer id. */
   steering: Record<string, number>;
   tip: Tip | null;
 };
 /**
- * "Could AI replace you?": an overall score over the last `Meta.brief_window_days` days, mixing how
+ * "Could AI replace you?": an overall score over the last `Meta.prompt_window_days` days, mixing how
  * often your tasks land (`direction`) with who corrects whom (`judgment`). Score fields are null
  * until there are enough tasks with a follow-up.
  */
@@ -121,11 +121,11 @@ export type Overall = {
   tier: string | null;
   next_tier: string | null;
   verdict: Verdict;
-  /** A correction tier id from `Meta.catch_tiers`, from judgment. */
-  catch_tier: string | null;
-  next_catch_tier: string | null;
-  /** Catches and times it corrected you, in the window. */
-  catches: number;
+  /** A correction tier id from `Meta.correction_tiers`, from judgment. */
+  correction_tier: string | null;
+  next_correction_tier: string | null;
+  /** Corrections and times it corrected you, in the window. */
+  corrections: number;
   humbled: number;
   to_rank: number;
 };
@@ -133,14 +133,14 @@ export type Stats = {
   first_day: string | null;
   last_day: string | null;
   messages: number;
-  catches: number;
+  corrections: number;
   humbled: number;
   labels: Record<string, number>;
-  catches_last_7d: number;
+  corrections_last_7d: number;
   overall: Overall;
-  messages_per_catch: number | null;
+  messages_per_correction: number | null;
   real_chats: number;
-  pct_real_chats_with_catch: number | null;
+  pct_real_chats_with_correction: number | null;
   best_streak_days: number;
   current_streak_days: number;
   peak_hour: number | null;
@@ -149,18 +149,18 @@ export type Stats = {
   weekly: WeekRow[];
   models: ModelRow[];
   hall_of_fame: HallEntry[];
-  briefs: Briefs;
+  prompts: Prompts;
 };
 /** One week of history (the week's Monday, local time). */
 export type HistoryWeek = {
   week: string;
   messages: number;
-  catches: number;
+  corrections: number;
   humbled: number;
   tasks: number;
   continued: number;
   landed: number;
-  /** Briefs carrying each signal; briefs per grade; steering messages and steered tasks per cause. */
+  /** Prompts carrying each signal; prompts per grade; steering messages and steered tasks per cause. */
   signals: Record<string, number>;
   grades: Record<string, number>;
   steering: Record<string, number>;
@@ -179,7 +179,7 @@ export type GoalStatus = {
   /** Weeks it takes (0 for a tier goal). */
   needed: number;
   done: boolean;
-  /** Habit goals: more briefs carrying the signal this week would reach the target (null when out of reach this week). */
+  /** Habit goals: more prompts carrying the signal this week would reach the target (null when out of reach this week). */
   need: number | null;
   /** Tier goals: the overall score now. */
   score: number | null;
@@ -200,8 +200,8 @@ export type Progress = {
     models: { family: string; landed: number; continued: number }[];
   };
 };
-/** A draft brief, graded like your history. `signals` is a bit mask, in `Meta.signals` order. */
-export type Check = { signals: number; grade: string; rules: string[]; not_a_brief: boolean };
+/** A draft prompt, graded like your history. `signals` is a bit mask, in `Meta.signals` order. */
+export type Check = { signals: number; grade: string; rules: string[]; not_a_prompt: boolean };
 export type SourceState = {
   id: string;
   allowed: boolean;
@@ -251,7 +251,7 @@ export type Commands = {
   progress: { args: { filter: Filter }; result: Progress };
   set_goal: { args: { kind: GoalKind; target: number }; result: Goal };
   clear_goal: { args: undefined; result: null };
-  check_brief: { args: { text: string }; result: Check };
+  check_prompt: { args: { text: string }; result: Check };
   learned: { args: undefined; result: string[] };
   set_learned: { args: { id: string; done: boolean }; result: string[] };
   get_menu_bar: { args: undefined; result: boolean };
@@ -293,7 +293,7 @@ export const api = {
   progress: (filter: Filter) => call("progress", { filter }),
   setGoal: (kind: GoalKind, target: number) => call("set_goal", { kind, target }),
   clearGoal: () => call("clear_goal", undefined),
-  checkBrief: (text: string) => call("check_brief", { text }),
+  checkPrompt: (text: string) => call("check_prompt", { text }),
   learned: () => call("learned", undefined),
   setLearned: (id: string, done: boolean) => call("set_learned", { id, done }),
   getMenuBar: () => call("get_menu_bar", undefined),

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { briefTier, briefTierRanges, categoryTitle, landedPct, percent, signalTitle, sourceName, steerTitle, tierName, tierOf, tierRanges } from "./meta";
+import { categoryTitle, landedPct, percent, promptTier, promptTierRanges, signalTitle, sourceName, steerTitle, tierName, tierOf, tierRanges } from "./meta";
 import { meta } from "./test/fixtures";
 
-describe("briefTierRanges", () => {
+describe("promptTierRanges", () => {
   it("shows percent ranges, top tier first", () => {
-    expect(briefTierRanges(meta).map((t) => [t.name, t.range])).toEqual([
+    expect(promptTierRanges(meta).map((t) => [t.name, t.range])).toEqual([
       ["Architect", "90%+ landed"],
       ["Tech lead", "80–89%"],
       ["Ticket writer", "70–79%"],
@@ -45,8 +45,8 @@ describe("lookups", () => {
     expect(tierName(meta, "sharp_eyed")).toBe("Sharp-eyed");
     expect(categoryTitle(meta, "just_wrong")).toBe("Flat-out wrong");
     expect(sourceName(meta, "claude-code")).toBe("Claude Code");
-    expect(briefTier(meta, "tech_lead")?.verdict).toBe("Sometimes.");
-    expect(briefTier(meta, null)).toBeUndefined();
+    expect(promptTier(meta, "tech_lead")?.verdict).toBe("Sometimes.");
+    expect(promptTier(meta, null)).toBeUndefined();
     expect(steerTitle(meta, "redo")).toBe("You started over");
     expect(steerTitle(meta, "unknown")).toBe("unknown");
   });

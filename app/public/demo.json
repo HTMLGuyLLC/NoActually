@@ -70,7 +70,7 @@
     "name": "Claude.ai (export)"
    }
   ],
-  "brief_tiers": [
+  "prompt_tiers": [
    {
     "id": "vibes_only",
     "name": "Vibes only",
@@ -96,8 +96,8 @@
     "verdict": "Rarely."
    }
   ],
-  "min_briefs": 10,
-  "brief_window_days": 28,
+  "min_prompts": 10,
+  "prompt_window_days": 28,
   "signals": [
    {
     "id": "spot",
@@ -159,12 +159,12 @@
    }
   ],
   "direction_weight": 70,
-  "catch_proof": 3,
+  "correction_proof": 3,
   "min_week": 5,
   "goal_weeks": 4,
   "humbled_cost": 5,
   "humbled_base": 30,
-  "catch_tiers": [
+  "correction_tiers": [
    {
     "id": "autopilot",
     "name": "Autopilot",
@@ -195,7 +195,7 @@
   "first_day": "2026-04-01",
   "last_day": "2026-10-27",
   "messages": 8282,
-  "catches": 177,
+  "corrections": 177,
   "humbled": 3,
   "labels": {
    "admitted": 146,
@@ -203,10 +203,10 @@
    "confirmed": 8,
    "humbled": 3
   },
-  "catches_last_7d": 17,
-  "messages_per_catch": 47,
+  "corrections_last_7d": 17,
+  "messages_per_correction": 47,
   "real_chats": 152,
-  "pct_real_chats_with_catch": 37.5,
+  "pct_real_chats_with_correction": 37.5,
   "best_streak_days": 14,
   "current_streak_days": 3,
   "peak_hour": 21,
@@ -222,112 +222,112 @@
    {
     "week": "2026-03-30",
     "messages": 4,
-    "catches": 0
+    "corrections": 0
    },
    {
     "week": "2026-06-01",
     "messages": 1,
-    "catches": 0
+    "corrections": 0
    },
    {
     "week": "2026-06-08",
     "messages": 1,
-    "catches": 0
+    "corrections": 0
    },
    {
     "week": "2026-06-22",
     "messages": 86,
-    "catches": 7
+    "corrections": 7
    },
    {
     "week": "2026-06-29",
     "messages": 38,
-    "catches": 0
+    "corrections": 0
    },
    {
     "week": "2026-07-06",
     "messages": 29,
-    "catches": 0
+    "corrections": 0
    },
    {
     "week": "2026-07-13",
     "messages": 84,
-    "catches": 7
+    "corrections": 7
    },
    {
     "week": "2026-07-20",
     "messages": 303,
-    "catches": 5
+    "corrections": 5
    },
    {
     "week": "2026-07-27",
     "messages": 748,
-    "catches": 19
+    "corrections": 19
    },
    {
     "week": "2026-08-03",
     "messages": 279,
-    "catches": 10
+    "corrections": 10
    },
    {
     "week": "2026-08-10",
     "messages": 636,
-    "catches": 16
+    "corrections": 16
    },
    {
     "week": "2026-08-17",
     "messages": 178,
-    "catches": 12
+    "corrections": 12
    },
    {
     "week": "2026-08-24",
     "messages": 189,
-    "catches": 6
+    "corrections": 6
    },
    {
     "week": "2026-08-31",
     "messages": 245,
-    "catches": 1
+    "corrections": 1
    },
    {
     "week": "2026-09-07",
     "messages": 405,
-    "catches": 8
+    "corrections": 8
    },
    {
     "week": "2026-09-14",
     "messages": 782,
-    "catches": 24
+    "corrections": 24
    },
    {
     "week": "2026-09-21",
     "messages": 2014,
-    "catches": 19
+    "corrections": 19
    },
    {
     "week": "2026-09-28",
     "messages": 681,
-    "catches": 15
+    "corrections": 15
    },
    {
     "week": "2026-10-05",
     "messages": 351,
-    "catches": 5
+    "corrections": 5
    },
    {
     "week": "2026-10-12",
     "messages": 742,
-    "catches": 6
+    "corrections": 6
    },
    {
     "week": "2026-10-19",
     "messages": 262,
-    "catches": 9
+    "corrections": 9
    },
    {
     "week": "2026-10-26",
     "messages": 224,
-    "catches": 8
+    "corrections": 8
    }
   ],
   "models": [
@@ -336,7 +336,7 @@
     "family": "Claude Opus",
     "version": "5",
     "messages": 2214,
-    "catches": 62,
+    "corrections": 62,
     "humbled": 1,
     "tasks": 57,
     "continued": 37,
@@ -347,7 +347,7 @@
     "family": "Claude Opus",
     "version": "5.5",
     "messages": 3279,
-    "catches": 39,
+    "corrections": 39,
     "humbled": 1,
     "tasks": 85,
     "continued": 55,
@@ -358,7 +358,7 @@
     "family": "GPT Astra",
     "version": "6",
     "messages": 1353,
-    "catches": 34,
+    "corrections": 34,
     "humbled": 0,
     "tasks": 35,
     "continued": 23,
@@ -369,7 +369,7 @@
     "family": "Claude Opus",
     "version": "4.8",
     "messages": 362,
-    "catches": 17,
+    "corrections": 17,
     "humbled": 0,
     "tasks": 9,
     "continued": 6,
@@ -380,7 +380,7 @@
     "family": "Claude Fable",
     "version": "5",
     "messages": 431,
-    "catches": 11,
+    "corrections": 11,
     "humbled": 0,
     "tasks": 11,
     "continued": 7,
@@ -391,7 +391,7 @@
     "family": "GPT Terra",
     "version": "5.6",
     "messages": 75,
-    "catches": 8,
+    "corrections": 8,
     "humbled": 0,
     "tasks": 2,
     "continued": 1,
@@ -402,7 +402,7 @@
     "family": "Claude Sonnet",
     "version": "5",
     "messages": 157,
-    "catches": 3,
+    "corrections": 3,
     "humbled": 1,
     "tasks": 4,
     "continued": 3,
@@ -413,7 +413,7 @@
     "family": "Claude Fable",
     "version": "5.1",
     "messages": 293,
-    "catches": 1,
+    "corrections": 1,
     "humbled": 0,
     "tasks": 8,
     "continued": 5,
@@ -424,7 +424,7 @@
     "family": "GPT Sol",
     "version": "6.1",
     "messages": 48,
-    "catches": 1,
+    "corrections": 1,
     "humbled": 0,
     "tasks": 1,
     "continued": 1,
@@ -435,7 +435,7 @@
     "family": "GPT Luna",
     "version": "6",
     "messages": 35,
-    "catches": 1,
+    "corrections": 1,
     "humbled": 0,
     "tasks": 1,
     "continued": 1,
@@ -446,7 +446,7 @@
     "family": "No model recorded",
     "version": "",
     "messages": 18,
-    "catches": 0,
+    "corrections": 0,
     "humbled": 0,
     "tasks": 0,
     "continued": 0,
@@ -457,7 +457,7 @@
     "family": "GPT Luna",
     "version": "5.6",
     "messages": 7,
-    "catches": 0,
+    "corrections": 0,
     "humbled": 0,
     "tasks": 0,
     "continued": 0,
@@ -468,7 +468,7 @@
     "family": "Claude Opus",
     "version": "4.6",
     "messages": 5,
-    "catches": 0,
+    "corrections": 0,
     "humbled": 0,
     "tasks": 0,
     "continued": 0,
@@ -479,7 +479,7 @@
     "family": "Claude Sonnet",
     "version": "5.5",
     "messages": 5,
-    "catches": 0,
+    "corrections": 0,
     "humbled": 0,
     "tasks": 0,
     "continued": 0,
@@ -579,7 +579,7 @@
     "pinned": false
    }
   ],
-  "briefs": {
+  "prompts": {
    "tasks": 214,
    "continued": 140,
    "landed": 120,
@@ -608,7 +608,7 @@
    },
    "tip": {
     "signal": "limits",
-    "pct_of_briefs": 14.0,
+    "pct_of_prompts": 14.0,
     "landed_with_without": [
      96.7,
      82.7
@@ -622,9 +622,9 @@
    "tier": "sharp_eyed",
    "next_tier": "irreplaceable",
    "verdict": "no",
-   "catch_tier": "reviewer",
-   "next_catch_tier": "hawk_eyed",
-   "catches": 52,
+   "correction_tier": "reviewer",
+   "next_correction_tier": "hawk_eyed",
+   "corrections": 52,
    "humbled": 1,
    "to_rank": 0
   }
@@ -634,7 +634,7 @@
    {
     "week": "2026-05-04",
     "messages": 99,
-    "catches": 12,
+    "corrections": 12,
     "humbled": 1,
     "tasks": 11,
     "continued": 7,
@@ -667,7 +667,7 @@
    {
     "week": "2026-05-11",
     "messages": 81,
-    "catches": 4,
+    "corrections": 4,
     "humbled": 0,
     "tasks": 9,
     "continued": 6,
@@ -700,7 +700,7 @@
    {
     "week": "2026-05-18",
     "messages": 72,
-    "catches": 7,
+    "corrections": 7,
     "humbled": 0,
     "tasks": 8,
     "continued": 5,
@@ -733,7 +733,7 @@
    {
     "week": "2026-05-25",
     "messages": 108,
-    "catches": 8,
+    "corrections": 8,
     "humbled": 0,
     "tasks": 12,
     "continued": 8,
@@ -766,7 +766,7 @@
    {
     "week": "2026-06-01",
     "messages": 99,
-    "catches": 12,
+    "corrections": 12,
     "humbled": 0,
     "tasks": 11,
     "continued": 7,
@@ -799,7 +799,7 @@
    {
     "week": "2026-06-08",
     "messages": 126,
-    "catches": 11,
+    "corrections": 11,
     "humbled": 1,
     "tasks": 14,
     "continued": 9,
@@ -832,7 +832,7 @@
    {
     "week": "2026-06-15",
     "messages": 90,
-    "catches": 4,
+    "corrections": 4,
     "humbled": 0,
     "tasks": 10,
     "continued": 6,
@@ -865,7 +865,7 @@
    {
     "week": "2026-06-22",
     "messages": 81,
-    "catches": 10,
+    "corrections": 10,
     "humbled": 0,
     "tasks": 9,
     "continued": 6,
@@ -898,7 +898,7 @@
    {
     "week": "2026-06-29",
     "messages": 99,
-    "catches": 6,
+    "corrections": 6,
     "humbled": 0,
     "tasks": 11,
     "continued": 7,
@@ -931,7 +931,7 @@
    {
     "week": "2026-07-06",
     "messages": 72,
-    "catches": 12,
+    "corrections": 12,
     "humbled": 0,
     "tasks": 8,
     "continued": 5,
@@ -964,7 +964,7 @@
    {
     "week": "2026-07-13",
     "messages": 126,
-    "catches": 10,
+    "corrections": 10,
     "humbled": 1,
     "tasks": 14,
     "continued": 9,
@@ -997,7 +997,7 @@
    {
     "week": "2026-07-20",
     "messages": 54,
-    "catches": 7,
+    "corrections": 7,
     "humbled": 0,
     "tasks": 6,
     "continued": 4,
@@ -1030,7 +1030,7 @@
    {
     "week": "2026-07-27",
     "messages": 117,
-    "catches": 5,
+    "corrections": 5,
     "humbled": 1,
     "tasks": 13,
     "continued": 8,
@@ -1063,7 +1063,7 @@
    {
     "week": "2026-08-03",
     "messages": 81,
-    "catches": 5,
+    "corrections": 5,
     "humbled": 0,
     "tasks": 9,
     "continued": 6,
@@ -1096,7 +1096,7 @@
    {
     "week": "2026-08-10",
     "messages": 126,
-    "catches": 10,
+    "corrections": 10,
     "humbled": 0,
     "tasks": 14,
     "continued": 9,
@@ -1129,7 +1129,7 @@
    {
     "week": "2026-08-17",
     "messages": 90,
-    "catches": 9,
+    "corrections": 9,
     "humbled": 0,
     "tasks": 10,
     "continued": 6,
@@ -1162,7 +1162,7 @@
    {
     "week": "2026-08-24",
     "messages": 54,
-    "catches": 10,
+    "corrections": 10,
     "humbled": 0,
     "tasks": 6,
     "continued": 4,
@@ -1195,7 +1195,7 @@
    {
     "week": "2026-08-31",
     "messages": 108,
-    "catches": 6,
+    "corrections": 6,
     "humbled": 1,
     "tasks": 12,
     "continued": 8,
@@ -1228,7 +1228,7 @@
    {
     "week": "2026-09-07",
     "messages": 117,
-    "catches": 4,
+    "corrections": 4,
     "humbled": 0,
     "tasks": 13,
     "continued": 8,
@@ -1261,7 +1261,7 @@
    {
     "week": "2026-09-14",
     "messages": 81,
-    "catches": 8,
+    "corrections": 8,
     "humbled": 0,
     "tasks": 9,
     "continued": 6,
@@ -1294,7 +1294,7 @@
    {
     "week": "2026-09-21",
     "messages": 99,
-    "catches": 12,
+    "corrections": 12,
     "humbled": 0,
     "tasks": 11,
     "continued": 7,
@@ -1327,7 +1327,7 @@
    {
     "week": "2026-09-28",
     "messages": 72,
-    "catches": 12,
+    "corrections": 12,
     "humbled": 0,
     "tasks": 8,
     "continued": 5,
@@ -1360,7 +1360,7 @@
    {
     "week": "2026-10-05",
     "messages": 54,
-    "catches": 11,
+    "corrections": 11,
     "humbled": 0,
     "tasks": 6,
     "continued": 4,
@@ -1393,7 +1393,7 @@
    {
     "week": "2026-10-12",
     "messages": 117,
-    "catches": 11,
+    "corrections": 11,
     "humbled": 1,
     "tasks": 13,
     "continued": 8,
@@ -1426,7 +1426,7 @@
    {
     "week": "2026-10-19",
     "messages": 90,
-    "catches": 8,
+    "corrections": 8,
     "humbled": 0,
     "tasks": 10,
     "continued": 6,
@@ -1459,7 +1459,7 @@
    {
     "week": "2026-10-26",
     "messages": 27,
-    "catches": 2,
+    "corrections": 2,
     "humbled": 0,
     "tasks": 3,
     "continued": 2,
@@ -1630,7 +1630,7 @@
    "signals": [
     {
      "signal": "done",
-     "pct_of_briefs": 31.5,
+     "pct_of_prompts": 31.5,
      "landed_with_without": [
       93.1,
       79.4

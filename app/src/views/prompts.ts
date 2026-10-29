@@ -1,41 +1,41 @@
 // "Do you make it guess?": how specific your prompts are and what it took to land them.
-import type { Briefs, Meta } from "../api";
+import type { Meta, Prompts } from "../api";
 import { type Html, html, num } from "../html";
-import { briefTier, briefTierRanges, landedPct, percent, steerTitle } from "../meta";
+import { landedPct, percent, promptTier, promptTierRanges, steerTitle } from "../meta";
 import { ladderView } from "./chrome";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
 
 /** "86% of your tasks in the last 28 days landed…", or how many more it takes to get ranked. */
-function becauseLine(b: Briefs, meta: Meta, when: string): Html {
-  return briefTier(meta, b.tier)
+function becauseLine(b: Prompts, meta: Meta, when: string): Html {
+  return promptTier(meta, b.tier)
     ? html`<b>${landedPct(b)}%</b> of your tasks ${when} landed without more from you.`
     : html`Give it <b>${plural(b.to_rank, "more task")}</b> with a follow-up to get ranked. One-shot tasks can't need steering, so they don't count.`;
 }
 
 /** The verdict word, hand-written, with a screen-reader version. */
-function markView(b: Briefs, meta: Meta, still: boolean): Html {
-  const tier = briefTier(meta, b.tier);
+function markView(b: Prompts, meta: Meta, still: boolean): Html {
+  const tier = promptTier(meta, b.tier);
   return html`<div class="no${tier ? "" : " maybe"}${still ? " still" : ""}" aria-hidden="true">${tier?.verdict ?? "Hmm."}</div>
       <span class="sr-only">${tier ? `${tier.verdict} Your prompt tier is ${tier.name}.` : "Not ranked yet."}</span>`;
 }
 
 /** The overview's half: the verdict, the tier, and a way to the details. */
-export function briefsSummaryView(b: Briefs, meta: Meta, still: boolean, when = "in the last 28 days"): Html {
-  const tier = briefTier(meta, b.tier);
+export function promptsSummaryView(b: Prompts, meta: Meta, still: boolean, when = "in the last 28 days"): Html {
+  const tier = promptTier(meta, b.tier);
   const body = b.tasks
     ? html`<div class="verdict">${markView(b, meta, still)}<div class="because">${becauseLine(b, meta, when)}</div></div>
         <p class="tier-line">${tier ? html`<span class="tier-label"><span>Tier</span>${tier.name}</span>` : ""}<span class="hand-note">${ladderNote(b, meta)}</span></p>`
     : html`<p class="muted">No tasks yet. The first message of each chat is its prompt.</p>`;
-  return html`<article class="card mini briefs">
+  return html`<article class="card mini prompts">
       <div class="eyebrow">How you prompt it</div>
       <h2 class="q">Do you make it guess?</h2>
       ${body}
-      <div class="share"><button class="ghost" data-action="view" data-id="briefs">See prompts</button></div>
+      <div class="share"><button class="ghost" data-action="view" data-id="prompts">See prompts</button></div>
     </article>`;
 }
 
-function verdictView(b: Briefs, meta: Meta, still: boolean, subject: Html | string, when: string): Html {
+function verdictView(b: Prompts, meta: Meta, still: boolean, subject: Html | string, when: string): Html {
   return html`
     <div class="eyebrow">How you prompt it</div>
     <h1 class="q">Do you make ${subject} guess?</h1>
@@ -47,7 +47,7 @@ function verdictView(b: Briefs, meta: Meta, still: boolean, subject: Html | stri
 }
 
 /** One bar split into sharp / solid / thin, with the numbers spelled out beside it. */
-function gradesView(b: Briefs, meta: Meta): Html {
+function gradesView(b: Prompts, meta: Meta): Html {
   const top = [...meta.grades].reverse();
   const parts = top.map((g) => ({ ...g, pct: percent(b.grades[g.id] ?? 0, b.tasks) }));
   const label = parts.map((p) => `${p.pct}% ${p.title.toLowerCase()}`).join(", ");
@@ -59,19 +59,19 @@ function gradesView(b: Briefs, meta: Meta): Html {
 }
 
 /** The next tier's target ("Architect at 90%. You're at 86%."), or how far a ranking is. */
-function ladderNote(b: Briefs, meta: Meta): string {
+function ladderNote(b: Prompts, meta: Meta): string {
   if (!b.tier) return `${plural(b.to_rank, "more task")} to get ranked`;
-  const next = briefTier(meta, b.next_tier);
+  const next = promptTier(meta, b.next_tier);
   return next ? `${next.name} at ${next.floor}%. You're at ${landedPct(b)}%.` : "Top tier. Don't let it slip.";
 }
 
-function briefLadderView(b: Briefs, meta: Meta): Html {
+function promptLadderView(b: Prompts, meta: Meta): Html {
   return html`
-    ${ladderView({ label: "Prompt tiers", tiers: briefTierRanges(meta), on: b.tier, at: b.tier ? `${landedPct(b)}%` : null, unranked: ladderNote(b, meta) })}
-    ${b.tier ? html`<div class="share"><button data-action="share-briefs">Share your prompts</button></div>` : ""}`;
+    ${ladderView({ label: "Prompt tiers", tiers: promptTierRanges(meta), on: b.tier, at: b.tier ? `${landedPct(b)}%` : null, unranked: ladderNote(b, meta) })}
+    ${b.tier ? html`<div class="share"><button data-action="share-prompts">Share your prompts</button></div>` : ""}`;
 }
 
-function signalsView(b: Briefs, meta: Meta): Html {
+function signalsView(b: Prompts, meta: Meta): Html {
   const rows = meta.signals.map((s) => {
     const pct = percent(b.signals[s.id] ?? 0, b.tasks);
     return html`<div class="cat sig"><span>${s.title}<small class="muted">${s.hint}</small></span><span class="bar-bg"><i data-w="${Math.max(pct ? 2 : 0, pct)}"></i></span><span class="n">${pct}%</span></div>`;
@@ -79,17 +79,17 @@ function signalsView(b: Briefs, meta: Meta): Html {
   return html`<div class="cats">${rows}</div>${tipView(b, meta)}`;
 }
 
-function tipView(b: Briefs, meta: Meta): Html | "" {
+function tipView(b: Prompts, meta: Meta): Html | "" {
   const tip = b.tip;
   const s = tip && meta.signals.find((x) => x.id === tip.signal);
   if (!tip || !s) return "";
   const proof = tip.landed_with_without
     ? html` Your prompts that do landed <b>${Math.round(tip.landed_with_without[0])}%</b> of the time, vs ${Math.round(tip.landed_with_without[1])}% without.`
     : "";
-  return html`<p class="tip"><span class="hand">Try this:</span> <b>${s.title.toLowerCase()}</b> (${s.hint}). Only ${Math.round(tip.pct_of_briefs)}% of your prompts do.${proof}</p>`;
+  return html`<p class="tip"><span class="hand">Try this:</span> <b>${s.title.toLowerCase()}</b> (${s.hint}). Only ${Math.round(tip.pct_of_prompts)}% of your prompts do.${proof}</p>`;
 }
 
-function steeringView(b: Briefs, meta: Meta): Html {
+function steeringView(b: Prompts, meta: Meta): Html {
   const counts = meta.steers.map((c) => ({ ...c, n: b.steering[c.id] ?? 0 }));
   const total = counts.reduce((t, c) => t + c.n, 0);
   if (!total) return html`<p class="muted">No steering yet. Every task landed as asked.</p>`;
@@ -102,17 +102,17 @@ function steeringView(b: Briefs, meta: Meta): Html {
   <p class="muted small">${plural(total, "steering message")}. ${num(total - yours)} were its mistakes (blue), which don't count against you; ${num(yours)} could have been in the prompt (red).</p>`;
 }
 
-/** The Briefs section: verdict card, then what briefs carry and where steering went. `subject` is the
+/** The Prompts section: verdict card, then what prompts carry and where steering went. `subject` is the
  * model picker ("it" when there's none). */
-export function briefsView(b: Briefs, meta: Meta, still: boolean, subject: Html | string = "it", when = "in the last 28 days"): Html {
+export function promptsView(b: Prompts, meta: Meta, still: boolean, subject: Html | string = "it", when = "in the last 28 days"): Html {
   if (!b.tasks) {
-    return html`<section class="card briefs"><div><div class="eyebrow">How you prompt it</div><h1 class="q">Do you make ${subject} guess?</h1>
+    return html`<section class="card prompts"><div><div class="eyebrow">How you prompt it</div><h1 class="q">Do you make ${subject} guess?</h1>
       <p class="muted">No tasks yet. The first message of each chat is its prompt, so start a chat and ask for something.</p></div></section>`;
   }
   return html`
-    <section class="card briefs">
+    <section class="card prompts">
       <div>${verdictView(b, meta, still, subject, when)}</div>
-      <div class="meter">${briefLadderView(b, meta)}</div>
+      <div class="meter">${promptLadderView(b, meta)}</div>
     </section>
     <section class="split">
       <div><div class="head"><h2>What your prompts carry</h2></div>${gradesView(b, meta)}${signalsView(b, meta)}</div>

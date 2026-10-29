@@ -3,20 +3,20 @@
 //! all read.
 //!
 //! The score mixes direction (how often your tasks land without you steering them) with judgment
-//! (how rarely the AI has to correct you, once you've shown you check its work). Catches only
-//! have to show that you check: past [`CATCH_PROOF`] in the window, more add nothing, and
-//! judgment never compares catches with corrections, so briefing better and catching fewer
+//! (how rarely the AI has to correct you, once you've shown you check its work). Corrections only
+//! have to show that you check: past [`CORRECTION_PROOF`] in the window, more add nothing, and
+//! judgment never compares your corrections with the AI's, so prompting better and correcting fewer
 //! mistakes never costs you points.
 
-use crate::brief::MIN_BRIEFS;
+use crate::prompt::MIN_PROMPTS;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
 /// Percent of the score that comes from direction (landed tasks); the rest is judgment.
 pub const DIRECTION_WEIGHT: i64 = 70;
-/// Catches in the window that fully show you check its work.
-pub const CATCH_PROOF: i64 = 3;
+/// Corrections in the window that fully show you check its work.
+pub const CORRECTION_PROOF: i64 = 3;
 /// Judgment points lost per 1% of continued tasks the AI had to correct you on (so being
 /// corrected on a fifth of your tasks leaves none).
 pub const HUMBLED_COST: i64 = 5;
@@ -131,11 +131,11 @@ impl Answer {
     }
 }
 
-/// "Do you catch its mistakes?" How judgment reads, in a word (rarely < sometimes < often <
-/// usually; never "always": nobody catches everything). Ordered from lowest to highest.
+/// "Do you correction its mistakes?" How judgment reads, in a word (rarely < sometimes < often <
+/// usually; never "always": nobody corrections everything). Ordered from lowest to highest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum CatchTier {
+pub enum CorrectionTier {
     /// Judgment under 50.
     Autopilot,
     /// 50 to 74.
@@ -146,59 +146,59 @@ pub enum CatchTier {
     HawkEyed,
 }
 
-impl CatchTier {
+impl CorrectionTier {
     /// Every tier, ascending by floor.
-    pub const ALL: [CatchTier; 4] =
-        [CatchTier::Autopilot, CatchTier::SpotChecker, CatchTier::Reviewer, CatchTier::HawkEyed];
+    pub const ALL: [CorrectionTier; 4] =
+        [CorrectionTier::Autopilot, CorrectionTier::SpotChecker, CorrectionTier::Reviewer, CorrectionTier::HawkEyed];
 
     /// The judgment needed to reach this tier.
     pub const fn floor(self) -> i64 {
         match self {
-            CatchTier::Autopilot => 0,
-            CatchTier::SpotChecker => 50,
-            CatchTier::Reviewer => 75,
-            CatchTier::HawkEyed => 90,
+            CorrectionTier::Autopilot => 0,
+            CorrectionTier::SpotChecker => 50,
+            CorrectionTier::Reviewer => 75,
+            CorrectionTier::HawkEyed => 90,
         }
     }
 
     /// Stable id, as serialized (`hawk_eyed`).
     pub const fn id(self) -> &'static str {
         match self {
-            CatchTier::Autopilot => "autopilot",
-            CatchTier::SpotChecker => "spot_checker",
-            CatchTier::Reviewer => "reviewer",
-            CatchTier::HawkEyed => "hawk_eyed",
+            CorrectionTier::Autopilot => "autopilot",
+            CorrectionTier::SpotChecker => "spot_checker",
+            CorrectionTier::Reviewer => "reviewer",
+            CorrectionTier::HawkEyed => "hawk_eyed",
         }
     }
 
     /// Display name ("Hawk-eyed").
     pub const fn name(self) -> &'static str {
         match self {
-            CatchTier::Autopilot => "Autopilot",
-            CatchTier::SpotChecker => "Spot-checker",
-            CatchTier::Reviewer => "Reviewer",
-            CatchTier::HawkEyed => "Hawk-eyed",
+            CorrectionTier::Autopilot => "Autopilot",
+            CorrectionTier::SpotChecker => "Spot-checker",
+            CorrectionTier::Reviewer => "Reviewer",
+            CorrectionTier::HawkEyed => "Hawk-eyed",
         }
     }
 
-    /// The answer to "Do you catch its mistakes?" at this tier.
+    /// The answer to "Do you correction its mistakes?" at this tier.
     pub const fn verdict(self) -> &'static str {
         match self {
-            CatchTier::Autopilot => "Rarely.",
-            CatchTier::SpotChecker => "Sometimes.",
-            CatchTier::Reviewer => "Often.",
-            CatchTier::HawkEyed => "Usually.",
+            CorrectionTier::Autopilot => "Rarely.",
+            CorrectionTier::SpotChecker => "Sometimes.",
+            CorrectionTier::Reviewer => "Often.",
+            CorrectionTier::HawkEyed => "Usually.",
         }
     }
 
     /// The highest tier whose floor `judgment` reaches.
-    pub fn for_judgment(judgment: i64) -> CatchTier {
-        CatchTier::ALL.into_iter().rev().find(|t| judgment >= t.floor()).unwrap_or(CatchTier::Autopilot)
+    pub fn for_judgment(judgment: i64) -> CorrectionTier {
+        CorrectionTier::ALL.into_iter().rev().find(|t| judgment >= t.floor()).unwrap_or(CorrectionTier::Autopilot)
     }
 
     /// The tier above this one, if any.
-    pub fn next(self) -> Option<CatchTier> {
-        CatchTier::ALL.into_iter().find(|t| *t > self)
+    pub fn next(self) -> Option<CorrectionTier> {
+        CorrectionTier::ALL.into_iter().find(|t| *t > self)
     }
 }
 
@@ -209,8 +209,8 @@ pub struct Window {
     pub continued: i64,
     /// Of those, the ones you never had to add to, clarify or redo.
     pub landed: i64,
-    /// Times you caught the AI.
-    pub catches: i64,
+    /// Times you corrected the AI.
+    pub corrections: i64,
     /// Times the AI corrected you.
     pub humbled: i64,
 }
@@ -223,24 +223,24 @@ pub struct Score {
     /// Percent of continued tasks that landed, rounded down.
     pub direction: i64,
     /// 0 to 100: how rarely the AI corrected you (per task), scaled down until you've shown
-    /// [`CATCH_PROOF`] catches.
+    /// [`CORRECTION_PROOF`] corrections.
     pub judgment: i64,
     /// The tier `score` reaches.
     pub tier: Tier,
 }
 
 impl Score {
-    /// The score for a window, or `None` until it has [`MIN_BRIEFS`] continued tasks: with fewer,
+    /// The score for a window, or `None` until it has [`MIN_PROMPTS`] continued tasks: with fewer,
     /// one task swings the number too much to rank.
     pub fn of(w: Window) -> Option<Score> {
-        if w.continued < MIN_BRIEFS {
+        if w.continued < MIN_PROMPTS {
             return None;
         }
         // Thousandths so the weights don't round twice.
         let direction = 1000 * w.landed.clamp(0, w.continued) / w.continued;
-        // Per task, not per catch: comparing with catches would make fewer catches cost points.
+        // Per task, not per correction: comparing with corrections would make fewer corrections cost points.
         let right = (1000 - HUMBLED_COST * 1000 * w.humbled.max(0) / w.continued.max(HUMBLED_BASE)).max(0);
-        let judgment = right * w.catches.clamp(0, CATCH_PROOF) / CATCH_PROOF;
+        let judgment = right * w.corrections.clamp(0, CORRECTION_PROOF) / CORRECTION_PROOF;
         let score = (DIRECTION_WEIGHT * direction + (100 - DIRECTION_WEIGHT) * judgment) / 100;
         Some(Score {
             score: score / 10,
@@ -255,22 +255,25 @@ impl Score {
 mod tests {
     use super::*;
 
-    fn w(continued: i64, landed: i64, catches: i64, humbled: i64) -> Window {
-        Window { continued, landed, catches, humbled }
+    fn w(continued: i64, landed: i64, corrections: i64, humbled: i64) -> Window {
+        Window { continued, landed, corrections, humbled }
     }
 
     #[test]
-    fn catch_tiers_follow_judgment() {
-        let at = |n| CatchTier::for_judgment(n);
-        assert_eq!((at(-1), at(0), at(49)), (CatchTier::Autopilot, CatchTier::Autopilot, CatchTier::Autopilot));
-        assert_eq!((at(50), at(74)), (CatchTier::SpotChecker, CatchTier::SpotChecker));
-        assert_eq!((at(75), at(89)), (CatchTier::Reviewer, CatchTier::Reviewer));
-        assert_eq!((at(90), at(100)), (CatchTier::HawkEyed, CatchTier::HawkEyed));
-        assert!(CatchTier::ALL.windows(2).all(|w| w[0] < w[1] && w[0].floor() < w[1].floor()));
-        assert_eq!(CatchTier::HawkEyed.next(), None);
-        // No catches yet reads as autopilot, however rarely it corrected you.
-        let s = Score::of(w(20, 20, 0, 0)).map(|s| CatchTier::for_judgment(s.judgment));
-        assert_eq!(s, Some(CatchTier::Autopilot));
+    fn correction_tiers_follow_judgment() {
+        let at = |n| CorrectionTier::for_judgment(n);
+        assert_eq!(
+            (at(-1), at(0), at(49)),
+            (CorrectionTier::Autopilot, CorrectionTier::Autopilot, CorrectionTier::Autopilot)
+        );
+        assert_eq!((at(50), at(74)), (CorrectionTier::SpotChecker, CorrectionTier::SpotChecker));
+        assert_eq!((at(75), at(89)), (CorrectionTier::Reviewer, CorrectionTier::Reviewer));
+        assert_eq!((at(90), at(100)), (CorrectionTier::HawkEyed, CorrectionTier::HawkEyed));
+        assert!(CorrectionTier::ALL.windows(2).all(|w| w[0] < w[1] && w[0].floor() < w[1].floor()));
+        assert_eq!(CorrectionTier::HawkEyed.next(), None);
+        // No corrections yet reads as autopilot, however rarely it corrected you.
+        let s = Score::of(w(20, 20, 0, 0)).map(|s| CorrectionTier::for_judgment(s.judgment));
+        assert_eq!(s, Some(CorrectionTier::Autopilot));
     }
 
     #[test]
@@ -306,16 +309,16 @@ mod tests {
 
     #[test]
     fn score_needs_enough_tasks() {
-        assert_eq!(Score::of(w(MIN_BRIEFS - 1, MIN_BRIEFS - 1, 50, 0)), None);
-        assert!(Score::of(w(MIN_BRIEFS, 0, 0, 0)).is_some());
+        assert_eq!(Score::of(w(MIN_PROMPTS - 1, MIN_PROMPTS - 1, 50, 0)), None);
+        assert!(Score::of(w(MIN_PROMPTS, 0, 0, 0)).is_some());
     }
 
     #[test]
     fn score_mixes_direction_and_judgment() {
-        // The author's month: 125 of 150 landed, 41 catches to 2.
+        // The author's month: 125 of 150 landed, 41 corrections to 2.
         let s = Score::of(w(150, 125, 41, 2)).unwrap();
         assert_eq!((s.direction, s.judgment, s.score, s.tier), (83, 93, 86, Tier::SharpEyed));
-        // Architect-level briefs and a clean record: Irreplaceable.
+        // Architect-level prompts and a clean record: Irreplaceable.
         assert_eq!(Score::of(w(100, 92, 10, 0)).unwrap().tier, Tier::Irreplaceable);
         // Landing everything but never catching anything: no proof you check its work.
         let s = Score::of(w(50, 50, 0, 0)).unwrap();
@@ -328,18 +331,18 @@ mod tests {
     }
 
     #[test]
-    fn catching_fewer_mistakes_never_costs_points() {
-        // Past the proof, fewer catches (because the AI is getting it right) changes nothing,
+    fn correcting_fewer_mistakes_never_costs_points() {
+        // Past the proof, fewer corrections (because the AI is getting it right) changes nothing,
         // even when it has corrected you too.
         for humbled in [0, 1, 2, 5] {
             let many = Score::of(w(100, 85, 40, humbled)).unwrap();
-            let few = Score::of(w(100, 85, CATCH_PROOF, humbled)).unwrap();
+            let few = Score::of(w(100, 85, CORRECTION_PROOF, humbled)).unwrap();
             assert_eq!(many.score, few.score, "humbled {humbled}");
         }
-        // Below it, each catch counts toward showing you check.
+        // Below it, each correction counts toward showing you check.
         let one = Score::of(w(100, 85, 1, 0)).unwrap();
         let two = Score::of(w(100, 85, 2, 0)).unwrap();
-        let three = Score::of(w(100, 85, CATCH_PROOF, 0)).unwrap();
+        let three = Score::of(w(100, 85, CORRECTION_PROOF, 0)).unwrap();
         assert!(one.score < two.score && two.score < three.score);
     }
 

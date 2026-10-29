@@ -6,7 +6,7 @@ import { type Html, html } from "./html";
 import { refreshCheck } from "./learn/checker";
 import { closePicker } from "./picker/popover";
 import { createScheduler, isUserBusy } from "./scheduler";
-import { isGlance, periodSince, setAllModels, setCurrent, setLastBriefTier, setLastVerdict, setMeta, state } from "./state";
+import { isGlance, periodSince, setAllModels, setCurrent, setLastPromptTier, setLastVerdict, setMeta, state } from "./state";
 import { updateBanner, updateLine } from "./update";
 import { coverage, headerView, statusPillView } from "./views/chrome";
 import { emptyGlanceView, glanceView } from "./views/glance";
@@ -48,7 +48,7 @@ async function view(): Promise<Html> {
     ]);
     body = html`${sourcesView(sources, state.status)}${settingsView({ retention, autostart, menuBar, update: state.update, demo })}`;
   } else if (state.tab === "learn") {
-    body = learnView({ meta, briefs: s.messages ? s.briefs : null, done: await api.learned(), lesson: state.lesson, draft: state.draft, demo });
+    body = learnView({ meta, prompts: s.messages ? s.prompts : null, done: await api.learned(), lesson: state.lesson, draft: state.draft, demo });
   } else if (state.tab === "improve") {
     const progress = await api.progress(state.filter);
     body = improveView({
@@ -67,10 +67,10 @@ async function view(): Promise<Html> {
       view: state.view,
       period: state.period,
       still: s.overall.verdict === state.lastVerdict,
-      briefsStill: s.briefs.tier === state.lastBriefTier,
+      promptsStill: s.prompts.tier === state.lastPromptTier,
     });
     setLastVerdict(s.overall.verdict);
-    setLastBriefTier(s.briefs.tier);
+    setLastPromptTier(s.prompts.tier);
   } else body = onboardingView(await watching());
   const banner = state.update ? updateBanner(state.update, state.laterFor) : "";
   return html`<div class="wrap">${headerView(state.tab, state.status, demo, coverage(state.current))}<div id="update-slot">${banner}</div>${body}</div>`;

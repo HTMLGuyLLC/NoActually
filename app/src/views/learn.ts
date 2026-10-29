@@ -1,11 +1,11 @@
 // Learn: how to prompt any AI well. A live prompt checker, three short tracks of lessons, and a
 // quiz in each. Nothing here needs your history; with it, the next lesson is picked for you.
-import type { Briefs, Check, Meta } from "../api";
+import type { Check, Meta, Prompts } from "../api";
 import { type Html, html } from "../html";
 import { answerIndex, LESSONS, type Lesson, lessonById, type Question, recommended, SIGNAL_HINTS, TRACKS, trackOf } from "../learn/lessons";
 import { signalTitle } from "../meta";
 
-export type LearnContext = { meta: Meta; briefs: Briefs | null; done: readonly string[]; lesson: string | null; draft: string; demo: boolean };
+export type LearnContext = { meta: Meta; prompts: Prompts | null; done: readonly string[]; lesson: string | null; draft: string; demo: boolean };
 
 const chips = (meta: Meta, ids: string[]) =>
   ids.length
@@ -23,7 +23,7 @@ export function checkResultView(meta: Meta, c: Check | null, empty: boolean): Ht
       (s, i) =>
         html`<li class="${has(i) ? "on" : ""}"><span aria-hidden="true">${has(i) ? "✓" : "·"}</span> ${s.title}<span class="sr-only">${has(i) ? ": yes" : ": not yet"}</span></li>`,
     )}</ul>
-    ${c.not_a_brief ? html`<p class="muted small">This reads as a question or a hello. Your history only grades requests as prompts.</p>` : ""}
+    ${c.not_a_prompt ? html`<p class="muted small">This reads as a question or a hello. Your history only grades requests as prompts.</p>` : ""}
     ${missing.length ? html`<ul class="check-hints">${missing.slice(0, 2).map((s) => html`<li>${SIGNAL_HINTS[s.id] ?? s.hint}</li>`)}</ul>` : html`<p class="hand-note">Nothing left to guess.</p>`}`;
 }
 
@@ -61,7 +61,7 @@ function trackView(t: (typeof TRACKS)[number], done: readonly string[]): Html {
 
 function homeView(ctx: LearnContext): Html {
   const done = ctx.done.filter((id) => LESSONS.some((l) => l.id === id));
-  const next = recommended(ctx.briefs, ctx.meta, done);
+  const next = recommended(ctx.prompts, ctx.meta, done);
   const graduated = done.length === LESSONS.length;
   return html`
     <section class="toolbar"><span class="eyebrow">Learn to prompt it · ${done.length} of ${LESSONS.length} lessons</span></section>
@@ -70,7 +70,7 @@ function homeView(ctx: LearnContext): Html {
       graduated
         ? html`<section class="card mini graduate"><div class="eyebrow">All three tracks</div><h2 class="q">Graduate 🎓</h2><p>Every lesson done. Keep the checker handy, and watch Improve to see it pay off.</p></section>`
         : next
-          ? html`<section class="next-lesson"><span class="eyebrow">${ctx.briefs?.tasks ? "Picked for you, from your prompts" : "Start here"}</span>
+          ? html`<section class="next-lesson"><span class="eyebrow">${ctx.prompts?.tasks ? "Picked for you, from your prompts" : "Start here"}</span>
             <button class="lesson-next" data-action="lesson" data-id="${next.id}"><b>${next.title}</b><span class="muted">${next.why}</span><span class="go" aria-hidden="true">→</span></button></section>`
           : ""
     }
@@ -82,7 +82,7 @@ function questionView(q: Question, li: number, qi: number, meta: Meta): Html {
   const label = (o: string) => (q.kind === "missing" ? signalTitle(meta, o) : o);
   return html`<fieldset class="quiz-q" data-answer="${answerIndex(q)}">
     <legend>${q.question}</legend>
-    ${q.kind === "missing" ? html`<blockquote class="brief-text">${q.brief}</blockquote>` : ""}
+    ${q.kind === "missing" ? html`<blockquote class="prompt-text">${q.prompt}</blockquote>` : ""}
     ${q.options.map(
       (o, oi) => html`<label class="quiz-opt"><input type="radio" name="${name}" value="${oi}" data-action="quiz"/><span>${label(o)}</span></label>`,
     )}
@@ -101,8 +101,8 @@ function lessonView(l: Lesson, ctx: LearnContext): Html {
       <h1 class="q">${l.title}</h1>
       <p class="lead">${l.why}</p>
       <div class="compare">
-        <div class="ex before"><div class="eyebrow">Before</div><blockquote class="brief-text">${l.before.text}</blockquote>${chips(ctx.meta, l.before.signals)}</div>
-        <div class="ex after"><div class="eyebrow">After</div><blockquote class="brief-text">${l.after.text}</blockquote>${chips(ctx.meta, l.after.signals)}</div>
+        <div class="ex before"><div class="eyebrow">Before</div><blockquote class="prompt-text">${l.before.text}</blockquote>${chips(ctx.meta, l.before.signals)}</div>
+        <div class="ex after"><div class="eyebrow">After</div><blockquote class="prompt-text">${l.after.text}</blockquote>${chips(ctx.meta, l.after.signals)}</div>
       </div>
       <section><div class="head"><h2>Template</h2></div>
         <p class="template mono">${l.template}</p>

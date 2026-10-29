@@ -67,7 +67,7 @@ pub static AI_ADMIT: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         rule("ai.should_have", r"\bi should have\b"),
         rule("ai.incorrectly", r"\bi incorrectly\b"),
         rule("ai.that_was_wrong", r"\bthat was (wrong|incorrect|a mistake)\b"),
-        rule("ai.didnt_check", r"\bi (didn'?t|did not) (actually )?(check|verify|read|catch)\b"),
+        rule("ai.didnt_check", r"\bi (didn'?t|did not) (actually )?(check|verify|read|correction)\b"),
     ]
 });
 
@@ -125,7 +125,7 @@ pub static USER_ANY: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     ]
 });
 
-/// You added information the AI couldn't have known, or you're just acknowledging. Never a catch.
+/// You added information the AI couldn't have known, or you're just acknowledging. Never a correction.
 pub static CONTEXT: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![
         rule("ctx.also", r"^(also|oh and|btw|fyi|one more thing|additionally|and also|plus)\b"),

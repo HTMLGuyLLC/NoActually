@@ -6,7 +6,7 @@ export type Tab = (typeof TABS)[number];
 export const isTab = (x: unknown): x is Tab => TABS.some((t) => t === x);
 
 /** The scorecard's sections, each its own sub-tab. */
-export const SCORE_VIEWS = ["overview", "briefs", "catches", "hall"] as const;
+export const SCORE_VIEWS = ["overview", "prompts", "corrections", "hall"] as const;
 export type ScoreView = (typeof SCORE_VIEWS)[number];
 export const isScoreView = (x: unknown): x is ScoreView => SCORE_VIEWS.some((v) => v === x);
 
@@ -51,7 +51,7 @@ export type AppState = {
   /** The verdict last drawn, so the scrawl only plays when it changes, not on every background redraw. */
   lastVerdict: Verdict | null;
   /** The prompt tier last drawn (undefined: none drawn yet), for the same reason. */
-  lastBriefTier: string | null | undefined;
+  lastPromptTier: string | null | undefined;
   meta: Meta | null;
   /** Scorecard: how far back the counts look. */
   period: Period;
@@ -73,7 +73,7 @@ const initial = (): AppState => ({
   update: null,
   laterFor: null,
   lastVerdict: null,
-  lastBriefTier: undefined,
+  lastPromptTier: undefined,
   meta: null,
   period: "28d",
   range: "12w",
@@ -121,8 +121,8 @@ export function setLaterFor(version: string | null): void {
 export function setLastVerdict(verdict: Verdict): void {
   s.lastVerdict = verdict;
 }
-export function setLastBriefTier(tier: string | null): void {
-  s.lastBriefTier = tier;
+export function setLastPromptTier(tier: string | null): void {
+  s.lastPromptTier = tier;
 }
 export function setPeriod(period: Period): void {
   s.period = period;

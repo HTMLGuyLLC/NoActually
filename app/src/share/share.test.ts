@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { briefs, HOSTILE, meta, overall, stats } from "../test/fixtures";
-import { briefLines, gradeKey } from "./cards";
-import { briefShareText, catchShareText, clip, SHARE_HOSTS, SHARE_URL, SHARE_URL_SHORT, type ShareTarget, shareGuide, shareTargets, shareText } from "./share";
+import { HOSTILE, meta, overall, prompts, stats } from "../test/fixtures";
+import { gradeKey, promptLines } from "./cards";
+import {
+  clip,
+  correctionShareText,
+  promptShareText,
+  SHARE_HOSTS,
+  SHARE_URL,
+  SHARE_URL_SHORT,
+  type ShareTarget,
+  shareGuide,
+  shareTargets,
+  shareText,
+} from "./share";
 
 describe("shareText", () => {
   const unranked = { score: null, direction: null, judgment: null, tier: null, next_tier: null, verdict: "hmm" as const };
@@ -14,11 +25,11 @@ describe("shareText", () => {
   });
 
   it("falls back to this week's corrections before there is a score, and handles the singular", () => {
-    const s = stats({ overall: overall(unranked), catches_last_7d: 1 });
+    const s = stats({ overall: overall(unranked), corrections_last_7d: 1 });
     expect(shareText(s, "AI", "Not scored yet")).toBe(
       `Could AI replace me? Maybe… I corrected it 1 time this week. Me 177, AI 3. What's your score? ${SHARE_URL}`,
     );
-    expect(shareText(stats({ overall: overall(unranked), catches_last_7d: 17 }), "AI", "")).toContain("I corrected it 17 times this week.");
+    expect(shareText(stats({ overall: overall(unranked), corrections_last_7d: 17 }), "AI", "")).toContain("I corrected it 17 times this week.");
   });
 
   it("follows the verdict, never re-deriving it from the score", () => {
@@ -27,19 +38,19 @@ describe("shareText", () => {
   });
 });
 
-describe("briefShareText", () => {
+describe("promptShareText", () => {
   it("posts the tier's answer and the landed share, numbers only", () => {
-    const tier = meta.brief_tiers[2];
+    const tier = meta.prompt_tiers[2];
     if (!tier) throw new Error("fixture");
-    expect(briefShareText(briefs(), tier)).toBe(
+    expect(promptShareText(prompts(), tier)).toBe(
       `Do I make my AI guess? Sometimes. 95% of my tasks in the last 28 days landed without me adding, clarifying or starting over. Prompt tier: Tech lead. Do you make yours guess? ${SHARE_URL}`,
     );
   });
 
   it("matches the card's lines", () => {
-    expect(briefLines(briefs())).toEqual(["95% of my tasks in the last 28 days landed without steering.", "20% of all my prompts were sharp."]);
-    expect(briefLines(briefs(), "ever")[0]).toBe("95% of my tasks ever landed without steering.");
-    expect(gradeKey(briefs())).toBe("SHARP 20%  ·  SOLID 30%  ·  THIN 50%");
+    expect(promptLines(prompts())).toEqual(["95% of my tasks in the last 28 days landed without steering.", "20% of all my prompts were sharp."]);
+    expect(promptLines(prompts(), "ever")[0]).toBe("95% of my tasks ever landed without steering.");
+    expect(gradeKey(prompts())).toBe("SHARP 20%  ·  SOLID 30%  ·  THIN 50%");
   });
 });
 
@@ -117,19 +128,19 @@ describe("shareGuide", () => {
   });
 });
 
-describe("catchShareText", () => {
+describe("correctionShareText", () => {
   it("quotes both sides, clipped, and links the project", () => {
-    const t = catchShareText({ model: "Claude Opus 5", human: "that's not a real page", ai: "You're right, that route doesn't exist." });
+    const t = correctionShareText({ model: "Claude Opus 5", human: "that's not a real page", ai: "You're right, that route doesn't exist." });
     expect(t).toBe(
       `I corrected Claude Opus 5. Me: “that's not a real page” Claude Opus 5: “You're right, that route doesn't exist.” Could AI replace me? No, actually. ${SHARE_URL}`,
     );
-    const long = catchShareText({ model: "GPT", human: "x".repeat(300), ai: null });
+    const long = correctionShareText({ model: "GPT", human: "x".repeat(300), ai: null });
     expect(long).toContain("…”");
     expect(long.length).toBeLessThan(220);
   });
 
   it("works when only the category was kept", () => {
-    expect(catchShareText({ model: "", human: null, ai: null })).toBe(`I corrected my AI. Could AI replace me? No, actually. ${SHARE_URL}`);
+    expect(correctionShareText({ model: "", human: null, ai: null })).toBe(`I corrected my AI. Could AI replace me? No, actually. ${SHARE_URL}`);
   });
 });
 
@@ -140,15 +151,15 @@ describe("clip", () => {
   });
 });
 
-describe("catches share", () => {
+describe("corrections share", () => {
   it("posts the correction tier's word and who corrected whom, numbers only", async () => {
-    const { catchesShareText } = await import("./share");
-    const { catchLines } = await import("./cards");
+    const { correctionsShareText } = await import("./share");
+    const { correctionLines } = await import("./cards");
     const tier = { id: "hawk_eyed", name: "Hawk-eyed", floor: 90, verdict: "Usually." };
-    expect(catchesShareText({ catches: 37, humbled: 1 }, tier)).toBe(
+    expect(correctionsShareText({ corrections: 37, humbled: 1 }, tier)).toBe(
       "Do I correct my AI's mistakes? Usually. I corrected it 37 times in the last 28 days, and it corrected me 1 time. Correction tier: Hawk-eyed. Do you correct yours? https://github.com/HTMLGuyLLC/NoActually",
     );
-    expect(catchLines({ catches: 1, humbled: 0, judgment: 96 }, "ever")).toEqual([
+    expect(correctionLines({ corrections: 1, humbled: 0, judgment: 96 }, "ever")).toEqual([
       "I corrected it 1 time ever. It corrected me 0.",
       "Judgment 96 of 100: I check its work, and it rarely has to correct me.",
     ]);

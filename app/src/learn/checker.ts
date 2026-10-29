@@ -23,7 +23,7 @@ export async function refreshCheck(root: ParentNode): Promise<void> {
     return;
   }
   try {
-    const c = await api.checkBrief(text);
+    const c = await api.checkPrompt(text);
     if (mine !== seq) return;
     out.innerHTML = checkResultView(meta, c, false).value;
     const count = meta.signals.filter((_, i) => (c.signals & (1 << i)) !== 0).length;

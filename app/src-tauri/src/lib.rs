@@ -230,7 +230,7 @@ pub fn run() {
             commands::progress,
             commands::set_goal,
             commands::clear_goal,
-            commands::check_brief,
+            commands::check_prompt,
             commands::learned,
             commands::set_learned,
             commands::get_menu_bar,

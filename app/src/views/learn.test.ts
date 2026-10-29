@@ -2,10 +2,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Check } from "../api";
 import { LESSONS, TRACKS } from "../learn/lessons";
-import { briefs, HOSTILE, meta } from "../test/fixtures";
+import { HOSTILE, meta, prompts } from "../test/fixtures";
 import { checkResultView, judgeQuiz, type LearnContext, learnView } from "./learn";
 
-const ctx = (over: Partial<LearnContext> = {}): LearnContext => ({ meta, briefs: null, done: [], lesson: null, draft: "", demo: false, ...over });
+const ctx = (over: Partial<LearnContext> = {}): LearnContext => ({ meta, prompts: null, done: [], lesson: null, draft: "", demo: false, ...over });
 const home = (over: Partial<LearnContext> = {}) => learnView(ctx(over)).value;
 const lesson = (id = "point-at-it", over: Partial<LearnContext> = {}) => learnView(ctx({ lesson: id, ...over })).value;
 
@@ -51,7 +51,7 @@ describe("learnView home", () => {
   it("starts at the first lesson with no data, and picks one from your prompts with it", () => {
     expect(home()).toContain("Start here");
     expect(home()).toContain('class="lesson-next" data-action="lesson" data-id="point-at-it"');
-    const m = home({ briefs: briefs({ tasks: 100, signals: { spot: 90, proof: 90, done: 90, limits: 20, why: 90 } }) });
+    const m = home({ prompts: prompts({ tasks: 100, signals: { spot: 90, proof: 90, done: 90, limits: 20, why: 90 } }) });
     expect(m).toContain("Picked for you, from your prompts");
     expect(m).toContain('class="lesson-next" data-action="lesson" data-id="set-limits"');
   });
@@ -90,7 +90,7 @@ describe("learnView lesson", () => {
     const m = lesson(l.id);
     const sets = m.split('<fieldset class="quiz-q"').slice(1);
     expect(sets).toHaveLength(l.quiz.length);
-    expect(sets[0]).toContain('data-answer="1"'); // the sharper question: the second brief
+    expect(sets[0]).toContain('data-answer="1"'); // the sharper question: the second prompt
     expect(sets[1]).toContain('data-answer="0"'); // "missing": spot is the first option
     // Radios are grouped per question, valued by option index.
     expect(sets[0]).toContain('name="q-0-0" value="0" data-action="quiz"');
@@ -99,7 +99,7 @@ describe("learnView lesson", () => {
     expect(m).toContain('role="status" aria-live="polite" data-explain="');
   });
 
-  it("titles a 'missing' question's options by signal and quotes the brief", () => {
+  it("titles a 'missing' question's options by signal and quotes the prompt", () => {
     const m = lesson(l.id);
     expect(m).toContain("<blockquote");
     expect(m).toContain("<span>Points at it</span></label>");
@@ -137,9 +137,9 @@ describe("learnView lesson", () => {
 });
 
 describe("checkResultView", () => {
-  const check = (over: Partial<Check> = {}): Check => ({ signals: 0, grade: "thin", rules: [], not_a_brief: false, ...over });
+  const check = (over: Partial<Check> = {}): Check => ({ signals: 0, grade: "thin", rules: [], not_a_prompt: false, ...over });
 
-  it("asks for a brief when empty, or when there's no result", () => {
+  it("asks for a prompt when empty, or when there's no result", () => {
     expect(checkResultView(meta, null, true).value).toContain("Type or paste a prompt.");
     expect(checkResultView(meta, check(), true).value).toContain("Type or paste a prompt.");
     expect(checkResultView(meta, null, false).value).toContain("Type or paste a prompt.");
@@ -163,8 +163,8 @@ describe("checkResultView", () => {
     expect(m).not.toContain("Nothing left to guess.");
   });
 
-  it("says so when it isn't a brief", () => {
-    expect(checkResultView(meta, check({ not_a_brief: true }), false).value).toContain("This reads as a question or a hello.");
+  it("says so when it isn't a prompt", () => {
+    expect(checkResultView(meta, check({ not_a_prompt: true }), false).value).toContain("This reads as a question or a hello.");
     expect(checkResultView(meta, check({ signals: 1 }), false).value).not.toContain("reads as a question");
   });
 

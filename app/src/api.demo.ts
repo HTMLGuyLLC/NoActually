@@ -1,5 +1,5 @@
 // The browser demo's stand-in for the Rust side: sample numbers from public/demo.json, read-only.
-import type { ArgsOf, Briefs, Command, Filter, Goal, GoalStatus, Meta, Overall, Progress, ResultOf, SourceInfo, Stats } from "./api";
+import type { ArgsOf, Command, Filter, Goal, GoalStatus, Meta, Overall, Progress, Prompts, ResultOf, SourceInfo, Stats } from "./api";
 import { modelName } from "./picker/picker";
 import { periodSince } from "./state";
 
@@ -18,12 +18,12 @@ export function isDemoData(x: unknown): x is DemoData {
     isRecord(stats.overall) &&
     (stats.overall.verdict === "no" || stats.overall.verdict === "hmm") &&
     Array.isArray(progress.weeks) &&
-    typeof stats.catches === "number" &&
+    typeof stats.corrections === "number" &&
     Array.isArray(stats.models) &&
     Array.isArray(stats.weekly) &&
     Array.isArray(stats.hall_of_fame) &&
     isRecord(stats.categories) &&
-    isRecord(stats.briefs)
+    isRecord(stats.prompts)
   );
 }
 
@@ -40,20 +40,30 @@ function demoData(): Promise<DemoData> {
 }
 
 /** What Rust's `Score::of` says for a window (engine/src/tier.rs): the demo's stand-in for it. */
-export function judge(meta: Meta, w: { continued: number; landed: number; catches: number; humbled: number }): Overall {
-  const base = { catches: w.catches, humbled: w.humbled, to_rank: Math.max(0, meta.min_briefs - w.continued) };
-  if (w.continued < meta.min_briefs)
-    return { ...base, score: null, direction: null, judgment: null, tier: null, next_tier: null, verdict: "hmm", catch_tier: null, next_catch_tier: null };
+export function judge(meta: Meta, w: { continued: number; landed: number; corrections: number; humbled: number }): Overall {
+  const base = { corrections: w.corrections, humbled: w.humbled, to_rank: Math.max(0, meta.min_prompts - w.continued) };
+  if (w.continued < meta.min_prompts)
+    return {
+      ...base,
+      score: null,
+      direction: null,
+      judgment: null,
+      tier: null,
+      next_tier: null,
+      verdict: "hmm",
+      correction_tier: null,
+      next_correction_tier: null,
+    };
   const direction = Math.floor((1000 * Math.min(w.landed, w.continued)) / w.continued);
   const right = Math.max(0, 1000 - Math.floor((meta.humbled_cost * 1000 * Math.max(0, w.humbled)) / Math.max(w.continued, meta.humbled_base)));
-  const judgment = Math.floor((right * Math.min(Math.max(0, w.catches), meta.catch_proof)) / meta.catch_proof);
+  const judgment = Math.floor((right * Math.min(Math.max(0, w.corrections), meta.correction_proof)) / meta.correction_proof);
   const score = Math.floor((meta.direction_weight * direction + (100 - meta.direction_weight) * judgment) / 100 / 10);
   const up = [...meta.tiers].sort((a, b) => a.floor - b.floor);
   const tier = up.filter((t) => score >= t.floor).pop();
   const next = up.find((t) => t.floor > score);
   const coworker = up.find((t) => t.id === "coworker")?.floor ?? Number.POSITIVE_INFINITY;
   const j = Math.floor(judgment / 10);
-  const catchUp = [...meta.catch_tiers].sort((a, b) => a.floor - b.floor);
+  const correctionUp = [...meta.correction_tiers].sort((a, b) => a.floor - b.floor);
   return {
     ...base,
     score,
@@ -62,8 +72,8 @@ export function judge(meta: Meta, w: { continued: number; landed: number; catche
     tier: tier?.id ?? null,
     next_tier: next?.id ?? null,
     verdict: score >= coworker ? "no" : "hmm",
-    catch_tier: catchUp.filter((t) => j >= t.floor).pop()?.id ?? null,
-    next_catch_tier: catchUp.find((t) => t.floor > j)?.id ?? null,
+    correction_tier: correctionUp.filter((t) => j >= t.floor).pop()?.id ?? null,
+    next_correction_tier: correctionUp.find((t) => t.floor > j)?.id ?? null,
   };
 }
 
@@ -76,14 +86,14 @@ export function demoStats({ meta, stats: base }: DemoData, filter: Filter): Stat
       (!filter.family || m.family === filter.family) &&
       (!filter.version || m.version === filter.version),
   );
-  const catches = keep.reduce((a, m) => a + m.catches, 0);
-  const share = base.catches ? catches / base.catches : 0;
+  const corrections = keep.reduce((a, m) => a + m.corrections, 0);
+  const share = base.corrections ? corrections / base.corrections : 0;
   const scale = (n: number) => Math.round(n * share);
-  const catches_last_7d = scale(base.catches_last_7d);
+  const corrections_last_7d = scale(base.corrections_last_7d);
   const sum = (k: "tasks" | "continued" | "landed") => keep.reduce((a, m) => a + m[k], 0);
-  const taskShare = base.briefs.continued ? sum("continued") / base.briefs.continued : 0;
-  const windowTasks = Math.round(base.briefs.window_tasks * taskShare);
-  const windowLanded = Math.round(base.briefs.window_landed * taskShare);
+  const taskShare = base.prompts.continued ? sum("continued") / base.prompts.continued : 0;
+  const windowTasks = Math.round(base.prompts.window_tasks * taskShare);
+  const windowLanded = Math.round(base.prompts.window_landed * taskShare);
   const categories: Record<string, number> = {};
   for (const [k, v] of Object.entries(base.categories)) if (scale(v) > 0) categories[k] = scale(v);
   return {
@@ -91,11 +101,11 @@ export function demoStats({ meta, stats: base }: DemoData, filter: Filter): Stat
     overall: judge(meta, {
       continued: windowTasks,
       landed: windowLanded,
-      catches: scale(base.overall.catches),
+      corrections: scale(base.overall.corrections),
       humbled: Math.round(base.overall.humbled * share),
     }),
-    briefs: {
-      ...base.briefs,
+    prompts: {
+      ...base.prompts,
       tasks: sum("tasks"),
       continued: sum("continued"),
       landed: sum("landed"),
@@ -103,58 +113,58 @@ export function demoStats({ meta, stats: base }: DemoData, filter: Filter): Stat
       window_landed: windowLanded,
     },
     models: keep,
-    catches,
+    corrections,
     messages: keep.reduce((a, m) => a + m.messages, 0),
     humbled: keep.reduce((a, m) => a + m.humbled, 0),
-    catches_last_7d,
-    weekly: base.weekly.map((w) => ({ ...w, catches: scale(w.catches), messages: scale(w.messages) })),
+    corrections_last_7d,
+    weekly: base.weekly.map((w) => ({ ...w, corrections: scale(w.corrections), messages: scale(w.messages) })),
     categories,
     hall_of_fame: base.hall_of_fame.filter((h) => keep.some((m) => h.model === modelName(m))),
   };
 }
 
 /**
- * The demo's stand-in for a period: counts shrink to the share of weekly catches since `since`,
+ * The demo's stand-in for a period: counts shrink to the share of weekly corrections since `since`,
  * and the score is worked out again over them, as in Rust.
  */
 export function withSince(meta: Meta, s: Stats, since: string | null): Stats {
   if (!since) return s;
-  const total = s.weekly.reduce((t, w) => t + w.catches, 0);
+  const total = s.weekly.reduce((t, w) => t + w.corrections, 0);
   // A week counts when any of its days is on or after `since`.
   const weekly = s.weekly.filter((w) => new Date(`${w.week}T00:00`).getTime() + 6 * 86_400_000 >= new Date(`${since}T00:00`).getTime());
-  const share = total ? weekly.reduce((t, w) => t + w.catches, 0) / total : 0;
+  const share = total ? weekly.reduce((t, w) => t + w.corrections, 0) / total : 0;
   const scale = (n: number) => Math.round(n * share);
   const each = (r: Record<string, number>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, scale(v)]));
-  const briefs: Briefs = {
-    ...s.briefs,
-    tasks: scale(s.briefs.tasks),
-    continued: scale(s.briefs.continued),
-    landed: scale(s.briefs.landed),
-    window_tasks: scale(s.briefs.continued),
-    window_landed: scale(s.briefs.landed),
-    grades: each(s.briefs.grades),
-    signals: each(s.briefs.signals),
-    steering: each(s.briefs.steering),
+  const prompts: Prompts = {
+    ...s.prompts,
+    tasks: scale(s.prompts.tasks),
+    continued: scale(s.prompts.continued),
+    landed: scale(s.prompts.landed),
+    window_tasks: scale(s.prompts.continued),
+    window_landed: scale(s.prompts.landed),
+    grades: each(s.prompts.grades),
+    signals: each(s.prompts.signals),
+    steering: each(s.prompts.steering),
   };
   return {
     ...s,
     first_day: since > (s.first_day ?? "") ? since : s.first_day,
     messages: scale(s.messages),
-    catches: scale(s.catches),
+    corrections: scale(s.corrections),
     humbled: scale(s.humbled),
     categories: each(s.categories),
     weekly,
     models: s.models.map((m) => ({
       ...m,
-      catches: scale(m.catches),
+      corrections: scale(m.corrections),
       messages: scale(m.messages),
       humbled: scale(m.humbled),
       tasks: scale(m.tasks),
       continued: scale(m.continued),
       landed: scale(m.landed),
     })),
-    briefs,
-    overall: judge(meta, { continued: briefs.window_tasks, landed: briefs.window_landed, catches: scale(s.catches), humbled: scale(s.humbled) }),
+    prompts,
+    overall: judge(meta, { continued: prompts.window_tasks, landed: prompts.window_landed, corrections: scale(s.corrections), humbled: scale(s.humbled) }),
   };
 }
 
@@ -220,7 +230,7 @@ const handlers: Handlers = {
     return null;
   },
   // The rules run in Rust; the browser demo can't grade a draft, and says so.
-  check_brief: () => {
+  check_prompt: () => {
     throw new Error("The prompt checker runs in the app.");
   },
   learned: () => visit.learned,

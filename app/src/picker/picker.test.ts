@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { row } from "../test/fixtures";
-import { buildPickItems, catchRate, landedRate, matchPickItems, type PickItem, sameFilter } from "./picker";
+import { buildPickItems, correctionRate, landedRate, matchPickItems, type PickItem, sameFilter } from "./picker";
 
 const models = [
   row("Anthropic", "Claude Opus", "5", 60),
@@ -20,27 +20,27 @@ describe("buildPickItems", () => {
   const items = buildPickItems(models);
   const labels = items.map((i) => i.label);
 
-  it("starts with everything, then providers by catches", () => {
+  it("starts with everything, then providers by corrections", () => {
     expect(labels[0]).toBe("All AI");
-    expect(items[0]?.catches).toBe(136);
+    expect(items[0]?.corrections).toBe(136);
     expect(labels.indexOf("Anthropic")).toBeLessThan(labels.indexOf("OpenAI"));
   });
 
   it("nests versions under families that have several", () => {
     const opus = byLabel(items, "Claude Opus");
-    expect(opus.catches).toBe(99);
+    expect(opus.corrections).toBe(99);
     expect(opus.filter).toEqual({ provider: "Anthropic", family: "Claude Opus" });
     const v55 = byLabel(items, "Claude Opus 5.5");
     expect(v55.depth).toBe(2);
     expect(v55.filter).toEqual({ provider: "Anthropic", family: "Claude Opus", version: "5.5" });
   });
 
-  it("carries summed counts for catches, messages and the brief score", () => {
+  it("carries summed counts for corrections, messages and the prompt score", () => {
     const all = byLabel(items, "All AI");
-    expect(all).toMatchObject({ catches: 136, messages: 500, tasks: 100, continued: 50, landed: 40 });
+    expect(all).toMatchObject({ corrections: 136, messages: 500, tasks: 100, continued: 50, landed: 40 });
     const opus = byLabel(items, "Claude Opus");
-    expect(opus).toMatchObject({ catches: 99, messages: 200, tasks: 40, continued: 20, landed: 16 });
-    expect(byLabel(items, "Claude Opus 5.5")).toMatchObject({ catches: 39, messages: 100, tasks: 20, continued: 10, landed: 8 });
+    expect(opus).toMatchObject({ corrections: 99, messages: 200, tasks: 40, continued: 20, landed: 16 });
+    expect(byLabel(items, "Claude Opus 5.5")).toMatchObject({ corrections: 39, messages: 100, tasks: 20, continued: 10, landed: 8 });
   });
 
   it("sums the tasks of a model that has its own mix", () => {
@@ -79,15 +79,15 @@ describe("matchPickItems", () => {
   });
 });
 
-describe("sameFilter / catchRate", () => {
+describe("sameFilter / correctionRate", () => {
   it("compares scopes by value", () => {
     expect(sameFilter({ provider: "OpenAI" }, { provider: "OpenAI" })).toBe(true);
     expect(sameFilter({}, { provider: "OpenAI" })).toBe(false);
   });
 
   it("formats a rate, or a dash when nothing was said", () => {
-    expect(catchRate(1, 8)).toBe("12.5%");
-    expect(catchRate(0, 0)).toBe("–");
+    expect(correctionRate(1, 8)).toBe("12.5%");
+    expect(correctionRate(0, 0)).toBe("–");
   });
 
   it("rounds the landed rate down, like the tier floors, and shows a dash with no follow-ups", () => {

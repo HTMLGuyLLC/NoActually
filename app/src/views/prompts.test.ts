@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { briefs, HOSTILE, meta, stats } from "../test/fixtures";
-import { briefsView } from "./briefs";
+import { HOSTILE, meta, prompts, stats } from "../test/fixtures";
 import { glanceView } from "./glance";
+import { promptsView } from "./prompts";
 import { scorecardView } from "./scorecard";
 
-const view = (over: Parameters<typeof briefs>[0] = {}, still = false) => briefsView(briefs(over), meta, still).value;
+const view = (over: Parameters<typeof prompts>[0] = {}, still = false) => promptsView(prompts(over), meta, still).value;
 
-describe("briefsView", () => {
+describe("promptsView", () => {
   it("answers with the tier's verdict, the window's landed share and the ladder", () => {
     const m = view();
     expect(m).toContain("Do you make it guess?");
@@ -16,7 +16,7 @@ describe("briefsView", () => {
     expect(m).toContain('<li class="on" aria-current="true"><span>Architect</span><span><b class="at">95%</b>');
     expect(m).toContain("<span>Ticket writer</span><span>70–79%</span>");
     expect(m).not.toContain("Top tier."); // the row carries the number; no note below
-    expect(m).toContain('data-action="share-briefs"');
+    expect(m).toContain('data-action="share-prompts"');
     expect(m).not.toContain("style=");
   });
 
@@ -32,7 +32,7 @@ describe("briefsView", () => {
     expect(m).toContain('class="no maybe"');
     expect(m).toContain(">Hmm.</div>");
     expect(m).toContain("<b>3 more tasks</b> with a follow-up to get ranked");
-    expect(m).not.toContain("share-briefs");
+    expect(m).not.toContain("share-prompts");
   });
 
   it("spells out the grade mix for screen readers, sharp first", () => {
@@ -49,13 +49,13 @@ describe("briefsView", () => {
   it("tips the weakest signal, quoting the gap only when Rust found one", () => {
     expect(view()).toContain("<b>sets limits</b> (don&#39;t, only, keep, without). Only 10% of your prompts do.");
     expect(view()).not.toContain("landed <b>");
-    const m = view({ tip: { signal: "why", pct_of_briefs: 20, landed_with_without: [93.3, 80] } });
+    const m = view({ tip: { signal: "why", pct_of_prompts: 20, landed_with_without: [93.3, 80] } });
     expect(m).toContain("Your prompts that do landed <b>93%</b> of the time, vs 80% without.");
     expect(view({ tip: null })).not.toContain("Try this");
-    expect(view({ tip: { signal: "gone", pct_of_briefs: 1, landed_with_without: null } })).not.toContain("Try this");
+    expect(view({ tip: { signal: "gone", pct_of_prompts: 1, landed_with_without: null } })).not.toContain("Try this");
   });
 
-  it("splits steering between the AI and the brief", () => {
+  it("splits steering between the AI and the prompt", () => {
     const m = view();
     expect(m).toContain('class="cat ai"><span>It got it wrong</span>');
     expect(m).toContain("25 steering messages. 12 were its mistakes (blue), which don't count against you; 13 could have been in the prompt (red).");
@@ -73,14 +73,14 @@ describe("briefsView", () => {
   });
 
   it("escapes whatever arrives", () => {
-    const m = briefsView(briefs({ tier: HOSTILE }), { ...meta, steers: [{ id: "added", title: HOSTILE }] }, false).value;
+    const m = promptsView(prompts({ tier: HOSTILE }), { ...meta, steers: [{ id: "added", title: HOSTILE }] }, false).value;
     expect(m).not.toContain("<img");
   });
 });
 
-describe("briefs on the scorecard and the glance", () => {
+describe("prompts on the scorecard and the glance", () => {
   it("sits on the scorecard, with its own still flag", () => {
-    const ctx = { meta, filter: {}, still: true, briefsStill: false };
+    const ctx = { meta, filter: {}, still: true, promptsStill: false };
     const m = scorecardView(stats(), ctx).value;
     expect(m).toContain("Do you make it guess?");
     expect(m).toContain('class="no" aria-hidden="true">Rarely.');
@@ -88,6 +88,6 @@ describe("briefs on the scorecard and the glance", () => {
 
   it("names the prompt tier in the glance once ranked", () => {
     expect(glanceView(stats(), meta).value).toContain('<span class="g-word">Rarely.</span><span class="muted small">95% landed · Architect</span>');
-    expect(glanceView(stats({ briefs: briefs({ tier: null, to_rank: 3 }) }), meta).value).toContain("3 more tasks to get ranked");
+    expect(glanceView(stats({ prompts: prompts({ tier: null, to_rank: 3 }) }), meta).value).toContain("3 more tasks to get ranked");
   });
 });

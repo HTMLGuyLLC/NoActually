@@ -82,7 +82,7 @@ fn examples_grade_the_way_the_lessons_say() {
                 wrong.push(format!("{id}.{side}: {text:?}\n   want {want:?}\n   got  {got:?}"));
             }
             let c = check(text);
-            if c.not_a_brief {
+            if c.not_a_prompt {
                 wrong.push(format!("{id}.{side} reads as not a prompt: {text:?}"));
             }
             grades.push(c.grade);
@@ -144,15 +144,15 @@ fn every_quiz_has_exactly_one_right_answer() {
                         ));
                     }
                     for o in &options {
-                        if check(o).not_a_brief {
+                        if check(o).not_a_prompt {
                             wrong.push(format!("{at}: option reads as not a prompt: {o:?}"));
                         }
                     }
                 }
                 "missing" => {
-                    let brief = str_of(q, "brief", &at);
+                    let prompt = str_of(q, "prompt", &at);
                     let answer = str_of(q, "answer", &at);
-                    let has = found(brief);
+                    let has = found(prompt);
                     if !(3..=4).contains(&options.len()) {
                         wrong.push(format!("{at}: a missing quiz lists 3 or 4 signals, has {}", options.len()));
                     }
@@ -163,19 +163,19 @@ fn every_quiz_has_exactly_one_right_answer() {
                         wrong.push(format!("{at}: answer {answer:?} is not one of the options"));
                     }
                     if has.contains(answer) {
-                        wrong.push(format!("{at}: the prompt already has {answer:?}: {brief:?} ({has:?})"));
+                        wrong.push(format!("{at}: the prompt already has {answer:?}: {prompt:?} ({has:?})"));
                     }
                     for o in options.iter().filter(|o| **o != answer) {
                         if !has.contains(*o) {
-                            wrong.push(format!("{at}: {o:?} is missing too, so two answers fit: {brief:?} ({has:?})"));
+                            wrong.push(format!("{at}: {o:?} is missing too, so two answers fit: {prompt:?} ({has:?})"));
                         }
                     }
-                    if check(brief).not_a_brief {
-                        wrong.push(format!("{at}: the prompt reads as not a prompt: {brief:?}"));
+                    if check(prompt).not_a_prompt {
+                        wrong.push(format!("{at}: the prompt reads as not a prompt: {prompt:?}"));
                     }
                 }
                 "pick" => {
-                    if track != "catch" {
+                    if track != "correction" {
                         wrong.push(format!("{at}: pick quizzes are only for the correction track"));
                     }
                     if !(2..=4).contains(&options.len()) {
@@ -246,7 +246,7 @@ fn the_file_is_well_formed() {
             && match (track, teaches.iter().next()) {
                 ("habits", Some((k, v))) => k == "signal" && v.as_str().is_some_and(|s| signals.contains(&s)),
                 ("steer", Some((k, v))) => k == "steer" && v.as_str().is_some_and(|s| STEERS.contains(&s)),
-                ("catch", Some((k, v))) => k == "catch" && v.as_bool() == Some(true),
+                ("correction", Some((k, v))) => k == "correction" && v.as_bool() == Some(true),
                 _ => false,
             };
         if !ok {

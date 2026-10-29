@@ -43,7 +43,7 @@
             {
               "kind": "missing",
               "question": "What's this prompt missing?",
-              "brief": "The welcome email should use the customer's first name. Don't change the subject line.",
+              "prompt": "The welcome email should use the customer's first name. Don't change the subject line.",
               "options": ["spot", "done", "limits"],
               "answer": "spot",
               "explain": "Which welcome email? Name the file or template it lives in."
@@ -81,7 +81,7 @@
             {
               "kind": "missing",
               "question": "What's this prompt missing?",
-              "brief": "In report.py, the monthly totals look off. They should match the bank statement.",
+              "prompt": "In report.py, the monthly totals look off. They should match the bank statement.",
               "options": ["spot", "proof", "done"],
               "answer": "proof",
               "explain": "Look off how? Show one total you got and the one you expected."
@@ -119,7 +119,7 @@
             {
               "kind": "missing",
               "question": "What's this prompt missing?",
-              "brief": "Rename getUser to fetchUser because the old name confuses new hires. Don't touch the tests.",
+              "prompt": "Rename getUser to fetchUser because the old name confuses new hires. Don't touch the tests.",
               "options": ["spot", "done", "limits", "why"],
               "answer": "done",
               "explain": "How will you know it worked? Say what to check, like the build passing."
@@ -157,7 +157,7 @@
             {
               "kind": "missing",
               "question": "What's this prompt missing?",
-              "brief": "In about.html, fix the typo in the first paragraph because the founders spotted it. It should say 'founded in 2019'.",
+              "prompt": "In about.html, fix the typo in the first paragraph because the founders spotted it. It should say 'founded in 2019'.",
               "options": ["spot", "done", "limits", "why"],
               "answer": "limits",
               "explain": "Nothing says to leave the rest of the page alone, so expect a few bonus edits."
@@ -191,7 +191,7 @@
             {
               "kind": "missing",
               "question": "What's this prompt missing?",
-              "brief": "Add a dark mode toggle to settings.tsx. Don't change the default theme. Done when it remembers the choice.",
+              "prompt": "Add a dark mode toggle to settings.tsx. Don't change the default theme. Done when it remembers the choice.",
               "options": ["spot", "done", "limits", "why"],
               "answer": "why",
               "explain": "Who asked for it, and what for? That shapes every small choice."
@@ -236,7 +236,7 @@
             {
               "kind": "missing",
               "question": "What's this prompt missing?",
-              "brief": "Add a CSV export to orders.ts. It should include tax. Don't change the table.",
+              "prompt": "Add a CSV export to orders.ts. It should include tax. Don't change the table.",
               "options": ["spot", "done", "limits", "why"],
               "answer": "why",
               "explain": "Who needs the export, and for what? That's where the next 'also' hides."
@@ -278,7 +278,7 @@
           "title": "Plan big tasks first",
           "reviewed": "2026-10",
           "teaches": { "steer": "redo" },
-          "why": "A plan you can read in a minute catches a wrong turn before hours of work get thrown away.",
+          "why": "A plan you can read in a minute corrections a wrong turn before hours of work get thrown away.",
           "before": {
             "text": "Move the app from the old payment system to the new one.",
             "signals": []
@@ -307,7 +307,7 @@
             {
               "kind": "missing",
               "question": "What's this prompt missing?",
-              "brief": "Split utils.ts into smaller files. Give me the plan as a list first. Don't move anything yet.",
+              "prompt": "Split utils.ts into smaller files. Give me the plan as a list first. Don't move anything yet.",
               "options": ["spot", "done", "limits", "why"],
               "answer": "why",
               "explain": "Smaller for what? Faster builds and easier reviews lead to different plans."
@@ -350,7 +350,7 @@
       ]
     },
     {
-      "id": "catch",
+      "id": "correction",
       "title": "Correct more",
       "blurb": "Check the work before you trust it.",
       "lessons": [
@@ -358,7 +358,7 @@
           "id": "ask-for-proof",
           "title": "Ask for proof",
           "reviewed": "2026-10",
-          "teaches": { "catch": true },
+          "teaches": { "correction": true },
           "why": "A confident answer isn't a checked one. Asking where it came from takes ten seconds.",
           "before": {
             "text": "Update the refund flow to use the retry helper.",
@@ -398,7 +398,7 @@
           "id": "run-it-before-you-trust-it",
           "title": "Run it before you trust it",
           "reviewed": "2026-10",
-          "teaches": { "catch": true },
+          "teaches": { "correction": true },
           "why": "Work that looks right and work that works are not the same thing. Running it is how you know.",
           "before": {
             "text": "Fix the date bug.",
@@ -435,7 +435,7 @@
           "id": "watch-for-confident-guesses",
           "title": "Watch for confident guesses",
           "reviewed": "2026-10",
-          "teaches": { "catch": true },
+          "teaches": { "correction": true },
           "why": "A wrong answer can sound just as sure as a right one. Learn the tells.",
           "before": {
             "text": "Make the upload faster.",

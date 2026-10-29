@@ -20,8 +20,8 @@ pub struct SyncReport {
     pub files_read: usize,
     /// New messages counted.
     pub messages: usize,
-    /// New catches counted.
-    pub catches: usize,
+    /// New corrections counted.
+    pub corrections: usize,
     /// One line per file that was skipped, with the reason.
     pub errors: Vec<String>,
     /// Scores were rebuilt because the rules changed since they were counted.
@@ -60,7 +60,7 @@ pub fn sync(store: &mut Store, all: &[Box<dyn Source>]) -> Result<SyncReport> {
                     Ok((m, c)) => {
                         report.files_read += 1;
                         report.messages += m;
-                        report.catches += c;
+                        report.corrections += c;
                     }
                     Err(e) => report.errors.push(e),
                 }

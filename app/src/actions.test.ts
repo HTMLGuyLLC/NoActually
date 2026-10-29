@@ -71,14 +71,14 @@ describe("pickStatFor", () => {
   it("shows both rates on the overview, and the page's own numbers elsewhere", async () => {
     const { pickStatFor } = await import("./actions");
     expect(pickStatFor("score", "overview")).toBe("both");
-    expect(pickStatFor("score", "briefs")).toBe("briefs");
-    expect(pickStatFor("score", "catches")).toBe("catches");
-    expect(pickStatFor("score", "hall")).toBe("catches");
+    expect(pickStatFor("score", "prompts")).toBe("prompts");
+    expect(pickStatFor("score", "corrections")).toBe("corrections");
+    expect(pickStatFor("score", "hall")).toBe("corrections");
   });
 
   it("shows both rates on Improve and Learn, whatever scorecard section was last open", async () => {
     const { pickStatFor } = await import("./actions");
-    for (const tab of ["improve", "learn", "settings"] as const) expect(pickStatFor(tab, "briefs"), tab).toBe("both");
+    for (const tab of ["improve", "learn", "settings"] as const) expect(pickStatFor(tab, "prompts"), tab).toBe("both");
   });
 });
 
@@ -180,13 +180,13 @@ describe("delegated actions", () => {
 
   it("switches scorecard sections", async () => {
     expect(root.querySelector('[data-action="view"][aria-current="page"]')?.textContent).toBe("Overview");
-    await click('[data-action="view"][data-id="briefs"]');
+    await click('[data-action="view"][data-id="prompts"]');
     expect(root.querySelector('[data-action="view"][aria-current="page"]')?.textContent).toBe("Prompts");
     expect(root.textContent).toContain("Where steering went");
   });
 
   it("sends the logo home: scorecard overview", async () => {
-    await click('[data-action="view"][data-id="briefs"]');
+    await click('[data-action="view"][data-id="prompts"]');
     await toTab("settings");
     await click('[data-action="home"]');
     expect(root.querySelector('[data-action="tab"][aria-current="page"]')?.textContent).toBe("Scorecard");

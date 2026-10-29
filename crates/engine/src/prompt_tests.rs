@@ -1,4 +1,4 @@
-//! Behavior tests for briefs and steering. Examples mirror real prompts without copying anyone's.
+//! Behavior tests for prompts and steering. Examples mirror real prompts without copying anyone's.
 
 use super::*;
 use crate::{classify, AiMsg};
@@ -19,8 +19,8 @@ fn first_message(human: &str) -> Prompt {
 
 fn signals(human: &str) -> Vec<Signal> {
     match first_message(human) {
-        Prompt::Brief { signals, .. } => Signal::ALL.into_iter().filter(|s| signals.has(*s)).collect(),
-        other => panic!("not a brief: {human:?} -> {other:?}"),
+        Prompt::Prompt { signals, .. } => Signal::ALL.into_iter().filter(|s| signals.has(*s)).collect(),
+        other => panic!("not a prompt: {human:?} -> {other:?}"),
     }
 }
 
@@ -134,8 +134,8 @@ fn every_example_carries_exactly_its_signals() {
 #[test]
 fn grades_count_signals_not_words() {
     let g = |p: &str| match first_message(p) {
-        Prompt::Brief { signals, .. } => Grade::of(signals),
-        _ => panic!("not a brief"),
+        Prompt::Prompt { signals, .. } => Grade::of(signals),
+        _ => panic!("not a prompt"),
     };
     assert_eq!(g("fix it"), Grade::Thin);
     let padded = "please please please make the whole thing a lot better and nicer and faster for everyone ".repeat(20);
@@ -157,7 +157,7 @@ fn signal_bits_never_move() {
 }
 
 #[test]
-fn until_a_chat_has_a_task_its_first_request_is_the_brief() {
+fn until_a_chat_has_a_task_its_first_request_is_the_prompt() {
     let msg = |human: &str, has_task: bool| {
         let turn = Turn {
             human: human.into(),
@@ -167,25 +167,25 @@ fn until_a_chat_has_a_task_its_first_request_is_the_brief() {
         };
         read_prompt(&turn, &classify(&turn), has_task)
     };
-    // After a hello or a question, the real request is the brief.
-    assert!(matches!(msg("add a CSV export to the report page", false), Prompt::Brief { .. }));
+    // After a hello or a question, the real request is the prompt.
+    assert!(matches!(msg("add a CSV export to the report page", false), Prompt::Prompt { .. }));
     assert_eq!(msg("add a CSV export to the report page", true), Prompt::Other, "mid-task, it's part of the task");
     assert_eq!(msg("thanks", false), Prompt::Other);
     assert_eq!(msg("I meant the other file", false), Prompt::Other, "nothing to steer, and not a request");
-    assert!(matches!(first_message("make sure the tests pass after the upgrade"), Prompt::Brief { .. }));
+    assert!(matches!(first_message("make sure the tests pass after the upgrade"), Prompt::Prompt { .. }));
     // A correction is still a correction, task or not.
     assert!(matches!(msg("that's wrong", false), Prompt::Steer { cause: Steer::AiWrong, .. }));
 }
 
 #[test]
-fn a_chats_first_message_is_its_brief() {
-    assert!(matches!(first_message("add a CSV export"), Prompt::Brief { .. }));
-    let Prompt::Brief { rules, .. } = first_message("add a test for parse_date") else { panic!() };
-    assert_eq!(rules, ["task.first", "brief.spot.ident", "brief.done.tests"], "says what started it, then why");
+fn a_chats_first_message_is_its_prompt() {
+    assert!(matches!(first_message("add a CSV export"), Prompt::Prompt { .. }));
+    let Prompt::Prompt { rules, .. } = first_message("add a test for parse_date") else { panic!() };
+    assert_eq!(rules, ["task.first", "prompt.spot.ident", "prompt.done.tests"], "says what started it, then why");
 }
 
 #[test]
-fn hellos_questions_and_payloads_are_not_briefs() {
+fn hellos_questions_and_payloads_are_not_prompts() {
     for p in [
         "hi",
         "continue",
@@ -210,7 +210,7 @@ fn hellos_questions_and_payloads_are_not_briefs() {
         "Is it possible to add dark mode?",
         "/Users/me/app/src/a.ts is broken",
     ] {
-        assert!(matches!(first_message(p), Prompt::Brief { .. }), "{p:?}");
+        assert!(matches!(first_message(p), Prompt::Prompt { .. }), "{p:?}");
     }
 }
 
@@ -279,7 +279,7 @@ fn ordinary_replies_are_not_steering() {
 #[test]
 fn a_new_task_partway_through_a_chat() {
     let starts = |human: &str| match read(Some("Done, the export works."), human, "On it.") {
-        Prompt::Brief { rules, .. } => Some(rules[0]),
+        Prompt::Prompt { rules, .. } => Some(rules[0]),
         _ => None,
     };
     assert_eq!(starts("great, now add a settings page"), Some("task.now"));
@@ -294,20 +294,20 @@ fn a_new_task_partway_through_a_chat() {
 }
 
 #[test]
-fn brief_tiers_follow_the_share_of_tasks_that_landed() {
-    let at = BriefTier::for_tasks;
+fn prompt_tiers_follow_the_share_of_tasks_that_landed() {
+    let at = PromptTier::for_tasks;
     assert_eq!(at(9, 9), None, "too few tasks to say");
-    assert_eq!(at(0, 10), Some(BriefTier::VibesOnly));
-    assert_eq!(at(6, 10), Some(BriefTier::VibesOnly));
-    assert_eq!(at(7, 10), Some(BriefTier::TicketWriter));
-    assert_eq!(at(86, 100), Some(BriefTier::TechLead), "a typical heavy user");
-    assert_eq!(at(9, 10), Some(BriefTier::Architect));
-    assert!(BriefTier::ALL.windows(2).all(|w| w[0] < w[1] && w[0].floor() < w[1].floor()));
-    for t in BriefTier::ALL {
+    assert_eq!(at(0, 10), Some(PromptTier::VibesOnly));
+    assert_eq!(at(6, 10), Some(PromptTier::VibesOnly));
+    assert_eq!(at(7, 10), Some(PromptTier::TicketWriter));
+    assert_eq!(at(86, 100), Some(PromptTier::TechLead), "a typical heavy user");
+    assert_eq!(at(9, 10), Some(PromptTier::Architect));
+    assert!(PromptTier::ALL.windows(2).all(|w| w[0] < w[1] && w[0].floor() < w[1].floor()));
+    for t in PromptTier::ALL {
         assert_eq!(t.id().parse(), Ok(t));
         assert_eq!(serde_json::to_string(&t).unwrap(), format!("\"{}\"", t.id()));
     }
-    assert_eq!((BriefTier::TechLead.next(), BriefTier::Architect.next()), (Some(BriefTier::Architect), None));
+    assert_eq!((PromptTier::TechLead.next(), PromptTier::Architect.next()), (Some(PromptTier::Architect), None));
 }
 
 #[test]
