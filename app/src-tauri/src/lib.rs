@@ -137,8 +137,27 @@ fn build_tray(tauri_app: &tauri::App, menu: &Menu<tauri::Wry>) -> tauri::Result<
 }
 
 /// Opens the database, builds the tray, and starts the tracker and update threads.
+/// Default width of the scorecard window: the page's content plus a little room on each side.
+const MAIN_WIDTH: f64 = 940.0;
+
+/// Opens the scorecard as tall as the screen's usable area (below the menu bar, above the Dock),
+/// centered, so as much of the page shows as fits. The size in `tauri.conf.json` is the fallback
+/// when the monitor can't be read.
+fn fit_main_to_screen(handle: &AppHandle) {
+    let Some(w) = handle.get_webview_window("main") else { return };
+    let Ok(Some(monitor)) = w.current_monitor().or_else(|_| w.primary_monitor()) else { return };
+    let area = monitor.work_area();
+    let scale = monitor.scale_factor();
+    let (height, top) = (f64::from(area.size.height) / scale, f64::from(area.position.y) / scale);
+    let width = MAIN_WIDTH.min(f64::from(area.size.width) / scale);
+    let left = f64::from(area.position.x) / scale + (f64::from(area.size.width) / scale - width) / 2.0;
+    let _ = w.set_size(tauri::LogicalSize::new(width, height));
+    let _ = w.set_position(tauri::LogicalPosition::new(left, top));
+}
+
 fn setup(tauri_app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let handle = tauri_app.handle().clone();
+    fit_main_to_screen(&handle);
     // The same file the CLI opens. NOACTUALLY_DB points at another one (development, demos).
     let db = store::default_db_path()?;
     if store::legacy_db_env_in_use() {
