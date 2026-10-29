@@ -92,8 +92,10 @@ export function verdictMark(word: string | null, srText: string, still: boolean)
 }
 
 /** Word-answered tiers label their ladder rows by the answer ("Usually"), plainer than the name. */
-export const byAnswer = <T extends { verdict: string }>(tiers: T[]): (T & { name: string })[] =>
-  tiers.map((t) => ({ ...t, name: t.verdict.replace(/\.$/, "") }));
+export const byAnswer = <T extends { verdict: string }>(tiers: T[]): (T & { name: string })[] => tiers.map((t) => ({ ...t, name: answerWord(t) }));
+
+/** A tier's answer as a label, without its full stop: "Usually". */
+export const answerWord = (t: { verdict: string }): string => t.verdict.replace(/\.$/, "");
 
 /** The tier's name and what it means, under its answer: "Hawk-eyed. You usually catch AI slipping." */
 export const tierBlurb = (tier: { name: string; blurb: string } | undefined): Html | "" =>

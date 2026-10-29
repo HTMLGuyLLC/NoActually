@@ -5,7 +5,7 @@ import { type Html, html, num } from "../html";
 import { landedPct, percent, promptTier, promptTierRanges, steerTitle } from "../meta";
 import { PERIOD_WHEN, type Period } from "../state";
 import { stackChart } from "./charts";
-import { byAnswer, ladderView, tierBlurb, verdictMark } from "./chrome";
+import { answerWord, byAnswer, ladderView, tierBlurb, verdictMark } from "./chrome";
 
 /** "86% of your tasks in the last 28 days landed…", or how many more it takes to get ranked. */
 function becauseLine(b: Prompts, meta: Meta, when: string): Html {
@@ -61,7 +61,7 @@ function gradesView(b: Prompts, meta: Meta): Html {
 function ladderNote(b: Prompts, meta: Meta): string {
   if (!b.tier) return `${plural(b.to_rank, "more task")} to get ranked`;
   const next = promptTier(meta, b.next_tier);
-  return next ? `${next.name} at ${next.floor}%. You're at ${landedPct(b)}%.` : "Top tier. Don't let it slip.";
+  return next ? `Next: ${answerWord(next)}, at ${next.floor}%. You're at ${landedPct(b)}%.` : "Top tier. Don't let it slip.";
 }
 
 function promptLadderView(b: Prompts, meta: Meta): Html {

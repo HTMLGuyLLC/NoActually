@@ -68,25 +68,13 @@ describe("scorecardView", () => {
     expect(unranked).not.toContain("share-corrections");
   });
 
-  it("shows you vs it as one tug-of-war bar, keeping a sliver for a tiny side", () => {
-    const view = (corrections: number, humbled: number) => scorecardView(stats({ corrections, humbled }), { ...ctx, view: "corrections" }).value;
-    const yours = (corrections: number, humbled: number) => view(corrections, humbled).match(/<i class="you" data-w="(\d+)"><\/i>/)?.[1];
-    expect(yours(37, 1)).toBe("97");
-    expect(yours(180, 1)).toBe("98");
-    expect(yours(1, 180)).toBe("2");
-    expect(yours(5, 0)).toBe("100");
-    expect(yours(0, 5)).toBe("0");
-    expect(yours(0, 0)).toBe("50");
-    expect(view(0, 0)).toContain('class="tug empty"');
-  });
-
-  it("names who corrected whom, and asks the question in one short line", () => {
+  it("asks the question in one short line, naming the model", () => {
     const m = scorecardView(stats(), { ...ctx, view: "corrections" }).value;
     expect(m).toContain('<h1 class="q">Do you correct AI?</h1>');
-    expect(m).toContain('<span class="eyebrow">You corrected AI</span>');
-    expect(m).toContain('<span class="eyebrow">AI corrected you</span>');
+    // The sentence carries both counts, so there's no separate you-vs-it block.
+    expect(m).not.toContain("You corrected AI</span>");
     const opus = scorecardView(stats(), { ...ctx, view: "corrections", filter: { provider: "Anthropic", family: "Claude Opus" } }).value;
-    expect(opus).toContain("You corrected Claude Opus");
+    expect(opus).toContain('<h1 class="q">Do you correct Claude Opus?</h1>');
   });
 
   it("says so when there are no corrections in the window yet", () => {
@@ -159,7 +147,7 @@ describe("overview hero", () => {
     expect(m).toContain('aria-hidden="true">Often.</div>');
     expect(m).toContain("You corrected it <b>41 times</b> in the last 28 days. It corrected you 2 times.");
     expect(m).toContain('<p class="tier-blurb"><b>Reviewer.</b> You often catch it slipping.</p>');
-    expect(m).toContain("Hawk-eyed at 90. You&#39;re at 88.");
+    expect(m).toContain("Next: Usually, at 90. You&#39;re at 88.");
   });
 
   it("shows the two parts as bars with their weights from meta", () => {

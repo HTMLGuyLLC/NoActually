@@ -151,16 +151,6 @@ svg [data-tip]::after { content: none }
 .no.maybe { color: var(--muted) }
 .because { font-size: 17px; max-width: 30ch; padding-bottom: 4px }
 .because b { background: linear-gradient(transparent 30%, var(--hl) 30%, var(--hl) 94%, transparent 94%); font-weight: 600; padding: 0 .08em }
-.score { display: grid; grid-template-columns: 1fr 1fr; align-items: end; gap: 10px; margin-top: 20px }
-.side { display: grid; gap: 2px } .side.ai { text-align: right }
-.side .n { font: 800 42px/1 var(--display) }
-.side.you .n, .n.you { color: var(--pen) } .side.ai .n, .n.ai { color: var(--ai) }
-/* The tug of war: your share in your color from the left, the rest in its color. */
-.tug { grid-column: 1 / -1; display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--ai) }
-.tug .you { width: var(--w, 50%); background: var(--pen) }
-.tug .ai { flex: 1 }
-.tug .you + .ai { box-shadow: inset 2px 0 0 var(--surface) }
-.tug.empty { background: var(--rule) } .tug.empty .you { background: transparent }
 .meter { display: grid; gap: 12px; align-content: start }
 /* A status, not a control: plain label text, no fill or border that would read as a button. */
 .tier-label { font: 600 10.5px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--pen); white-space: nowrap }

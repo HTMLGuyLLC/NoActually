@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { HOSTILE, meta, prompts, stats } from "../test/fixtures";
 import { glanceView } from "./glance";
-import { promptsView } from "./prompts";
+import { promptsSummaryView, promptsView } from "./prompts";
 import { scorecardView } from "./scorecard";
 
 const view = (over: Parameters<typeof prompts>[0] = {}, still = false) => promptsView(prompts(over), meta, still).value;
@@ -27,6 +27,10 @@ describe("promptsView", () => {
     expect(m).toContain(">Sometimes.</div>");
     expect(m).toContain('<span>Sometimes</span><span><b class="at">85%</b><span class="sr-only">, you\'re at 85%. Range</span> · 80–89%</span>');
     expect(m).not.toContain("Architect at 90%");
+    // The overview card names the next tier by its answer, like the ladder rows.
+    expect(promptsSummaryView(prompts({ tier: "tech_lead", next_tier: "architect", window_landed: 34 }), meta, true).value).toContain(
+      "Next: Rarely, at 90%. You&#39;re at 85%.",
+    );
   });
 
   it("waits to rank a thin week, and offers nothing to share yet", () => {

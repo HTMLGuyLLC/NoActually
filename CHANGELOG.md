@@ -25,7 +25,7 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 - Click (or hover) a bar in Tasks per week or Corrections per week to see that week's breakdown: what the tasks needed, or which kinds of corrections, and how often it corrected you. Every tooltip is the app's own now, charts included.
 - The Hall of fame flips between an award's entries with ‹ › arrows instead of expanding, and each entry is quieter: your quote in ink, no category chip (the award names it).
 - Cards drop labels that repeated the question or the time picker. Scrolling lists leave room for the scrollbar.
-- Prompting has a **Tasks per week** chart: each week's tasks split into the ones that landed and the ones that needed more from you, the same tasks your prompt tier counts. You vs it on Corrections is a tug-of-war bar.
+- Prompting has a **Tasks per week** chart: each week's tasks split into the ones that landed and the ones that needed more from you, the same tasks your prompt tier counts.
 - Corrections per week no longer colors the busiest week as if it were the good one; it's labeled "Most" instead.
 - The header keeps Scorecard, Improve and Learn labeled; Settings is an icon button, and Sources is its first section.
 - The quick glance asks the scorecard's three questions, each answered in a word with a short why, plus your goal with this week's number. A gear opens Settings and **Open app** opens the scorecard; the share and copy buttons are gone (share from the app).

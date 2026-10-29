@@ -6,7 +6,7 @@ import { type Html, html, num, raw } from "../html";
 import { categoryTitle, correctionTier, correctionTierRanges, tierName, tierOf, tierRanges } from "../meta";
 import { correctionRate, modelName } from "../picker/picker";
 import { PERIOD_WHEN, PERIODS, type Period, SCORE_VIEWS, type ScoreView } from "../state";
-import { byAnswer, ladderView, svg, tierBlurb, verdictMark } from "./chrome";
+import { answerWord, byAnswer, ladderView, svg, tierBlurb, verdictMark } from "./chrome";
 import { promptsSummaryView, promptsView } from "./prompts";
 
 export type ScorecardContext = {
@@ -119,18 +119,6 @@ function heroView(s: Stats, ctx: Ctx): Html {
     </section>`;
 }
 
-/** You vs it as a tug of war: one bar, your share from the left, its share from the right. */
-function versusView(s: Stats, who: string): Html {
-  const total = s.corrections + s.humbled;
-  // Each side that has any keeps a sliver, so 180 to 1 still shows the 1. A side with none gets none.
-  const yours = total ? Math.min(s.humbled ? 98 : 100, Math.max(s.corrections ? 2 : 0, Math.round((100 * s.corrections) / total))) : 50;
-  return html`<div class="score">
-      <div class="side you"><span class="eyebrow">You corrected ${who}</span><span class="n">${num(s.corrections)}</span></div>
-      <div class="side ai"><span class="eyebrow">${who} corrected you</span><span class="n">${num(s.humbled)}</span></div>
-      <div class="tug${total ? "" : " empty"}" role="img" aria-label="${total ? `${yours}% of the corrections were yours` : "No corrections yet"}"><i class="you" data-w="${total ? yours : 50}"></i><i class="ai"></i></div>
-    </div>`;
-}
-
 /** Why fewer corrections never costs points. */
 const proofNote = (meta: Meta) =>
   html`<p class="muted small">${meta.correction_proof} corrections prove you check its work. Correcting it less because it got it right never costs you.</p>`;
@@ -152,7 +140,7 @@ function correctionBecause(s: Stats, when: string): Html {
 function correctionNote(o: Overall, meta: Meta): string {
   if (o.judgment == null) return `${plural(o.to_rank, "more task")} to get ranked`;
   const next = correctionTier(meta, o.next_correction_tier);
-  return next ? `${next.name} at ${next.floor}. You're at ${o.judgment}.` : "Top tier. Keep checking.";
+  return next ? `Next: ${answerWord(next)}, at ${next.floor}. You're at ${o.judgment}.` : "Top tier. Keep checking.";
 }
 
 function correctionLadderView(o: Overall, meta: Meta): Html {
@@ -299,7 +287,6 @@ function correctionsView(s: Stats, ctx: Ctx): Html {
         <h1 class="q">Do you correct ${subjectText(ctx.filter, ctx.meta)}?</h1>
         <div class="verdict">${correctionMark(s.overall, meta, ctx.correctionsStill)}<div class="because">${correctionBecause(s, ctx.when)}</div></div>
         ${tierBlurb(correctionTier(meta, s.overall.correction_tier))}
-        ${versusView(s, subjectText(ctx.filter, ctx.meta))}
       </div>
       <div class="meter">
         ${correctionLadderView(s.overall, meta)}
