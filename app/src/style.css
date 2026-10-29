@@ -281,9 +281,13 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 /* An award's entries share one cell, so the card keeps the tallest one's height while you flip. */
 .slides { display: grid }
 .slide { grid-area: 1 / 1; display: grid }
-.slide[aria-hidden="true"] { visibility: hidden }
+.slide[aria-hidden] { visibility: hidden }
+/* Entries are capped (quote 3 lines, reply 2) so the tallest one doesn't leave the rest with a gap. */
+.slide .you-said { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden }
+.slide .ai-said { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
 .slide-nav { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 10px }
-.slide-nav button { min-width: 34px; font-size: 16px; line-height: 1 }
+.slide-nav button { display: inline-grid; place-items: center; width: 34px; height: 34px; padding: 0; border-radius: 50% }
+.slide-nav svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 
 .sources { display: grid; gap: 10px }
 .source { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface) }

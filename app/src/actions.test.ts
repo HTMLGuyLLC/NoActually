@@ -174,6 +174,33 @@ describe("delegated actions", () => {
     expect(shown()).toContain("first"); // wraps around
   });
 
+  it("loops through five entries both ways", async () => {
+    const { hallEntry } = await import("./test/fixtures");
+    const names = ["a1", "a2", "a3", "a4", "a5"];
+    api.stats.mockResolvedValue(
+      stats({ categories: { just_wrong: 5 }, hall_of_fame: names.map((h, i) => hallEntry({ id: i + 1, category: "just_wrong", human: h })) }),
+    );
+    state.setView("hall");
+    await render();
+    // What a person sees: the slides the stylesheet doesn't hide (every other one is aria-hidden="true").
+    const shown = () => {
+      const visible = [...root.querySelectorAll('[data-award="just_wrong"] .slide')].filter((el) => el.getAttribute("aria-hidden") !== "true");
+      expect(visible).toHaveLength(1);
+      return visible[0]?.querySelector(".you-said")?.textContent ?? "";
+    };
+    const next = () => click('[data-award="just_wrong"] [data-action="award-slide"][data-step="1"]');
+    const seen: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      seen.push(shown());
+      await next();
+    }
+    expect(seen.map((t) => t.replace(/[“”]/g, ""))).toEqual(["a1", "a2", "a3", "a4", "a5", "a1", "a2"]);
+    await click('[data-award="just_wrong"] [data-action="award-slide"][data-step="-1"]');
+    await click('[data-award="just_wrong"] [data-action="award-slide"][data-step="-1"]');
+    await click('[data-award="just_wrong"] [data-action="award-slide"][data-step="-1"]');
+    expect(shown().replace(/[“”]/g, "")).toBe("a5");
+  });
+
   it("takes two clicks to forget a source", async () => {
     await toTab("settings");
     await click('[data-action="forget"][data-id="codex"]');

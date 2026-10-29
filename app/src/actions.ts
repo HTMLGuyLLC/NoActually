@@ -213,7 +213,9 @@ export const clickActions = {
     const now = slides.findIndex((el) => !el.hasAttribute("aria-hidden"));
     const next = (now + Number(data(b, "step")) + slides.length) % slides.length;
     slides.forEach((el, n) => {
-      el.toggleAttribute("aria-hidden", n !== next);
+      // The same markup the view draws: aria-hidden="true" plus inert on every slide but one.
+      if (n === next) el.removeAttribute("aria-hidden");
+      else el.setAttribute("aria-hidden", "true");
       el.toggleAttribute("inert", n !== next);
     });
     const at = award.querySelector(".slide-at");

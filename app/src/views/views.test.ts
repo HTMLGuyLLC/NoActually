@@ -485,7 +485,7 @@ describe("hall of fame awards", () => {
     expect(big).toBeGreaterThan(-1);
     expect(big).toBeLessThan(m.indexOf(AWARDS.made_it_up?.name ?? "?"));
     // Entries flip in place: the best shows, the rest wait in the same cell, with "1 of 2" arrows.
-    expect(m).toContain('<span class="slide-at">1</span> of 2');
+    expect(m).toContain('<span class="slide-at">1</span> of top 2');
     expect(m).toContain('data-action="award-slide"');
     expect(m).toContain('class="slide" aria-hidden="true" inert');
     expect(m.indexOf("best one")).toBeLessThan(m.indexOf("runner up"));

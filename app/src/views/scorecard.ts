@@ -333,6 +333,10 @@ export const AWARDS: Record<string, { emoji: string; name: string; blurb: string
   "": { emoji: "🪞", name: "Touché", blurb: "The times it corrected you. Fair's fair." },
 };
 
+/** Drawn chevrons: text arrows sit on the font's baseline and never center in a round button. */
+const ARROW_PREV = raw(`<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M7.5 2.5 4 6l3.5 3.5"/></svg>`);
+const ARROW_NEXT = raw(`<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5 8 6l-3.5 3.5"/></svg>`);
+
 /** An award's entries, best first, one at a time. All of them share one grid cell, so the card is as
  * tall as the tallest and flipping never moves the page; prev/next flip in place (actions.ts). */
 function slidesView(key: string, entries: HallEntry[], at: number): Html {
@@ -342,9 +346,9 @@ function slidesView(key: string, entries: HallEntry[], at: number): Html {
   )}</div>`;
   if (entries.length < 2) return slides;
   const nav = html`<div class="slide-nav">
-      <button class="ghost small" data-action="award-slide" data-id="${key}" data-step="-1" aria-label="Previous">‹</button>
-      <span class="muted small" aria-live="polite"><span class="slide-at">${i + 1}</span> of ${entries.length}</span>
-      <button class="ghost small" data-action="award-slide" data-id="${key}" data-step="1" aria-label="Next">›</button>
+      <button class="ghost small" data-action="award-slide" data-id="${key}" data-step="-1" aria-label="Previous">${ARROW_PREV}</button>
+      <span class="muted small" aria-live="polite"><span class="slide-at">${i + 1}</span> of top ${entries.length}</span>
+      <button class="ghost small" data-action="award-slide" data-id="${key}" data-step="1" aria-label="Next">${ARROW_NEXT}</button>
     </div>`;
   return html`${slides}${nav}`;
 }
