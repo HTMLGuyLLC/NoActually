@@ -779,3 +779,48 @@ fn a_window_moves_the_counts_and_the_score() {
     assert_eq!((year.briefs.window_tasks, year.overall.catches), (12, 6));
     assert_eq!(week.catches_last_7d, all.catches_last_7d, "this week never moves");
 }
+
+#[test]
+fn the_hall_of_fame_keeps_the_best_few_per_award() {
+    let s = Store::open_in_memory().unwrap();
+    let event = |id: i64,
+                 label: &str,
+                 category: &str,
+                 human: Option<&str>,
+                 ai: Option<&str>,
+                 pinned: bool,
+                 ts: &str| {
+        s.conn()
+            .execute(
+                "INSERT INTO events (id, ts, day, source, session, provider, family, version, label, category, rules, level,
+                   human_snip, ai_snip, pinned, seen_key)
+                 VALUES (?1, ?2, substr(?2, 1, 10), 'claude-code', 's', 'Anthropic', 'Claude Opus', '5.5', ?3, ?4, '[]',
+                   'snippet', ?5, ?6, ?7, ?1)",
+                rusqlite::params![id, ts, label, category, human, ai, pinned],
+            )
+            .unwrap();
+    };
+    let punchy = "that endpoint doesn't exist, you made it up out of thin air";
+    event(1, "claimed", "made_it_up", Some(punchy), Some("Let me check."), false, "2026-10-20T10:00:00Z");
+    event(2, "confirmed", "made_it_up", Some(punchy), Some("You're right."), false, "2026-10-01T10:00:00Z");
+    event(3, "confirmed", "made_it_up", Some("no"), Some("You're right."), false, "2026-10-21T10:00:00Z");
+    event(4, "claimed", "made_it_up", Some("meh"), None, true, "2026-09-01T10:00:00Z");
+    for id in 10..20 {
+        event(id, "claimed", "still_broken", Some("still broken"), None, false, "2026-10-10T10:00:00Z");
+    }
+    event(
+        30,
+        "humbled",
+        "",
+        Some("use the old flag"),
+        Some("Actually, that flag was removed."),
+        false,
+        "2026-10-22T10:00:00Z",
+    );
+    let hall = stats(&s).hall_of_fame;
+    let ids = |cat: &str| hall.iter().filter(|e| e.category == cat).map(|e| e.id).collect::<Vec<_>>();
+    // Pinned first; then admitted beats claimed; then the punchier line; then the newest.
+    assert_eq!(ids("made_it_up"), [4, 2, 3, 1]);
+    assert_eq!(ids("still_broken").len(), 5, "the best few per award, not all of them");
+    assert_eq!(ids(""), [30], "being humbled is an award too");
+}

@@ -374,3 +374,27 @@ describe("status and refresh", () => {
     expect(scorecardView(stats(), { meta, filter: { provider: "OpenAI" }, still: true }).value).toContain("chip-clear");
   });
 });
+
+describe("hall of fame awards", () => {
+  it("gives each kind of catch an award, best snippet first, most earned first, unearned dimmed", async () => {
+    const { scorecardView, AWARDS } = await import("./scorecard");
+    const s = stats({
+      categories: { made_it_up: 2, just_wrong: 9 },
+      humbled: 0,
+      hall_of_fame: [
+        hallEntry({ id: 1, category: "just_wrong", human: "best one" }),
+        hallEntry({ id: 2, category: "just_wrong", human: "runner up" }),
+        hallEntry({ id: 3, category: "made_it_up" }),
+      ],
+    });
+    const m = scorecardView(s, { meta, filter: {}, still: true, view: "hall" }).value;
+    const big = m.indexOf(AWARDS.just_wrong?.name ?? "?");
+    expect(big).toBeGreaterThan(-1);
+    expect(big).toBeLessThan(m.indexOf(AWARDS.made_it_up?.name ?? "?"));
+    expect(m).toContain("<summary>1 more</summary>");
+    expect(m.indexOf("best one")).toBeLessThan(m.indexOf("runner up"));
+    expect(m).toContain('class="award unearned"');
+    expect(m).toContain(AWARDS[""]?.name ?? "?");
+    expect(m).not.toContain("<img");
+  });
+});

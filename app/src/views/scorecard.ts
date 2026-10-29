@@ -281,8 +281,46 @@ function catchesView(s: Stats, ctx: ScorecardContext): Html {
     </section>`;
 }
 
+/** One award per kind of catch, plus one for the times it caught you. Keys are category ids ("" is humbled). */
+export const AWARDS: Record<string, { emoji: string; name: string; blurb: string }> = {
+  made_it_up: { emoji: "🦄", name: "The Fabulist", blurb: "Made it up with a straight face." },
+  ignored_instructions: { emoji: "🙉", name: "Selective Hearing", blurb: "You said it. It heard something else." },
+  misread: { emoji: "🤓", name: "Reading Is Hard", blurb: "Got the gist. The wrong gist." },
+  missed_something: { emoji: "🙈", name: "The Blind Spot", blurb: "It was right there. Right. There." },
+  still_broken: { emoji: "🔧", name: "“Fixed” It", blurb: "Declared victory. The bug disagreed." },
+  just_wrong: { emoji: "🧠", name: "Big Brain Energy", blurb: "Confidently, spectacularly wrong." },
+  "": { emoji: "🪞", name: "Touché", blurb: "The times it caught you. Fair's fair." },
+};
+
+/** An award: its count, its best snippet, and the runners-up. Unearned awards wait, dimmed. */
+function awardView(key: string, count: number, entries: HallEntry[], meta: Meta): Html {
+  const a = AWARDS[key] ?? { emoji: "🏅", name: categoryTitle(meta, key), blurb: "" };
+  const [best, ...rest] = entries;
+  const body = !count
+    ? html`<p class="muted small">Not earned yet.</p>`
+    : best
+      ? html`${hallView([best])}${rest.length ? html`<details class="runners-up"><summary>${rest.length} more</summary>${hallView(rest)}</details>` : ""}`
+      : html`<p class="muted small">No snippets kept. Your privacy setting may be “category only”, or the text has aged out.</p>`;
+  return html`<article class="award${count ? "" : " unearned"}">
+    <header><span class="award-emoji" aria-hidden="true">${a.emoji}</span><div><h3>${a.name}</h3><p class="muted small">${a.blurb}</p></div><span class="award-count" aria-label="${count} times">×${num(count)}</span></header>
+    ${body}
+  </article>`;
+}
+
 function hallSection(s: Stats, ctx: ScorecardContext): Html {
-  return html`<section><div class="head"><h2>Hall of fame · ${subjectButton(ctx)}</h2><p class="muted">Snippets are redacted and kept per your privacy setting.</p></div>${hallView(s.hall_of_fame)}</section>`;
+  const keys = [...ctx.meta.categories.map((c) => c.id), ""];
+  const count = (k: string) => (k ? (s.categories[k] ?? 0) : s.humbled);
+  // Most earned first; unearned last, in display order.
+  const order = keys.map((k, i) => ({ k, i, n: count(k) })).sort((x, y) => Number(y.n > 0) - Number(x.n > 0) || y.n - x.n || x.i - y.i);
+  return html`<section><div class="head"><h2>Hall of fame · ${subjectButton(ctx)}</h2><p class="muted">The best catch for each award, picked from your history. Snippets are redacted and kept per your privacy setting.</p></div>
+    <div class="awards">${order.map(({ k, n }) =>
+      awardView(
+        k,
+        n,
+        s.hall_of_fame.filter((e) => e.category === k),
+        ctx.meta,
+      ),
+    )}</div></section>`;
 }
 
 export function scorecardView(s: Stats, ctx: ScorecardContext): Html {

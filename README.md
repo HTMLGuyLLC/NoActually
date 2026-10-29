@@ -57,7 +57,7 @@ Better prompts mean fewer mistakes to catch, and that never costs you: once you'
 - **Learn.** 12 one-minute lessons in three tracks (the 5 habits, steer less, catch more), quick quizzes, and a brief checker that grades a draft as you type, with the same rules as your score.
 - **Any time window.** 7 days, 28 days, 90 days or all time: the whole scorecard follows the picker, score included. Every part of the score is a rate, so tiers mean the same thing in any window.
 - **Every model, side by side.** All AI, one provider, one family, or one exact version (say, Claude Opus 5.5). The picker shows the numbers that page is about.
-- **A Hall of Fame** of your best catches, as redacted snippets. Pin the ones you want to keep forever.
+- **A Hall of Fame** of awards, one per kind of catch: The Fabulist (made it up), Selective Hearing, The Blind Spot, “Fixed” It, Big Brain Energy, and Touché for the times it caught you. Each shows its best snippet, picked the same way every time. Pin the ones you want to keep forever.
 - **Popups** for your 10th catch, a new tier, a streak, a goal week met, or a goal done.
 - **Made to brag.** Share cards for X, LinkedIn, Bluesky, Threads, Reddit, Facebook, WhatsApp and Instagram. You always see exactly what will be posted before anything goes anywhere.
 

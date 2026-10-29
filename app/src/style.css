@@ -256,6 +256,18 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .ai-said { font-size: 14px; color: var(--muted); background: var(--ai-soft); border-radius: 8px; padding: 8px 10px; overflow-wrap: anywhere }
 .ai-said b { color: var(--ai) }
 .catch-actions { display: flex; gap: 8px; flex-wrap: wrap }
+/* Hall of fame: one award per kind of catch, its best snippet up front. */
+.awards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start }
+.award { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--rule); border-radius: 16px; background: var(--surface) }
+.award header { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center }
+.award h3 { margin: 0; font: 800 19px/1.1 var(--display) }
+.award-emoji { font-size: 30px; line-height: 1 }
+.award-count { font: 800 22px/1 var(--display); color: var(--pen); font-variant-numeric: tabular-nums }
+.award .fame { grid-template-columns: 1fr }
+.award.unearned { opacity: .55; border-style: dashed; background: transparent }
+.award.unearned .award-emoji { filter: grayscale(1) }
+.runners-up summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--muted) }
+.runners-up .fame { margin-top: 10px }
 
 .sources { display: grid; gap: 10px }
 .source { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface) }
@@ -416,7 +428,7 @@ button.link:hover { filter: none }
 }
 
 @media (max-width: 760px) {
-  .card, .split, .fame, .duo, .tracks, .compare, .improve-top { grid-template-columns: 1fr }
+  .card, .split, .fame, .duo, .tracks, .compare, .improve-top, .awards { grid-template-columns: 1fr }
   .recap { padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--rule) }
   .part { grid-template-columns: 1fr 3em } .part .bar-bg { grid-column: 1 / -1; grid-row: 2 }
   .stats { grid-template-columns: repeat(2, 1fr) }

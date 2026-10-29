@@ -12,8 +12,10 @@ use std::sync::LazyLock;
 
 /// A chat with at least this many messages counts as a real one.
 const REAL_CHAT: i64 = 10;
-/// Entries in the hall of fame.
-const HALL_SIZE: i64 = 12;
+/// Hall of fame entries per award (one award per catch category, and one for being humbled).
+const HALL_PER_AWARD: i64 = 5;
+/// A punchy line is about this long; much shorter says little, much longer rambles.
+const HALL_SWEET_SPOT: i64 = 60;
 /// A tip only quotes "with vs without" when both groups have this many continued tasks.
 const TIP_MIN_GROUP: i64 = 10;
 /// ...and briefs carrying the signal landed at least this many points more often.
@@ -193,7 +195,7 @@ pub struct Stats {
     pub weekly: Vec<WeekRow>,
     /// Per model, most caught first.
     pub models: Vec<ModelRow>,
-    /// Pinned first, then confirmed catches, newest first.
+    /// The best few per award (catch category, or "" for being humbled), best first in each.
     pub hall_of_fame: Vec<HallEntry>,
     /// How you brief it.
     pub briefs: Briefs,
@@ -446,11 +448,23 @@ fn model_counts(v: &View) -> Result<Vec<ModelRow>> {
 
 fn hall_of_fame(v: &View) -> Result<Vec<HallEntry>> {
     let names: HashMap<&str, &str> = SOURCE_NAMES.iter().copied().collect();
+    // The best few per award: pinned first, then the catches the AI owned up to, then ones that
+    // kept both sides, then the punchiest line, then the newest. Same history, same picks.
     let sql = format!(
-        "SELECT id, day, source, family || CASE WHEN version = '' THEN '' ELSE ' ' || version END, label, category,
-            COALESCE(human_full, human_snip), COALESCE(ai_full, ai_snip), pinned
-         FROM events WHERE level != 'category' {}
-         ORDER BY pinned DESC, label = 'confirmed' DESC, ts DESC LIMIT {HALL_SIZE}",
+        "SELECT id, day, source, model, label, category, human, ai, pinned FROM (
+           SELECT id, day, source, family || CASE WHEN version = '' THEN '' ELSE ' ' || version END AS model, label,
+             category, COALESCE(human_full, human_snip) AS human, COALESCE(ai_full, ai_snip) AS ai, pinned,
+             ROW_NUMBER() OVER (
+               PARTITION BY category
+               ORDER BY pinned DESC,
+                 CASE label WHEN 'confirmed' THEN 3 WHEN 'admitted' THEN 2 ELSE 1 END DESC,
+                 (COALESCE(human_full, human_snip) IS NOT NULL) + (COALESCE(ai_full, ai_snip) IS NOT NULL) DESC,
+                 ABS(LENGTH(COALESCE(human_full, human_snip, '')) - {HALL_SWEET_SPOT}),
+                 ts DESC
+             ) AS place
+           FROM events WHERE level != 'category' {}
+         ) WHERE place <= {HALL_PER_AWARD}
+         ORDER BY pinned DESC, category, place",
         v.clause
     );
     v.rows(&sql, &[], |r| {

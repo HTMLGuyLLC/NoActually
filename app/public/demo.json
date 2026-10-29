@@ -512,6 +512,45 @@
     "human": "don't create a brand new component. We have it in other places",
     "ai": "You're right, I duplicated it.",
     "pinned": false
+   },
+   {
+    "id": 9001,
+    "day": "2026-10-14",
+    "source": "claude-code",
+    "source_name": "Claude Code",
+    "model": "Claude Opus 5",
+    "label": "claimed",
+    "category": "still_broken",
+    "category_title": "Still broken",
+    "human": "it says fixed but the page still crashes when I click save",
+    "ai": "I've updated the handler, it should work now.",
+    "pinned": false
+   },
+   {
+    "id": 9002,
+    "day": "2026-10-09",
+    "source": "claude-code",
+    "source_name": "Claude Code",
+    "model": "Claude Opus 5",
+    "label": "admitted",
+    "category": "misread",
+    "category_title": "Misread you",
+    "human": "I said rename it, not delete it",
+    "ai": "You're right, I misread that. Restoring it now.",
+    "pinned": false
+   },
+   {
+    "id": 9003,
+    "day": "2026-10-03",
+    "source": "claude-code",
+    "source_name": "Claude Code",
+    "model": "Claude Opus 5",
+    "label": "humbled",
+    "category": "",
+    "category_title": "",
+    "human": "use the old --legacy flag",
+    "ai": "Actually, that flag was removed in the last release; the new one is --compat.",
+    "pinned": false
    }
   ],
   "briefs": {
