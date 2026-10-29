@@ -17,6 +17,10 @@ pub enum Msg {
 
 const SAFETY_NET: Duration = Duration::from_secs(5 * 60);
 const DEBOUNCE: Duration = Duration::from_secs(2);
+/// Live tracking checks at most this often while an AI tool is writing: a busy session rewrites
+/// its files every few seconds, and scores don't need to move that fast. "Check now" and consent
+/// changes don't wait.
+const MIN_GAP: Duration = Duration::from_secs(60);
 /// More new messages than a person writes between two checks means history was just read.
 const BACKFILL_MESSAGES: usize = 40;
 
@@ -119,16 +123,26 @@ pub fn spawn(handle: AppHandle, app: Arc<App>, tx: mpsc::Sender<Msg>, rx: mpsc::
                 }
             };
             guarded(false); // catch up on anything written while the app was closed
+            let mut last = std::time::Instant::now();
             loop {
                 let mut sources_changed = false;
                 match rx.recv_timeout(SAFETY_NET) {
                     Ok(Msg::SourcesChanged) => sources_changed = true,
                     Ok(Msg::FilesChanged) => {
-                        // Coalesce bursts: an AI reply streams many writes. Keep any consent change
-                        // that arrives meanwhile, or a newly allowed source would go unwatched.
-                        std::thread::sleep(DEBOUNCE);
-                        while let Ok(m) = rx.try_recv() {
-                            sources_changed |= matches!(m, Msg::SourcesChanged);
+                        // Coalesce bursts (an AI reply streams many writes) and wait out the gap
+                        // since the last pass. A consent change or "Check now" meanwhile ends the
+                        // wait, so a newly allowed source is never left unwatched.
+                        let until = std::time::Instant::now() + DEBOUNCE.max(MIN_GAP.saturating_sub(last.elapsed()));
+                        loop {
+                            match rx.recv_timeout(until.saturating_duration_since(std::time::Instant::now())) {
+                                Ok(Msg::FilesChanged) => {}
+                                Ok(Msg::SourcesChanged) => {
+                                    sources_changed = true;
+                                    break;
+                                }
+                                Ok(Msg::SyncNow) | Err(mpsc::RecvTimeoutError::Timeout) => break,
+                                Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                            }
                         }
                     }
                     Ok(Msg::SyncNow) | Err(mpsc::RecvTimeoutError::Timeout) => {}
@@ -138,6 +152,7 @@ pub fn spawn(handle: AppHandle, app: Arc<App>, tx: mpsc::Sender<Msg>, rx: mpsc::
                     watcher = watch(&app, &tx);
                 }
                 guarded(sources_changed);
+                last = std::time::Instant::now();
             }
             drop(watcher);
         })

@@ -279,8 +279,8 @@ export function scorecardView(s: Stats, ctx: ScorecardContext): Html {
   const { meta, filter } = ctx;
   const view = ctx.view ?? "overview";
   const toolbar = isFiltered(filter)
-    ? html`<button class="chip-clear" data-action="clear-filter">Showing ${filterLabel(filter, meta)} only <span aria-hidden="true">×</span></button>`
-    : html`<span class="eyebrow">All models · pick one from “All AI”</span>`;
+    ? html`<section class="toolbar"><button class="chip-clear" data-action="clear-filter">Showing ${filterLabel(filter, meta)} only <span aria-hidden="true">×</span></button></section>`
+    : "";
   const body =
     view === "catches"
       ? catchesView(s, ctx)
@@ -290,7 +290,7 @@ export function scorecardView(s: Stats, ctx: ScorecardContext): Html {
           ? hallSection(s, ctx)
           : overviewView(s, ctx);
   return html`
-    <section class="toolbar">${toolbar}<span class="muted small">${s.first_day ? `${s.first_day} – ${s.last_day ?? ""} · ` : ""}${num(s.messages)} messages</span></section>
+    ${toolbar}
     <div class="views-row">${viewsNav(view)}${periodNav(ctx.period ?? "28d")}</div>
     <div class="view-body">${body}</div>`;
 }

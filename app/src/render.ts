@@ -8,7 +8,7 @@ import { closePicker } from "./picker/popover";
 import { createScheduler, isUserBusy } from "./scheduler";
 import { isGlance, periodSince, setAllModels, setCurrent, setLastBriefTier, setLastVerdict, setMeta, state } from "./state";
 import { updateBanner, updateLine } from "./update";
-import { headerView, statusPillView } from "./views/chrome";
+import { coverage, headerView, statusPillView } from "./views/chrome";
 import { emptyGlanceView, glanceView } from "./views/glance";
 import { improveView } from "./views/improve";
 import { learnView } from "./views/learn";
@@ -59,7 +59,7 @@ async function view(): Promise<Html> {
     setLastBriefTier(s.briefs.tier);
   } else body = onboardingView(await watching());
   const banner = state.update ? updateBanner(state.update, state.laterFor) : "";
-  return html`<div class="wrap">${headerView(state.tab, state.status, demo)}<div id="update-slot">${banner}</div>${body}</div>`;
+  return html`<div class="wrap">${headerView(state.tab, state.status, demo, coverage(state.current))}<div id="update-slot">${banner}</div>${body}</div>`;
 }
 
 /** Bar widths are set through CSSOM, not inline style attributes, so the CSP needs no 'unsafe-inline'. */
@@ -90,7 +90,7 @@ export function paintStatus(): void {
   const pill = root.querySelector(".sync-pill");
   if (pill) {
     const hadFocus = pill.contains(document.activeElement);
-    pill.outerHTML = statusPillView(state.status, demo).value;
+    pill.outerHTML = statusPillView(state.status, demo, coverage(state.current)).value;
     if (hadFocus) root.querySelector<HTMLElement>(".sync-pill")?.focus();
   }
   const line = root.querySelector("#sync-line");

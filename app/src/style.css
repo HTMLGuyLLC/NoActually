@@ -85,6 +85,9 @@ nav { display: flex; gap: 6px }
 .home:hover { filter: none; opacity: .85 }
 .sync-pill { display: inline-flex; align-items: center; gap: 7px; font: 500 12px var(--body); color: var(--muted); background: transparent; border: 0; padding: 0 }
 .sync-pill.bad { color: var(--pen); text-decoration: underline; cursor: pointer }
+button.sync-pill { cursor: pointer; border-radius: 999px; padding: 3px 8px }
+button.sync-pill:hover { filter: none; color: var(--ink); background: var(--surface) }
+.sync-pill .refresh { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; opacity: .7 }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok) }
 .dot.live { background: var(--ai) }
 .update-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); font-size: 14px }
@@ -105,7 +108,6 @@ nav { display: flex; gap: 6px }
   .views-row { flex-wrap: nowrap }
   .views-row .views.period { display: none }
   .period-select { display: block; flex: none }
-  .toolbar > .muted.small { display: none }
   .top { align-items: flex-start }
   .top-right { align-items: flex-start }
   .top-right .sync-pill { padding: 0 0 0 10px }
@@ -362,7 +364,16 @@ button.link { background: none; border: 0; padding: 0; color: var(--pen-text); t
 button.link:hover { filter: none }
 
 /* Improve: the goal, last week, trends, bests and trophies. */
-.goal-title { font-size: clamp(20px, 2.6vw, 26px); line-height: 1.15; margin-top: 8px }
+/* Improve leads with the goal: the wide, red-bordered card; last week is a quiet side note. */
+.improve-top { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr); gap: 24px; align-items: start }
+.goal-hero { border: 2px solid var(--pen); box-shadow: 0 18px 40px -26px color-mix(in srgb, var(--pen) 70%, transparent) }
+.goal-title { font-size: clamp(24px, 3.2vw, 34px); line-height: 1.1; margin-top: 8px }
+.goal-meter { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 4px 12px; margin: 6px 0 4px }
+.goal-meter .big { font: 800 clamp(40px, 5vw, 56px)/1 var(--display); color: var(--pen); font-variant-numeric: tabular-nums }
+.goal-meter .of { color: var(--muted); font-size: 14px }
+.goal-meter .bar-bg { grid-column: 1 / -1; height: 10px }
+.recap { display: grid; gap: 2px; padding: 4px 0 0 20px; border-left: 1px solid var(--rule) }
+.recap .recap-row b { font-size: 18px }
 .goal-count { font-size: 15px }
 .goal-count .hand { font: 400 18px var(--hand); color: var(--pen) }
 .goal-weeks { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px }
@@ -392,7 +403,8 @@ button.link:hover { filter: none }
 }
 
 @media (max-width: 760px) {
-  .card, .split, .fame, .duo, .tracks, .compare { grid-template-columns: 1fr }
+  .card, .split, .fame, .duo, .tracks, .compare, .improve-top { grid-template-columns: 1fr }
+  .recap { padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--rule) }
   .part { grid-template-columns: 1fr 3em } .part .bar-bg { grid-column: 1 / -1; grid-row: 2 }
   .stats { grid-template-columns: repeat(2, 1fr) }
   .stat:nth-child(3) { border-left: 0; padding-left: 0 }

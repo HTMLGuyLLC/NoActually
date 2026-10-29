@@ -112,7 +112,8 @@ function thisWeekLine(st: GoalStatus, meta: Meta): string {
   const w = st.weeks.at(-1);
   if (w?.state !== "open") return "";
   const unit = g.kind === "habit" ? "briefs" : "tasks";
-  const so = `This week: ${w.value}% of ${w.count} ${unit} so far.`;
+  // The meter above already shows the percent; this says how many and what's left.
+  const so = `${w.count} ${w.count === 1 ? unit.replace(/s$/, "") : unit} so far.`;
   if (g.kind === "habit") {
     if (st.need == null) return `${so} Out of reach this week; next week starts fresh.`;
     return st.need
@@ -142,11 +143,26 @@ const kindArgs = (k: GoalKind): Record<string, string> =>
 /** A goal choice as a form value: its kind and target, read back by the start-goal action. */
 const goalValue = (g: GoalKind & { target: number }) => JSON.stringify({ ...kindArgs(g), target: g.target });
 
+/** The one number to watch: your score against the tier, or this week against the target. */
+function goalMeter(st: GoalStatus, meta: Meta): Html | "" {
+  const g = st.goal;
+  if (g.kind === "tier") {
+    const floor = meta.tiers.find((t) => t.id === g.tier)?.floor ?? 100;
+    if (st.score == null) return "";
+    return html`<div class="goal-meter"><span class="big">${st.score}</span><span class="of">of ${floor} to reach ${tierName(meta, g.tier)}</span>
+      <span class="bar-bg" role="img" aria-label="Score ${st.score} of ${floor}"><i data-w="${Math.min(100, Math.round((100 * st.score) / floor))}"></i></span></div>`;
+  }
+  const w = st.weeks.at(-1);
+  if (w?.state !== "open") return "";
+  const word = g.kind === "habit" ? "at least" : "at most";
+  return html`<div class="goal-meter"><span class="big">${w.value}%</span><span class="of">this week · aim for ${word} ${g.target}%</span></div>`;
+}
+
 function goalView(p: Progress, meta: Meta, filtered: boolean): Html {
   const st = p.goal;
   const across = filtered ? " · all AI" : "";
   if (!st) {
-    return html`<section class="card mini goal"><div class="eyebrow">Your goal${across}</div><h2 class="q">Pick one thing to get better at</h2>
+    return html`<section class="card mini goal goal-hero"><div class="eyebrow">Your goal${across}</div><h2 class="q">Pick one thing to get better at</h2>
       <p class="muted">One goal at a time, measured each week from your own history. Hit it ${meta.goal_weeks} weeks to win a trophy.</p>
       ${goalPickerView(p, meta, null)}</section>`;
   }
@@ -155,9 +171,10 @@ function goalView(p: Progress, meta: Meta, filtered: boolean): Html {
     g.kind === "tier"
       ? ""
       : html`<p class="goal-count"><b>${st.met}</b> of ${st.needed} weeks met${st.streak > 1 ? html` · <span class="hand">${st.streak} in a row</span>` : ""}</p>`;
-  return html`<section class="card mini goal${st.done ? " finished" : ""}">
+  return html`<section class="card mini goal goal-hero${st.done ? " finished" : ""}">
     <div class="eyebrow">${st.done ? "Goal done 🏆" : `Your goal · since ${fmtDay(g.start)}`}${across}</div>
     <h2 class="goal-title">${goalTitle(g, meta)}</h2>
+    ${st.done ? "" : goalMeter(st, meta)}
     ${progressLine}
     ${g.kind === "tier" ? "" : goalWeeksView(st, meta)}
     <p>${st.done ? "It's on your trophy shelf. Pick the next one." : thisWeekLine(st, meta)}</p>
@@ -179,7 +196,7 @@ function recapView(weeks: HistoryWeek[], meta: Meta): Html | "" {
     const arrow = diff == null || diff === 0 ? "" : diff > 0 ? `▲ ${diff}` : `▼ ${-diff}`;
     return html`<div class="recap-row"><span>${name}</span><b>${a ?? "–"}${a != null ? unit : ""}</b><span class="delta${neutral || !diff ? "" : diff > 0 ? " up" : " down"}">${arrow}</span></div>`;
   };
-  return html`<section class="card mini recap"><div class="eyebrow">Last week · ${fmtDay(last.week)}</div>
+  return html`<section class="recap"><div class="eyebrow">Last week · ${fmtDay(last.week)}</div>
     ${row("Tasks landed", landed(last), landed(before))}
     ${row("Sharp briefs", sharp(last), sharp(before))}
     ${row("Catches", last.catches, before.catches, "", true)}
@@ -289,7 +306,7 @@ export function improveView(ctx: ImproveContext): Html {
   const empty = !p.weeks.length;
   return html`
     <section class="toolbar"><span class="eyebrow">Are you getting better?</span></section>
-    <section class="duo">${goalView(p, meta, ctx.filtered)}${recapView(p.weeks, meta) || html`<section class="card mini recap"><div class="eyebrow">Last week</div><p class="muted">Your weekly recap shows up once a full week has ${meta.min_week}+ tasks.</p></section>`}</section>
+    <section class="improve-top">${goalView(p, meta, ctx.filtered)}${recapView(p.weeks, meta) || html`<section class="recap"><div class="eyebrow">Last week</div><p class="muted small">Your weekly recap shows up once a full week has ${meta.min_week}+ tasks.</p></section>`}</section>
     ${bestsView(p, ctx.filtered)}
     ${trophiesView(p, meta)}
     <div class="head trends-head"><h2>How ${ctx.subject} and you are trending</h2>${rangeNav(ctx.range)}</div>

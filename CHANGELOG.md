@@ -16,6 +16,8 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 - A time picker on the scorecard (7 days, 28 days, 90 days, all time) sets how far back every count looks: catches, you vs it, tasks and briefs, the chart, models, categories and the hall of fame. The score and tiers always use the last 28 days. `noactually stats --since YYYY-MM-DD` does the same.
 - The header keeps Scorecard, Improve and Learn labeled; Sources and Settings are icon buttons.
+- Live tracking checks at most once a minute while an AI tool is writing (it used to check a few seconds after every write). The status under the menu is now a refresh button: click it to check now, hover it to see the dates and messages the numbers cover.
+- Improve leads with your goal: a bigger card with one number to watch (this week's percent, or your score against the tier). Last week's recap sits beside it.
 - The model picker shows the numbers the page is about: landed % on Briefs, catches on Catches and Hall of fame, both on the overview.
 - Scorecard sections run Overview, Briefs, Catches, Hall of fame. The Catches section asks "Do you catch its mistakes?" and shows your judgment score.
 - The top tabs show icons only on narrow windows.

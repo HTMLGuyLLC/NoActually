@@ -177,9 +177,9 @@ describe("improveView goal", () => {
   });
 
   it("says how many more briefs would hit a habit goal this week", () => {
-    expect(view(progress({ goal: status({ need: 2 }) }))).toContain("This week: 30% of 12 briefs so far. 2 more briefs that say why would hit it.");
+    expect(view(progress({ goal: status({ need: 2 }) }))).toContain("12 briefs so far. 2 more briefs that say why would hit it.");
     expect(view(progress({ goal: status({ need: 1 }) }))).toContain("1 more brief that say why would hit it.");
-    expect(view(progress({ goal: status({ need: 0 }) }))).toContain("This week: 30% of 12 briefs so far. On track.");
+    expect(view(progress({ goal: status({ need: 0 }) }))).toContain("12 briefs so far. On track.");
   });
 
   it("mentions a streak only past one week", () => {
@@ -191,9 +191,9 @@ describe("improveView goal", () => {
     const st = status({ goal: goal({ kind: "steer", steer: "redo", target: 10 } as Partial<Goal>), weeks: [gw("2026-10-26", "open", 5, 20)], need: null });
     const m = view(progress({ goal: st }));
     expect(m).toContain("Keep “you started over” to 10% of your tasks or fewer each week");
-    expect(m).toContain("This week: 5% of 20 tasks so far. On track.");
+    expect(m).toContain("20 tasks so far. On track.");
     const over = view(progress({ goal: status({ goal: st.goal, weeks: [gw("2026-10-26", "open", 25, 20)], need: null }) }));
-    expect(over).toContain("This week: 25% of 20 tasks so far.");
+    expect(over).toContain("20 tasks so far.");
     expect(over).not.toContain("On track.");
     // Too few tasks to say yet: not "on track" either.
     expect(view(progress({ goal: status({ goal: st.goal, weeks: [gw("2026-10-26", "open", 0, 2)], need: null }) }))).not.toContain("On track.");
@@ -368,5 +368,19 @@ describe("improveView escaping", () => {
     });
     safe(improveView({ meta: bad, stats: stats(), progress: p, range: "12w", subject: HOSTILE, filtered: true }).value);
     safe(improveView({ meta: bad, stats: stats(), progress: { ...p, goal: null }, range: "all", subject: HOSTILE, filtered: false }).value);
+  });
+});
+
+describe("goal meter", () => {
+  it("shows the score against the tier for a tier goal, and this week against the target for a habit", () => {
+    const tierGoal = { kind: "tier", tier: "irreplaceable", id: 1, target: 0, start: "2026-10-29" } as Goal;
+    const tier = view(progress({ goal: status({ goal: tierGoal, needed: 0, weeks: [], score: 87 }) }));
+    expect(tier).toContain('<span class="big">87</span><span class="of">of 90 to reach Irreplaceable</span>');
+    expect(tier).toContain('aria-label="Score 87 of 90"');
+    const open = { week: "2026-10-26", count: 3, value: 33, state: "open" } as GoalWeek;
+    const habit = view(progress({ goal: status({ weeks: [open] }) }));
+    expect(habit).toContain('<span class="big">33%</span>');
+    expect(habit).toContain("aim for at least");
+    expect(habit).toContain("goal-hero");
   });
 });

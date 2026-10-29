@@ -1,5 +1,5 @@
 // The frame around every page: wordmark, sync status and tabs.
-import type { SyncStatus } from "../api";
+import type { Stats, SyncStatus } from "../api";
 import { ago } from "../format";
 import { type Html, html, raw } from "../html";
 import { TABS, type Tab } from "../state";
@@ -30,18 +30,28 @@ const TAB_ICONS: Record<Tab, ReturnType<typeof raw>> = {
   ),
 };
 
-export function statusPillView(status: SyncStatus, demo: boolean): Html {
+const REFRESH = raw(`<svg class="refresh" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>`);
+
+/** "2026-08-01 – 2026-10-29 · 7,485 messages": what the numbers cover, for the status's tooltip. */
+export function coverage(s: Pick<Stats, "first_day" | "last_day" | "messages"> | null): string {
+  if (!s) return "";
+  return `${s.first_day ? `${s.first_day} – ${s.last_day ?? ""} · ` : ""}${s.messages.toLocaleString()} messages`;
+}
+
+/** The sync status, which is also the "check now" button. Hovering shows what the numbers cover. */
+export function statusPillView(status: SyncStatus, demo: boolean, covers = ""): Html {
   if (status.last_error)
     return html`<button class="sync-pill bad" data-action="sync-now" data-id="top" title="${status.last_error}">Couldn't check. Retry</button>`;
   if (status.syncing) return html`<span class="sync-pill"><i class="dot live"></i>Checking…</span>`;
-  const checked = `Checked ${ago(status.last_sync)}`;
-  return html`<span class="sync-pill" title="${checked}"><i class="dot"></i>${demo ? "Demo data" : checked}</span>`;
+  const checked = demo ? "Demo data" : `Checked ${ago(status.last_sync)}`;
+  const tip = `Check for new chats now${covers ? `. Showing ${covers}` : ""}`;
+  return html`<button class="sync-pill" data-action="sync-now" data-id="top" title="${tip}" aria-label="${checked}. ${tip}"><i class="dot"></i>${checked}${REFRESH}</button>`;
 }
 
 /** Set up once and rarely visited: icons only, so the main sections have room. */
 const UTILITY: readonly Tab[] = ["sources", "settings"];
 
-export function headerView(tab: Tab, status: SyncStatus, demo: boolean): Html {
+export function headerView(tab: Tab, status: SyncStatus, demo: boolean, covers = ""): Html {
   const button = (t: Tab) => {
     const cls = `tab${UTILITY.includes(t) ? " icon-only" : ""}${tab === t ? " on" : ""}`;
     return html`<button class="${cls}" data-action="tab" data-id="${t}" title="${TAB_TITLES[t]}"${tab === t ? raw(' aria-current="page"') : ""}>${TAB_ICONS[t]}<span class="tab-name">${TAB_TITLES[t]}</span></button>`;
@@ -49,5 +59,5 @@ export function headerView(tab: Tab, status: SyncStatus, demo: boolean): Html {
   const tabs = html`${TABS.filter((t) => !UTILITY.includes(t)).map(button)}<span class="nav-gap" aria-hidden="true"></span>${UTILITY.map(button)}`;
   // The logo goes home: the scorecard's overview.
   const home = html`<button class="home" data-action="home" title="Go to the scorecard">${wordmarkView()}<span class="sr-only">, go to the scorecard</span></button>`;
-  return html`<header class="top">${home}<div class="top-right"><nav aria-label="Main">${tabs}</nav>${statusPillView(status, demo)}</div></header>`;
+  return html`<header class="top">${home}<div class="top-right"><nav aria-label="Main">${tabs}</nav>${statusPillView(status, demo, covers)}</div></header>`;
 }

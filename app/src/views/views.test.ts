@@ -349,3 +349,23 @@ describe("periodSince", () => {
     expect(periodSince("all", today)).toBeNull();
   });
 });
+
+describe("status and refresh", () => {
+  it("is a check-now button whose tooltip says what the numbers cover", async () => {
+    const { statusPillView, coverage } = await import("./chrome");
+    const covers = coverage(stats({ first_day: "2026-08-01", last_day: "2026-10-29", messages: 7485 }));
+    expect(covers).toBe(`2026-08-01 – 2026-10-29 · ${(7485).toLocaleString()} messages`);
+    const m = statusPillView({ syncing: false, last_sync: null, last_error: null, files_with_errors: 0 }, false, covers).value;
+    expect(m).toContain('data-action="sync-now"');
+    expect(m).toContain(`Showing ${covers}`);
+    expect(coverage(null)).toBe("");
+  });
+
+  it("drops the 'pick one from All AI' line and the date line from the scorecard", async () => {
+    const { scorecardView } = await import("./scorecard");
+    const m = scorecardView(stats(), { meta, filter: {}, still: true }).value;
+    expect(m).not.toContain("Pick one from");
+    expect(m).not.toContain("messages</span></section>");
+    expect(scorecardView(stats(), { meta, filter: { provider: "OpenAI" }, still: true }).value).toContain("chip-clear");
+  });
+});
