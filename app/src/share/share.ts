@@ -11,19 +11,19 @@ export const SHARE_URL_SHORT = SHARE_URL.replace(/^https:\/\//, "");
 type ScoreLike = Pick<Stats, "overall" | "catches_last_7d" | "catches" | "humbled">;
 
 /** The score, ready to post: the answer, the score and its two halves. Numbers only. */
-export function shareText(s: ScoreLike, who: string, tier: string) {
+export function shareText(s: ScoreLike, who: string, tier: string, when = "in the last 28 days") {
   const o = s.overall;
   const answer = o.verdict === "no" ? "No." : "Maybe…";
   if (o.score == null) {
     const times = s.catches_last_7d === 1 ? "time" : "times";
     return `Could ${who} replace me? ${answer} I caught it ${s.catches_last_7d} ${times} this week. Me ${s.catches}, ${who} ${s.humbled}. What's your score? ${SHARE_URL}`;
   }
-  return `Could ${who} replace me? ${answer} My score is ${o.score} (${tier}): ${o.direction}% of my tasks landed without steering, and I caught it ${o.catches} ${o.catches === 1 ? "time" : "times"} to its ${o.humbled} in 28 days. What's yours? ${SHARE_URL}`;
+  return `Could ${who} replace me? ${answer} My score is ${o.score} (${tier}): ${o.direction}% of my tasks landed without steering, and I caught it ${o.catches} ${o.catches === 1 ? "time" : "times"} to its ${o.humbled} ${when}. What's yours? ${SHARE_URL}`;
 }
 
 /** The briefs score, ready to post: the tier's answer and how many tasks landed. Numbers only. */
-export function briefShareText(b: Pick<Briefs, "landed_last_28d" | "tasks_last_28d">, tier: BriefTier) {
-  return `Do I make my AI guess? ${tier.verdict} ${landedPct(b)}% of my tasks in the last 28 days landed without me adding, clarifying or starting over. Brief tier: ${tier.name}. Do you make yours guess? ${SHARE_URL}`;
+export function briefShareText(b: Pick<Briefs, "window_landed" | "window_tasks">, tier: BriefTier, when = "in the last 28 days") {
+  return `Do I make my AI guess? ${tier.verdict} ${landedPct(b)}% of my tasks ${when} landed without me adding, clarifying or starting over. Brief tier: ${tier.name}. Do you make yours guess? ${SHARE_URL}`;
 }
 
 import type { CardShape } from "./cards";

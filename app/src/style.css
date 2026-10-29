@@ -85,9 +85,22 @@ nav { display: flex; gap: 6px }
 .home:hover { filter: none; opacity: .85 }
 .sync-pill { display: inline-flex; align-items: center; gap: 7px; font: 500 12px var(--body); color: var(--muted); background: transparent; border: 0; padding: 0 }
 .sync-pill.bad { color: var(--pen); text-decoration: underline; cursor: pointer }
-button.sync-pill { cursor: pointer; border-radius: 999px; padding: 3px 8px }
-button.sync-pill:hover { filter: none; color: var(--ink); background: var(--surface) }
-.sync-pill .refresh { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; opacity: .7 }
+.sync-text { border-radius: 6px; cursor: default }
+.sync-text[data-tip]:hover, .sync-text[data-tip]:focus-visible { color: var(--ink) }
+.sync-now { display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border-radius: 50%; background: transparent; color: var(--muted); border: 1px solid var(--rule) }
+.sync-now:hover { filter: none; color: var(--ink); border-color: var(--muted) }
+.sync-now .refresh { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
+.sync-bad { background: none; border: 0; padding: 0; color: var(--pen); text-decoration: underline; font: inherit }
+
+/* The app's own tooltips: a small card under the control, on hover or keyboard focus. */
+[data-tip] { position: relative }
+[data-tip]:hover::after, [data-tip]:focus-visible::after {
+  content: attr(data-tip); position: absolute; top: calc(100% + 8px); right: 0; z-index: 40; pointer-events: none;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: 10px; padding: 7px 10px;
+  font: 500 12px/1.3 var(--body); letter-spacing: 0; text-transform: none; white-space: nowrap;
+  box-shadow: 0 12px 28px -12px rgba(var(--shade), .45) }
+/* Labeled tabs don't need one until their names are hidden on narrow windows. */
+.top .tab:not(.icon-only)[data-tip]::after { display: none }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok) }
 .dot.live { background: var(--ai) }
 .update-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); font-size: 14px }
@@ -112,7 +125,6 @@ button.sync-pill:hover { filter: none; color: var(--ink); background: var(--surf
   .top-right { align-items: flex-start }
   .top-right .sync-pill { padding: 0 0 0 10px }
 }
-.eyebrow .note { text-transform: none; letter-spacing: 0; font-family: var(--body); font-weight: 500 }
 .chip-clear { background: var(--pen-soft); color: var(--pen-text); border-color: transparent; font-weight: 600 }
 .chip-clear span { margin-left: 4px; font-size: 15px }
 
@@ -398,6 +410,7 @@ button.link:hover { filter: none }
 
 /* Five tabs don't fit beside the logo on narrow windows: show icons, keep names for screen readers. */
 @media (max-width: 720px) {
+  .top .tab:not(.icon-only)[data-tip]::after { display: block }
   .top .tab .tab-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
   .top .tab { padding: 9px 11px }
 }

@@ -14,7 +14,7 @@ export const wordmarkView = (cls = "brand"): Html => html`<span class="${cls}">$
 const TAB_TITLES: Record<Tab, string> = { score: "Scorecard", improve: "Improve", learn: "Learn", sources: "Sources", settings: "Settings" };
 
 /** Small line icons beside each tab's name (decoration: the name is the label). */
-const svg = (d: string) => raw(`<svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`);
+export const svg = (d: string) => raw(`<svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`);
 const TAB_ICONS: Record<Tab, ReturnType<typeof raw>> = {
   // Bar chart.
   score: svg("M4 20V10M10 20V4M16 20v-7M22 20H2"),
@@ -32,20 +32,29 @@ const TAB_ICONS: Record<Tab, ReturnType<typeof raw>> = {
 
 const REFRESH = raw(`<svg class="refresh" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>`);
 
-/** "2026-08-01 – 2026-10-29 · 7,485 messages": what the numbers cover, for the status's tooltip. */
+const day = (iso: string) => new Date(`${iso}T00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+
+/** "Oct 2, 2026 – Oct 29, 2026 · 2,083 messages": what the numbers cover, for the status's tooltip. */
 export function coverage(s: Pick<Stats, "first_day" | "last_day" | "messages"> | null): string {
   if (!s) return "";
-  return `${s.first_day ? `${s.first_day} – ${s.last_day ?? ""} · ` : ""}${s.messages.toLocaleString()} messages`;
+  return `${s.first_day ? `${day(s.first_day)} – ${day(s.last_day ?? s.first_day)} · ` : ""}${s.messages.toLocaleString()} messages`;
 }
 
-/** The sync status, which is also the "check now" button. Hovering shows what the numbers cover. */
+/**
+ * The sync status (hover or focus it to see what the numbers cover) and, beside it, a separate
+ * "check now" button. Tooltips are the app's own (`data-tip`), mirrored for screen readers.
+ */
 export function statusPillView(status: SyncStatus, demo: boolean, covers = ""): Html {
   if (status.last_error)
-    return html`<button class="sync-pill bad" data-action="sync-now" data-id="top" title="${status.last_error}">Couldn't check. Retry</button>`;
-  if (status.syncing) return html`<span class="sync-pill"><i class="dot live"></i>Checking…</span>`;
-  const checked = demo ? "Demo data" : `Checked ${ago(status.last_sync)}`;
-  const tip = `Check for new chats now${covers ? `. Showing ${covers}` : ""}`;
-  return html`<button class="sync-pill" data-action="sync-now" data-id="top" title="${tip}" aria-label="${checked}. ${tip}"><i class="dot"></i>${checked}${REFRESH}</button>`;
+    return html`<span class="sync-pill"><button class="sync-bad" data-action="sync-now" data-id="top" data-tip="${status.last_error}">Couldn't check. Retry</button></span>`;
+  const checked = status.syncing ? "Checking…" : demo ? "Demo data" : `Checked ${ago(status.last_sync)}`;
+  const text = covers
+    ? html`<span class="sync-text" tabindex="0" data-tip="${covers}" aria-label="${checked}. Showing ${covers}">${checked}</span>`
+    : html`<span class="sync-text">${checked}</span>`;
+  const refresh = status.syncing
+    ? ""
+    : html`<button class="sync-now" data-action="sync-now" data-id="top" data-tip="Check now" aria-label="Check for new chats now">${REFRESH}</button>`;
+  return html`<span class="sync-pill"><i class="dot${status.syncing ? " live" : ""}"></i>${text}${refresh}</span>`;
 }
 
 /** Set up once and rarely visited: icons only, so the main sections have room. */
@@ -54,7 +63,7 @@ const UTILITY: readonly Tab[] = ["sources", "settings"];
 export function headerView(tab: Tab, status: SyncStatus, demo: boolean, covers = ""): Html {
   const button = (t: Tab) => {
     const cls = `tab${UTILITY.includes(t) ? " icon-only" : ""}${tab === t ? " on" : ""}`;
-    return html`<button class="${cls}" data-action="tab" data-id="${t}" title="${TAB_TITLES[t]}"${tab === t ? raw(' aria-current="page"') : ""}>${TAB_ICONS[t]}<span class="tab-name">${TAB_TITLES[t]}</span></button>`;
+    return html`<button class="${cls}" data-action="tab" data-id="${t}" data-tip="${TAB_TITLES[t]}"${tab === t ? raw(' aria-current="page"') : ""}>${TAB_ICONS[t]}<span class="tab-name">${TAB_TITLES[t]}</span></button>`;
   };
   const tabs = html`${TABS.filter((t) => !UTILITY.includes(t)).map(button)}<span class="nav-gap" aria-hidden="true"></span>${UTILITY.map(button)}`;
   // The logo goes home: the scorecard's overview.

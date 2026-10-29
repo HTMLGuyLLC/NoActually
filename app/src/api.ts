@@ -89,8 +89,8 @@ export type Briefs = {
   continued: number;
   landed: number;
   /** Continued tasks in the last `Meta.brief_window_days` days, and how many of them landed. */
-  tasks_last_28d: number;
-  landed_last_28d: number;
+  window_tasks: number;
+  window_landed: number;
   /** A brief tier id from `Meta.brief_tiers`, or null until there are enough tasks. */
   tier: string | null;
   /** The tier above it; its floor is the target to show. */

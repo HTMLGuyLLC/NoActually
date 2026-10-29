@@ -16,8 +16,8 @@ describe("briefTierRanges", () => {
 describe("percents", () => {
   it("rounds, and never divides by zero", () => {
     expect([percent(1, 3), percent(2, 3), percent(5, 0)]).toEqual([33, 67, 0]);
-    expect(landedPct({ landed_last_28d: 19, tasks_last_28d: 20 })).toBe(95);
-    expect(landedPct({ landed_last_28d: 26, tasks_last_28d: 29 })).toBe(89); // 89.7%: never shows 90% for a Tech lead
+    expect(landedPct({ window_landed: 19, window_tasks: 20 })).toBe(95);
+    expect(landedPct({ window_landed: 26, window_tasks: 29 })).toBe(89); // 89.7%: never shows 90% for a Tech lead
   });
 });
 

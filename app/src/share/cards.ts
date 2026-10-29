@@ -139,8 +139,8 @@ const timesLine = (s: ScoreCard) =>
   s.overall.score == null
     ? `I caught it ${s.catches_last_7d} ${s.catches_last_7d === 1 ? "time" : "times"} this week.`
     : `Score ${s.overall.score}. ${s.overall.direction}% of my tasks landed.`;
-const pctLine = (s: ScoreCard) =>
-  s.overall.score == null ? null : `I caught it ${s.overall.catches} ${s.overall.catches === 1 ? "time" : "times"} to its ${s.overall.humbled} in 28 days.`;
+const pctLine = (s: ScoreCard, when: string) =>
+  s.overall.score == null ? null : `I caught it ${s.overall.catches} ${s.overall.catches === 1 ? "time" : "times"} to its ${s.overall.humbled} ${when}.`;
 
 /** Hand-written `text`, rotated like a red-pen mark, baseline at (x, y). */
 function drawMark(g: CanvasRenderingContext2D, text: string, color: string, x: number, y: number, size: number) {
@@ -160,12 +160,12 @@ function drawVerdict(g: CanvasRenderingContext2D, s: ScoreCard, x: number, y: nu
 }
 
 /** The score card. `tier` is the tier's display name. */
-export async function drawShareCard(s: ScoreCard, who: string, tier: string, shape: CardShape = "wide"): Promise<Blob> {
+export async function drawShareCard(s: ScoreCard, who: string, tier: string, shape: CardShape = "wide", when = "in the last 28 days"): Promise<Blob> {
   const { c, g } = await canvas(shape, SCORE_FONTS);
   const { w } = CARD_SIZES[shape];
   const { ink, muted } = CARD_THEME;
   const q = `Could ${who} replace me?`;
-  const pct = pctLine(s);
+  const pct = pctLine(s, when);
   g.textBaseline = "alphabetic";
 
   if (shape === "portrait") {
@@ -310,11 +310,11 @@ export async function drawCatchCard(e: CatchLike, shape: CardShape = "wide"): Pr
   return png(c);
 }
 
-type BriefsCard = Pick<Briefs, "landed_last_28d" | "tasks_last_28d" | "grades" | "tasks">;
+type BriefsCard = Pick<Briefs, "window_landed" | "window_tasks" | "grades" | "tasks">;
 
 const BRIEF_QUESTION = "Do I make my AI guess?";
-export const briefLines = (b: BriefsCard): [string, string] => [
-  `${landedPct(b)}% of my tasks landed without steering (last 28 days).`,
+export const briefLines = (b: BriefsCard, when = "in the last 28 days"): [string, string] => [
+  `${landedPct(b)}% of my tasks ${when} landed without steering.`,
   `${percent(b.grades.sharp ?? 0, b.tasks)}% of all my briefs were sharp.`,
 ];
 
@@ -345,11 +345,11 @@ function drawGradeBar(g: CanvasRenderingContext2D, b: BriefsCard, x: number, y: 
 }
 
 /** The briefs card: "Do I make my AI guess?", the tier's answer, and what landed. */
-export async function drawBriefCard(b: BriefsCard, tier: BriefTier, shape: CardShape = "wide"): Promise<Blob> {
+export async function drawBriefCard(b: BriefsCard, tier: BriefTier, shape: CardShape = "wide", when = "in the last 28 days"): Promise<Blob> {
   const { c, g } = await canvas(shape, SCORE_FONTS);
   const { w } = CARD_SIZES[shape];
   const { ink, muted, pen } = CARD_THEME;
-  const [landed, sharp] = briefLines(b);
+  const [landed, sharp] = briefLines(b, when);
   const hand = (size: number) => `400 ${size}px 'Gochi Hand'`;
   g.textBaseline = "alphabetic";
 

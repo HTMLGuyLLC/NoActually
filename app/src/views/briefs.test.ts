@@ -21,13 +21,13 @@ describe("briefsView", () => {
   });
 
   it("names the next tier's target and where you are", () => {
-    const m = view({ tier: "tech_lead", next_tier: "architect", landed_last_28d: 34 });
+    const m = view({ tier: "tech_lead", next_tier: "architect", window_landed: 34 });
     expect(m).toContain(">Sometimes.</div>");
     expect(m).toContain("Architect at 90%. You&#39;re at 85%.");
   });
 
   it("waits to rank a thin week, and offers nothing to share yet", () => {
-    const m = view({ tier: null, next_tier: null, to_rank: 3, tasks_last_28d: 7 });
+    const m = view({ tier: null, next_tier: null, to_rank: 3, window_tasks: 7 });
     expect(m).toContain('class="no maybe"');
     expect(m).toContain(">Hmm.</div>");
     expect(m).toContain("<b>3 more tasks</b> with a follow-up to get ranked");

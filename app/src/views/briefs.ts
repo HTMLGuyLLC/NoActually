@@ -6,9 +6,9 @@ import { briefTier, briefTierRanges, landedPct, percent, steerTitle } from "../m
 const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
 
 /** "86% of your tasks in the last 28 days landed…", or how many more it takes to get ranked. */
-function becauseLine(b: Briefs, meta: Meta): Html {
+function becauseLine(b: Briefs, meta: Meta, when: string): Html {
   return briefTier(meta, b.tier)
-    ? html`<b>${landedPct(b)}%</b> of your tasks in the last ${meta.brief_window_days} days landed without you adding, clarifying or starting over.`
+    ? html`<b>${landedPct(b)}%</b> of your tasks ${when} landed without you adding, clarifying or starting over.`
     : html`Give it <b>${plural(b.to_rank, "more task")}</b> with a follow-up to get ranked. One-shot tasks can't need steering, so they don't count.`;
 }
 
@@ -20,10 +20,10 @@ function markView(b: Briefs, meta: Meta, still: boolean): Html {
 }
 
 /** The overview's half: the verdict, the tier, and a way to the details. */
-export function briefsSummaryView(b: Briefs, meta: Meta, still: boolean): Html {
+export function briefsSummaryView(b: Briefs, meta: Meta, still: boolean, when = "in the last 28 days"): Html {
   const tier = briefTier(meta, b.tier);
   const body = b.tasks
-    ? html`<div class="verdict">${markView(b, meta, still)}<div class="because">${becauseLine(b, meta)}</div></div>
+    ? html`<div class="verdict">${markView(b, meta, still)}<div class="because">${becauseLine(b, meta, when)}</div></div>
         <p class="tier-line">${tier ? html`<span class="tier-label"><span>Tier</span>${tier.name}</span>` : ""}<span class="hand-note">${ladderNote(b, meta)}</span></p>`
     : html`<p class="muted">No tasks yet. The first message of each chat is its brief.</p>`;
   return html`<article class="card mini briefs">
@@ -34,13 +34,13 @@ export function briefsSummaryView(b: Briefs, meta: Meta, still: boolean): Html {
     </article>`;
 }
 
-function verdictView(b: Briefs, meta: Meta, still: boolean, subject: Html | string): Html {
+function verdictView(b: Briefs, meta: Meta, still: boolean, subject: Html | string, when: string): Html {
   return html`
     <div class="eyebrow">How you brief it</div>
     <h1 class="q">Do you make ${subject} guess?</h1>
     <div class="verdict">
       ${markView(b, meta, still)}
-      <div class="because">${becauseLine(b, meta)}</div>
+      <div class="because">${becauseLine(b, meta, when)}</div>
     </div>
     ${gradesView(b, meta)}`;
 }
@@ -107,14 +107,14 @@ function steeringView(b: Briefs, meta: Meta): Html {
 
 /** The Briefs section: verdict card, then what briefs carry and where steering went. `subject` is the
  * model picker ("it" when there's none). */
-export function briefsView(b: Briefs, meta: Meta, still: boolean, subject: Html | string = "it"): Html {
+export function briefsView(b: Briefs, meta: Meta, still: boolean, subject: Html | string = "it", when = "in the last 28 days"): Html {
   if (!b.tasks) {
     return html`<section class="card briefs"><div><div class="eyebrow">How you brief it</div><h1 class="q">Do you make ${subject} guess?</h1>
       <p class="muted">No tasks yet. The first message of each chat is its brief, so start a chat and ask for something.</p></div></section>`;
   }
   return html`
     <section class="card briefs">
-      <div>${verdictView(b, meta, still, subject)}</div>
+      <div>${verdictView(b, meta, still, subject, when)}</div>
       <div class="meter">${ladderView(b, meta)}</div>
     </section>
     <section class="split">

@@ -46,7 +46,7 @@ impl Snapshot {
             streak: s.current_streak_days,
             brief_tier: b.tier,
             // Rounded down, like the tier floors, so the popup never says 95% for a Tech lead week.
-            landed_pct: if b.tasks_last_28d > 0 { 100 * b.landed_last_28d / b.tasks_last_28d } else { 0 },
+            landed_pct: if b.window_tasks > 0 { 100 * b.window_landed / b.window_tasks } else { 0 },
         }
     }
 }

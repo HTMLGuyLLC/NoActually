@@ -603,7 +603,7 @@ fn briefs_count_tasks_signals_and_steering() {
     let steering: BTreeMap<String, i64> =
         [("ai_wrong", 1), ("added", 1), ("clarified", 0), ("redo", 0)].map(|(k, n)| (k.into(), n)).into();
     assert_eq!(b.steering, steering);
-    assert_eq!((b.tasks_last_28d, b.tier, b.to_rank), (2, None, 8), "too few tasks to rank");
+    assert_eq!((b.window_tasks, b.tier, b.to_rank), (2, None, 8), "too few tasks to rank");
     let models = stats(&s).models;
     let sum = |f: fn(&ModelRow) -> i64| models.iter().map(f).sum::<i64>();
     assert_eq!((sum(|m| m.tasks), sum(|m| m.continued), sum(|m| m.landed)), (3, 2, 1), "the picker's per-model briefs");
@@ -640,7 +640,7 @@ fn brief_tiers_come_from_the_last_28_days_of_tasks_that_continued() {
     ingest(&mut s, "f", turns);
     let b = stats(&s).briefs;
     assert_eq!((b.tasks, b.continued, b.landed), (20, 17, 11));
-    assert_eq!((b.tasks_last_28d, b.landed_last_28d), (12, 11));
+    assert_eq!((b.window_tasks, b.window_landed), (12, 11));
     assert_eq!((b.tier, b.next_tier, b.to_rank), (Some(BriefTier::Architect), None, 0));
     let tip = b.tip.unwrap();
     assert_eq!((tip.signal.as_str(), tip.pct_of_briefs, tip.landed_with_without), ("spot", 0.0, None));
@@ -740,7 +740,7 @@ fn no_tip_once_every_signal_is_common() {
 }
 
 #[test]
-fn a_window_moves_the_counts_but_never_the_score() {
+fn a_window_moves_the_counts_and_the_score() {
     let s = Store::open_in_memory().unwrap();
     let day = |ago: i64| (today() - chrono::Duration::days(ago)).to_string();
     let count = |ago: i64, kind: &str, n: i64| {
@@ -771,7 +771,11 @@ fn a_window_moves_the_counts_but_never_the_score() {
     assert_eq!((all.messages, all.catches, all.briefs.tasks), (30, 6, 12));
     assert_eq!((week.messages, week.catches, week.briefs.tasks), (10, 2, 2), "counts follow the window");
     assert_eq!(week.weekly.len(), 1);
-    assert_eq!(week.overall, all.overall, "the score always looks at its own 28 days");
-    assert_eq!((week.briefs.tier, week.briefs.tasks_last_28d), (all.briefs.tier, 11));
-    assert_eq!(week.catches_last_7d, all.catches_last_7d);
+    // The score follows the window too: 2 tasks this week, too few to score.
+    assert_eq!((week.briefs.window_tasks, week.overall.score, week.overall.catches), (2, None, 2));
+    assert_eq!(all.briefs.window_tasks, 11, "no window: the last 28 days");
+    let year =
+        s.stats(&Filter { since: Some(today() - chrono::Duration::days(364)), ..Default::default() }, today()).unwrap();
+    assert_eq!((year.briefs.window_tasks, year.overall.catches), (12, 6));
+    assert_eq!(week.catches_last_7d, all.catches_last_7d, "this week never moves");
 }

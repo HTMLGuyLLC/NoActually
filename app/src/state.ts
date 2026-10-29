@@ -16,10 +16,16 @@ export type Period = (typeof PERIODS)[number];
 export const isPeriod = (x: unknown): x is Period => PERIODS.some((p) => p === x);
 const PERIOD_DAYS: Record<Period, number | null> = { "7d": 7, "28d": 28, "90d": 90, all: null };
 
-/** The first day a period covers, as a local date ("2026-10-02"), or null for all time. */
-export function periodSince(p: Period, today = new Date()): string | null {
+/** "in the last 7 days", "ever": a period, for the end of a sentence. */
+export const PERIOD_WHEN: Record<Period, string> = { "7d": "in the last 7 days", "28d": "in the last 28 days", "90d": "in the last 90 days", all: "ever" };
+
+/** Before any history: "all time" as a start date, so the score covers it too (no date means 28 days). */
+const ALL_TIME = "1970-01-01";
+
+/** The first day a period covers, as a local date ("2026-10-02"). */
+export function periodSince(p: Period, today = new Date()): string {
   const days = PERIOD_DAYS[p];
-  if (days == null) return null;
+  if (days == null) return ALL_TIME;
   const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (days - 1));
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }

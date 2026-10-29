@@ -17,7 +17,7 @@ describe("scorecardView", () => {
   it("opens on an overview with both verdicts and the section tabs", () => {
     const m = scorecardView(stats(), ctx).value;
     expect(m).toContain('aria-label="Scorecard sections"');
-    expect(m).toContain('data-id="overview" aria-current="page">Overview</button>');
+    expect(m).toMatch(/data-id="overview" aria-current="page"><svg class="tab-icon"[^>]*aria-hidden="true">.*?<\/svg>Overview<\/button>/);
     expect(m).toContain("Could ");
     expect(m).toContain("Do you make it guess?");
     expect(m).toContain("Do you catch its mistakes?");
@@ -85,7 +85,7 @@ describe("overview hero", () => {
   it("shows the score, the tier and why, with a share button once scored", () => {
     const m = hero();
     expect(m).toContain("Last 28 days");
-    expect(m).toContain("Score <b>86</b>. Your tasks landed <b>83%</b> of the time, and you caught it <b>41 times</b> to its 2 in 28 days.");
+    expect(m).toContain("Score <b>86</b>. Your tasks landed <b>83%</b> of the time, and you caught it <b>41 times</b> to its 2 in the last 28 days.");
     expect(m).toContain("Your tier is Sharp-eyed, score 86.");
     expect(m).toContain("Irreplaceable at 90. You&#39;re at 86.");
     expect(m).toContain('data-action="open-share"');
@@ -123,7 +123,7 @@ describe("overview hero", () => {
   });
 
   it("says why fewer catches never costs points", () => {
-    expect(hero()).toContain("3 catches in 28 days show you check its work.");
+    expect(hero()).toContain("3 catches show you check its work.");
   });
 
   it("escapes names from meta and unknown ids", () => {
@@ -206,7 +206,7 @@ describe("onboarding and glance", () => {
 describe("chrome", () => {
   it("marks the current tab for assistive tech", () => {
     const m = headerView("sources", { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 }, false).value;
-    expect(m).toContain('data-id="sources" title="Sources" aria-current="page"');
+    expect(m).toContain('data-id="sources" data-tip="Sources" aria-current="page"');
     expect(m.match(/aria-current/g)).toHaveLength(1);
   });
 
@@ -328,25 +328,27 @@ describe("settingsView", () => {
 });
 
 describe("scorecard period picker", () => {
-  it("marks the period, words the catch count for it, and notes the score keeps its own window", async () => {
+  it("marks the period, words the catch count for it, and uses it for the score too", async () => {
     const { scorecardView } = await import("./scorecard");
     const view = (period: "7d" | "28d" | "90d" | "all") => scorecardView(stats({ catches: 37 }), { meta, filter: {}, still: true, period }).value;
     const week = view("7d");
     expect(week).toContain('data-action="period" data-id="7d" aria-current="true"');
     expect(week).toContain("You caught it <b>37 times</b> in the last 7 days.");
-    expect(week).toContain("the score always uses these");
-    expect(view("28d")).not.toContain("the score always uses these");
-    expect(view("all")).toContain("<b>37 times</b> in all.");
+    // Everything follows the period, the score included: no disclaimer needed.
+    expect(week).toContain('<div class="eyebrow">Last 7 days</div>');
+    expect(week).not.toContain("always uses");
+    expect(view("all")).toContain('<div class="eyebrow">All time</div>');
+    expect(view("all")).toContain("<b>37 times</b> ever.");
   });
 });
 
 describe("periodSince", () => {
-  it("counts the period back from today, local time, and is null for all time", async () => {
+  it("counts the period back from today, local time, from the start of history for all time", async () => {
     const { periodSince } = await import("../state");
     const today = new Date(2026, 2, 1); // 1 March
     expect(periodSince("7d", today)).toBe("2026-02-23");
     expect(periodSince("28d", today)).toBe("2026-02-02");
-    expect(periodSince("all", today)).toBeNull();
+    expect(periodSince("all", today)).toBe("1970-01-01"); // a start date, so the score covers all time too
   });
 });
 
@@ -354,10 +356,13 @@ describe("status and refresh", () => {
   it("is a check-now button whose tooltip says what the numbers cover", async () => {
     const { statusPillView, coverage } = await import("./chrome");
     const covers = coverage(stats({ first_day: "2026-08-01", last_day: "2026-10-29", messages: 7485 }));
-    expect(covers).toBe(`2026-08-01 – 2026-10-29 · ${(7485).toLocaleString()} messages`);
+    const day = (iso: string) => new Date(`${iso}T00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    expect(covers).toBe(`${day("2026-08-01")} – ${day("2026-10-29")} · ${(7485).toLocaleString()} messages`);
     const m = statusPillView({ syncing: false, last_sync: null, last_error: null, files_with_errors: 0 }, false, covers).value;
     expect(m).toContain('data-action="sync-now"');
-    expect(m).toContain(`Showing ${covers}`);
+    expect(m).toContain('data-tip="Check now"');
+    expect(m).not.toContain("title=");
+    expect(m).toContain(`data-tip="${covers}"`);
     expect(coverage(null)).toBe("");
   });
 

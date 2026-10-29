@@ -30,8 +30,8 @@ export const steerTitle = (meta: Meta, id: string): string => meta.steers.find((
 export const percent = (n: number, total: number): number => (total > 0 ? Math.round((100 * n) / total) : 0);
 
 /** Percent of the window's tasks that landed, rounded down like the tier floors (89.7% is 89%, Tech lead). */
-export const landedPct = (b: Pick<Briefs, "landed_last_28d" | "tasks_last_28d">): number =>
-  b.tasks_last_28d > 0 ? Math.floor((100 * b.landed_last_28d) / b.tasks_last_28d) : 0;
+export const landedPct = (b: Pick<Briefs, "window_landed" | "window_tasks">): number =>
+  b.window_tasks > 0 ? Math.floor((100 * b.window_landed) / b.window_tasks) : 0;
 
 export const tierName = (meta: Meta, id: string | null): string => (id ? (meta.tiers.find((t) => t.id === id)?.name ?? id) : "Not scored yet");
 

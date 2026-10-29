@@ -9,7 +9,7 @@ describe("shareText", () => {
   it("brags with the score and its tier, numbers only, and links to the project", () => {
     const t = shareText(stats(), "Claude Opus 5.5", "Sharp-eyed");
     expect(t).toBe(
-      `Could Claude Opus 5.5 replace me? No. My score is 86 (Sharp-eyed): 83% of my tasks landed without steering, and I caught it 41 times to its 2 in 28 days. What's yours? ${SHARE_URL}`,
+      `Could Claude Opus 5.5 replace me? No. My score is 86 (Sharp-eyed): 83% of my tasks landed without steering, and I caught it 41 times to its 2 in the last 28 days. What's yours? ${SHARE_URL}`,
     );
   });
 
@@ -37,7 +37,8 @@ describe("briefShareText", () => {
   });
 
   it("matches the card's lines", () => {
-    expect(briefLines(briefs())).toEqual(["95% of my tasks landed without steering (last 28 days).", "20% of all my briefs were sharp."]);
+    expect(briefLines(briefs())).toEqual(["95% of my tasks in the last 28 days landed without steering.", "20% of all my briefs were sharp."]);
+    expect(briefLines(briefs(), "ever")[0]).toBe("95% of my tasks ever landed without steering.");
     expect(gradeKey(briefs())).toBe("SHARP 20%  ·  SOLID 30%  ·  THIN 50%");
   });
 });

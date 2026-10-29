@@ -338,7 +338,7 @@ fn brief_lines(b: &store::Briefs) -> Vec<String> {
         return Vec::new();
     }
     let pct = |n: i64, of: i64| if of > 0 { 100 * n / of } else { 0 };
-    let recent = pct(b.landed_last_28d, b.tasks_last_28d);
+    let recent = pct(b.window_landed, b.window_tasks);
     let tier = match b.tier {
         Some(t) => format!(
             "{} {}  ({recent}% landed in {} days{})",
@@ -484,7 +484,7 @@ mod tests {
         assert!(text.contains("You added more       1"), "{text}");
         b.tier = Some(engine::BriefTier::TechLead);
         b.next_tier = Some(engine::BriefTier::Architect);
-        (b.tasks_last_28d, b.landed_last_28d) = (40, 34);
+        (b.window_tasks, b.window_landed) = (40, 34);
         assert!(brief_lines(&b)[1].ends_with("Sometimes. Tech lead  (85% landed in 28 days; Architect at 90%)"));
     }
 

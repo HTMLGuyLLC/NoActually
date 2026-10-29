@@ -5,8 +5,9 @@ import { filterLabel, isFiltered, shortSourceName, subjectLabel } from "../forma
 import { type Html, html, num, raw } from "../html";
 import { categoryTitle, tierName, tierOf, tierRanges } from "../meta";
 import { catchRate, modelName } from "../picker/picker";
-import { PERIODS, type Period, SCORE_VIEWS, type ScoreView } from "../state";
+import { PERIOD_WHEN, PERIODS, type Period, SCORE_VIEWS, type ScoreView } from "../state";
 import { briefsSummaryView, briefsView } from "./briefs";
+import { svg } from "./chrome";
 
 export type ScorecardContext = {
   meta: Meta;
@@ -22,8 +23,7 @@ export type ScorecardContext = {
 };
 
 const PERIOD_TITLES: Record<Period, string> = { "7d": "7 days", "28d": "28 days", "90d": "90 days", all: "All time" };
-/** "in the last 28 days", for sentences about the period's counts. */
-export const PERIOD_TEXT: Record<Period, string> = { "7d": "in the last 7 days", "28d": "in the last 28 days", "90d": "in the last 90 days", all: "in all" };
+const PERIOD_EYEBROW: Record<Period, string> = { "7d": "Last 7 days", "28d": "Last 28 days", "90d": "Last 90 days", all: "All time" };
 
 /** The scorecard's time picker: how far back every count looks. Buttons on wide windows, a
  * dropdown on narrow ones (CSS shows one; the hidden one is out of the accessibility tree). */
@@ -38,6 +38,18 @@ function periodNav(period: Period): Html {
 
 const VIEW_TITLES: Record<ScoreView, string> = { overview: "Overview", briefs: "Briefs", catches: "Catches", hall: "Hall of fame" };
 
+/** Line icons beside each section's name (decoration: the name is the label). */
+const VIEW_ICONS: Record<ScoreView, Html> = {
+  // A dashboard: four panels.
+  overview: svg("M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z"),
+  // A page with lines: what you wrote.
+  briefs: svg("M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5"),
+  // A check in a circle: a mistake caught.
+  catches: svg("M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12l3 3 5-6"),
+  // A star.
+  hall: svg("M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"),
+};
+
 const CHEVRON = raw(`<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>`);
 
 /** The model picker, shown as the question's subject ("Could [Claude Opus 5.5] replace you?"). One per page. */
@@ -48,7 +60,7 @@ export const subjectButton = (ctx: Pick<ScorecardContext, "filter" | "meta">): H
   )}${CHEVRON}</button>`;
 
 /** "You caught it 37 times in the last 28 days." */
-const caughtLine = (s: Stats, period: Period) => html`You caught it <b>${num(s.catches)} ${s.catches === 1 ? "time" : "times"}</b> ${PERIOD_TEXT[period]}.`;
+const caughtLine = (s: Stats, period: Period) => html`You caught it <b>${num(s.catches)} ${s.catches === 1 ? "time" : "times"}</b> ${PERIOD_WHEN[period]}.`;
 
 const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
 
@@ -60,10 +72,10 @@ function answerView(o: Overall, meta: Meta, still: boolean, small = false): Html
 }
 
 /** Why the answer is what it is: the two parts, or how far a score is. */
-function scoreBecause(o: Overall, meta: Meta): Html {
+function scoreBecause(o: Overall, when: string): Html {
   if (o.score == null)
     return html`Give it <b>${plural(o.to_rank, "more task")}</b> with a follow-up to get a score. One-shot tasks can't need steering, so they don't count.`;
-  return html`Score <b>${o.score}</b>. Your tasks landed <b>${o.direction}%</b> of the time, and you caught it <b>${plural(o.catches, "time")}</b> to its ${num(o.humbled)} in ${meta.brief_window_days} days.`;
+  return html`Score <b>${o.score}</b>. Your tasks landed <b>${o.direction}%</b> of the time, and you caught it <b>${plural(o.catches, "time")}</b> to its ${num(o.humbled)} ${when}.`;
 }
 
 /** The next tier's target ("Irreplaceable at 90. You're at 86."). */
@@ -94,11 +106,9 @@ function heroView(s: Stats, ctx: ScorecardContext): Html {
   const o = s.overall;
   return html`<section class="card hero">
       <div>
-        <div class="eyebrow">Last ${ctx.meta.brief_window_days} days${
-          (ctx.period ?? "28d") === "28d" ? "" : html` <span class="note">· the score always uses these, whatever the period below</span>`
-        }</div>
+        <div class="eyebrow">${PERIOD_EYEBROW[ctx.period ?? "28d"]}</div>
         <h1 class="q">Could ${subjectButton(ctx)} replace you?</h1>
-        <div class="verdict">${answerView(o, ctx.meta, ctx.still)}<div class="because">${scoreBecause(o, ctx.meta)}</div></div>
+        <div class="verdict">${answerView(o, ctx.meta, ctx.still)}<div class="because">${scoreBecause(o, PERIOD_WHEN[ctx.period ?? "28d"])}</div></div>
         ${partsView(o, ctx.meta)}
       </div>
       <div class="meter">
@@ -120,7 +130,7 @@ function versusView(s: Stats): Html {
 
 /** Why fewer catches never costs points. */
 const proofNote = (meta: Meta) =>
-  html`<p class="muted small">${meta.catch_proof} catches in ${meta.brief_window_days} days show you check its work. Past that, more don't add points, so fewer catches because it's getting it right never costs you.</p>`;
+  html`<p class="muted small">${meta.catch_proof} catches show you check its work. Past that, more don't add points, so fewer catches because it's getting it right never costs you.</p>`;
 
 /** The overview's "Who corrects whom?" half. */
 function correctsSummaryView(s: Stats, ctx: ScorecardContext): Html {
@@ -200,7 +210,7 @@ export function hallView(entries: HallEntry[]): Html {
 function viewsNav(view: ScoreView): Html {
   return html`<nav class="views" aria-label="Scorecard sections">${SCORE_VIEWS.map(
     (v) =>
-      html`<button class="tab${v === view ? " on" : ""}" data-action="view" data-id="${v}"${v === view ? raw(' aria-current="page"') : ""}>${VIEW_TITLES[v]}</button>`,
+      html`<button class="tab${v === view ? " on" : ""}" data-action="view" data-id="${v}"${v === view ? raw(' aria-current="page"') : ""}>${VIEW_ICONS[v]}${VIEW_TITLES[v]}</button>`,
   )}</nav>`;
 }
 
@@ -209,7 +219,7 @@ function overviewView(s: Stats, ctx: ScorecardContext): Html {
   return html`
     ${heroView(s, ctx)}
     <section class="duo">
-      ${briefsSummaryView(s.briefs, ctx.meta, ctx.briefsStill ?? false)}
+      ${briefsSummaryView(s.briefs, ctx.meta, ctx.briefsStill ?? false, PERIOD_WHEN[ctx.period ?? "28d"])}
       ${correctsSummaryView(s, ctx)}
     </section>
     ${statsView(s)}`;
@@ -252,7 +262,7 @@ function catchesView(s: Stats, ctx: ScorecardContext): Html {
         ${versusView(s)}
       </div>
       <div class="meter">
-        <p class="big-stat"><span class="n">${s.overall.judgment ?? "–"}</span><span class="muted small">judgment over the last ${meta.brief_window_days} days, out of 100: you check its work, and it rarely has to correct you</span></p>
+        <p class="big-stat"><span class="n">${s.overall.judgment ?? "–"}</span><span class="muted small">judgment ${PERIOD_WHEN[ctx.period ?? "28d"]}, out of 100: you check its work, and it rarely has to correct you</span></p>
         ${proofNote(meta)}
       </div>
     </section>
@@ -285,7 +295,7 @@ export function scorecardView(s: Stats, ctx: ScorecardContext): Html {
     view === "catches"
       ? catchesView(s, ctx)
       : view === "briefs"
-        ? briefsView(s.briefs, meta, ctx.briefsStill ?? false, subjectButton(ctx))
+        ? briefsView(s.briefs, meta, ctx.briefsStill ?? false, subjectButton(ctx), PERIOD_WHEN[ctx.period ?? "28d"])
         : view === "hall"
           ? hallSection(s, ctx)
           : overviewView(s, ctx);

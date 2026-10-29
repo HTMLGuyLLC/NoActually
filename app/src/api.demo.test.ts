@@ -8,7 +8,7 @@ const base = stats({
   catches_last_7d: 20,
   messages: 400,
   models: [row("Anthropic", "Claude Opus", "5", 75, 300, 200), row("OpenAI", "GPT Astra", "6", 25, 100)],
-  briefs: briefs({ continued: 110, tasks_last_28d: 40, landed_last_28d: 38 }),
+  briefs: briefs({ continued: 110, window_tasks: 40, window_landed: 38 }),
   categories: { just_wrong: 8, made_it_up: 1 },
   weekly: [{ week: "2026-10-19", messages: 40, catches: 12 }],
   hall_of_fame: [hallEntry({ id: 1, model: "Claude Opus 5" }), hallEntry({ id: 2, model: "GPT Astra 6" })],
@@ -35,7 +35,7 @@ describe("demoStats", () => {
   it("scores the narrowed window the way Rust would", () => {
     // Opus holds 100 of the 110 tasks with a follow-up, so 36 of the window's 40 and 35 of its 38 landed.
     const s = demoStats(data, { provider: "Anthropic" });
-    expect(s.briefs).toMatchObject({ tasks: 200, continued: 100, landed: 80, tasks_last_28d: 36, landed_last_28d: 35 });
+    expect(s.briefs).toMatchObject({ tasks: 200, continued: 100, landed: 80, window_tasks: 36, window_landed: 35 });
     expect(s.overall).toEqual(judge(meta, { continued: 36, landed: 35, catches: 31, humbled: 2 }));
     // 2 corrections on 36 tasks (5.6%) cost 28 judgment points: Sharp-eyed, not Irreplaceable.
     expect(s.overall).toMatchObject({ score: 89, judgment: 72, tier: "sharp_eyed", verdict: "no", next_tier: "irreplaceable" });
@@ -198,15 +198,15 @@ describe("demoCall", () => {
 });
 
 describe("withSince", () => {
-  it("shrinks the counts to the period but keeps the score", async () => {
+  it("shrinks the counts to the period and scores them again", async () => {
     const { withSince } = await import("./api.demo");
     const { stats } = await import("./test/fixtures");
     const s = stats();
     const last = s.weekly.at(-1)?.week ?? "";
-    const p = withSince(s, last);
+    const p = withSince(meta, s, last);
     expect(p.weekly).toHaveLength(1);
     expect(p.catches).toBeLessThan(s.catches);
-    expect(p.overall).toEqual(s.overall);
-    expect(withSince(s, null)).toBe(s);
+    expect(p.overall).toEqual(judge(meta, { continued: p.briefs.window_tasks, landed: p.briefs.window_landed, catches: p.catches, humbled: p.humbled }));
+    expect(withSince(meta, s, null)).toBe(s);
   });
 });

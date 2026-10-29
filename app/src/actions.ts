@@ -19,6 +19,7 @@ import {
   isRange,
   isScoreView,
   isTab,
+  PERIOD_WHEN,
   setAutoUpdate,
   setDraft,
   setFilter,
@@ -68,13 +69,14 @@ const thenRender = async (btn: HTMLButtonElement, work: () => Promise<unknown>, 
 const scorePost = (s: Stats, meta: Meta): Post => {
   const who = filterLabel(state.filter, meta);
   const tier = tierName(meta, s.overall.tier);
-  return { title: "Share your score", text: shareText(s, who, tier), image: (shape) => drawShareCard(s, who, tier, shape) };
+  const w = when();
+  return { title: "Share your score", text: shareText(s, who, tier, w), image: (shape) => drawShareCard(s, who, tier, shape, w) };
 };
 
 const briefsPost = (s: Stats, tier: BriefTier): Post => ({
   title: "Share your briefs",
-  text: briefShareText(s.briefs, tier),
-  image: (shape) => drawBriefCard(s.briefs, tier, shape),
+  text: briefShareText(s.briefs, tier, when()),
+  image: (shape) => drawBriefCard(s.briefs, tier, shape, when()),
 });
 
 const catchPost = (e: HallEntry): Post => ({
@@ -83,6 +85,9 @@ const catchPost = (e: HallEntry): Post => ({
   image: (shape) => drawCatchCard(e, shape),
   quotesChat: !!(e.human || e.ai),
 });
+
+/** The period the drawn numbers cover: the scorecard's picker, or the default 28 days elsewhere. */
+const when = () => PERIOD_WHEN[state.tab === "score" ? state.period : "28d"];
 
 /** True on the second click. The first relabels the button and holds off redraws until then. */
 function confirmed(b: HTMLButtonElement, ask: string): boolean {
