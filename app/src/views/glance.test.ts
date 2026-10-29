@@ -30,7 +30,7 @@ describe("glanceView", () => {
     expect(m).toContain('<span class="g-word">No.</span><span class="muted small">Score 86 · Sharp-eyed</span>');
     expect(m).toContain("Do you make it guess?");
     expect(m).toContain("Do you catch its mistakes?");
-    expect(m).toContain('<span class="g-word">Always.</span><span class="muted small">You 41 vs it 2 · Hawk-eyed</span>');
+    expect(m).toContain('<span class="g-word">Almost always.</span><span class="muted small">You 41 vs it 2 · Hawk-eyed</span>');
   });
 
   it("shows a goal only when there is one, with this week's number", () => {

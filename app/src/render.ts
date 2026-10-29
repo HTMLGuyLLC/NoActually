@@ -12,7 +12,7 @@ import { coverage, headerView, statusPillView } from "./views/chrome";
 import { emptyGlanceView, glanceView } from "./views/glance";
 import { improveView } from "./views/improve";
 import { learnView } from "./views/learn";
-import { onboardingView, scorecardView, subjectButton } from "./views/scorecard";
+import { modelPicker, onboardingView, scorecardView, subjectText } from "./views/scorecard";
 import { settingsView } from "./views/settings";
 import { sourcesView, watchingNames } from "./views/sources";
 
@@ -56,7 +56,8 @@ async function view(): Promise<Html> {
       stats: s,
       progress,
       range: state.range,
-      subject: subjectButton({ filter: state.filter, meta }),
+      subject: subjectText({ filter: state.filter, meta }),
+      picker: modelPicker({ filter: state.filter, meta }),
       filtered: isFiltered(state.filter),
     });
   } else if (s.messages) {

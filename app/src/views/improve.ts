@@ -8,7 +8,16 @@ import { RANGES, type Range } from "../state";
 import { lineChart, type Point, sparkline, stackChart } from "./charts";
 
 /** `filtered`: a model is picked, so charts follow it while the goal and bests stay across all AI. */
-export type ImproveContext = { meta: Meta; stats: Stats; progress: Progress; range: Range; subject: Html | string; filtered: boolean };
+export type ImproveContext = {
+  meta: Meta;
+  stats: Stats;
+  progress: Progress;
+  range: Range;
+  subject: string;
+  /** The model picker, beside the range. */
+  picker?: Html;
+  filtered: boolean;
+};
 
 /** Fewer messages than this in a week and its catch rate is too noisy to put on the line. */
 const RATE_MIN_MESSAGES = 50;
@@ -309,7 +318,7 @@ export function improveView(ctx: ImproveContext): Html {
     <section class="improve-top">${goalView(p, meta, ctx.filtered)}${recapView(p.weeks, meta) || html`<section class="recap"><div class="eyebrow">Last week</div><p class="muted small">Your weekly recap shows up once a full week has ${meta.min_week}+ tasks.</p></section>`}</section>
     ${bestsView(p, ctx.filtered)}
     ${trophiesView(p, meta)}
-    <div class="head trends-head"><h2>How ${ctx.subject} and you are trending</h2>${rangeNav(ctx.range)}</div>
+    <div class="head trends-head"><h2>How ${ctx.subject} and you are trending</h2><div class="filters">${ctx.picker ?? ""}${rangeNav(ctx.range)}</div></div>
     ${empty ? html`<p class="muted">No history yet. Your charts start with your first tasks.</p>` : trendsView(ctx)}
     ${insightsView(p, meta)}`;
 }

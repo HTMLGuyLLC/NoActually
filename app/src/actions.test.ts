@@ -219,14 +219,6 @@ describe("delegated actions", () => {
     expect(box.checked).toBe(false);
   });
 
-  it("clears a filter", async () => {
-    state.setFilter({ provider: "OpenAI" });
-    await render();
-    await click('[data-action="clear-filter"]');
-    expect(state.state.filter).toEqual({});
-    expect(api.stats).toHaveBeenLastCalledWith({ since: state.periodSince("28d") });
-  });
-
   it("holds a background refresh while the picker is open and applies it when it closes", async () => {
     await click('[data-action="model-picker"]');
     expect(document.querySelector(".picker-pop")).not.toBeNull();

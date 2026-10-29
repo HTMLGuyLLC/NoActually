@@ -68,3 +68,19 @@ export function headerView(tab: Tab, status: SyncStatus, demo: boolean, covers =
   const home = html`<button class="home" data-action="home" title="Go to the scorecard">${wordmarkView()}<span class="sr-only">, go to the scorecard</span></button>`;
   return html`<header class="top">${home}<div class="top-right"><nav aria-label="Main">${tabs}</nav>${statusPillView(status, demo, covers)}</div></header>`;
 }
+
+/** A tier ladder, top tier first. Your tier's row carries your number ("88 · 80–89"), so no
+ * note below is needed; before you're ranked, `unranked` says how far a ranking is. */
+export function ladderView(o: {
+  label: string;
+  tiers: { id: string; name: string; range: string }[];
+  on: string | null;
+  at: string | null;
+  unranked: string;
+}): Html {
+  const row = (t: { id: string; name: string; range: string }) =>
+    t.id === o.on && o.at != null
+      ? html`<li class="on" aria-current="true"><span>${t.name}</span><span><b class="at">${o.at}</b><span class="sr-only">, you're at ${o.at}. Range</span> · ${t.range}</span></li>`
+      : html`<li><span>${t.name}</span><span>${t.range}</span></li>`;
+  return html`<ol class="ladder" aria-label="${o.label}">${o.tiers.map(row)}</ol>${o.on ? "" : html`<p class="hand-note">${o.unranked}</p>`}`;
+}

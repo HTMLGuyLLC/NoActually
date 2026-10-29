@@ -13,17 +13,18 @@ describe("briefsView", () => {
     expect(m).toContain(">Rarely.</div>");
     expect(m).toContain('<span class="sr-only">Rarely. Your brief tier is Architect.</span>');
     expect(m).toContain("<b>95%</b> of your tasks in the last 28 days landed");
-    expect(m).toContain('<li class="on" aria-current="true"><span>Architect</span><span>90%+ landed</span></li>');
+    expect(m).toContain('<li class="on" aria-current="true"><span>Architect</span><span><b class="at">95%</b>');
     expect(m).toContain("<span>Ticket writer</span><span>70–79%</span>");
-    expect(m).toContain("Top tier.");
+    expect(m).not.toContain("Top tier."); // the row carries the number; no note below
     expect(m).toContain('data-action="share-briefs"');
     expect(m).not.toContain("style=");
   });
 
-  it("names the next tier's target and where you are", () => {
+  it("puts where you are in your tier's row, and the tiers say the rest", () => {
     const m = view({ tier: "tech_lead", next_tier: "architect", window_landed: 34 });
     expect(m).toContain(">Sometimes.</div>");
-    expect(m).toContain("Architect at 90%. You&#39;re at 85%.");
+    expect(m).toContain('<span>Tech lead</span><span><b class="at">85%</b><span class="sr-only">, you\'re at 85%. Range</span> · 80–89%</span>');
+    expect(m).not.toContain("Architect at 90%");
   });
 
   it("waits to rank a thin week, and offers nothing to share yet", () => {

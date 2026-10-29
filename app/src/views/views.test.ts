@@ -37,7 +37,9 @@ describe("scorecardView", () => {
   it("draws the ladder from Rust's data on the overview", () => {
     const m = scorecardView(stats(), ctx).value;
     expect(m).toContain(">No.</div>");
-    expect(m).toContain('<li class="on" aria-current="true"><span>Sharp-eyed</span><span>80–89</span></li>');
+    expect(m).toContain(
+      '<li class="on" aria-current="true"><span>Sharp-eyed</span><span><b class="at">86</b><span class="sr-only">, you\'re at 86. Range</span> · 80–89</span></li>',
+    );
     expect(m).toContain("<span>Irreplaceable</span><span>90+</span>");
     expect(m).not.toContain("style=");
   });
@@ -52,11 +54,10 @@ describe("scorecardView", () => {
 
   it("answers the catches section in a word, with the catch tiers and a share", () => {
     const m = scorecardView(stats(), { ...ctx, view: "catches" }).value;
-    expect(m).toContain('aria-hidden="true">Always.</div>');
+    expect(m).toContain('aria-hidden="true">Almost always.</div>');
     expect(m).toContain('<ol class="ladder" aria-label="Catch tiers">');
-    expect(m).toContain('<li class="on" aria-current="true"><span>Hawk-eyed</span><span>90+</span></li>');
+    expect(m).toContain('<span>Hawk-eyed</span><span><b class="at">95</b>');
     expect(m).toContain("<span>Spot-checker</span><span>50–74</span>");
-    expect(m).toContain("Top tier. Keep checking.");
     expect(m).toContain('data-action="share-catches">Share your catches</button>');
     const unranked = scorecardView(stats({ overall: overall({ judgment: null, catch_tier: null, to_rank: 3 }) }), { ...ctx, view: "catches" }).value;
     expect(unranked).toContain(">Hmm.</div>");
@@ -76,17 +77,18 @@ describe("scorecardView", () => {
     const m = scorecardView(stats({ overall: overall({ verdict: "hmm", score: 60, tier: "rubber_stamp", next_tier: "coworker" }) }), ctx).value;
     expect(m).toContain("no maybe");
     expect(m).toContain(">Hmm.</div>");
-    expect(m).toContain("Coworker at 65. You&#39;re at 60.");
+    expect(m).toContain('<b class="at">60</b>');
   });
 
   it("keeps the scrawl still when the verdict didn't change", () => {
     expect(scorecardView(stats(), { ...ctx, still: true }).value).toContain('class="no still"');
   });
 
-  it("offers to clear a filter, naming it", () => {
+  it("names a filter only in the model picker, with no chip to repeat it", () => {
     const m = scorecardView(stats(), { ...ctx, filter: { provider: "Anthropic", family: "Claude Opus", version: "5" } }).value;
-    expect(m).toContain("Showing Claude Opus 5 only");
-    expect(m).toContain('data-action="clear-filter"');
+    expect(m).not.toContain("Showing");
+    expect(m).not.toContain("clear-filter");
+    expect(m).toContain('id="model-trigger"');
   });
 
   it("escapes every string that comes from chats or model names", () => {
@@ -109,7 +111,7 @@ describe("overview hero", () => {
     expect(m).toContain("Last 28 days");
     expect(m).toContain("Score <b>86</b>. Your tasks landed <b>83%</b> of the time, and you caught it <b>41 times</b> to its 2 in the last 28 days.");
     expect(m).toContain("Your tier is Sharp-eyed, score 86.");
-    expect(m).toContain("Irreplaceable at 90. You&#39;re at 86.");
+    expect(m).not.toContain("Irreplaceable at 90. You&#39;re at 86."); // the row says it
     expect(m).toContain('data-action="open-share"');
     // The overview shares the score; Briefs and Catches each share their own answer.
     expect(m).not.toContain("share-briefs");
@@ -137,8 +139,8 @@ describe("overview hero", () => {
     expect(hero({}, {}).split('class="part"')).toHaveLength(3);
   });
 
-  it("says Top tier at the top of the ladder", () => {
-    expect(hero({ tier: "irreplaceable", next_tier: null, score: 93 })).toContain("Top tier. Don&#39;t let it slip.");
+  it("marks the top tier's row with your score", () => {
+    expect(hero({ tier: "irreplaceable", next_tier: null, score: 93 })).toContain('<span>Irreplaceable</span><span><b class="at">93</b>');
   });
 
   it("asks for more tasks, and offers nothing to share, until there is a score", () => {
@@ -187,10 +189,10 @@ describe("hallView", () => {
 });
 
 describe("chartView", () => {
-  it("marks the peak week", () => {
+  it("labels the busiest week once without coloring it as the good one", () => {
     const m = chartView(stats()).value;
-    expect(m).toContain('class="bar hot"');
-    expect(m.match(/class="bar hot"/g)).toHaveLength(1);
+    expect(m).not.toContain("hot");
+    expect(m.match(/class="peak-label">Most: /g)).toHaveLength(1);
     expect(m).toContain('aria-label="Catches per week"');
     expect(m).toContain('aria-describedby="chart-summary"');
   });
@@ -420,7 +422,6 @@ describe("status and refresh", () => {
     const m = scorecardView(stats(), { meta, filter: {}, still: true }).value;
     expect(m).not.toContain("Pick one from");
     expect(m).not.toContain("messages</span></section>");
-    expect(scorecardView(stats(), { meta, filter: { provider: "OpenAI" }, still: true }).value).toContain("chip-clear");
   });
 });
 

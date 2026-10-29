@@ -1,7 +1,8 @@
 // "Do you make it guess?": how specific your briefs are and what it took to land them.
 import type { Briefs, Meta } from "../api";
-import { type Html, html, num, raw } from "../html";
+import { type Html, html, num } from "../html";
 import { briefTier, briefTierRanges, landedPct, percent, steerTitle } from "../meta";
+import { ladderView } from "./chrome";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
 
@@ -64,13 +65,9 @@ function ladderNote(b: Briefs, meta: Meta): string {
   return next ? `${next.name} at ${next.floor}%. You're at ${landedPct(b)}%.` : "Top tier. Don't let it slip.";
 }
 
-function ladderView(b: Briefs, meta: Meta): Html {
-  const note = ladderNote(b, meta);
+function briefLadderView(b: Briefs, meta: Meta): Html {
   return html`
-    <ol class="ladder" aria-label="Brief tiers">${briefTierRanges(meta).map(
-      (t) => html`<li${t.id === b.tier ? raw(' class="on" aria-current="true"') : ""}><span>${t.name}</span><span>${t.range}</span></li>`,
-    )}</ol>
-    <p class="hand-note">${note}</p>
+    ${ladderView({ label: "Brief tiers", tiers: briefTierRanges(meta), on: b.tier, at: b.tier ? `${landedPct(b)}%` : null, unranked: ladderNote(b, meta) })}
     ${b.tier ? html`<div class="share"><button data-action="share-briefs">Share your briefs</button></div>` : ""}`;
 }
 
@@ -115,7 +112,7 @@ export function briefsView(b: Briefs, meta: Meta, still: boolean, subject: Html 
   return html`
     <section class="card briefs">
       <div>${verdictView(b, meta, still, subject, when)}</div>
-      <div class="meter">${ladderView(b, meta)}</div>
+      <div class="meter">${briefLadderView(b, meta)}</div>
     </section>
     <section class="split">
       <div><div class="head"><h2>What your briefs carry</h2></div>${gradesView(b, meta)}${signalsView(b, meta)}</div>

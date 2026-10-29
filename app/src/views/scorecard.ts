@@ -7,7 +7,7 @@ import { catchTier, catchTierRanges, categoryTitle, tierName, tierOf, tierRanges
 import { catchRate, modelName } from "../picker/picker";
 import { PERIOD_WHEN, PERIODS, type Period, SCORE_VIEWS, type ScoreView } from "../state";
 import { briefsSummaryView, briefsView } from "./briefs";
-import { svg } from "./chrome";
+import { ladderView, svg } from "./chrome";
 
 export type ScorecardContext = {
   meta: Meta;
@@ -53,11 +53,15 @@ const VIEW_ICONS: Record<ScoreView, Html> = {
 const CHEVRON = raw(`<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>`);
 
 /** The model picker, shown as the question's subject ("Could [Claude Opus 5.5] replace you?"). One per page. */
-export const subjectButton = (ctx: Pick<ScorecardContext, "filter" | "meta">): Html =>
-  html`<button id="model-trigger" class="subject" data-action="model-picker" aria-haspopup="listbox" aria-expanded="false" title="Pick a model">${subjectLabel(
+/** Who the questions ask about, in plain words: "AI", or the model the picker narrowed to. */
+export const subjectText = (ctx: Pick<ScorecardContext, "filter" | "meta">): string => (isFiltered(ctx.filter) ? filterLabel(ctx.filter, ctx.meta) : "AI");
+
+/** The model picker, beside the time range, so it reads as filtering the whole page. */
+export const modelPicker = (ctx: Pick<ScorecardContext, "filter" | "meta">): Html =>
+  html`<button id="model-trigger" class="model-pick" data-action="model-picker" aria-haspopup="listbox" aria-expanded="false" aria-label="Model: ${subjectLabel(
     ctx.filter,
     ctx.meta,
-  )}${CHEVRON}</button>`;
+  )}. Pick a model">${subjectLabel(ctx.filter, ctx.meta)}${CHEVRON}</button>`;
 
 /** "You caught it 37 times in the last 28 days." */
 const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
@@ -93,10 +97,8 @@ function partsView(o: Overall, meta: Meta): Html {
   </div>`;
 }
 
-function ladderView(o: Overall, meta: Meta): Html {
-  return html`<ol class="ladder" aria-label="Tiers">${tierRanges(meta).map(
-    (t) => html`<li${t.id === o.tier ? raw(' class="on" aria-current="true"') : ""}><span>${t.name}</span><span>${t.range}</span></li>`,
-  )}</ol>`;
+function scoreLadderView(o: Overall, meta: Meta): Html {
+  return ladderView({ label: "Tiers", tiers: tierRanges(meta), on: o.tier, at: o.score == null ? null : String(o.score), unranked: scoreNote(o, meta) });
 }
 
 /** The headline: could it replace you? Both sides of working with AI, one score. */
@@ -105,13 +107,12 @@ function heroView(s: Stats, ctx: ScorecardContext): Html {
   return html`<section class="card hero">
       <div>
         <div class="eyebrow">${PERIOD_EYEBROW[ctx.period ?? "28d"]}</div>
-        <h1 class="q">Could ${subjectButton(ctx)} replace you?</h1>
+        <h1 class="q">Could ${subjectText(ctx)} replace you?</h1>
         <div class="verdict">${answerView(o, ctx.meta, ctx.still)}<div class="because">${scoreBecause(o, PERIOD_WHEN[ctx.period ?? "28d"])}</div></div>
         ${partsView(o, ctx.meta)}
       </div>
       <div class="meter">
-        ${ladderView(o, ctx.meta)}
-        <p class="hand-note">${scoreNote(o, ctx.meta)}</p>
+        ${scoreLadderView(o, ctx.meta)}
         ${o.tier ? html`<div class="share"><button data-action="open-share">Share your score</button></div>` : ""}
       </div>
     </section>`;
@@ -130,7 +131,7 @@ function versusView(s: Stats): Html {
 const proofNote = (meta: Meta) =>
   html`<p class="muted small">${meta.catch_proof} catches prove you check its work. Catching fewer because it got it right never costs you.</p>`;
 
-/** "Always.", hand-written, with a screen-reader version. */
+/** "Almost always.", hand-written, with a screen-reader version. */
 function catchMark(o: Overall, meta: Meta, still: boolean, small = false): Html {
   const tier = catchTier(meta, o.catch_tier);
   return html`<div class="no${small ? " sm" : ""}${tier ? "" : " maybe"}${still ? " still" : ""}" aria-hidden="true">${tier?.verdict ?? "Hmm."}</div>
@@ -152,7 +153,13 @@ function catchNote(o: Overall, meta: Meta): string {
 }
 
 function catchLadderView(o: Overall, meta: Meta): Html {
-  return html`<ol class="ladder" aria-label="Catch tiers">${catchTierRanges(meta).map((t) => html`<li${t.id === o.catch_tier ? raw(' class="on" aria-current="true"') : ""}><span>${t.name}</span><span>${t.range}</span></li>`)}</ol>`;
+  return ladderView({
+    label: "Catch tiers",
+    tiers: catchTierRanges(meta),
+    on: o.catch_tier,
+    at: o.judgment == null ? null : String(o.judgment),
+    unranked: catchNote(o, meta),
+  });
 }
 
 /** The overview's "Who corrects whom?" half: the answer, the tier, and a way to the details. */
@@ -191,10 +198,11 @@ export function chartView(s: Stats): Html {
     const x = L + i * bw + bw * 0.18;
     const bwid = bw * 0.64;
     const barTop = y(w.catches);
-    const hot = w.catches > 0 && w.catches === peak;
+    // The busiest week gets a label, not a color: more catches isn't better, so no week stands out as the good one.
+    const busiest = w.catches > 0 && w.catches === peak && weeks.findIndex((v) => v.catches === peak) === i;
     const d = new Date(`${w.week}T00:00`);
-    return html`<rect x="${x}" y="${barTop}" width="${bwid}" height="${y(0) - barTop}" rx="3" class="${hot ? "bar hot" : "bar"}"><title>Week of ${d.toLocaleDateString()}: ${w.catches} catches, ${w.messages} messages</title></rect>${
-      hot ? html`<text x="${x + bwid / 2}" y="${barTop - 6}" text-anchor="middle" class="hotlabel">${w.catches}</text>` : ""
+    return html`<rect x="${x}" y="${barTop}" width="${bwid}" height="${y(0) - barTop}" rx="3" class="bar"><title>Week of ${d.toLocaleDateString()}: ${w.catches} catches, ${w.messages} messages</title></rect>${
+      busiest ? html`<text x="${x + bwid / 2}" y="${barTop - 6}" text-anchor="middle" class="peak-label">Most: ${w.catches}</text>` : ""
     }${i % 2 === 0 ? html`<text x="${x + bwid / 2}" y="${H - 10}" text-anchor="middle">${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</text>` : ""}`;
   });
   return html`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Catches per week" aria-describedby="chart-summary">${grid}${bars}</svg>
@@ -230,7 +238,7 @@ export function hallView(entries: HallEntry[]): Html {
   )}</div>`;
 }
 
-/** The sub-tabs under the toolbar. Plain buttons, like the main nav, with the current one marked. */
+/** The sub-tabs. Plain buttons, like the main nav, with the current one marked. */
 function viewsNav(view: ScoreView): Html {
   return html`<nav class="views" aria-label="Scorecard sections">${SCORE_VIEWS.map(
     (v) =>
@@ -279,13 +287,12 @@ function catchesView(s: Stats, ctx: ScorecardContext): Html {
     <section class="card catches">
       <div>
         <div class="eyebrow">Who corrects whom</div>
-        <h1 class="q">Do you catch ${subjectButton(ctx)}'s mistakes?</h1>
+        <h1 class="q">Do you catch <span class="nowrap">${subjectText(ctx)}'s</span> mistakes?</h1>
         <div class="verdict">${catchMark(s.overall, meta, ctx.still)}<div class="because">${catchBecause(s, PERIOD_WHEN[ctx.period ?? "28d"])}</div></div>
         ${versusView(s)}
       </div>
       <div class="meter">
         ${catchLadderView(s.overall, meta)}
-        <p class="hand-note">${catchNote(s.overall, meta)}</p>
         ${proofNote(meta)}
         ${catchTier(meta, s.overall.catch_tier) ? html`<div class="share"><button data-action="share-catches">Share your catches</button></div>` : ""}
       </div>
@@ -336,7 +343,7 @@ function hallSection(s: Stats, ctx: ScorecardContext): Html {
   const count = (k: string) => (k ? (s.categories[k] ?? 0) : s.humbled);
   // Most earned first; unearned last, in display order.
   const order = keys.map((k, i) => ({ k, i, n: count(k) })).sort((x, y) => Number(y.n > 0) - Number(x.n > 0) || y.n - x.n || x.i - y.i);
-  return html`<section><div class="head"><h2>Hall of fame · ${subjectButton(ctx)}</h2><p class="muted">The best catch for each award, picked from your history. Snippets are redacted and kept per your privacy setting.</p></div>
+  return html`<section><div class="head"><h2>Hall of fame · ${subjectText(ctx)}</h2><p class="muted">The best catch for each award, picked from your history. Snippets are redacted and kept per your privacy setting.</p></div>
     <div class="awards">${order.map(({ k, n }) =>
       awardView(
         k,
@@ -348,22 +355,18 @@ function hallSection(s: Stats, ctx: ScorecardContext): Html {
 }
 
 export function scorecardView(s: Stats, ctx: ScorecardContext): Html {
-  const { meta, filter } = ctx;
+  const { meta } = ctx;
   const view = ctx.view ?? "overview";
-  const toolbar = isFiltered(filter)
-    ? html`<section class="toolbar"><button class="chip-clear" data-action="clear-filter">Showing ${filterLabel(filter, meta)} only <span aria-hidden="true">×</span></button></section>`
-    : "";
   const body =
     view === "catches"
       ? catchesView(s, ctx)
       : view === "briefs"
-        ? briefsView(s.briefs, meta, ctx.briefsStill ?? false, subjectButton(ctx), PERIOD_WHEN[ctx.period ?? "28d"])
+        ? briefsView(s.briefs, meta, ctx.briefsStill ?? false, subjectText(ctx), PERIOD_WHEN[ctx.period ?? "28d"])
         : view === "hall"
           ? hallSection(s, ctx)
           : overviewView(s, ctx);
   return html`
-    ${toolbar}
-    <div class="views-row">${viewsNav(view)}${periodNav(ctx.period ?? "28d")}</div>
+    <div class="views-row">${viewsNav(view)}<div class="filters">${modelPicker(ctx)}${periodNav(ctx.period ?? "28d")}</div></div>
     <div class="view-body">${body}</div>`;
 }
 

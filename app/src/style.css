@@ -117,6 +117,13 @@ nav { display: flex; gap: 6px }
 .views-row { display: flex; justify-content: space-between; align-items: center; gap: 8px 16px; flex-wrap: wrap; border-bottom: 1px solid var(--rule); padding-bottom: 8px }
 .views-row .views { border: 0; padding: 0; min-width: 0; flex: 0 1 auto }
 .period-select { display: none; min-height: 34px; font-size: 13px }
+/* The model picker and the time range: what the whole page is filtered by. */
+.filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0 }
+.model-pick { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; font: 600 12.5px var(--body); color: var(--ink);
+  background: transparent; border: 1px solid var(--rule); border-radius: 999px; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.model-pick:hover, .model-pick[aria-expanded="true"] { filter: none; border-color: var(--muted) }
+.model-pick svg { width: 10px; height: 10px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.model-pick[aria-expanded="true"] svg { transform: rotate(180deg) }
 
 /* Narrow windows: the period is a dropdown beside the sections, and the date line goes. */
 @media (max-width: 640px) {
@@ -127,8 +134,6 @@ nav { display: flex; gap: 6px }
   .top-right { align-items: flex-start }
   .top-right .sync-pill { padding: 0 0 0 10px }
 }
-.chip-clear { background: var(--pen-soft); color: var(--pen-text); border-color: transparent; font-weight: 600 }
-.chip-clear span { margin-left: 4px; font-size: 15px }
 
 .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 18px; padding: clamp(20px, 4vw, 36px);
   display: grid; grid-template-columns: 1.25fr 1fr; gap: 28px; position: relative; overflow: hidden }
@@ -153,16 +158,11 @@ nav { display: flex; gap: 6px }
 .ladder li { display: grid; grid-template-columns: 1fr auto; padding: 9px 12px; border-radius: 10px; border: 1px dashed var(--rule); color: var(--muted); font-size: 14px }
 .ladder li span:last-child { font: 400 12px/1.6 var(--mono) }
 .ladder li.on { border: 2px solid var(--pen); color: var(--ink); background: var(--pen-soft); font-weight: 600 }
+.ladder li .at { font: 700 15px/1 var(--display); color: var(--pen) }
 .hand-note { font: 400 18px/1.1 var(--hand); color: var(--pen) }
 .share { display: flex; gap: 8px; flex-wrap: wrap }
 
 /* Model picker: the headline's subject is the control. */
-.subject { display: inline-flex; align-items: center; gap: .18em; font: inherit; letter-spacing: inherit; color: var(--pen);
-  background: none; border: 0; border-bottom: 3px dashed color-mix(in srgb, var(--pen) 55%, transparent); border-radius: 0;
-  padding: 0 .05em .02em; cursor: pointer }
-.subject:hover, .subject[aria-expanded="true"] { filter: none; border-bottom-style: solid; background: var(--pen-soft) }
-.subject svg { width: .5em; height: .5em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
-.subject[aria-expanded="true"] svg { transform: rotate(180deg) }
 
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); border-block: 1px solid var(--rule) }
 .stat { padding: 16px; display: grid; gap: 6px; border-left: 1px solid var(--rule) }
@@ -174,8 +174,8 @@ nav { display: flex; gap: 6px }
 .chart svg { display: block; width: 100%; min-width: 540px; height: auto }
 .chart text { font: 11px var(--mono); fill: var(--muted) }
 .chart .grid { stroke: var(--rule) }
-.chart .bar { fill: var(--ink); opacity: .82 } .chart .bar.hot { fill: var(--pen); opacity: 1 }
-.chart .hotlabel { fill: var(--pen); font-weight: 600 }
+.chart .bar { fill: var(--ink); opacity: .82 }
+.chart .peak-label { fill: var(--muted); font-weight: 600 }
 /* Improve's charts: a red trend line; hollow dots for weeks with too few tasks to count. */
 .chart .trend { fill: none; stroke: var(--pen); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round }
 .chart .dot-strong { fill: var(--pen) }
@@ -455,7 +455,7 @@ button.link:hover { filter: none }
   /* Redraws (a background check finishing) keep the verdict still; it only plays when it changes.
      The glance window loads hidden, so it skips the scrawl and shows the resting state. */
   .no.still, .no.sm { animation: none }
-  .subject svg { transition: transform .15s ease-out }
+  .model-pick svg { transition: transform .15s ease-out }
   .picker-pop { animation: pop .14s ease-out }
   .share-dialog[open] { animation: pop .16s ease-out }
   .dot.live { animation: pulse 1s ease-in-out infinite alternate }
@@ -463,3 +463,6 @@ button.link:hover { filter: none }
   @keyframes pop { from { opacity: 0; transform: translateY(-4px) } }
   @keyframes pulse { to { opacity: .3 } }
 }
+
+/* Keeps a possessive with the name it belongs to ("Claude Opus 5.5's"), so it never wraps alone. */
+.nowrap { white-space: nowrap }

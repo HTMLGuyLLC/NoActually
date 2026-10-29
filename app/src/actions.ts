@@ -250,10 +250,6 @@ export const clickActions = {
     if (!confirmed(b, "Click again to drop it")) return;
     return thenRender(b, () => api.clearGoal());
   },
-  "clear-filter": () => {
-    setFilter({});
-    return render();
-  },
   pin: (b) => thenRender(b, () => api.pin(Number(data(b, "id")), data(b, "pinned") !== "true")),
   allow: (b) => {
     const id = data(b, "id");
