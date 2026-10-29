@@ -46,7 +46,7 @@ function answerView(o: Overall, meta: Meta, still: boolean, small = false): Html
 function scoreBecause(o: Overall, meta: Meta): Html {
   if (o.score == null)
     return html`Give it <b>${plural(o.to_rank, "more task")}</b> with a follow-up to get a score. One-shot tasks can't need steering, so they don't count.`;
-  return html`Score <b>${o.score}</b>. Your tasks landed <b>${o.direction}%</b> of the time, and you caught it ${plural(o.catches, "time")} to its ${num(o.humbled)} in ${meta.brief_window_days} days.`;
+  return html`Score <b>${o.score}</b>. Your tasks landed <b>${o.direction}%</b> of the time, and you caught it <b>${plural(o.catches, "time")}</b> to its ${num(o.humbled)} in ${meta.brief_window_days} days.`;
 }
 
 /** The next tier's target ("Irreplaceable at 90. You're at 86."). */

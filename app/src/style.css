@@ -74,6 +74,11 @@ nav { display: flex; gap: 6px }
 .tab.on { color: var(--ink); border-color: var(--ink) }
 .tab { display: inline-flex; align-items: center; gap: 6px }
 .tab-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+/* Sources and Settings: round icon buttons after a thin divider; the name is the tooltip and the label. */
+.top .tab.icon-only { padding: 8px; width: 34px; height: 34px; justify-content: center }
+.top .tab.icon-only .tab-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
+.nav-gap { width: 1px; align-self: stretch; margin: 6px 4px; background: var(--rule) }
+.top nav { align-items: center; gap: 2px }
 .home { background: none; border: 0; padding: 0; border-radius: 8px; cursor: pointer }
 .home:hover { filter: none; opacity: .85 }
 .sync-pill { display: inline-flex; align-items: center; gap: 7px; font: 500 12px var(--body); color: var(--muted); background: transparent; border: 0; padding: 0 }
@@ -360,7 +365,7 @@ button.link:hover { filter: none }
 .insights { margin: 0; padding-left: 18px; display: grid; gap: 10px; max-width: 70ch }
 
 /* Five tabs don't fit beside the logo on narrow windows: show icons, keep names for screen readers. */
-@media (max-width: 900px) {
+@media (max-width: 720px) {
   .top .tab .tab-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
   .top .tab { padding: 9px 11px }
 }

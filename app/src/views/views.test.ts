@@ -85,7 +85,7 @@ describe("overview hero", () => {
   it("shows the score, the tier and why, with a share button once scored", () => {
     const m = hero();
     expect(m).toContain("Last 28 days");
-    expect(m).toContain("Score <b>86</b>. Your tasks landed <b>83%</b> of the time, and you caught it 41 times to its 2 in 28 days.");
+    expect(m).toContain("Score <b>86</b>. Your tasks landed <b>83%</b> of the time, and you caught it <b>41 times</b> to its 2 in 28 days.");
     expect(m).toContain("Your tier is Sharp-eyed, score 86.");
     expect(m).toContain("Irreplaceable at 90. You&#39;re at 86.");
     expect(m).toContain('data-action="open-share"');

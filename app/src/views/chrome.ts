@@ -38,11 +38,15 @@ export function statusPillView(status: SyncStatus, demo: boolean): Html {
   return html`<span class="sync-pill" title="${checked}"><i class="dot"></i>${demo ? "Demo data" : checked}</span>`;
 }
 
+/** Set up once and rarely visited: icons only, so the main sections have room. */
+const UTILITY: readonly Tab[] = ["sources", "settings"];
+
 export function headerView(tab: Tab, status: SyncStatus, demo: boolean): Html {
-  const tabs = TABS.map(
-    (t) =>
-      html`<button class="tab${tab === t ? " on" : ""}" data-action="tab" data-id="${t}" title="${TAB_TITLES[t]}"${tab === t ? raw(' aria-current="page"') : ""}>${TAB_ICONS[t]}<span class="tab-name">${TAB_TITLES[t]}</span></button>`,
-  );
+  const button = (t: Tab) => {
+    const cls = `tab${UTILITY.includes(t) ? " icon-only" : ""}${tab === t ? " on" : ""}`;
+    return html`<button class="${cls}" data-action="tab" data-id="${t}" title="${TAB_TITLES[t]}"${tab === t ? raw(' aria-current="page"') : ""}>${TAB_ICONS[t]}<span class="tab-name">${TAB_TITLES[t]}</span></button>`;
+  };
+  const tabs = html`${TABS.filter((t) => !UTILITY.includes(t)).map(button)}<span class="nav-gap" aria-hidden="true"></span>${UTILITY.map(button)}`;
   // The logo goes home: the scorecard's overview.
   const home = html`<button class="home" data-action="home" title="Go to the scorecard">${wordmarkView()}<span class="sr-only">, go to the scorecard</span></button>`;
   return html`<header class="top">${home}<div class="top-right">${statusPillView(status, demo)}<nav aria-label="Main">${tabs}</nav></div></header>`;
