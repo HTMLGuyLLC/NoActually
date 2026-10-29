@@ -20,12 +20,12 @@ export function shareText(s: ScoreLike, who: string, tier: string, when = PERIOD
   if (o.score == null) {
     return `Could ${who} replace me? ${answer} I corrected it ${plural(s.corrections_last_7d, "time")} this week. Me ${s.corrections}, ${who} ${s.humbled}. What's your score? ${SHARE_URL}`;
   }
-  return `Could ${who} replace me? ${answer} My score is ${o.score} (${tier}): ${o.direction}% of my tasks landed without steering, and I corrected it ${plural(o.corrections, "time")} to its ${o.humbled} ${when}. What's yours? ${SHARE_URL}`;
+  return `Could ${who} replace me? ${answer} My score is ${o.score} (${tier}): ${o.direction}% of my prompts were clear the first time, and I corrected it ${plural(o.corrections, "time")} to its ${o.humbled} ${when}. What's yours? ${SHARE_URL}`;
 }
 
-/** The prompts score, ready to post: the tier's answer and how many tasks landed. Numbers only. */
+/** The prompts score, ready to post: the tier's answer and how many prompts were clear the first time. Numbers only. */
 export function promptShareText(b: Pick<Prompts, "window_landed" | "window_tasks">, tier: PromptTier, when = PERIOD_WHEN["28d"]) {
-  return `Do I make my AI guess? ${tier.verdict} ${landedPct(b)}% of my tasks ${when} landed without me adding, clarifying or starting over. Prompt tier: ${tier.name}. Do you make yours guess? ${SHARE_URL}`;
+  return `Do I make my AI guess? ${tier.verdict} ${landedPct(b)}% of my prompts ${when} were clear the first time. Prompt tier: ${tier.name}. Do you make yours guess? ${SHARE_URL}`;
 }
 
 /** The corrections answer, ready to post: the tier's word and who corrected whom. Numbers only. */

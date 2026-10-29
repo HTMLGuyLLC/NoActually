@@ -150,11 +150,11 @@ type ScoreCard = Pick<Stats, "overall" | "corrections_last_7d" | "corrections" |
 const SCORE_FONTS = ["800 64px 'Bricolage Grotesque Variable'", "400 200px 'Gochi Hand'", "500 24px 'Instrument Sans'", "600 18px 'JetBrains Mono'"];
 const heading = (size: number) => `800 ${size}px 'Bricolage Grotesque Variable'`;
 const hand = (size: number) => `400 ${size}px 'Gochi Hand'`;
-/** "Score 86. 83% of my tasks landed." or, before a score, this week's corrections. */
+/** "Score 86. 83% of my prompts were clear the first time." or, before a score, this week's corrections. */
 const timesLine = (s: ScoreCard) =>
   s.overall.score == null
     ? `I corrected it ${plural(s.corrections_last_7d, "time")} this week.`
-    : `Score ${s.overall.score}. ${s.overall.direction}% of my tasks landed.`;
+    : `Score ${s.overall.score}. ${s.overall.direction}% of my prompts were clear the first time.`;
 const pctLine = (s: ScoreCard, when: string) =>
   s.overall.score == null ? null : `I corrected it ${plural(s.overall.corrections, "time")} to its ${s.overall.humbled} ${when}.`;
 
@@ -328,7 +328,7 @@ type PromptsCard = Pick<Prompts, "window_landed" | "window_tasks" | "grades" | "
 
 const PROMPT_QUESTION = "Do I make my AI guess?";
 export const promptLines = (b: PromptsCard, when = PERIOD_WHEN["28d"]): [string, string] => [
-  `${landedPct(b)}% of my tasks ${when} landed without steering.`,
+  `${landedPct(b)}% of my prompts ${when} were clear the first time.`,
   `${percent(b.grades.sharp ?? 0, b.tasks)}% of all my prompts were sharp.`,
 ];
 
@@ -407,7 +407,7 @@ export async function drawCorrectionsCard(o: CorrectionsCard, tier: PromptTier, 
   return png(c);
 }
 
-/** The prompts card: "Do I make my AI guess?", the tier's answer, and what landed. */
+/** The prompts card: "Do I make my AI guess?", the tier's answer, and how many were clear the first time. */
 export async function drawPromptCard(b: PromptsCard, tier: PromptTier, shape: CardShape = "wide", when = PERIOD_WHEN["28d"]): Promise<Blob> {
   const { c, g } = await canvas(shape, SCORE_FONTS);
   const { w } = CARD_SIZES[shape];

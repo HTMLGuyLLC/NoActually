@@ -137,7 +137,9 @@ describe("overview hero", () => {
   it("shows the score, the tier and why, with a share button once scored", () => {
     const m = hero();
     expect(m).not.toContain('class="eyebrow"'); // the picker and the sentence already say the window
-    expect(m).toContain("Score <b>86</b>. Your tasks landed <b>83%</b> of the time, and you corrected it <b>41 times</b> to its 2 in the last 28 days.");
+    expect(m).toContain(
+      "Score <b>86</b>. <b>83%</b> of your prompts were clear the first time, and you corrected it <b>41 times</b> to its 2 in the last 28 days.",
+    );
     expect(m).toContain("Your tier is Sharp-eyed, score 86.");
     expect(m).not.toContain("Irreplaceable at 90. You&#39;re at 86."); // the row says it
     expect(m).toContain('data-action="open-share"');
@@ -158,7 +160,7 @@ describe("overview hero", () => {
     const m = hero();
     expect(m).toContain('aria-label="What the score is made of"');
     expect(m).toContain("Your prompts<small");
-    expect(m).toContain("tasks that landed · 70% of the score");
+    expect(m).toContain("prompts clear the first time · 70% of the score");
     expect(m).toContain('data-w="83"');
     expect(m).toContain("Who corrects whom<small");
     expect(m).toContain("how rarely it has to correct you");

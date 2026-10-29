@@ -6,8 +6,8 @@ import { correctionRate, landedRate, matchPickItems, type PickItem, type PickSta
 
 /** The numbers beside one model, for what the page is about. */
 export function pickStatView(i: PickItem, stat: PickStat): Html {
-  if (stat === "prompts") return html`<b>${landedRate(i.landed, i.continued)}</b> landed · ${num(i.tasks)} tasks`;
-  if (stat === "both") return html`<b>${correctionRate(i.corrections, i.messages)}</b> corrected · <b>${landedRate(i.landed, i.continued)}</b> landed`;
+  if (stat === "prompts") return html`<b>${landedRate(i.landed, i.continued)}</b> clear · ${num(i.tasks)} prompts`;
+  if (stat === "both") return html`<b>${correctionRate(i.corrections, i.messages)}</b> corrected · <b>${landedRate(i.landed, i.continued)}</b> clear`;
   return html`<b>${num(i.corrections)}</b> corrections · ${correctionRate(i.corrections, i.messages)}`;
 }
 

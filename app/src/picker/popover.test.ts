@@ -16,14 +16,14 @@ describe("pickStatView", () => {
     expect(pickStatView(none, "corrections").value).toBe("<b>0</b> corrections · –");
   });
 
-  it("shows landed and tasks for the prompts page", () => {
-    expect(pickStatView(item, "prompts").value).toBe(`<b>80%</b> landed · ${(1200).toLocaleString()} tasks`);
-    expect(pickStatView(none, "prompts").value).toBe("<b>–</b> landed · 0 tasks");
+  it("shows clear rate and prompts for the prompts page", () => {
+    expect(pickStatView(item, "prompts").value).toBe(`<b>80%</b> clear · ${(1200).toLocaleString()} prompts`);
+    expect(pickStatView(none, "prompts").value).toBe("<b>–</b> clear · 0 prompts");
   });
 
   it("shows both rates for the overview", () => {
-    expect(pickStatView(item, "both").value).toBe("<b>60.0%</b> corrected · <b>80%</b> landed");
-    expect(pickStatView(none, "both").value).toBe("<b>–</b> corrected · <b>–</b> landed");
+    expect(pickStatView(item, "both").value).toBe("<b>60.0%</b> corrected · <b>80%</b> clear");
+    expect(pickStatView(none, "both").value).toBe("<b>–</b> corrected · <b>–</b> clear");
   });
 });
 
@@ -113,7 +113,7 @@ describe("model picker popover", () => {
 
   it("shows the chosen stat beside each model", () => {
     openPicker(trigger, { items, stat: "prompts", isSelected: () => false, onChoose, onClose });
-    expect(must("#pick-opt-0").textContent).toContain("landed");
+    expect(must("#pick-opt-0").textContent).toContain("clear");
     expect(must("#pick-opt-0").textContent).not.toContain("corrections");
     closePicker(false);
     open();

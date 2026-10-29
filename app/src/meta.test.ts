@@ -20,7 +20,7 @@ import { meta } from "./test/fixtures";
 describe("promptTierRanges", () => {
   it("shows percent ranges, top tier first", () => {
     expect(promptTierRanges(meta).map((t) => [t.name, t.range])).toEqual([
-      ["Architect", "90%+ landed"],
+      ["Architect", "90%+ clear"],
       ["Tech lead", "80–89%"],
       ["Ticket writer", "70–79%"],
       ["Vibes only", "0–69%"],

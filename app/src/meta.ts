@@ -19,8 +19,8 @@ function withRanges<T extends Tier>(tiers: T[], top: (floor: number) => string, 
 /** Overall tiers top-down: "90+", "80–89", … */
 export const tierRanges = (meta: Meta): TierRange[] => withRanges(meta.tiers, (f) => `${f}+`);
 
-/** Prompt tiers top-down: "95%+ landed", "90–94%", … */
-export const promptTierRanges = (meta: Meta): (PromptTier & { range: string })[] => withRanges(meta.prompt_tiers, (f) => `${f}%+ landed`, "%");
+/** Prompt tiers top-down: "95%+ clear", "90–94%", … */
+export const promptTierRanges = (meta: Meta): (PromptTier & { range: string })[] => withRanges(meta.prompt_tiers, (f) => `${f}%+ clear`, "%");
 
 export const promptTier = (meta: Meta, id: string | null): PromptTier | undefined => meta.prompt_tiers.find((t) => t.id === id);
 
@@ -37,7 +37,7 @@ export const percent = (n: number, total: number): number => (total > 0 ? Math.r
 /** The same, rounded down like the tier floors (89.7% is 89%, Tech lead). */
 export const floorPercent = (n: number, total: number): number => (total > 0 ? Math.floor((100 * n) / total) : 0);
 
-/** Percent of the window's tasks that landed, rounded down. */
+/** Percent of the window's prompts that were clear the first time, rounded down. */
 export const landedPct = (b: Pick<Prompts, "window_landed" | "window_tasks">): number => floorPercent(b.window_landed, b.window_tasks);
 
 export const tierOf = (meta: Meta, id: string | null): Tier | undefined => meta.tiers.find((t) => t.id === id);

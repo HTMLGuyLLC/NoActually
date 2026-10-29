@@ -123,7 +123,10 @@ fn build_tray(tauri_app: &tauri::App, menu: &Menu<tauri::Wry>) -> tauri::Result<
                 let _ = app.state::<std::sync::Arc<App>>().tracker.send(tracker::Msg::SyncNow);
             }
             "update" => updater::on_menu(app),
-            "quit" => app.exit(0),
+            "quit" => {
+                save_main_placement(app);
+                app.exit(0);
+            }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
@@ -139,25 +142,92 @@ fn build_tray(tauri_app: &tauri::App, menu: &Menu<tauri::Wry>) -> tauri::Result<
 /// Opens the database, builds the tray, and starts the tracker and update threads.
 /// Default width of the scorecard window: the page's content plus a little room on each side.
 const MAIN_WIDTH: f64 = 940.0;
+/// Settings key: the scorecard window's last position and size, "x,y,width,height" in points.
+const MAIN_WINDOW_KEY: &str = "window.main";
 
-/// Opens the scorecard as tall as the screen's usable area (below the menu bar, above the Dock),
-/// centered, so as much of the page shows as fits. The size in `tauri.conf.json` is the fallback
-/// when the monitor can't be read.
-fn fit_main_to_screen(handle: &AppHandle) {
+/// A screen rectangle in points (logical pixels).
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Rect {
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+}
+
+impl Rect {
+    fn parse(saved: &str) -> Option<Rect> {
+        let parts: Vec<f64> = saved.split(',').map(|p| p.trim().parse().ok()).collect::<Option<_>>()?;
+        match parts[..] {
+            [x, y, width, height] if width > 0.0 && height > 0.0 => Some(Rect { x, y, w: width, h: height }),
+            _ => None,
+        }
+    }
+
+    /// A monitor's usable area (below the menu bar, above the Dock), in points.
+    fn work_area(m: &tauri::Monitor) -> Rect {
+        let (a, scale) = (m.work_area(), m.scale_factor());
+        Rect {
+            x: f64::from(a.position.x) / scale,
+            y: f64::from(a.position.y) / scale,
+            w: f64::from(a.size.width) / scale,
+            h: f64::from(a.size.height) / scale,
+        }
+    }
+
+    /// Whether `self` sits entirely inside `area` (a pixel of slack for rounding).
+    fn inside(&self, area: &Rect) -> bool {
+        self.x >= area.x - 1.0
+            && self.y >= area.y - 1.0
+            && self.x + self.w <= area.x + area.w + 1.0
+            && self.y + self.h <= area.y + area.h + 1.0
+    }
+}
+
+/// The best fit for a screen: as tall as its usable area, [`MAIN_WIDTH`] wide, centered.
+fn best_fit(area: &Rect) -> Rect {
+    let w = MAIN_WIDTH.min(area.w);
+    Rect { x: area.x + (area.w - w) / 2.0, y: area.y, w, h: area.h }
+}
+
+/// Where the scorecard opens: where you left it, if that still fits fully on a screen; otherwise
+/// the best fit for the main screen. `None` when no screen can be read (the config size stands).
+fn main_placement(saved: Option<Rect>, areas: &[Rect], primary: Option<Rect>) -> Option<Rect> {
+    if let Some(r) = saved.filter(|r| areas.iter().any(|a| r.inside(a))) {
+        return Some(r);
+    }
+    primary.or_else(|| areas.first().copied()).map(|a| best_fit(&a))
+}
+
+/// Opens the scorecard where it was last left, or sized to the screen the first time.
+fn place_main(handle: &AppHandle, saved: Option<&str>) {
     let Some(w) = handle.get_webview_window("main") else { return };
-    let Ok(Some(monitor)) = w.current_monitor().or_else(|_| w.primary_monitor()) else { return };
-    let area = monitor.work_area();
-    let scale = monitor.scale_factor();
-    let (height, top) = (f64::from(area.size.height) / scale, f64::from(area.position.y) / scale);
-    let width = MAIN_WIDTH.min(f64::from(area.size.width) / scale);
-    let left = f64::from(area.position.x) / scale + (f64::from(area.size.width) / scale - width) / 2.0;
-    let _ = w.set_size(tauri::LogicalSize::new(width, height));
-    let _ = w.set_position(tauri::LogicalPosition::new(left, top));
+    let areas: Vec<Rect> = w.available_monitors().unwrap_or_default().iter().map(Rect::work_area).collect();
+    let primary = w.primary_monitor().ok().flatten().as_ref().map(Rect::work_area);
+    let Some(r) = main_placement(saved.and_then(Rect::parse), &areas, primary) else { return };
+    let _ = w.set_size(tauri::LogicalSize::new(r.w, r.h));
+    let _ = w.set_position(tauri::LogicalPosition::new(r.x, r.y));
+}
+
+/// Remembers the scorecard's position and size (outer frame, in points) for next launch.
+fn save_main_placement(handle: &AppHandle) {
+    let Some(w) = handle.get_webview_window("main") else { return };
+    if w.is_minimized().unwrap_or(false) || w.is_fullscreen().unwrap_or(false) {
+        return;
+    }
+    let (Ok(pos), Ok(size), Ok(scale)) = (w.outer_position(), w.outer_size(), w.scale_factor()) else { return };
+    let r = format!(
+        "{},{},{},{}",
+        f64::from(pos.x) / scale,
+        f64::from(pos.y) / scale,
+        f64::from(size.width) / scale,
+        f64::from(size.height) / scale
+    );
+    let app = handle.state::<std::sync::Arc<App>>();
+    let _ = lock(&app.writer).set_setting(MAIN_WINDOW_KEY, &r);
 }
 
 fn setup(tauri_app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let handle = tauri_app.handle().clone();
-    fit_main_to_screen(&handle);
     // The same file the CLI opens. NOACTUALLY_DB points at another one (development, demos).
     let db = store::default_db_path()?;
     if store::legacy_db_env_in_use() {
@@ -167,6 +237,7 @@ fn setup(tauri_app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let writer = Store::open(&db)?;
     let reader = Store::open(&db)?;
     let menu_bar = writer.get_setting(MENU_BAR_KEY)?.as_deref() != Some("off");
+    place_main(&handle, writer.get_setting(MAIN_WINDOW_KEY)?.as_deref());
     let (tx, rx) = mpsc::channel();
     let app = std::sync::Arc::new(App {
         writer: Mutex::new(writer),
@@ -231,6 +302,7 @@ pub fn run() {
             // Closing the scorecard hides it and tracking keeps running from the menu bar, unless
             // it's set to be an ordinary app: then closing quits.
             WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
+                save_main_placement(window.app_handle());
                 if window.app_handle().state::<std::sync::Arc<App>>().menu_bar() {
                     api.prevent_close();
                     hide_main(window);
@@ -277,4 +349,41 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running No, Actually...");
+}
+
+#[cfg(test)]
+mod placement_tests {
+    use super::{main_placement, Rect, MAIN_WIDTH};
+
+    const LAPTOP: Rect = Rect { x: 0.0, y: 25.0, w: 1512.0, h: 920.0 };
+    const SIDE: Rect = Rect { x: 1512.0, y: 0.0, w: 1920.0, h: 1055.0 };
+
+    #[test]
+    fn the_first_open_fills_the_screen_height_and_centers() {
+        let r = main_placement(None, &[LAPTOP], Some(LAPTOP)).unwrap();
+        assert_eq!(r, Rect { x: (1512.0 - MAIN_WIDTH) / 2.0, y: 25.0, w: MAIN_WIDTH, h: 920.0 });
+    }
+
+    #[test]
+    fn a_saved_window_reopens_as_you_left_it_on_any_screen() {
+        let saved = Rect::parse("1600,40,1200,900");
+        assert_eq!(main_placement(saved, &[LAPTOP, SIDE], Some(LAPTOP)), saved);
+    }
+
+    #[test]
+    fn a_saved_window_that_no_longer_fits_goes_back_to_the_best_fit() {
+        let best = main_placement(None, &[LAPTOP], Some(LAPTOP));
+        // Left on a monitor that's gone, too tall for this one, or hanging off the edge.
+        for saved in ["1600,40,1200,900", "100,25,900,1400", "1000,25,900,600"] {
+            assert_eq!(main_placement(Rect::parse(saved), &[LAPTOP], Some(LAPTOP)), best, "{saved}");
+        }
+        assert_eq!(Rect::parse("nonsense"), None);
+        assert_eq!(Rect::parse("1,2,0,4"), None);
+    }
+
+    #[test]
+    fn a_narrow_screen_caps_the_width() {
+        let small = Rect { x: 0.0, y: 0.0, w: 800.0, h: 600.0 };
+        assert_eq!(main_placement(None, &[small], None).map(|r| r.w), Some(800.0));
+    }
 }

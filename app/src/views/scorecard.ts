@@ -79,7 +79,7 @@ function answerView(o: Overall, meta: Meta, still: boolean): Html {
 function scoreBecause(o: Overall, when: string): Html {
   if (o.score == null)
     return html`Give it <b>${plural(o.to_rank, "more task")}</b> with a follow-up to get a score. One-shot tasks can't need steering, so they don't count.`;
-  return html`Score <b>${o.score}</b>. Your tasks landed <b>${o.direction}%</b> of the time, and you corrected it <b>${plural(o.corrections, "time")}</b> to its ${num(o.humbled)} ${when}.`;
+  return html`Score <b>${o.score}</b>. <b>${o.direction}%</b> of your prompts were clear the first time, and you corrected it <b>${plural(o.corrections, "time")}</b> to its ${num(o.humbled)} ${when}.`;
 }
 
 /** The next tier's target ("Irreplaceable at 90. You're at 86."). */
@@ -95,7 +95,7 @@ function partsView(o: Overall, meta: Meta): Html {
     html`<div class="part"><span class="part-name">${label}<small class="muted">${hint} · ${weight}% of the score</small></span><span class="bar-bg"><i data-w="${value ?? 0}"></i></span><span class="n">${value ?? "–"}</span></div>`;
   return html`<div class="parts" role="group" aria-label="What the score is made of">
     ${part("Who corrects whom", o.judgment, 100 - meta.direction_weight, "how rarely it has to correct you")}
-    ${part("Your prompts", o.direction, meta.direction_weight, "tasks that landed")}
+    ${part("Your prompts", o.direction, meta.direction_weight, "prompts clear the first time")}
   </div>`;
 }
 

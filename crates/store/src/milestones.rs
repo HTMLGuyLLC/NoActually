@@ -32,7 +32,7 @@ pub struct Snapshot {
     pub streak: i64,
     /// The prompt tier over the last [`engine::WINDOW_DAYS`] days, once ranked.
     pub prompt_tier: Option<PromptTier>,
-    /// Percent of the window's continued tasks that landed, rounded down like the tier floors.
+    /// Percent of the window's continued prompts that were clear the first time, rounded down like the tier floors.
     pub landed_pct: i64,
 }
 
@@ -93,7 +93,7 @@ pub fn crossed(prev: &Snapshot, now: &Snapshot) -> Vec<Milestone> {
         out.push(Milestone {
             title: format!("Prompts: {}", t.name()),
             body: format!(
-                "{}% of your tasks in the last {WINDOW_DAYS} days landed without steering. Open the scorecard to share it.",
+                "{}% of your prompts in the last {WINDOW_DAYS} days were clear the first time. Open the scorecard to share it.",
                 now.landed_pct
             ),
         });
@@ -269,8 +269,9 @@ mod tests {
             m,
             vec![Milestone {
                 title: "Prompts: Tech lead".into(),
-                body: "92% of your tasks in the last 28 days landed without steering. Open the scorecard to share it."
-                    .into()
+                body:
+                    "92% of your prompts in the last 28 days were clear the first time. Open the scorecard to share it."
+                        .into()
             }]
         );
         assert_eq!(crossed(&prompts(None), &prompts(Some(Architect))).len(), 1, "a first ranking above the bottom");

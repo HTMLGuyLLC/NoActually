@@ -32,7 +32,7 @@ You correct your AI all day: the function that doesn't exist, the instruction it
 | | The question | What it measures | Tiers |
 |---|---|---|---|
 | 🧠 | **Could AI replace you?** | Your overall score, 0 to 100, from both questions below | Rubber stamp → Coworker → Sharp-eyed → **Irreplaceable** |
-| 🎯 | ↳ **Do you make it guess?** | How often your tasks land without you adding, clarifying or starting over | Vibes only → Ticket writer → Tech lead → **Architect** |
+| 🎯 | ↳ **Do you make it guess?** | How often your prompts are clear the first time: no adding, clarifying or starting over | Vibes only → Ticket writer → Tech lead → **Architect** |
 | 🧐 | ↳ **Do you correct it?** | Who corrects whom: you correcting it, or it correcting you | Autopilot → Spot-checker → Reviewer → **Hawk-eyed** |
 
 Better prompts mean fewer mistakes to correct, and that never costs you: once you've corrected it a few times (proof you check its work), more corrections add nothing.
@@ -52,7 +52,7 @@ Better prompts mean fewer mistakes to correct, and that never costs you: once yo
 ## What you get
 
 - **A verdict and a score.** "Could Claude replace you? **No.** Score 86, Sharp-eyed." Updated as you work, over the last 28 days.
-- **A prompt score.** "Do you make it guess? **Sometimes.** 85% of your tasks landed." Plus what your prompts carry, where the steering went, and one tip backed by your own history.
+- **A prompt score.** "Do you make it guess? **Sometimes.** 85% of your prompts were clear the first time." Plus what your prompts carry, where the steering went, and one tip backed by your own history.
 - **Improve.** One weekly goal picked from your own numbers ("Set limits in 25% of your prompts"), streaks, trophies, personal bests, last week's recap, and charts of how you're trending.
 - **Learn.** 12 one-minute lessons in three tracks (the 5 habits, steer less, correct more), quick quizzes, and a prompt checker that grades a draft as you type, with the same rules as your score.
 - **Any time window.** 7 days, 28 days, 90 days or all time: the whole scorecard follows the picker, score included. Every part of the score is a rate, so tiers mean the same thing in any window.
@@ -116,7 +116,7 @@ No. Corrections only have to show you check its work: 3 in 28 days is full credi
 <details>
 <summary><b>Is a low prompt score bad?</b></summary>
 
-It's a nudge, not a grade on you. "Landed" means nothing *on you* followed the task: you didn't add to it, clarify it or start it over. The AI getting it wrong never counts against you; that's a correction for you instead. One-shot tasks don't count at all, since they can't need steering.
+It's a nudge, not a grade on you. A prompt is "clear the first time" when nothing *on you* followed it: you didn't add to it, clarify it or start it over. The AI getting it wrong never counts against you; that's a correction for you instead. One-shot prompts don't count at all, since they can't need steering.
 </details>
 
 <details>
@@ -156,7 +156,7 @@ Over the window you pick (the last 28 days unless you choose another), once it h
 ```
 score = 70% × direction + 30% × judgment
 
-direction = % of your tasks that landed (see "How a prompt is graded")
+direction = % of your prompts that were clear the first time (see "How a prompt is graded")
 judgment  = 100, minus 5 for each 1% of your tasks where the AI had to correct you
             (counted against at least 30 tasks, so a quiet month isn't wiped out),
             scaled down until you've corrected it 3 times
@@ -169,7 +169,7 @@ judgment  = 100, minus 5 for each 1% of your tasks where the AI had to correct y
 | Coworker | 65–79 | No. |
 | Rubber stamp | under 65 | Hmm. |
 
-Each question below the score gets a one-word answer too. Do you make it guess? goes by how many tasks landed (next section). Do you correct it? goes by judgment:
+Each question below the score gets a one-word answer too. Do you make it guess? goes by how many prompts were clear the first time (next section). Do you correct it? goes by judgment:
 
 | Correction tier | Judgment | Answer |
 |---|---|---|
@@ -206,9 +206,9 @@ Adding context ("also", "fyi", "I forgot to mention") never counts against the A
 
   Three or more is **sharp**, two is **solid**, fewer is **thin**. Pasted blocks count as showing it, but their words aren't graded as yours.
 - **Steering** is a later message that redirects the task. Either the AI got it wrong (a correction), or it's on you: **added more** ("also…", "I forgot to mention"), **clarified** ("I meant…", "to be clear") or **started over** ("scrap that", "revert it").
-- **A task landed** when nothing on you followed it. The tier is the share of tasks with a follow-up that landed over the last 28 days (at least 10 of them): Vibes only, Ticket writer 70%+, Tech lead 80%+, Architect 90%+.
+- **A prompt is clear the first time** when nothing on you followed it. The tier is the share of prompts with a follow-up that were clear the first time over the last 28 days (at least 10 of them): Vibes only, Ticket writer 70%+, Tech lead 80%+, Architect 90%+.
 
-The tip names the thing your prompts carry least. It only quotes "prompts that do landed X% vs Y%" when your own history shows a real gap.
+The tip names the thing your prompts carry least. It only quotes "prompts that do were clear the first time X% vs Y%" when your own history shows a real gap.
 
 ### How goals work
 
@@ -228,9 +228,9 @@ There's no public benchmark for weekly per-person scores, so every threshold was
 What that showed:
 
 - The correction rate agrees across sources: 1 in 47 messages for the author, 1 in 41 in WildChat.
-- Public chats are short and almost never steer, so the prompt floors come from one heavy user, whose typical month landed 86% (Tech lead). Expect them to move as more people's numbers exist.
+- Public chats are short and almost never steer, so the prompt floors come from one heavy user, whose typical month had 86% of prompts clear the first time (Tech lead). Expect them to move as more people's numbers exist.
 - Longer prompts didn't steer less. Bigger tasks get both longer prompts and more back-and-forth, which is why the tier scores outcomes, not length.
-- The overall score puts the author's typical month at 86 (Sharp-eyed): 83% of 150 tasks landed, 41 corrections, and the AI corrected them twice.
+- The overall score puts the author's typical month at 86 (Sharp-eyed): 83% of 150 prompts clear the first time, 41 corrections, and the AI corrected them twice.
 
 ## Supported tools
 

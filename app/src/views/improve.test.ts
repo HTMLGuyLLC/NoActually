@@ -247,7 +247,7 @@ describe("improveView history", () => {
   });
 
   it("summarises the landed trend, or says there isn't enough to show one", () => {
-    expect(view(progress({ weeks: weeks(10) }))).toMatch(/Tasks landed went from 60% \(.+\) to 60% \(.+\)\./);
+    expect(view(progress({ weeks: weeks(10) }))).toMatch(/Clear the first time went from 60% \(.+\) to 60% \(.+\)\./);
     const noFollowUps = weeks(10, 1).map((w) => ({ ...w, continued: 0, landed: 0 }));
     expect(view(progress({ weeks: noFollowUps }))).toContain("Not enough tasks yet to show a trend.");
   });
@@ -267,7 +267,7 @@ describe("improveView recap, bests and trophies", () => {
     // Last full week is 2026-10-19 (9 of 12 landed: 75%); the one before is 10-12 (11 of 12: 91%).
     const m = view(progress());
     expect(m).toContain("Last week · ");
-    expect(m).toContain("<span>Tasks landed</span><b>75%</b>");
+    expect(m).toContain("<span>Clear the first time</span><b>75%</b>");
     expect(m).toContain("▼ 16");
     expect(m).toContain("<span>Sharp prompts</span><b>25%</b>");
     expect(m).toContain("<span>Corrections</span><b>8</b>");
@@ -286,11 +286,11 @@ describe("improveView recap, bests and trophies", () => {
 
   it("shows the bests, with dashes before there are any", () => {
     const m = view(progress());
-    expect(m).toContain('<span class="v">91%</span><span class="l">best 4 weeks landed · to ');
+    expect(m).toContain('<span class="v">91%</span><span class="l">best 4 weeks clear the first time · to ');
     expect(m).toContain('<span class="v">40%</span><span class="l">sharpest week · ');
     expect(m).toContain('<span class="v">0 weeks</span><span class="l">longest goal streak</span>');
     const none = view(progress({ bests: { landed: null, sharp: null, goal_streak: 1 } }));
-    expect(none).toContain('<span class="v">–</span><span class="l">best 4 weeks landed</span>');
+    expect(none).toContain('<span class="v">–</span><span class="l">best 4 weeks clear the first time</span>');
     expect(none).toContain('<span class="v">1 week</span>');
   });
 
@@ -318,7 +318,7 @@ describe("improveView insights", () => {
     ];
     const m = view(progress({ insights: { signals, steer: null, models: [] } }));
     expect(m).toContain('<ul class="insights">');
-    expect(m).toContain("Prompts that say why landed <b>93%</b> of the time, vs 80% without.");
+    expect(m).toContain("Prompts that say why were clear the first time <b>93%</b> of the time, vs 80% without.");
     expect(m).toContain('data-action="open-lesson" data-id="say-why"');
     expect(count(m, "<li>Prompts that")).toBe(1);
     expect(m).not.toContain("Not enough history yet.");
@@ -336,7 +336,7 @@ describe("improveView insights", () => {
       { family: "GPT Astra", landed: 70, continued: 30 },
     ];
     expect(view(progress({ insights: { signals: [], steer: null, models } }))).toContain(
-      "Your tasks land <b>90%</b> of the time with Claude Opus, and 70% with GPT Astra.",
+      "Your prompts are clear the first time <b>90%</b> of the time with Claude Opus, and 70% with GPT Astra.",
     );
     expect(view(progress({ insights: { signals: [], steer: null, models: models.slice(0, 1) } }))).toContain("Not enough history yet.");
   });

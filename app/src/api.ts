@@ -97,7 +97,7 @@ export type WeekRow = {
 /** The signal your prompts carry least; the with/without rates only when your history backs them. */
 export type Tip = { signal: string; pct_of_prompts: number; landed_with_without: [number, number] | null };
 /**
- * How you prompt it. A task "landed" when you never had to add to, clarify or redo it. Only tasks
+ * How you prompt it. A prompt is "clear the first time" (internally `landed`) when you never had to add to, clarify or redo it. Only tasks
  * with a follow-up (`continued`) count toward landing: a one-shot task can't need steering.
  */
 export type Prompts = {

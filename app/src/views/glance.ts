@@ -21,7 +21,7 @@ function answersView(s: Stats, meta: Meta): Html {
   const o = s.overall;
   const replace = o.score == null ? `${plural(o.to_rank, "more task")} to get a score` : `Score ${o.score} · ${tierName(meta, o.tier)}`;
   const prompt = promptTier(meta, s.prompts.tier);
-  const guess = prompt ? `${landedPct(s.prompts)}% landed · ${prompt.name}` : `${plural(s.prompts.to_rank, "more task")} to get ranked`;
+  const guess = prompt ? `${landedPct(s.prompts)}% clear · ${prompt.name}` : `${plural(s.prompts.to_rank, "more task")} to get ranked`;
   const corrected = correctionTier(meta, o.correction_tier);
   const check = corrected ? `You ${num(o.corrections)} vs it ${num(o.humbled)} · ${corrected.name}` : `${plural(o.to_rank, "more task")} to get ranked`;
   return html`<div class="g-answers">

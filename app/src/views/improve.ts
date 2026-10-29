@@ -23,7 +23,7 @@ export type ImproveContext = {
 /** Fewer messages than this in a week and its correction rate is too noisy to put on the line. */
 const RATE_MIN_MESSAGES = 50;
 
-/** The landed chart starts at 50% so the tier bands (70/80/90) have room, lower when a week was lower. */
+/** The clear-the-first-time chart starts at 50% so the tier bands (70/80/90) have room, lower when a week was lower. */
 const landedFloor = (points: Point[]) => Math.min(50, ...points.filter((p) => p.value != null && !p.weak).map((p) => Math.floor((p.value ?? 0) / 10) * 10));
 
 /** Half-width charts draw on a narrower canvas, so their text stays as big as the full-width ones'. */
@@ -81,7 +81,7 @@ export function buckets(weeks: HistoryWeek[], range: Range, minWeek: number): { 
 
 const pctOf = (n: number, total: number) => (total > 0 ? floorPercent(n, total) : null);
 
-/** "Says why" → "say why", for "Prompts that say why landed…". */
+/** "Says why" → "say why", for "Prompts that say why were clear the first time…". */
 const verbPhrase = (title: string) => title.toLowerCase().replace(/^(\w+?)s\b/, "$1");
 
 /** What a goal asks, in a sentence. */
@@ -202,7 +202,7 @@ function recapView(weeks: HistoryWeek[], meta: Meta): Html | "" {
     return html`<div class="recap-row"><span>${name}</span><b>${a ?? "–"}${a != null ? unit : ""}</b><span class="delta${neutral || !diff ? "" : diff > 0 ? " up" : " down"}">${arrow}</span></div>`;
   };
   return html`<section class="recap"><div class="eyebrow">Last week · ${fmtDay(latest.week)}</div>
-    ${row("Tasks landed", landed(latest), landed(before))}
+    ${row("Clear the first time", landed(latest), landed(before))}
     ${row("Sharp prompts", sharp(latest), sharp(before))}
     ${row("Corrections", latest.corrections, before.corrections, "", true)}
     <p class="muted small">Compared with the week before.</p>
@@ -220,7 +220,7 @@ function trendsView(ctx: ImproveContext): Html {
   const lastStrong = last(strong);
   const landedSummary =
     firstStrong && lastStrong
-      ? `Tasks landed went from ${firstStrong.value}% (${firstStrong.label}) to ${lastStrong.value}% (${lastStrong.label}).`
+      ? `Clear the first time went from ${firstStrong.value}% (${firstStrong.label}) to ${lastStrong.value}% (${lastStrong.label}).`
       : "Not enough tasks yet to show a trend.";
   const bands = meta.prompt_tiers.slice(1).map((t) => ({ from: t.floor, name: t.name }));
   const signals = meta.signals.map((s) => {
@@ -239,8 +239,8 @@ function trendsView(ctx: ImproveContext): Html {
   const rateMax = Math.max(5, ...rate.map((r) => Math.ceil(r.value ?? 0)));
   const totalSteer = steerSeries.reduce((t, s) => t + s.values.reduce((a, v) => a + v, 0), 0);
   return html`
-    <section><div class="head"><h2>Tasks that landed</h2><p class="muted">Per ${per}. Hollow dots had fewer than ${meta.min_week} tasks with a follow-up, so they're left off the line.</p></div>
-      <div class="chart">${lineChart({ id: "landed", label: `Percent of tasks that landed, per ${per}`, summary: landedSummary, points: landed, bands, unit: "%", min: landedFloor(landed) })}</div></section>
+    <section><div class="head"><h2>Prompts clear the first time</h2><p class="muted">Per ${per}. Hollow dots had fewer than ${meta.min_week} prompts with a follow-up, so they're left off the line.</p></div>
+      <div class="chart">${lineChart({ id: "landed", label: `Percent of prompts clear the first time, per ${per}`, summary: landedSummary, points: landed, bands, unit: "%", min: landedFloor(landed) })}</div></section>
     <section class="split">
       <div><div class="head"><h2>What your prompts carry</h2></div><div class="cats">${signals}</div></div>
       <div><div class="head"><h2>Prompt grades</h2></div><div class="chart">${stackChart({ id: "grades", label: `Prompts by grade, per ${per}`, summary: `Prompts by grade over ${points.length} ${per}s.`, labels, series: gradeSeries, width: HALF, height: 220 })}</div></div>
@@ -256,7 +256,7 @@ function bestsView(p: Progress, filtered: boolean): Html {
   const b = p.bests;
   const stat = (v: string, l: string) => html`<div class="stat"><span class="v">${v}</span><span class="l">${l}${filtered ? " · all AI" : ""}</span></div>`;
   return html`<section class="stats">
-    ${stat(b.landed ? `${b.landed[0]}%` : "–", b.landed ? `best 4 weeks landed · to ${fmtDay(b.landed[1])}` : "best 4 weeks landed")}
+    ${stat(b.landed ? `${b.landed[0]}%` : "–", b.landed ? `best 4 weeks clear the first time · to ${fmtDay(b.landed[1])}` : "best 4 weeks clear the first time")}
     ${stat(b.sharp ? `${b.sharp[0]}%` : "–", b.sharp ? `sharpest week · ${fmtDay(b.sharp[1])}` : "sharpest week")}
     ${stat(plural(b.goal_streak, "week"), "longest goal streak")}
     ${stat(`${p.trophies.length}`, p.trophies.length === 1 ? "trophy" : "trophies")}
@@ -279,7 +279,7 @@ function insightsView(p: Progress, meta: Meta): Html {
     const [w, wo] = t.landed_with_without;
     const l = lessonFor("signal", t.signal);
     items.push(
-      html`<li>Prompts that ${verbPhrase(signalTitle(meta, t.signal))} landed <b>${Math.round(w)}%</b> of the time, vs ${Math.round(wo)}% without.${l ? html` <button class="link" data-action="open-lesson" data-id="${l.id}">${l.title} →</button>` : ""}</li>`,
+      html`<li>Prompts that ${verbPhrase(signalTitle(meta, t.signal))} were clear the first time <b>${Math.round(w)}%</b> of the time, vs ${Math.round(wo)}% without.${l ? html` <button class="link" data-action="open-lesson" data-id="${l.id}">${l.title} →</button>` : ""}</li>`,
     );
   }
   if (i.steer) {
@@ -291,7 +291,9 @@ function insightsView(p: Progress, meta: Meta): Html {
   }
   const [best, worst] = i.models;
   if (best && worst)
-    items.push(html`<li>Your tasks land <b>${best.landed}%</b> of the time with ${best.family}, and ${worst.landed}% with ${worst.family}.</li>`);
+    items.push(
+      html`<li>Your prompts are clear the first time <b>${best.landed}%</b> of the time with ${best.family}, and ${worst.landed}% with ${worst.family}.</li>`,
+    );
   return html`<section><div class="head"><h2>What works for you</h2><p class="muted">From your own history, and only when there's enough of it to say.</p></div>
     ${items.length ? html`<ul class="insights">${items}</ul>` : html`<p class="muted">Not enough history yet. Keep going; these show up as your tasks add up.</p>`}</section>`;
 }

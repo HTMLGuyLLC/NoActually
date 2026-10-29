@@ -91,7 +91,7 @@ export function matchPickItems(items: PickItem[], query: string): PickItem[] {
 
 export const sameFilter = (a: Filter, b: Filter) => JSON.stringify(a) === JSON.stringify(b);
 
-/** "83%" of continued tasks that landed (rounded down, like the tier floors), or "–" with none. */
+/** "83%" of continued prompts that were clear the first time (rounded down, like the tier floors), or "–" with none. */
 export const landedRate = (landed: number, continued: number) => (continued ? `${floorPercent(landed, continued)}%` : "–");
 
 /** "12.5%" of messages that were a correction, or "–" when there were none. */

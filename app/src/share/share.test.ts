@@ -20,7 +20,7 @@ describe("shareText", () => {
   it("brags with the score and its tier, numbers only, and links to the project", () => {
     const t = shareText(stats(), "Claude Opus 5.5", "Sharp-eyed");
     expect(t).toBe(
-      `Could Claude Opus 5.5 replace me? No. My score is 86 (Sharp-eyed): 83% of my tasks landed without steering, and I corrected it 41 times to its 2 in the last 28 days. What's yours? ${SHARE_URL}`,
+      `Could Claude Opus 5.5 replace me? No. My score is 86 (Sharp-eyed): 83% of my prompts were clear the first time, and I corrected it 41 times to its 2 in the last 28 days. What's yours? ${SHARE_URL}`,
     );
   });
 
@@ -43,13 +43,13 @@ describe("promptShareText", () => {
     const tier = meta.prompt_tiers[2];
     if (!tier) throw new Error("fixture");
     expect(promptShareText(prompts(), tier)).toBe(
-      `Do I make my AI guess? Sometimes. 95% of my tasks in the last 28 days landed without me adding, clarifying or starting over. Prompt tier: Tech lead. Do you make yours guess? ${SHARE_URL}`,
+      `Do I make my AI guess? Sometimes. 95% of my prompts in the last 28 days were clear the first time. Prompt tier: Tech lead. Do you make yours guess? ${SHARE_URL}`,
     );
   });
 
   it("matches the card's lines", () => {
-    expect(promptLines(prompts())).toEqual(["95% of my tasks in the last 28 days landed without steering.", "20% of all my prompts were sharp."]);
-    expect(promptLines(prompts(), "ever")[0]).toBe("95% of my tasks ever landed without steering.");
+    expect(promptLines(prompts())).toEqual(["95% of my prompts in the last 28 days were clear the first time.", "20% of all my prompts were sharp."]);
+    expect(promptLines(prompts(), "ever")[0]).toBe("95% of my prompts ever were clear the first time.");
     expect(gradeKey(prompts())).toBe("SHARP 20%  ·  SOLID 30%  ·  THIN 50%");
   });
 });

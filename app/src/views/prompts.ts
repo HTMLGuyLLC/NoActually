@@ -7,10 +7,10 @@ import { PERIOD_WHEN, type Period } from "../state";
 import { stackChart } from "./charts";
 import { answerWord, byAnswer, ladderView, tierBlurb, verdictMark } from "./chrome";
 
-/** "86% of your tasks in the last 28 days landed…", or how many more it takes to get ranked. */
+/** "86% of your prompts in the last 28 days were clear the first time…", or how many more it takes to get ranked. */
 function becauseLine(b: Prompts, meta: Meta, when: string): Html {
   return promptTier(meta, b.tier)
-    ? html`<b>${landedPct(b)}%</b> of your tasks ${when} landed without more from you.`
+    ? html`<b>${landedPct(b)}%</b> of your prompts ${when} were clear the first time.`
     : html`Give it <b>${plural(b.to_rank, "more task")}</b> with a follow-up to get ranked. One-shot tasks can't need steering, so they don't count.`;
 }
 
@@ -83,7 +83,7 @@ function tipView(b: Prompts, meta: Meta): Html | "" {
   const s = tip && meta.signals.find((x) => x.id === tip.signal);
   if (!tip || !s) return "";
   const proof = tip.landed_with_without
-    ? html` Your prompts that do landed <b>${Math.round(tip.landed_with_without[0])}%</b> of the time, vs ${Math.round(tip.landed_with_without[1])}% without.`
+    ? html` Your prompts that do were clear the first time <b>${Math.round(tip.landed_with_without[0])}%</b> of the time, vs ${Math.round(tip.landed_with_without[1])}% without.`
     : "";
   return html`<p class="tip"><span class="hand">Try this:</span> <b>${s.title.toLowerCase()}</b> (${s.hint}). Only ${Math.round(tip.pct_of_prompts)}% of your prompts do.${proof}</p>`;
 }
@@ -91,7 +91,7 @@ function tipView(b: Prompts, meta: Meta): Html | "" {
 function steeringView(b: Prompts, meta: Meta): Html {
   const counts = meta.steers.map((c) => ({ ...c, n: b.steering[c.id] ?? 0 }));
   const total = counts.reduce((t, c) => t + c.n, 0);
-  if (!total) return html`<p class="muted">No steering yet. Every task landed as asked.</p>`;
+  if (!total) return html`<p class="muted">No steering yet. Every prompt was clear the first time.</p>`;
   const top = Math.max(...counts.map((c) => c.n));
   const yours = counts.filter((c) => c.id !== "ai_wrong").reduce((t, c) => t + c.n, 0);
   return html`<div class="cats">${counts.map(
@@ -103,11 +103,11 @@ function steeringView(b: Prompts, meta: Meta): Html {
 
 /** The Prompts section: verdict card, then what prompts carry and where steering went. `subject` is who
  * the question asks about ("it" by default). */
-/** Tasks per week, split into the ones that landed and the ones that needed more from you: the
+/** Prompts per week, split into the ones that were clear the first time and the ones that needed more from you: the
  * same tasks the prompt tier counts, so the bars add up to the number at the top. */
-/** A week's tip: its tasks, how many landed, and what the rest needed. */
+/** A week's tip: its tasks, how many were clear the first time, and what the rest needed. */
 function weekTip(w: WeekRow, meta: Meta): string {
-  const lines = [`Week of ${fmtDay(w.week)}`, `${plural(w.continued, "task")} · ${w.landed} landed (${percent(w.landed, w.continued)}%)`];
+  const lines = [`Week of ${fmtDay(w.week)}`, `${plural(w.continued, "prompt")} · ${w.landed} clear the first time (${percent(w.landed, w.continued)}%)`];
   const onYou = meta.steers.filter((s) => s.id !== "ai_wrong" && (w.steering[s.id] ?? 0) > 0);
   if (onYou.length) lines.push("", "Needed more from you:", ...onYou.map((s) => `${s.title} ${w.steering[s.id]}`));
   const wrong = w.steering.ai_wrong ?? 0;
@@ -121,16 +121,16 @@ function weeksView(weekly: WeekRow[], meta: Meta): Html {
   const recent = weeks.filter((w) => w.continued);
   const last = recent[recent.length - 1];
   const summary = last
-    ? `${plural(weeks.length, "week")} from ${fmtDay(weeks[0]?.week ?? last.week)}. The latest, the week of ${fmtDay(last.week)}: ${last.landed} of ${plural(last.continued, "task")} landed without more from you.`
+    ? `${plural(weeks.length, "week")} from ${fmtDay(weeks[0]?.week ?? last.week)}. The latest, the week of ${fmtDay(last.week)}: ${last.landed} of ${plural(last.continued, "prompt")} were clear the first time.`
     : "";
   return stackChart({
     id: "prompt-weeks",
-    label: "Tasks per week",
+    label: "Prompts per week",
     summary,
     labels: weeks.map((w) => fmtDay(w.week)),
     tips: weeks.map((w) => weekTip(w, meta)),
     series: [
-      { title: "Landed without more from you", values: weeks.map((w) => w.landed) },
+      { title: "Clear the first time", values: weeks.map((w) => w.landed) },
       { title: "Needed more from you", values: weeks.map((w) => w.continued - w.landed) },
     ],
   });
@@ -146,7 +146,7 @@ export function promptsView(b: Prompts, meta: Meta, still: boolean, subject = "i
       <div>${verdictView(b, meta, still, subject, period)}</div>
       <div class="meter">${promptLadderView(b, meta)}</div>
     </section>
-    <section><div class="head"><h2>Tasks per week</h2><p class="muted">Tasks with a follow-up. One-shot tasks can't need more from you, so they don't count.</p></div><div class="chart">${weeksView(weekly, meta)}</div></section>
+    <section><div class="head"><h2>Prompts per week</h2><p class="muted">Prompts with a follow-up. A one-shot prompt can't need more from you, so it doesn't count.</p></div><div class="chart">${weeksView(weekly, meta)}</div></section>
     <section class="split">
       <div><div class="head"><h2>What your prompts carry</h2></div>${gradesView(b, meta)}${signalsView(b, meta)}</div>
       <div><div class="head"><h2>Where steering went</h2></div>${steeringView(b, meta)}</div>

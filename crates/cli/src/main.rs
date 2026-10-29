@@ -301,7 +301,7 @@ fn overall_lines(o: &store::Overall, window: &str) -> Vec<String> {
                 o.next_tier.map_or(String::new(), |n| format!("  ({} at {})", n.name(), n.floor()))
             ),
             format!(
-                "  Your prompts    {direction}% of tasks landed {window} ({}% of the score)",
+                "  Your prompts    {direction}% clear the first time {window} ({}% of the score)",
                 engine::DIRECTION_WEIGHT
             ),
             format!(
@@ -347,7 +347,7 @@ fn prompt_lines(p: &store::Prompts, window: &str) -> Vec<String> {
     let recent = pct(p.window_landed, p.window_tasks);
     let tier = match p.tier {
         Some(t) => format!(
-            "{} {}  ({recent}% landed {window}{})",
+            "{} {}  ({recent}% clear the first time {window}{})",
             t.verdict(),
             t.name(),
             p.next_tier.map_or(String::new(), |n| format!("; {} at {}%", n.name(), n.floor()))
@@ -358,7 +358,7 @@ fn prompt_lines(p: &store::Prompts, window: &str) -> Vec<String> {
         String::new(),
         format!("Do you make it guess? {tier}"),
         format!(
-            "  Landed           {}% of {} tasks with a follow-up needed no adding, clarifying or redoing",
+            "  Clear first time {}% of {} prompts with a follow-up needed no adding, clarifying or redoing",
             pct(p.landed, p.continued),
             p.continued
         ),
@@ -462,7 +462,7 @@ mod tests {
         assert!(overall_lines(&unranked, &window_label(None))[0].contains("Not scored yet: 4 more tasks"));
         let since = window_label(Some("2026-09-01".parse().unwrap()));
         let text = overall_lines(&o, &since).join("\n");
-        assert!(text.contains("83% of tasks landed since 2026-09-01"), "{text}");
+        assert!(text.contains("83% clear the first time since 2026-09-01"), "{text}");
         assert!(text.contains("you 41 · it 2 since 2026-09-01 →"), "{text}");
         assert!(!text.contains("28 days"), "{text}");
         assert!(overall_lines(&unranked, &since)[0].contains("with a follow-up since 2026-09-01"));
@@ -495,7 +495,7 @@ mod tests {
         b.steering.insert("added".into(), 1);
         let text = prompt_lines(&b, &window_label(None)).join("\n");
         assert!(text.contains("Do you make it guess? Hmm. 2 more tasks with a follow-up to get ranked"), "{text}");
-        assert!(text.contains("Landed           75% of 8 tasks with a follow-up"), "{text}");
+        assert!(text.contains("Clear first time 75% of 8 prompts with a follow-up"), "{text}");
         assert!(text.contains("Sharp prompts    30%"), "{text}");
         assert!(text.contains("Says why              50%"), "{text}");
         assert!(text.contains("You added more       1"), "{text}");
@@ -503,10 +503,10 @@ mod tests {
         b.next_tier = Some(engine::PromptTier::Architect);
         (b.window_tasks, b.window_landed) = (40, 34);
         assert!(prompt_lines(&b, &window_label(None))[1]
-            .ends_with("Sometimes. Tech lead  (85% landed in 28 days; Architect at 90%)"));
+            .ends_with("Sometimes. Tech lead  (85% clear the first time in 28 days; Architect at 90%)"));
         let since = window_label(Some("2026-09-01".parse().unwrap()));
         assert!(prompt_lines(&b, &since)[1]
-            .ends_with("Sometimes. Tech lead  (85% landed since 2026-09-01; Architect at 90%)"));
+            .ends_with("Sometimes. Tech lead  (85% clear the first time since 2026-09-01; Architect at 90%)"));
     }
 
     #[test]

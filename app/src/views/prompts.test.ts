@@ -12,7 +12,7 @@ describe("promptsView", () => {
     expect(m).toContain("Do you make it guess?");
     expect(m).toContain(">Rarely.</div>");
     expect(m).toContain('<span class="sr-only">Rarely. Your prompt tier is Architect.</span>');
-    expect(m).toContain("<b>95%</b> of your tasks in the last 28 days landed");
+    expect(m).toContain("<b>95%</b> of your prompts in the last 28 days were clear the first time.");
     // Rows say the answer; the tier's name and meaning sit under the answer.
     expect(m).toContain('<li class="on" aria-current="true"><span>Rarely</span><span><b class="at">95%</b>');
     expect(m).toContain("<span>Often</span><span>70–79%</span>");
@@ -54,9 +54,9 @@ describe("promptsView", () => {
 
   it("tips the weakest signal, quoting the gap only when Rust found one", () => {
     expect(view()).toContain("<b>sets limits</b> (don&#39;t, only, keep, without). Only 10% of your prompts do.");
-    expect(view()).not.toContain("landed <b>");
+    expect(view()).not.toContain("were clear the first time <b>");
     const m = view({ tip: { signal: "why", pct_of_prompts: 20, landed_with_without: [93.3, 80] } });
-    expect(m).toContain("Your prompts that do landed <b>93%</b> of the time, vs 80% without.");
+    expect(m).toContain("Your prompts that do were clear the first time <b>93%</b> of the time, vs 80% without.");
     expect(view({ tip: null })).not.toContain("Try this");
     expect(view({ tip: { signal: "gone", pct_of_prompts: 1, landed_with_without: null } })).not.toContain("Try this");
   });
@@ -93,21 +93,21 @@ describe("prompts on the scorecard and the glance", () => {
   });
 
   it("names the prompt tier in the glance once ranked", () => {
-    expect(glanceView(stats(), meta).value).toContain('<span class="g-word">Rarely.</span><span class="muted small">95% landed · Architect</span>');
+    expect(glanceView(stats(), meta).value).toContain('<span class="g-word">Rarely.</span><span class="muted small">95% clear · Architect</span>');
     expect(glanceView(stats({ prompts: prompts({ tier: null, to_rank: 3 }) }), meta).value).toContain("3 more tasks to get ranked");
   });
 
-  it("charts tasks per week as landed vs needed more, adding up to each week's tasks", () => {
+  it("charts prompts per week as clear vs needed more, adding up to each week's tasks", () => {
     const weekly = stats().weekly;
     const m = promptsView(prompts(), meta, true, "AI", "28d", weekly).value;
-    expect(m).toContain("<h2>Tasks per week</h2>");
-    expect(m).toContain("Landed without more from you");
+    expect(m).toContain("<h2>Prompts per week</h2>");
+    expect(m).toContain("Clear the first time");
     expect(m).toContain("Needed more from you");
     // One tip per week's bar: its tasks, what landed, and what the rest needed.
     expect(m).toContain(
-      'class="bar-group" data-tip="Week of Oct 19\n20 tasks · 17 landed (85%)\n\nNeeded more from you:\nYou added more 2\nYou clarified 1\n\nIt got it wrong 4 (not on you)"',
+      'class="bar-group" data-tip="Week of Oct 19\n20 prompts · 17 clear the first time (85%)\n\nNeeded more from you:\nYou added more 2\nYou clarified 1\n\nIt got it wrong 4 (not on you)"',
     );
-    expect(m).toContain("17 of 20 tasks landed without more from you.");
+    expect(m).toContain("17 of 20 prompts were clear the first time.");
     expect(promptsView(prompts(), meta, true, "AI", "28d", []).value).toContain("No tasks with a follow-up yet.");
   });
 });
