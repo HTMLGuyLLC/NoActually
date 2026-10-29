@@ -181,13 +181,13 @@
     "id": "reviewer",
     "name": "Reviewer",
     "floor": 75,
-    "verdict": "Usually."
+    "verdict": "Often."
    },
    {
     "id": "hawk_eyed",
     "name": "Hawk-eyed",
     "floor": 90,
-    "verdict": "Reliably."
+    "verdict": "Usually."
    }
   ]
  },

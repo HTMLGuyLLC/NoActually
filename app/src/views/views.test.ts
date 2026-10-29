@@ -54,7 +54,7 @@ describe("scorecardView", () => {
 
   it("answers the catches section in a word, with the catch tiers and a share", () => {
     const m = scorecardView(stats(), { ...ctx, view: "catches" }).value;
-    expect(m).toContain('aria-hidden="true">Reliably.</div>');
+    expect(m).toContain('aria-hidden="true">Usually.</div>');
     expect(m).toContain('<ol class="ladder" aria-label="Catch tiers">');
     expect(m).toContain('<span>Hawk-eyed</span><span><b class="at">95</b>');
     expect(m).toContain("<span>Spot-checker</span><span>50–74</span>");
@@ -120,7 +120,7 @@ describe("overview hero", () => {
 
   it("answers Do you catch its mistakes? in a word on the overview, with its tier", () => {
     const m = hero({ catch_tier: "reviewer", next_catch_tier: "hawk_eyed", judgment: 88 }, { catches: 41, humbled: 2 });
-    expect(m).toContain('aria-hidden="true">Usually.</div>');
+    expect(m).toContain('aria-hidden="true">Often.</div>');
     expect(m).toContain("You caught it <b>41 times</b> in the last 28 days. It caught you 2 times.");
     expect(m).toContain("<span>Tier</span>Reviewer");
     expect(m).toContain("Hawk-eyed at 90. You&#39;re at 88.");

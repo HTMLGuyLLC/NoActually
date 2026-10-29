@@ -99,7 +99,7 @@ function steeringView(b: Briefs, meta: Meta): Html {
     (c) =>
       html`<div class="cat${c.id === "ai_wrong" ? " ai" : ""}"><span>${steerTitle(meta, c.id)}</span><span class="bar-bg"><i data-w="${c.n ? Math.max(2, (c.n / top) * 100) : 0}"></i></span><span class="n">${num(c.n)}</span></div>`,
   )}</div>
-  <p class="muted small">${plural(total, "steering message")}. ${num(yours)} of them could have been in the brief.</p>`;
+  <p class="muted small">${plural(total, "steering message")}. ${num(total - yours)} were its mistakes (blue), which don't count against you; ${num(yours)} could have been in the brief (red).</p>`;
 }
 
 /** The Briefs section: verdict card, then what briefs carry and where steering went. `subject` is the

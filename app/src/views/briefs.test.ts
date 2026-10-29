@@ -58,7 +58,7 @@ describe("briefsView", () => {
   it("splits steering between the AI and the brief", () => {
     const m = view();
     expect(m).toContain('class="cat ai"><span>It got it wrong</span>');
-    expect(m).toContain("25 steering messages. 13 of them could have been in the brief.");
+    expect(m).toContain("25 steering messages. 12 were its mistakes (blue), which don't count against you; 13 could have been in the brief (red).");
     expect(view({ steering: { ai_wrong: 0, added: 0, clarified: 0, redo: 0 } })).toContain("No steering yet.");
   });
 

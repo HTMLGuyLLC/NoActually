@@ -131,7 +131,8 @@ impl Answer {
     }
 }
 
-/// "Do you catch its mistakes?" How judgment reads, in a word. Ordered from lowest to highest.
+/// "Do you catch its mistakes?" How judgment reads, in a word (rarely < sometimes < often <
+/// usually; never "always": nobody catches everything). Ordered from lowest to highest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CatchTier {
@@ -185,8 +186,8 @@ impl CatchTier {
         match self {
             CatchTier::Autopilot => "Rarely.",
             CatchTier::SpotChecker => "Sometimes.",
-            CatchTier::Reviewer => "Usually.",
-            CatchTier::HawkEyed => "Reliably.",
+            CatchTier::Reviewer => "Often.",
+            CatchTier::HawkEyed => "Usually.",
         }
     }
 
