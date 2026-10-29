@@ -90,3 +90,11 @@ export function verdictMark(word: string | null, srText: string, still: boolean)
   return html`<div class="no${word ? "" : " maybe"}${still ? " still" : ""}" aria-hidden="true">${word ?? "Hmm."}</div>
     <span class="sr-only">${srText}</span>`;
 }
+
+/** Word-answered tiers label their ladder rows by the answer ("Usually"), plainer than the name. */
+export const byAnswer = <T extends { verdict: string }>(tiers: T[]): (T & { name: string })[] =>
+  tiers.map((t) => ({ ...t, name: t.verdict.replace(/\.$/, "") }));
+
+/** The tier's name and what it means, under its answer: "Hawk-eyed. You usually catch AI slipping." */
+export const tierBlurb = (tier: { name: string; blurb: string } | undefined): Html | "" =>
+  tier ? html`<p class="tier-blurb"><b>${tier.name}.</b> ${tier.blurb}</p>` : "";

@@ -5,7 +5,7 @@ import { type Html, html, num } from "../html";
 import { landedPct, percent, promptTier, promptTierRanges, steerTitle } from "../meta";
 import { PERIOD_WHEN, type Period } from "../state";
 import { stackChart } from "./charts";
-import { ladderView, verdictMark } from "./chrome";
+import { byAnswer, ladderView, tierBlurb, verdictMark } from "./chrome";
 
 /** "86% of your tasks in the last 28 days landed…", or how many more it takes to get ranked. */
 function becauseLine(b: Prompts, meta: Meta, when: string): Html {
@@ -25,7 +25,7 @@ export function promptsSummaryView(b: Prompts, meta: Meta, still: boolean, when 
   const tier = promptTier(meta, b.tier);
   const body = b.tasks
     ? html`<div class="verdict">${markView(b, meta, still)}<div class="because">${becauseLine(b, meta, when)}</div></div>
-        <p class="tier-line">${tier ? html`<span class="tier-label"><span>Tier</span>${tier.name}</span>` : ""}<span class="hand-note">${ladderNote(b, meta)}</span></p>`
+        ${tierBlurb(tier)}<p class="hand-note">${ladderNote(b, meta)}</p>`
     : html`<p class="muted">No tasks yet. The first message of each chat is its prompt.</p>`;
   return html`<article class="card mini prompts">
       <h2 class="q">Do you make it guess?</h2>
@@ -42,7 +42,7 @@ function verdictView(b: Prompts, meta: Meta, still: boolean, subject: string, pe
       ${markView(b, meta, still)}
       <div class="because">${becauseLine(b, meta, when)}</div>
     </div>
-    ${b.tier ? html`<p class="muted small">The rest needed you to add more, clarify or start over.</p>` : ""}`;
+    ${tierBlurb(promptTier(meta, b.tier))}`;
 }
 
 /** One bar split into sharp / solid / thin, with the numbers spelled out beside it. */
@@ -66,7 +66,7 @@ function ladderNote(b: Prompts, meta: Meta): string {
 
 function promptLadderView(b: Prompts, meta: Meta): Html {
   return html`
-    ${ladderView({ label: "Prompt tiers", tiers: promptTierRanges(meta), on: b.tier, at: b.tier ? `${landedPct(b)}%` : null, unranked: ladderNote(b, meta) })}
+    ${ladderView({ label: "Prompt tiers", tiers: byAnswer(promptTierRanges(meta)), on: b.tier, at: b.tier ? `${landedPct(b)}%` : null, unranked: ladderNote(b, meta) })}
     ${b.tier ? html`<div class="share"><button data-action="share-prompts">Share your prompts</button></div>` : ""}`;
 }
 

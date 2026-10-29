@@ -155,7 +155,7 @@ describe("corrections share", () => {
   it("posts the correction tier's word and who corrected whom, numbers only", async () => {
     const { correctionsShareText } = await import("./share");
     const { correctionLines } = await import("./cards");
-    const tier = { id: "hawk_eyed", name: "Hawk-eyed", floor: 90, verdict: "Usually." };
+    const tier = { id: "hawk_eyed", name: "Hawk-eyed", floor: 90, verdict: "Usually.", blurb: "You usually catch AI slipping." };
     expect(correctionsShareText({ corrections: 37, humbled: 1 }, tier)).toBe(
       "Do I correct my AI? Usually. I corrected it 37 times in the last 28 days, and it corrected me 1 time. Correction tier: Hawk-eyed. Do you correct yours? https://github.com/HTMLGuyLLC/NoActually",
     );

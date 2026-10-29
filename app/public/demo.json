@@ -75,25 +75,29 @@
     "id": "vibes_only",
     "name": "Vibes only",
     "floor": 0,
-    "verdict": "Constantly."
+    "verdict": "Constantly.",
+    "blurb": "It's mostly guessing what you want."
    },
    {
     "id": "ticket_writer",
     "name": "Ticket writer",
     "floor": 70,
-    "verdict": "Often."
+    "verdict": "Often.",
+    "blurb": "It often fills in the blanks for you."
    },
    {
     "id": "tech_lead",
     "name": "Tech lead",
     "floor": 80,
-    "verdict": "Sometimes."
+    "verdict": "Sometimes.",
+    "blurb": "Clear most of the time, with a few gaps."
    },
    {
     "id": "architect",
     "name": "Architect",
     "floor": 90,
-    "verdict": "Rarely."
+    "verdict": "Rarely.",
+    "blurb": "It rarely has to guess what you mean."
    }
   ],
   "min_prompts": 10,
@@ -169,25 +173,29 @@
     "id": "autopilot",
     "name": "Autopilot",
     "floor": 0,
-    "verdict": "Rarely."
+    "verdict": "Rarely.",
+    "blurb": "Most of its slips get past you."
    },
    {
     "id": "spot_checker",
     "name": "Spot-checker",
     "floor": 50,
-    "verdict": "Sometimes."
+    "verdict": "Sometimes.",
+    "blurb": "Some of its slips get past you."
    },
    {
     "id": "reviewer",
     "name": "Reviewer",
     "floor": 75,
-    "verdict": "Often."
+    "verdict": "Often.",
+    "blurb": "You often catch it slipping."
    },
    {
     "id": "hawk_eyed",
     "name": "Hawk-eyed",
     "floor": 90,
-    "verdict": "Usually."
+    "verdict": "Usually.",
+    "blurb": "You usually catch AI slipping."
    }
   ]
  },

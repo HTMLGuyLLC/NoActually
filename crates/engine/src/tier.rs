@@ -180,6 +180,16 @@ impl PromptTier {
         }
     }
 
+    /// One line on what this tier means, shown after its name.
+    pub const fn blurb(self) -> &'static str {
+        match self {
+            PromptTier::VibesOnly => "It's mostly guessing what you want.",
+            PromptTier::TicketWriter => "It often fills in the blanks for you.",
+            PromptTier::TechLead => "Clear most of the time, with a few gaps.",
+            PromptTier::Architect => "It rarely has to guess what you mean.",
+        }
+    }
+
     /// The tier reached when `landed` of `tasks` landed, or `None` below [`MIN_PROMPTS`] tasks.
     pub fn for_tasks(landed: i64, tasks: i64) -> Option<PromptTier> {
         (tasks >= MIN_PROMPTS)
@@ -286,6 +296,16 @@ impl CorrectionTier {
             CorrectionTier::SpotChecker => "Sometimes.",
             CorrectionTier::Reviewer => "Often.",
             CorrectionTier::HawkEyed => "Usually.",
+        }
+    }
+
+    /// One line on what this tier means, shown after its name.
+    pub const fn blurb(self) -> &'static str {
+        match self {
+            CorrectionTier::Autopilot => "Most of its slips get past you.",
+            CorrectionTier::SpotChecker => "Some of its slips get past you.",
+            CorrectionTier::Reviewer => "You often catch it slipping.",
+            CorrectionTier::HawkEyed => "You usually catch AI slipping.",
         }
     }
 

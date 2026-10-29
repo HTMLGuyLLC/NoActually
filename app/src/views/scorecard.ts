@@ -6,7 +6,7 @@ import { type Html, html, num, raw } from "../html";
 import { categoryTitle, correctionTier, correctionTierRanges, tierName, tierOf, tierRanges } from "../meta";
 import { correctionRate, modelName } from "../picker/picker";
 import { PERIOD_WHEN, PERIODS, type Period, SCORE_VIEWS, type ScoreView } from "../state";
-import { ladderView, svg, verdictMark } from "./chrome";
+import { byAnswer, ladderView, svg, tierBlurb, verdictMark } from "./chrome";
 import { promptsSummaryView, promptsView } from "./prompts";
 
 export type ScorecardContext = {
@@ -158,7 +158,7 @@ function correctionNote(o: Overall, meta: Meta): string {
 function correctionLadderView(o: Overall, meta: Meta): Html {
   return ladderView({
     label: "Correction tiers",
-    tiers: correctionTierRanges(meta),
+    tiers: byAnswer(correctionTierRanges(meta)),
     on: o.correction_tier,
     at: o.judgment == null ? null : String(o.judgment),
     unranked: correctionNote(o, meta),
@@ -172,7 +172,7 @@ function correctsSummaryView(s: Stats, ctx: Ctx): Html {
   return html`<article class="card mini corrections">
       <h2 class="q">Do you correct it?</h2>
       <div class="verdict">${correctionMark(o, ctx.meta, ctx.correctionsStill)}<div class="because">${correctionBecause(s, ctx.when)}</div></div>
-      <p class="tier-line">${tier ? html`<span class="tier-label"><span>Tier</span>${tier.name}</span>` : ""}<span class="hand-note">${correctionNote(o, ctx.meta)}</span></p>
+      ${tierBlurb(tier)}<p class="hand-note">${correctionNote(o, ctx.meta)}</p>
       <div class="share"><button class="ghost" data-action="view" data-id="corrections">See corrections</button></div>
     </article>`;
 }
@@ -298,6 +298,7 @@ function correctionsView(s: Stats, ctx: Ctx): Html {
       <div>
         <h1 class="q">Do you correct ${subjectText(ctx.filter, ctx.meta)}?</h1>
         <div class="verdict">${correctionMark(s.overall, meta, ctx.correctionsStill)}<div class="because">${correctionBecause(s, ctx.when)}</div></div>
+        ${tierBlurb(correctionTier(meta, s.overall.correction_tier))}
         ${versusView(s, subjectText(ctx.filter, ctx.meta))}
       </div>
       <div class="meter">

@@ -17,7 +17,8 @@ export type Retention = { level: Level; full_days: number; snippet_days: number 
 /** Static app data from Rust: the one place tiers, category titles and source names are defined. */
 export type Tier = { id: string; name: string; floor: number };
 /** A prompt tier: `floor` is the percent of the week's tasks that must land. */
-export type PromptTier = Tier & { verdict: string };
+/** A tier answered in a word (prompt and correction tiers): its answer, and a line on what it means. */
+export type PromptTier = Tier & { verdict: string; blurb: string };
 export type Titled = { id: string; title: string };
 export type Meta = {
   /** Overall tiers, ascending by floor (an overall score, 0 to 100). */

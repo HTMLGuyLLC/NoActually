@@ -59,8 +59,9 @@ describe("scorecardView", () => {
     const m = scorecardView(stats(), { ...ctx, view: "corrections" }).value;
     expect(m).toContain('aria-hidden="true">Usually.</div>');
     expect(m).toContain('<ol class="ladder" aria-label="Correction tiers">');
-    expect(m).toContain('<span>Hawk-eyed</span><span><b class="at">95</b>');
-    expect(m).toContain("<span>Spot-checker</span><span>50–74</span>");
+    expect(m).toContain('<span>Usually</span><span><b class="at">95</b>');
+    expect(m).toContain("<span>Sometimes</span><span>50–74</span>");
+    expect(m).toContain('<p class="tier-blurb"><b>Hawk-eyed.</b> You usually catch AI slipping.</p>');
     expect(m).toContain('data-action="share-corrections">Share your corrections</button>');
     const unranked = scorecardView(stats({ overall: overall({ judgment: null, correction_tier: null, to_rank: 3 }) }), { ...ctx, view: "corrections" }).value;
     expect(unranked).toContain(">Hmm.</div>");
@@ -157,7 +158,7 @@ describe("overview hero", () => {
     const m = hero({ correction_tier: "reviewer", next_correction_tier: "hawk_eyed", judgment: 88 }, { corrections: 41, humbled: 2 });
     expect(m).toContain('aria-hidden="true">Often.</div>');
     expect(m).toContain("You corrected it <b>41 times</b> in the last 28 days. It corrected you 2 times.");
-    expect(m).toContain("<span>Tier</span>Reviewer");
+    expect(m).toContain('<p class="tier-blurb"><b>Reviewer.</b> You often catch it slipping.</p>');
     expect(m).toContain("Hawk-eyed at 90. You&#39;re at 88.");
   });
 

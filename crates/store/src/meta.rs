@@ -58,6 +58,8 @@ pub struct VerdictTierInfo {
     pub floor: i64,
     /// Its answer ("Sometimes.").
     pub verdict: &'static str,
+    /// What the tier means, after its name ("Clear most of the time, with a few gaps.").
+    pub blurb: &'static str,
 }
 
 /// One prompt signal.
@@ -121,11 +123,23 @@ pub fn meta(sources: &[Box<dyn Source>]) -> Meta {
         sources: sources.iter().map(|s| SourceInfo { id: s.id(), name: s.name() }).collect(),
         prompt_tiers: PromptTier::ALL
             .iter()
-            .map(|t| VerdictTierInfo { id: t.id(), name: t.name(), floor: t.floor(), verdict: t.verdict() })
+            .map(|t| VerdictTierInfo {
+                id: t.id(),
+                name: t.name(),
+                floor: t.floor(),
+                verdict: t.verdict(),
+                blurb: t.blurb(),
+            })
             .collect(),
         correction_tiers: CorrectionTier::ALL
             .iter()
-            .map(|t| VerdictTierInfo { id: t.id(), name: t.name(), floor: t.floor(), verdict: t.verdict() })
+            .map(|t| VerdictTierInfo {
+                id: t.id(),
+                name: t.name(),
+                floor: t.floor(),
+                verdict: t.verdict(),
+                blurb: t.blurb(),
+            })
             .collect(),
         min_prompts: MIN_PROMPTS,
         prompt_window_days: WINDOW_DAYS,
@@ -152,7 +166,7 @@ mod tests {
         assert_eq!(m["sources"][0], serde_json::json!({"id":"claude-code","name":"Claude Code"}));
         assert_eq!(
             m["prompt_tiers"][2],
-            serde_json::json!({"id":"tech_lead","name":"Tech lead","floor":80,"verdict":"Sometimes."})
+            serde_json::json!({"id":"tech_lead","name":"Tech lead","floor":80,"verdict":"Sometimes.","blurb":"Clear most of the time, with a few gaps."})
         );
         assert_eq!(m["signals"][0]["id"], "spot");
         assert_eq!(m["grades"][2], serde_json::json!({"id":"sharp","title":"Sharp"}));

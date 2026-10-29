@@ -233,7 +233,7 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .part-name { display: grid; gap: 2px; font-weight: 600 }
 .part-name small { font-size: 12px; font-weight: 400 }
 .part .n { text-align: right }
-.tier-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin: 4px 0 0 }
+.tier-blurb { margin: 6px 0 0; color: var(--muted) } .tier-blurb b { color: var(--ink); font-weight: 600 }
 
 /* Prompts: the verdict words are longer than "No.", so they're smaller and may wrap. */
 .prompts .verdict, .corrections .verdict { flex-wrap: wrap; margin-top: 26px }
