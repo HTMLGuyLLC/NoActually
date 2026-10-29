@@ -9,7 +9,7 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 - **Could AI replace you?** is now an overall score from 0 to 100 over the last 28 days: 70% how often your tasks land, 30% judgment (how rarely the AI has to correct you, per task, once you've corrected it 3 times). Tiers: Rubber stamp, Coworker 65+, Sharp-eyed 80+, Irreplaceable 90+. Correcting fewer mistakes because you prompted well never costs points. Overall and prompt tiers are announced once, the first time you reach each one.
 - **Improve** tab: one weekly goal suggested from your numbers (a habit, a steering ceiling or a higher tier), judged once each week is over, with week-by-week marks, streaks that pause on quiet weeks, trophies, personal bests, last week's recap, charts (tasks landed with tier bands, what your prompts carry, grades, steering, correction rate) over 12 weeks, 6 months or all time, and "what works for you" from your own history. Finished goal weeks are frozen. Popups when a goal week is met and when a goal is done.
 - **Learn** tab: 12 one-minute lessons in three tracks (the 5 habits, steer less, correct more), each with a before/after, a template and a quick quiz, plus a prompt checker that grades a draft as you type with the same rules as your score and saves nothing. The next lesson is picked from your prompts. A test grades every lesson example with the real rules and fails if the copy names a product, model or version.
-- **Do you correct its mistakes?** now has a one-word answer and tiers from judgment: Autopilot (Rarely.), Spot-checker 50+ (Sometimes.), Reviewer 75+ (Often.), Hawk-eyed 90+ (Usually.), with **Share your corrections** on the Corrections page. The overview shares your score; Prompts and Corrections each share their own answer.
+- **Do you correct it?** now has a one-word answer and tiers from judgment: Autopilot (Rarely.), Spot-checker 50+ (Sometimes.), Reviewer 75+ (Often.), Hawk-eyed 90+ (Usually.), with **Share your corrections** on the Corrections page. The overview shares your score; Prompts and Corrections each share their own answer.
 - `noactually check "<prompt>"` grades a draft prompt from the command line.
 - Settings: **Keep running in the menu bar**. Off makes it an ordinary app with no menu bar or tray icon that quits when its window closes.
 
@@ -29,7 +29,7 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 - The Hall of fame is an awards wall: one award per kind of correction (and Touché for the times it corrected you), each with its count and best snippet first, ranked the same way every time: pinned, then admitted, then with both sides kept, then the punchiest line, then the newest. Unearned awards wait, dimmed.
 - Improve leads with your goal: a bigger card with one number to watch (this week's percent, or your score against the tier). Last week's recap sits beside it.
 - The model picker shows the numbers the page is about: landed % on Prompts, corrections on Corrections and Hall of fame, both on the overview.
-- Scorecard sections run Overview, Prompts, Corrections, Hall of fame. The Corrections section asks "Do you correct its mistakes?" and shows your judgment score.
+- Scorecard sections run Overview, Prompts, Corrections, Hall of fame. The Corrections section asks "Do you correct it?" and shows your judgment score.
 - The top tabs show icons only on narrow windows.
 
 ## [0.3.0] - 2026-10-28

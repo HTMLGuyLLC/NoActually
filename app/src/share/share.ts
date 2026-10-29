@@ -30,7 +30,7 @@ export function promptShareText(b: Pick<Prompts, "window_landed" | "window_tasks
 
 /** The corrections answer, ready to post: the tier's word and who corrected whom. Numbers only. */
 export function correctionsShareText(o: Pick<Overall, "corrections" | "humbled">, tier: PromptTier, when = PERIOD_WHEN["28d"]) {
-  return `Do I correct my AI's mistakes? ${tier.verdict} I corrected it ${plural(o.corrections, "time")} ${when}, and it corrected me ${plural(o.humbled, "time")}. Correction tier: ${tier.name}. Do you correct yours? ${SHARE_URL}`;
+  return `Do I correct my AI? ${tier.verdict} I corrected it ${plural(o.corrections, "time")} ${when}, and it corrected me ${plural(o.humbled, "time")}. Correction tier: ${tier.name}. Do you correct yours? ${SHARE_URL}`;
 }
 
 export type ShareTarget = {

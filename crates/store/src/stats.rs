@@ -114,7 +114,7 @@ pub struct Overall {
     pub next_tier: Option<Tier>,
     /// The headline answer.
     pub verdict: Answer,
-    /// "Do you correct its mistakes?", from judgment.
+    /// "Do you correct it?", from judgment.
     pub correction_tier: Option<CorrectionTier>,
     /// The correction tier above it.
     pub next_correction_tier: Option<CorrectionTier>,

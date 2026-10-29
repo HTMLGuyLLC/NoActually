@@ -113,16 +113,16 @@ function drawPill(g: CanvasRenderingContext2D, label: string, x: number, y: numb
   g.fillText(text, x + 18 * scale, y + 26 * scale);
 }
 
-/** "I CORRECTED IT 177  vs  3 IT CORRECTED ME" between x and x + w, with the rule on top at `y`. */
-function drawScoreLine(g: CanvasRenderingContext2D, s: ScoreCard, x: number, y: number, w: number, scale = 1) {
+/** "I CORRECTED AI 177  vs  3 AI CORRECTED ME" between x and x + w, with the rule on top at `y`. */
+function drawScoreLine(g: CanvasRenderingContext2D, s: ScoreCard, who: string, x: number, y: number, w: number, scale = 1) {
   const { ink, muted, pen, ai } = CARD_THEME;
   g.fillStyle = ink;
   g.fillRect(x, y, w, 3 * scale);
   g.font = `600 ${16 * scale}px 'JetBrains Mono'`;
   g.fillStyle = muted;
-  g.fillText("I CORRECTED IT", x, y + 40 * scale);
+  g.fillText(`I CORRECTED ${who}`.toUpperCase(), x, y + 40 * scale, w / 2 - 8 * scale);
   g.textAlign = "right";
-  g.fillText("IT CORRECTED ME", x + w, y + 40 * scale);
+  g.fillText(`${who} CORRECTED ME`.toUpperCase(), x + w, y + 40 * scale, w / 2 - 8 * scale);
   g.font = `800 ${64 * scale}px 'Bricolage Grotesque Variable'`;
   g.fillStyle = ai;
   g.fillText(String(s.humbled), x + w, y + 110 * scale);
@@ -209,7 +209,7 @@ export async function drawShareCard(s: ScoreCard, who: string, tier: string, sha
       g.fillText(pct, x, 900);
     }
     drawPill(g, tier, x, 950, 1.5);
-    drawScoreLine(g, s, x, 1080, inner, 1.5);
+    drawScoreLine(g, s, who, x, 1080, inner, 1.5);
     drawFooter(g, `What's your score?  ${SHARE_URL_SHORT}`, w, 1290, 1.4);
     return png(c);
   }
@@ -227,7 +227,7 @@ export async function drawShareCard(s: ScoreCard, who: string, tier: string, sha
     g.fillText(pct, 520, 354);
   }
   drawPill(g, tier, 520, 384);
-  drawScoreLine(g, s, 140, 470, w - 280);
+  drawScoreLine(g, s, who, 140, 470, w - 280);
   drawFooter(g, `What's your score?  ${SHARE_URL_SHORT}`, w, 612);
   return png(c);
 }
@@ -360,13 +360,13 @@ function drawGradeBar(g: CanvasRenderingContext2D, b: PromptsCard, x: number, y:
 
 type CorrectionsCard = Pick<Overall, "corrections" | "humbled" | "judgment">;
 
-const CORRECTION_QUESTION = "Do I correct my AI's mistakes?";
+const CORRECTION_QUESTION = "Do I correct my AI?";
 export const correctionLines = (o: CorrectionsCard, when = PERIOD_WHEN["28d"]): [string, string] => [
   `I corrected it ${plural(o.corrections, "time")} ${when}. It corrected me ${o.humbled}.`,
   `Judgment ${o.judgment ?? 0} of 100: I check its work, and it rarely has to correct me.`,
 ];
 
-/** The corrections card: "Do I correct my AI's mistakes?", the tier's answer, and who corrected whom. */
+/** The corrections card: "Do I correct my AI?", the tier's answer, and who corrected whom. */
 export async function drawCorrectionsCard(o: CorrectionsCard, tier: PromptTier, shape: CardShape = "wide", when = PERIOD_WHEN["28d"]): Promise<Blob> {
   const { c, g } = await canvas(shape, SCORE_FONTS);
   const { w } = CARD_SIZES[shape];

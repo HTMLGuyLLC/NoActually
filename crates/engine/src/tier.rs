@@ -229,7 +229,7 @@ impl Answer {
     }
 }
 
-/// "Do you correct its mistakes?" How judgment reads, in a word (rarely < sometimes < often <
+/// "Do you correct it?" How judgment reads, in a word (rarely < sometimes < often <
 /// usually; never "always": nobody catches everything). Ordered from lowest to highest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -279,7 +279,7 @@ impl CorrectionTier {
         }
     }
 
-    /// The answer to "Do you correct its mistakes?" at this tier.
+    /// The answer to "Do you correct it?" at this tier.
     pub const fn verdict(self) -> &'static str {
         match self {
             CorrectionTier::Autopilot => "Rarely.",

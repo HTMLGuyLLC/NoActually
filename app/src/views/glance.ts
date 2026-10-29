@@ -27,7 +27,7 @@ function answersView(s: Stats, meta: Meta): Html {
   return html`<div class="g-answers">
     ${answerView("Could AI replace you?", o.score == null ? null : o.verdict === "no" ? "No." : "Hmm.", replace)}
     ${answerView("Do you make it guess?", prompt?.verdict ?? null, guess)}
-    ${answerView("Do you correct its mistakes?", corrected?.verdict ?? null, check)}
+    ${answerView("Do you correct it?", corrected?.verdict ?? null, check)}
   </div>`;
 }
 

@@ -34,7 +34,7 @@ export type Meta = {
   sources: { id: string; name: string }[];
   /** Ascending by floor. */
   prompt_tiers: PromptTier[];
-  /** "Do you correct its mistakes?" tiers, by judgment, ascending. */
+  /** "Do you correct it?" tiers, by judgment, ascending. */
   correction_tiers: PromptTier[];
   /** Tasks with a follow-up, in the window, before a prompt tier is given. */
   min_prompts: number;

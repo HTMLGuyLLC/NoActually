@@ -23,7 +23,7 @@ describe("scorecardView", () => {
     expect(m).toContain('data-id="prompts" data-tip="Prompting"');
     expect(m).toContain("Could ");
     expect(m).toContain("Do you make it guess?");
-    expect(m).toContain("Do you correct its mistakes?");
+    expect(m).toContain("Do you correct it?");
     expect(m).toContain('data-action="view" data-id="corrections"');
     expect(m).not.toContain("Hall of fame ·");
   });
@@ -77,6 +77,15 @@ describe("scorecardView", () => {
     expect(yours(0, 5)).toBe("0");
     expect(yours(0, 0)).toBe("50");
     expect(view(0, 0)).toContain('class="tug empty"');
+  });
+
+  it("names who corrected whom, and asks the question in one short line", () => {
+    const m = scorecardView(stats(), { ...ctx, view: "corrections" }).value;
+    expect(m).toContain('<h1 class="q">Do you correct AI?</h1>');
+    expect(m).toContain('<span class="eyebrow">You corrected AI</span>');
+    expect(m).toContain('<span class="eyebrow">AI corrected you</span>');
+    const opus = scorecardView(stats(), { ...ctx, view: "corrections", filter: { provider: "Anthropic", family: "Claude Opus" } }).value;
+    expect(opus).toContain("You corrected Claude Opus");
   });
 
   it("says so when there are no corrections in the window yet", () => {
@@ -144,7 +153,7 @@ describe("overview hero", () => {
     expect(m).not.toContain("share-corrections");
   });
 
-  it("answers Do you correct its mistakes? in a word on the overview, with its tier", () => {
+  it("answers Do you correct it? in a word on the overview, with its tier", () => {
     const m = hero({ correction_tier: "reviewer", next_correction_tier: "hawk_eyed", judgment: 88 }, { corrections: 41, humbled: 2 });
     expect(m).toContain('aria-hidden="true">Often.</div>');
     expect(m).toContain("You corrected it <b>41 times</b> in the last 28 days. It corrected you 2 times.");

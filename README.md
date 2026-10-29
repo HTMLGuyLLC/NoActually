@@ -33,7 +33,7 @@ You correct your AI all day: the function that doesn't exist, the instruction it
 |---|---|---|---|
 | 🧠 | **Could AI replace you?** | Your overall score, 0 to 100, from both questions below | Rubber stamp → Coworker → Sharp-eyed → **Irreplaceable** |
 | 🎯 | ↳ **Do you make it guess?** | How often your tasks land without you adding, clarifying or starting over | Vibes only → Ticket writer → Tech lead → **Architect** |
-| 🧐 | ↳ **Do you correct its mistakes?** | Who corrects whom: you correcting it, or it correcting you | Autopilot → Spot-checker → Reviewer → **Hawk-eyed** |
+| 🧐 | ↳ **Do you correct it?** | Who corrects whom: you correcting it, or it correcting you | Autopilot → Spot-checker → Reviewer → **Hawk-eyed** |
 
 Better prompts mean fewer mistakes to correct, and that never costs you: once you've corrected it a few times (proof you check its work), more corrections add nothing.
 
@@ -169,7 +169,7 @@ judgment  = 100, minus 5 for each 1% of your tasks where the AI had to correct y
 | Coworker | 65–79 | No. |
 | Rubber stamp | under 65 | Hmm. |
 
-Each question below the score gets a one-word answer too. Do you make it guess? goes by how many tasks landed (next section). Do you correct its mistakes? goes by judgment:
+Each question below the score gets a one-word answer too. Do you make it guess? goes by how many tasks landed (next section). Do you correct it? goes by judgment:
 
 | Correction tier | Judgment | Answer |
 |---|---|---|

@@ -471,5 +471,3 @@ button.link:hover { filter: none }
   @keyframes pulse { to { opacity: .3 } }
 }
 
-/* Keeps a possessive with the name it belongs to ("Claude Opus 5.5's"), so it never wraps alone. */
-.nowrap { white-space: nowrap }

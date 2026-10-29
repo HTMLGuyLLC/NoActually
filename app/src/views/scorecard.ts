@@ -120,13 +120,13 @@ function heroView(s: Stats, ctx: Ctx): Html {
 }
 
 /** You vs it as a tug of war: one bar, your share from the left, its share from the right. */
-function versusView(s: Stats): Html {
+function versusView(s: Stats, who: string): Html {
   const total = s.corrections + s.humbled;
   // Each side that has any keeps a sliver, so 180 to 1 still shows the 1. A side with none gets none.
   const yours = total ? Math.min(s.humbled ? 98 : 100, Math.max(s.corrections ? 2 : 0, Math.round((100 * s.corrections) / total))) : 50;
   return html`<div class="score">
-      <div class="side you"><span class="eyebrow">You corrected it</span><span class="n">${num(s.corrections)}</span></div>
-      <div class="side ai"><span class="eyebrow">It corrected you</span><span class="n">${num(s.humbled)}</span></div>
+      <div class="side you"><span class="eyebrow">You corrected ${who}</span><span class="n">${num(s.corrections)}</span></div>
+      <div class="side ai"><span class="eyebrow">${who} corrected you</span><span class="n">${num(s.humbled)}</span></div>
       <div class="tug${total ? "" : " empty"}" role="img" aria-label="${total ? `${yours}% of the corrections were yours` : "No corrections yet"}"><i class="you" data-w="${total ? yours : 50}"></i><i class="ai"></i></div>
     </div>`;
 }
@@ -171,7 +171,7 @@ function correctsSummaryView(s: Stats, ctx: Ctx): Html {
   const tier = correctionTier(ctx.meta, o.correction_tier);
   return html`<article class="card mini corrections">
       <div class="eyebrow">Who corrects whom</div>
-      <h2 class="q">Do you correct its mistakes?</h2>
+      <h2 class="q">Do you correct it?</h2>
       <div class="verdict">${correctionMark(o, ctx.meta, ctx.correctionsStill)}<div class="because">${correctionBecause(s, ctx.when)}</div></div>
       <p class="tier-line">${tier ? html`<span class="tier-label"><span>Tier</span>${tier.name}</span>` : ""}<span class="hand-note">${correctionNote(o, ctx.meta)}</span></p>
       <div class="share"><button class="ghost" data-action="view" data-id="corrections">See corrections</button></div>
@@ -288,9 +288,9 @@ function correctionsView(s: Stats, ctx: Ctx): Html {
     <section class="card corrections">
       <div>
         <div class="eyebrow">Who corrects whom</div>
-        <h1 class="q">Do you correct <span class="nowrap">${subjectText(ctx.filter, ctx.meta)}'s</span> mistakes?</h1>
+        <h1 class="q">Do you correct ${subjectText(ctx.filter, ctx.meta)}?</h1>
         <div class="verdict">${correctionMark(s.overall, meta, ctx.correctionsStill)}<div class="because">${correctionBecause(s, ctx.when)}</div></div>
-        ${versusView(s)}
+        ${versusView(s, subjectText(ctx.filter, ctx.meta))}
       </div>
       <div class="meter">
         ${correctionLadderView(s.overall, meta)}

@@ -27,7 +27,7 @@ pub struct Meta {
     pub sources: Vec<SourceInfo>,
     /// Prompt tiers, ascending by floor.
     pub prompt_tiers: Vec<VerdictTierInfo>,
-    /// "Do you correct its mistakes?" tiers, by judgment, ascending.
+    /// "Do you correct it?" tiers, by judgment, ascending.
     pub correction_tiers: Vec<VerdictTierInfo>,
     /// Continued tasks in the window before a prompt tier is given.
     pub min_prompts: i64,

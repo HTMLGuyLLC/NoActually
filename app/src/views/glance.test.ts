@@ -29,7 +29,7 @@ describe("glanceView", () => {
     expect(m).toContain("Could AI replace you?");
     expect(m).toContain('<span class="g-word">No.</span><span class="muted small">Score 86 · Sharp-eyed</span>');
     expect(m).toContain("Do you make it guess?");
-    expect(m).toContain("Do you correct its mistakes?");
+    expect(m).toContain("Do you correct it?");
     expect(m).toContain('<span class="g-word">Usually.</span><span class="muted small">You 41 vs it 2 · Hawk-eyed</span>');
   });
 
