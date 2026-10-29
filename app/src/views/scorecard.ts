@@ -78,7 +78,7 @@ function answerView(o: Overall, meta: Meta, still: boolean): Html {
 /** Why the answer is what it is: the two parts, or how far a score is. */
 function scoreBecause(o: Overall, when: string): Html {
   if (o.score == null)
-    return html`Give it <b>${plural(o.to_rank, "more task")}</b> with a follow-up to get a score. One-shot tasks can't need steering, so they don't count.`;
+    return html`Give it <b>${plural(o.to_rank, "more task")}</b> with a follow-up to get a score. A one-shot prompt can't need a follow-up, so it doesn't count.`;
   return html`Score <b>${o.score}</b>. <b>${o.direction}%</b> of your prompts were clear the first time, and you corrected it <b>${plural(o.corrections, "time")}</b> to its ${num(o.humbled)} ${when}.`;
 }
 

@@ -10,7 +10,7 @@
     {
       "id": "habits",
       "title": "The 5 habits",
-      "blurb": "Five things a good prompt carries, whoever you hand it to.",
+      "blurb": "Five things a good prompt includes, whoever you hand it to.",
       "lessons": [
         {
           "id": "point-at-it",
@@ -203,7 +203,7 @@
     {
       "id": "steer",
       "title": "Steer less",
-      "blurb": "Get it right in the first message, so you don't have to keep steering.",
+      "blurb": "Get it right in the first message, so you don't have to keep following up.",
       "lessons": [
         {
           "id": "say-it-all-up-front",

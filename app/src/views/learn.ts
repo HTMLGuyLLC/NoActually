@@ -14,11 +14,11 @@ const chips = (meta: Meta, ids: string[]) =>
 
 /** The checker's verdict for a draft: grade, which signals it has, and a nudge for each missing one. */
 export function checkResultView(meta: Meta, c: Check | null, empty: boolean): Html {
-  if (empty || !c) return html`<p class="muted small">Type or paste a prompt. Each thing it carries lights up.</p>`;
+  if (empty || !c) return html`<p class="muted small">Type or paste a prompt. Each thing it includes lights up.</p>`;
   const has = (i: number) => hasSignal(c.signals, i);
   const grade = gradeTitle(meta, c.grade);
   const missing = meta.signals.filter((_, i) => !has(i));
-  return html`<div class="check-grade is-${c.grade}"><b>${grade}</b> · carries ${meta.signals.filter((_, i) => has(i)).length} of ${meta.signals.length}</div>
+  return html`<div class="check-grade is-${c.grade}"><b>${grade}</b> · includes ${meta.signals.filter((_, i) => has(i)).length} of ${meta.signals.length}</div>
     <ul class="check-signals">${meta.signals.map(
       (s, i) =>
         html`<li class="${has(i) ? "on" : ""}"><span aria-hidden="true">${has(i) ? "✓" : "·"}</span> ${s.title}<span class="sr-only">${has(i) ? ": yes" : ": not yet"}</span></li>`,

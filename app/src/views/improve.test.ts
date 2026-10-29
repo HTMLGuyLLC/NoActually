@@ -326,7 +326,7 @@ describe("improveView insights", () => {
 
   it("reports the steering that was on you, with its lesson", () => {
     const m = view(progress({ insights: { signals: [], steer: ["added", 60], models: [] } }));
-    expect(m).toContain("Most of the steering that was on you is <b>“You added more”</b> (60%).");
+    expect(m).toContain("Most of the follow-ups that were on you are <b>“You added more”</b> (60%).");
     expect(m).toContain('data-action="open-lesson" data-id="say-it-all-up-front"');
   });
 

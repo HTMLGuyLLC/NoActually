@@ -20,7 +20,7 @@ USAGE
   noactually import <source> <path>      Import an export file or folder (chatgpt-export, claude-ai-export)
   noactually sync                        Read anything new from allowed sources
   noactually stats [filters] [--json]    Scorecard. Filters: --source --provider --family --version --since
-  noactually check <prompt>              What a draft prompt carries, graded like your history (nothing is saved)
+  noactually check <prompt>              What a draft prompt includes, graded like your history (nothing is saved)
   noactually retention <full|snippet|category> [--full-days N] [--snippet-days N]
 
 Data lives in NOACTUALLY_DB, or app.noactually/noactually.db in your app data folder (shared with the desktop app).
@@ -323,7 +323,7 @@ fn overall_lines(o: &store::Overall, window: &str) -> Vec<String> {
 fn check_lines(text: &str) -> Vec<String> {
     let c = engine::check(text);
     let mut out = vec![format!(
-        "{} ({} of {} things a prompt can carry)",
+        "{} ({} of {} things a prompt can include)",
         c.grade.title(),
         c.signals.count(),
         engine::Signal::ALL.len()
@@ -374,7 +374,7 @@ fn prompt_lines(p: &store::Prompts, window: &str) -> Vec<String> {
         let n = p.signals.get(sig.as_str()).copied().unwrap_or(0);
         out.push(format!("    {:<20} {:>3}%  {}", sig.title(), pct(n, p.tasks), sig.hint()));
     }
-    out.push("\n  Steering".into());
+    out.push("\n  Why you followed up".into());
     for c in engine::Steer::ALL {
         out.push(format!("    {:<20} {}", c.title(), p.steering.get(c.as_str()).copied().unwrap_or(0)));
     }
@@ -434,7 +434,7 @@ mod tests {
         assert_eq!(parse("check --fix the thing").unwrap(), Command::Check { text: "--fix the thing".into() });
         assert!(err("check").starts_with("missing prompt"));
         let lines = check_lines("Fix the crash in `checkout.ts`. Done when the tests pass. Don't touch the API.");
-        assert_eq!(lines[0], "Sharp (3 of 5 things a prompt can carry)");
+        assert_eq!(lines[0], "Sharp (3 of 5 things a prompt can include)");
         assert!(lines.iter().any(|l| l.starts_with("  ✓ Points at it")));
         assert!(lines.iter().any(|l| l.starts_with("  · Says why")));
         assert!(check_lines("how does this work?").last().unwrap().contains("question"));

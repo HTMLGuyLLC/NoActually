@@ -486,3 +486,8 @@ button.link:hover { filter: none }
 .share-btn-icon { display: inline-flex; align-items: center; gap: 7px }
 .btn-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 .small .btn-icon { width: 13px; height: 13px }
+
+/* Sources: the intro on the left, the check for new chats top right. */
+.sources-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px 24px; flex-wrap: wrap }
+.sources-head > p { flex: 1 1 320px; margin: 0 }
+.sync-check { display: grid; justify-items: end; gap: 6px; text-align: right }

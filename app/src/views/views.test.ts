@@ -37,7 +37,7 @@ describe("scorecardView", () => {
       const m = scorecardView(stats(), { ...ctx, view }).value;
       expect(m.split('id="model-trigger"').length - 1, view).toBe(1);
     }
-    expect(scorecardView(stats(), { ...ctx, view: "prompts" }).value).toContain("Where steering went");
+    expect(scorecardView(stats(), { ...ctx, view: "prompts" }).value).toContain("Why you followed up");
     expect(scorecardView(stats(), { ...ctx, view: "hall" }).value).toContain('data-action="pin"');
   });
 

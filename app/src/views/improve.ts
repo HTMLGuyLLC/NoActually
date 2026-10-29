@@ -2,7 +2,7 @@
 // numbers trend, your personal bests and trophies, and what your own history says works.
 import type { Goal, GoalKind, GoalStatus, GoalWeek, HistoryWeek, Meta, Progress, Stats } from "../api";
 import { fmtDay, last, plural } from "../format";
-import { type Html, html, num, raw } from "../html";
+import { type Html, html, raw } from "../html";
 import { lessonFor } from "../learn/lessons";
 import { floorPercent, signalTitle, steerTitle, tierName, tierOf } from "../meta";
 import { RANGES, type Range } from "../state";
@@ -24,6 +24,9 @@ export type ImproveContext = {
 const RATE_MIN_MESSAGES = 50;
 
 /** The clear-the-first-time chart starts at 50% so the tier bands (70/80/90) have room, lower when a week was lower. */
+/** Follow-up reasons' colors: blue is the AI's side, red is yours. */
+const STEER_SEG: Record<string, string> = { ai_wrong: "s2", added: "s0", clarified: "s1", redo: "s3" };
+
 const landedFloor = (points: Point[]) => Math.min(50, ...points.filter((p) => p.value != null && !p.weak).map((p) => Math.floor((p.value ?? 0) / 10) * 10));
 
 /** Half-width charts draw on a narrower canvas, so their text stays as big as the full-width ones'. */
@@ -229,7 +232,8 @@ function trendsView(ctx: ImproveContext): Html {
     return html`<div class="cat sig"><span>${s.title}<small class="muted">${s.hint}</small></span>${sparkline(pts, `${s.title} per ${per}`)}<span class="n">${now != null ? `${now}%` : "–"}</span></div>`;
   });
   const labels = points.map((b) => b.label);
-  const steerSeries = meta.steers.map((s) => ({ title: s.title, values: points.map((b) => b.steering[s.id] ?? 0) }));
+  // The AI's mistakes in its blue, the ones on you in your red and the rest muted, as on Prompting.
+  const steerSeries = meta.steers.map((s) => ({ title: s.title, values: points.map((b) => b.steering[s.id] ?? 0), seg: STEER_SEG[s.id] }));
   const gradeSeries = [...meta.grades].reverse().map((g) => ({ title: g.title, values: points.map((b) => b.grades[g.id] ?? 0) }));
   const rate: Point[] = points.map((b) => ({
     label: b.label,
@@ -242,11 +246,11 @@ function trendsView(ctx: ImproveContext): Html {
     <section><div class="head"><h2>Prompts clear the first time</h2><p class="muted">Per ${per}. Hollow dots had fewer than ${meta.min_week} prompts with a follow-up, so they're left off the line.</p></div>
       <div class="chart">${lineChart({ id: "landed", label: `Percent of prompts clear the first time, per ${per}`, summary: landedSummary, points: landed, bands, unit: "%", min: landedFloor(landed) })}</div></section>
     <section class="split">
-      <div><div class="head"><h2>What your prompts carry</h2></div><div class="cats">${signals}</div></div>
+      <div><div class="head"><h2>What your prompts include</h2></div><div class="cats">${signals}</div></div>
       <div><div class="head"><h2>Prompt grades</h2></div><div class="chart">${stackChart({ id: "grades", label: `Prompts by grade, per ${per}`, summary: `Prompts by grade over ${points.length} ${per}s.`, labels, series: gradeSeries, width: HALF, height: 220 })}</div></div>
     </section>
     <section class="split">
-      <div><div class="head"><h2>Where steering went</h2></div><div class="chart">${stackChart({ id: "steering", label: `Steering messages by cause, per ${per}`, summary: `${num(totalSteer)} steering messages over ${points.length} ${per}s.`, labels, series: steerSeries, width: HALF, height: 220 })}</div></div>
+      <div><div class="head"><h2>Why you followed up</h2></div><div class="chart">${stackChart({ id: "steering", label: `Follow-ups by reason, per ${per}`, summary: `${plural(totalSteer, "follow-up")} over ${points.length} ${per}s.`, labels, series: steerSeries, width: HALF, height: 220 })}</div></div>
       <div><div class="head"><h2>Corrections per 100 messages</h2></div><div class="chart">${lineChart({ id: "rate", label: `Corrections per 100 messages, per ${per}`, summary: "How often you corrected a mistake, per 100 messages.", points: rate, max: rateMax, width: HALF, height: 220 })}</div></div>
     </section>`;
 }
@@ -286,7 +290,7 @@ function insightsView(p: Progress, meta: Meta): Html {
     const [id, share] = i.steer;
     const l = lessonFor("steer", id);
     items.push(
-      html`<li>Most of the steering that was on you is <b>“${steerTitle(meta, id)}”</b> (${share}%).${l ? html` <button class="link" data-action="open-lesson" data-id="${l.id}">${l.title} →</button>` : ""}</li>`,
+      html`<li>Most of the follow-ups that were on you are <b>“${steerTitle(meta, id)}”</b> (${share}%).${l ? html` <button class="link" data-action="open-lesson" data-id="${l.id}">${l.title} →</button>` : ""}</li>`,
     );
   }
   const [best, worst] = i.models;

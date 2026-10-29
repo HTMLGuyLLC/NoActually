@@ -147,7 +147,7 @@ describe("checkResultView", () => {
 
   it("lights up the signals in a sharp check, and says there's nothing missing at five", () => {
     const m = checkResultView(meta, check({ signals: 0b111, grade: "sharp" }), false).value;
-    expect(m).toContain('class="check-grade is-sharp"><b>Sharp</b> · carries 3 of 5');
+    expect(m).toContain('class="check-grade is-sharp"><b>Sharp</b> · includes 3 of 5');
     expect(m.match(/<li class="on">/g)).toHaveLength(3);
     expect(m).toContain('<li class="on"><span aria-hidden="true">✓</span> Points at it<span class="sr-only">: yes</span>');
     expect(m).toContain('<li class=""><span aria-hidden="true">·</span> Sets limits<span class="sr-only">: not yet</span>');

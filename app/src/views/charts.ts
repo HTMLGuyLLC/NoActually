@@ -68,7 +68,8 @@ export function stackChart(o: {
   label: string;
   summary: string;
   labels: string[];
-  series: { title: string; values: number[] }[];
+  /** `seg` picks a series' color class (s0 red, s1 ink, s2 blue, s3 muted); by default, its position. */
+  series: { title: string; values: number[]; seg?: string | undefined }[];
   /** One tip per bucket for the whole bar (its breakdown); without, each segment names itself. */
   tips?: string[];
   width?: number;
@@ -90,7 +91,7 @@ export function stackChart(o: {
       if (!v) return "";
       const top = y(acc + v);
       const own = o.tips ? "" : html` data-tip="${label}: ${s.title} ${v}"`;
-      const seg = html`<rect x="${L + i * bw + bw * 0.18}" y="${top}" width="${bw * 0.64}" height="${y(acc) - top}" class="seg s${si}"${own}></rect>`;
+      const seg = html`<rect x="${L + i * bw + bw * 0.18}" y="${top}" width="${bw * 0.64}" height="${y(acc) - top}" class="seg ${s.seg ?? `s${si}`}"${own}></rect>`;
       acc += v;
       return seg;
     });
@@ -101,7 +102,7 @@ export function stackChart(o: {
   const grid = [0, max].map(
     (g) => html`<line x1="${L}" x2="${W - R}" y1="${y(g)}" y2="${y(g)}" class="grid"/><text x="${L - 8}" y="${y(g) + 4}" text-anchor="end">${g}</text>`,
   );
-  const key = html`<ul class="chart-key">${o.series.map((s, si) => html`<li><i class="seg s${si}" aria-hidden="true"></i>${s.title}</li>`)}</ul>`;
+  const key = html`<ul class="chart-key">${o.series.map((s, si) => html`<li><i class="seg ${s.seg ?? `s${si}`}" aria-hidden="true"></i>${s.title}</li>`)}</ul>`;
   return html`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${o.label}" aria-describedby="${o.id}-summary">${grid}${bars}</svg>${key}
     <p class="sr-only" id="${o.id}-summary">${o.summary}</p>`;
 }

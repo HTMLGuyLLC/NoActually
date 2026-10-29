@@ -28,7 +28,7 @@ export async function refreshCheck(root: ParentNode): Promise<void> {
     if (mine !== seq) return;
     out.innerHTML = checkResultView(meta, c, false).value;
     const count = meta.signals.filter((_, i) => hasSignal(c.signals, i)).length;
-    const summary = `${gradeTitle(meta, c.grade)}, carries ${count} of ${meta.signals.length}.`;
+    const summary = `${gradeTitle(meta, c.grade)}, includes ${count} of ${meta.signals.length}.`;
     const status = root.querySelector("#check-status");
     if (status && summary !== announced) {
       announced = summary;

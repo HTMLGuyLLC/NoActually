@@ -64,8 +64,8 @@ describe("promptsView", () => {
   it("splits steering between the AI and the prompt", () => {
     const m = view();
     expect(m).toContain('class="cat ai"><span>It got it wrong</span>');
-    expect(m).toContain("25 steering messages. 12 were its mistakes (blue), which don't count against you; 13 could have been in the prompt (red).");
-    expect(view({ steering: { ai_wrong: 0, added: 0, clarified: 0, redo: 0 } })).toContain("No steering yet.");
+    expect(m).toContain("25 follow-ups. 12 were its mistakes (blue), which don't count against you; 13 could have been in the prompt (red).");
+    expect(view({ steering: { ai_wrong: 0, added: 0, clarified: 0, redo: 0 } })).toContain("No follow-ups yet.");
   });
 
   it("explains itself before the first task", () => {

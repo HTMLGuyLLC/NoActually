@@ -261,7 +261,7 @@ describe("delegated actions", () => {
     expect(root.querySelector('[data-action="view"][aria-current="page"]')?.textContent).toBe("Overview");
     await click('[data-action="view"][data-id="prompts"]');
     expect(root.querySelector('[data-action="view"][aria-current="page"]')?.textContent).toBe("Prompting");
-    expect(root.textContent).toContain("Where steering went");
+    expect(root.textContent).toContain("Why you followed up");
   });
 
   it("sends the logo home: scorecard overview", async () => {

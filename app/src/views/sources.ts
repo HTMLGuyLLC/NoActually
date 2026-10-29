@@ -56,13 +56,13 @@ function sourceRow(s: SourceInfo): Html {
 /** `status` dates the last check for new chats; Check for updates runs one now. */
 export function sourcesView(list: SourceInfo[], status: SyncStatus): Html {
   return html`
-    <section id="sources"><div class="head">
-      <p class="muted">Nothing is read until you allow it. No, Actually... reads your messages and the AI's replies on this computer to count corrections. Nothing leaves this machine.</p></div>
-      <div class="sources">${list.map(sourceRow)}</div>
-      <p class="muted small">Stop reading keeps your scores. Forget also deletes everything that source produced.</p>
-      <div class="settings-row">
+    <section id="sources"><div class="head sources-head">
+      <p class="muted">Nothing is read until you allow it. No, Actually... reads your messages and the AI's replies on this computer to count corrections. Nothing leaves this machine.</p>
+      <div class="sync-check">
         <button class="ghost" data-action="sync-now">Check for updates</button>
         <span class="muted small" id="sync-line">New chats last checked ${ago(status.last_sync)}.</span>
-      </div>
+      </div></div>
+      <div class="sources">${list.map(sourceRow)}</div>
+      <p class="muted small">Stop reading keeps your scores. Forget also deletes everything that source produced.</p>
     </section>`;
 }

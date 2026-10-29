@@ -11,7 +11,7 @@ import { answerWord, byAnswer, ladderView, shareButton, tierBlurb, verdictMark }
 function becauseLine(b: Prompts, meta: Meta, when: string): Html {
   return promptTier(meta, b.tier)
     ? html`<b>${landedPct(b)}%</b> of your prompts ${when} were clear the first time.`
-    : html`Give it <b>${plural(b.to_rank, "more task")}</b> with a follow-up to get ranked. One-shot tasks can't need steering, so they don't count.`;
+    : html`Give it <b>${plural(b.to_rank, "more task")}</b> with a follow-up to get ranked. A one-shot prompt can't need a follow-up, so it doesn't count.`;
 }
 
 /** The verdict word, hand-written, with a screen-reader version. */
@@ -53,7 +53,7 @@ function gradesView(b: Prompts, meta: Meta): Html {
   return html`<div class="grades">
     <div class="grade-bar" role="img" aria-label="Your prompts: ${label}">${parts.map((p) => html`<i class="g-${p.id}" data-w="${p.pct}"></i>`)}</div>
     <ul class="grade-key">${parts.map((p) => html`<li><i class="g-${p.id}" aria-hidden="true"></i>${p.title} <b>${p.pct}%</b></li>`)}</ul>
-    <p class="muted small">Sharp prompts carry ${meta.sharp_signals}+ of the ${meta.signals.length} things below. Questions aren't graded.</p>
+    <p class="muted small">Sharp prompts include ${meta.sharp_signals}+ of the ${meta.signals.length} things below. Questions aren't graded.</p>
   </div>`;
 }
 
@@ -91,14 +91,14 @@ function tipView(b: Prompts, meta: Meta): Html | "" {
 function steeringView(b: Prompts, meta: Meta): Html {
   const counts = meta.steers.map((c) => ({ ...c, n: b.steering[c.id] ?? 0 }));
   const total = counts.reduce((t, c) => t + c.n, 0);
-  if (!total) return html`<p class="muted">No steering yet. Every prompt was clear the first time.</p>`;
+  if (!total) return html`<p class="muted">No follow-ups yet. Every prompt was clear the first time.</p>`;
   const top = Math.max(...counts.map((c) => c.n));
   const yours = counts.filter((c) => c.id !== "ai_wrong").reduce((t, c) => t + c.n, 0);
   return html`<div class="cats">${counts.map(
     (c) =>
       html`<div class="cat${c.id === "ai_wrong" ? " ai" : ""}"><span>${steerTitle(meta, c.id)}</span><span class="bar-bg"><i data-w="${c.n ? Math.max(2, (c.n / top) * 100) : 0}"></i></span><span class="n">${num(c.n)}</span></div>`,
   )}</div>
-  <p class="muted small">${plural(total, "steering message")}. ${num(total - yours)} were its mistakes (blue), which don't count against you; ${num(yours)} could have been in the prompt (red).</p>`;
+  <p class="muted small">${plural(total, "follow-up")}. ${num(total - yours)} were its mistakes (blue), which don't count against you; ${num(yours)} could have been in the prompt (red).</p>`;
 }
 
 /** The Prompts section: verdict card, then what prompts carry and where steering went. `subject` is who
@@ -148,7 +148,7 @@ export function promptsView(b: Prompts, meta: Meta, still: boolean, subject = "i
     </section>
     <section><div class="head"><h2>Prompts per week</h2><p class="muted">Prompts with a follow-up. A one-shot prompt can't need more from you, so it doesn't count.</p></div><div class="chart">${weeksView(weekly, meta)}</div></section>
     <section class="split">
-      <div><div class="head"><h2>What your prompts carry</h2></div>${gradesView(b, meta)}${signalsView(b, meta)}</div>
-      <div><div class="head"><h2>Where steering went</h2></div>${steeringView(b, meta)}</div>
+      <div><div class="head"><h2>What your prompts include</h2></div>${gradesView(b, meta)}${signalsView(b, meta)}</div>
+      <div><div class="head"><h2>Why you followed up</h2></div>${steeringView(b, meta)}</div>
     </section>`;
 }
