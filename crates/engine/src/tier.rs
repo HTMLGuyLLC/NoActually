@@ -131,6 +131,76 @@ impl Answer {
     }
 }
 
+/// "Do you catch its mistakes?" How judgment reads, in a word. Ordered from lowest to highest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CatchTier {
+    /// Judgment under 50.
+    Autopilot,
+    /// 50 to 74.
+    SpotChecker,
+    /// 75 to 89.
+    Reviewer,
+    /// 90 or more.
+    HawkEyed,
+}
+
+impl CatchTier {
+    /// Every tier, ascending by floor.
+    pub const ALL: [CatchTier; 4] =
+        [CatchTier::Autopilot, CatchTier::SpotChecker, CatchTier::Reviewer, CatchTier::HawkEyed];
+
+    /// The judgment needed to reach this tier.
+    pub const fn floor(self) -> i64 {
+        match self {
+            CatchTier::Autopilot => 0,
+            CatchTier::SpotChecker => 50,
+            CatchTier::Reviewer => 75,
+            CatchTier::HawkEyed => 90,
+        }
+    }
+
+    /// Stable id, as serialized (`hawk_eyed`).
+    pub const fn id(self) -> &'static str {
+        match self {
+            CatchTier::Autopilot => "autopilot",
+            CatchTier::SpotChecker => "spot_checker",
+            CatchTier::Reviewer => "reviewer",
+            CatchTier::HawkEyed => "hawk_eyed",
+        }
+    }
+
+    /// Display name ("Hawk-eyed").
+    pub const fn name(self) -> &'static str {
+        match self {
+            CatchTier::Autopilot => "Autopilot",
+            CatchTier::SpotChecker => "Spot-checker",
+            CatchTier::Reviewer => "Reviewer",
+            CatchTier::HawkEyed => "Hawk-eyed",
+        }
+    }
+
+    /// The answer to "Do you catch its mistakes?" at this tier.
+    pub const fn verdict(self) -> &'static str {
+        match self {
+            CatchTier::Autopilot => "Rarely.",
+            CatchTier::SpotChecker => "Sometimes.",
+            CatchTier::Reviewer => "Usually.",
+            CatchTier::HawkEyed => "Always.",
+        }
+    }
+
+    /// The highest tier whose floor `judgment` reaches.
+    pub fn for_judgment(judgment: i64) -> CatchTier {
+        CatchTier::ALL.into_iter().rev().find(|t| judgment >= t.floor()).unwrap_or(CatchTier::Autopilot)
+    }
+
+    /// The tier above this one, if any.
+    pub fn next(self) -> Option<CatchTier> {
+        CatchTier::ALL.into_iter().find(|t| *t > self)
+    }
+}
+
 /// The last [`crate::WINDOW_DAYS`] days, counted the way the score reads them.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Window {
@@ -186,6 +256,20 @@ mod tests {
 
     fn w(continued: i64, landed: i64, catches: i64, humbled: i64) -> Window {
         Window { continued, landed, catches, humbled }
+    }
+
+    #[test]
+    fn catch_tiers_follow_judgment() {
+        let at = |n| CatchTier::for_judgment(n);
+        assert_eq!((at(-1), at(0), at(49)), (CatchTier::Autopilot, CatchTier::Autopilot, CatchTier::Autopilot));
+        assert_eq!((at(50), at(74)), (CatchTier::SpotChecker, CatchTier::SpotChecker));
+        assert_eq!((at(75), at(89)), (CatchTier::Reviewer, CatchTier::Reviewer));
+        assert_eq!((at(90), at(100)), (CatchTier::HawkEyed, CatchTier::HawkEyed));
+        assert!(CatchTier::ALL.windows(2).all(|w| w[0] < w[1] && w[0].floor() < w[1].floor()));
+        assert_eq!(CatchTier::HawkEyed.next(), None);
+        // No catches yet reads as autopilot, however rarely it corrected you.
+        let s = Score::of(w(20, 20, 0, 0)).map(|s| CatchTier::for_judgment(s.judgment));
+        assert_eq!(s, Some(CatchTier::Autopilot));
     }
 
     #[test]

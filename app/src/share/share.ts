@@ -1,7 +1,10 @@
 // Share text, network links and the dialog's guidance. All made on this machine from numbers only
 // (or, for a single catch, the stored and already redacted snippet the person can edit first).
-import type { Briefs, BriefTier, Stats } from "../api";
+import type { Briefs, BriefTier, Overall, Stats } from "../api";
 import { type Html, html } from "../html";
+
+const times = (n: number) => `${n} ${n === 1 ? "time" : "times"}`;
+
 import { landedPct } from "../meta";
 
 export const SHARE_URL = "https://github.com/HTMLGuyLLC/NoActually";
@@ -24,6 +27,11 @@ export function shareText(s: ScoreLike, who: string, tier: string, when = "in th
 /** The briefs score, ready to post: the tier's answer and how many tasks landed. Numbers only. */
 export function briefShareText(b: Pick<Briefs, "window_landed" | "window_tasks">, tier: BriefTier, when = "in the last 28 days") {
   return `Do I make my AI guess? ${tier.verdict} ${landedPct(b)}% of my tasks ${when} landed without me adding, clarifying or starting over. Brief tier: ${tier.name}. Do you make yours guess? ${SHARE_URL}`;
+}
+
+/** The catches answer, ready to post: the tier's word and who caught whom. Numbers only. */
+export function catchesShareText(o: Pick<Overall, "catches" | "humbled">, tier: BriefTier, when = "in the last 28 days") {
+  return `Do I catch my AI's mistakes? ${tier.verdict} I caught it ${times(o.catches)} ${when}, and it caught me ${times(o.humbled)}. Catch tier: ${tier.name}. Do you catch yours? ${SHARE_URL}`;
 }
 
 import type { CardShape } from "./cards";

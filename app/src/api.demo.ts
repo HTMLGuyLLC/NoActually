@@ -42,7 +42,8 @@ function demoData(): Promise<DemoData> {
 /** What Rust's `Score::of` says for a window (engine/src/tier.rs): the demo's stand-in for it. */
 export function judge(meta: Meta, w: { continued: number; landed: number; catches: number; humbled: number }): Overall {
   const base = { catches: w.catches, humbled: w.humbled, to_rank: Math.max(0, meta.min_briefs - w.continued) };
-  if (w.continued < meta.min_briefs) return { ...base, score: null, direction: null, judgment: null, tier: null, next_tier: null, verdict: "hmm" };
+  if (w.continued < meta.min_briefs)
+    return { ...base, score: null, direction: null, judgment: null, tier: null, next_tier: null, verdict: "hmm", catch_tier: null, next_catch_tier: null };
   const direction = Math.floor((1000 * Math.min(w.landed, w.continued)) / w.continued);
   const right = Math.max(0, 1000 - Math.floor((meta.humbled_cost * 1000 * Math.max(0, w.humbled)) / Math.max(w.continued, meta.humbled_base)));
   const judgment = Math.floor((right * Math.min(Math.max(0, w.catches), meta.catch_proof)) / meta.catch_proof);
@@ -51,14 +52,18 @@ export function judge(meta: Meta, w: { continued: number; landed: number; catche
   const tier = up.filter((t) => score >= t.floor).pop();
   const next = up.find((t) => t.floor > score);
   const coworker = up.find((t) => t.id === "coworker")?.floor ?? Number.POSITIVE_INFINITY;
+  const j = Math.floor(judgment / 10);
+  const catchUp = [...meta.catch_tiers].sort((a, b) => a.floor - b.floor);
   return {
     ...base,
     score,
     direction: Math.floor(direction / 10),
-    judgment: Math.floor(judgment / 10),
+    judgment: j,
     tier: tier?.id ?? null,
     next_tier: next?.id ?? null,
     verdict: score >= coworker ? "no" : "hmm",
+    catch_tier: catchUp.filter((t) => j >= t.floor).pop()?.id ?? null,
+    next_catch_tier: catchUp.find((t) => t.floor > j)?.id ?? null,
   };
 }
 

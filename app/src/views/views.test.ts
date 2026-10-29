@@ -50,6 +50,28 @@ describe("scorecardView", () => {
     expect(m).not.toContain("style=");
   });
 
+  it("answers the catches section in a word, with the catch tiers and a share", () => {
+    const m = scorecardView(stats(), { ...ctx, view: "catches" }).value;
+    expect(m).toContain('aria-hidden="true">Always.</div>');
+    expect(m).toContain('<ol class="ladder" aria-label="Catch tiers">');
+    expect(m).toContain('<li class="on" aria-current="true"><span>Hawk-eyed</span><span>90+</span></li>');
+    expect(m).toContain("<span>Spot-checker</span><span>50–74</span>");
+    expect(m).toContain("Top tier. Keep checking.");
+    expect(m).toContain('data-action="share-catches">Share your catches</button>');
+    const unranked = scorecardView(stats({ overall: overall({ judgment: null, catch_tier: null, to_rank: 3 }) }), { ...ctx, view: "catches" }).value;
+    expect(unranked).toContain(">Hmm.</div>");
+    expect(unranked).not.toContain("share-catches");
+  });
+
+  it("says so when there are no catches in the window yet", () => {
+    const m = scorecardView(stats({ catches: 0, overall: overall({ catches: 0, judgment: 0, catch_tier: "autopilot", next_catch_tier: "spot_checker" }) }), {
+      ...ctx,
+      view: "catches",
+    }).value;
+    expect(m).toContain('aria-hidden="true">Rarely.</div>');
+    expect(m).toContain("so there's no proof yet that you check its work.");
+  });
+
   it("shows Hmm. and the next tier by name and floor when Rust says hmm", () => {
     const m = scorecardView(stats({ overall: overall({ verdict: "hmm", score: 60, tier: "rubber_stamp", next_tier: "coworker" }) }), ctx).value;
     expect(m).toContain("no maybe");
@@ -89,13 +111,17 @@ describe("overview hero", () => {
     expect(m).toContain("Your tier is Sharp-eyed, score 86.");
     expect(m).toContain("Irreplaceable at 90. You&#39;re at 86.");
     expect(m).toContain('data-action="open-share"');
-    expect(m).toContain('<button class="ghost" data-action="share-briefs">Share your briefs</button>');
+    // The overview shares the score; Briefs and Catches each share their own answer.
+    expect(m).not.toContain("share-briefs");
+    expect(m).not.toContain("share-catches");
   });
 
-  it("offers the brief share up top on its own once only the briefs are ranked", () => {
-    const m = scorecardView(stats({ overall: overall({ score: null, tier: null, next_tier: null, verdict: "hmm" }) }), ctx).value;
-    expect(m).not.toContain('data-action="open-share"');
-    expect(m).toContain('<div class="share"><button data-action="share-briefs">Share your briefs</button>');
+  it("answers Do you catch its mistakes? in a word on the overview, with its tier", () => {
+    const m = hero({ catch_tier: "reviewer", next_catch_tier: "hawk_eyed", judgment: 88 }, { catches: 41, humbled: 2 });
+    expect(m).toContain('aria-hidden="true">Usually.</div>');
+    expect(m).toContain("You caught it <b>41 times</b> in the last 28 days. It caught you 2 times.");
+    expect(m).toContain("<span>Tier</span>Reviewer");
+    expect(m).toContain("Hawk-eyed at 90. You&#39;re at 88.");
   });
 
   it("shows the two parts as bars with their weights from meta", () => {
@@ -130,7 +156,8 @@ describe("overview hero", () => {
   });
 
   it("says why fewer catches never costs points", () => {
-    expect(hero()).toContain("3 catches show you check its work.");
+    const m = scorecardView(stats(), { ...ctx, view: "catches" }).value;
+    expect(m).toContain("3 catches prove you check its work. Catching fewer because it got it right never costs you.");
   });
 
   it("escapes names from meta and unknown ids", () => {
@@ -190,17 +217,17 @@ describe("onboarding and glance", () => {
 
   it("shows the score and tier by name in the glance", () => {
     const m = glanceView(stats(), meta).value;
-    expect(m).toContain("<span>Score 86</span>Sharp-eyed");
-    expect(m).toContain("Irreplaceable at 90");
-    expect(glanceView(stats({ overall: overall({ tier: "irreplaceable", next_tier: null }) }), meta).value).toContain("Top tier");
+    expect(m).toContain("Score 86 · Sharp-eyed");
+    expect(glanceView(stats({ overall: overall({ tier: "irreplaceable", next_tier: null, score: 93 }) }), meta).value).toContain(
+      "Score 93 · Irreplaceable</span>",
+    );
   });
 
   it("asks for more tasks in the glance until there is a score", () => {
     const o = overall({ score: null, direction: null, judgment: null, tier: null, next_tier: null, verdict: "hmm", to_rank: 4 });
     const m = glanceView(stats({ overall: o }), meta).value;
     expect(m).toContain("4 more tasks to get a score");
-    expect(m).not.toContain("tier-label");
-    expect(m).toContain(">Hmm.</div>");
+    expect(m).toContain('<span class="g-word maybe">Hmm.</span>');
   });
 
   it("has an empty glance before the first catch", () => {
@@ -351,15 +378,16 @@ describe("settingsView", () => {
 describe("scorecard period picker", () => {
   it("marks the period, words the catch count for it, and uses it for the score too", async () => {
     const { scorecardView } = await import("./scorecard");
-    const view = (period: "7d" | "28d" | "90d" | "all") => scorecardView(stats({ catches: 37 }), { meta, filter: {}, still: true, period }).value;
+    const view = (period: "7d" | "28d" | "90d" | "all") =>
+      scorecardView(stats({ overall: overall({ catches: 37 }) }), { meta, filter: {}, still: true, period }).value;
     const week = view("7d");
     expect(week).toContain('data-action="period" data-id="7d" aria-current="true"');
-    expect(week).toContain("You caught it <b>37 times</b> in the last 7 days.");
+    expect(week).toContain("you caught it <b>37 times</b> to its 2 in the last 7 days.");
     // Everything follows the period, the score included: no disclaimer needed.
     expect(week).toContain('<div class="eyebrow">Last 7 days</div>');
     expect(week).not.toContain("always uses");
     expect(view("all")).toContain('<div class="eyebrow">All time</div>');
-    expect(view("all")).toContain("<b>37 times</b> ever.");
+    expect(view("all")).toContain("<b>37 times</b> to its 2 ever.");
   });
 });
 

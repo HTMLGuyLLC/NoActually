@@ -2,8 +2,8 @@
 
 use crate::{GOAL_WEEKS, MIN_WEEK};
 use engine::{
-    BriefTier, Category, Grade, Signal, Steer, Tier, CATCH_PROOF, DIRECTION_WEIGHT, HUMBLED_BASE, HUMBLED_COST,
-    MIN_BRIEFS, WINDOW_DAYS,
+    BriefTier, CatchTier, Category, Grade, Signal, Steer, Tier, CATCH_PROOF, DIRECTION_WEIGHT, HUMBLED_BASE,
+    HUMBLED_COST, MIN_BRIEFS, WINDOW_DAYS,
 };
 use serde::Serialize;
 use sources::Source;
@@ -27,6 +27,8 @@ pub struct Meta {
     pub sources: Vec<SourceInfo>,
     /// Brief tiers, ascending by floor.
     pub brief_tiers: Vec<BriefTierInfo>,
+    /// "Do you catch its mistakes?" tiers, by judgment, ascending.
+    pub catch_tiers: Vec<BriefTierInfo>,
     /// Continued tasks in the window before a brief tier is given.
     pub min_briefs: i64,
     /// Days of tasks a brief tier looks at.
@@ -45,7 +47,7 @@ pub struct Meta {
     pub goal_weeks: i64,
 }
 
-/// One brief tier.
+/// A tier with a one-word answer: brief tiers and catch tiers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct BriefTierInfo {
     /// Stable id (`tech_lead`).
@@ -54,7 +56,7 @@ pub struct BriefTierInfo {
     pub name: &'static str,
     /// Percent of the window's continued tasks that must land.
     pub floor: i64,
-    /// The answer to "Do you make it guess?".
+    /// Its answer ("Sometimes.").
     pub verdict: &'static str,
 }
 
@@ -118,6 +120,10 @@ pub fn meta(sources: &[Box<dyn Source>]) -> Meta {
         categories: Category::ALL.iter().map(|c| CategoryInfo { id: c.as_str(), title: c.title() }).collect(),
         sources: sources.iter().map(|s| SourceInfo { id: s.id(), name: s.name() }).collect(),
         brief_tiers: BriefTier::ALL
+            .iter()
+            .map(|t| BriefTierInfo { id: t.id(), name: t.name(), floor: t.floor(), verdict: t.verdict() })
+            .collect(),
+        catch_tiers: CatchTier::ALL
             .iter()
             .map(|t| BriefTierInfo { id: t.id(), name: t.name(), floor: t.floor(), verdict: t.verdict() })
             .collect(),

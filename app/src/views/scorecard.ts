@@ -3,7 +3,7 @@
 import type { Filter, HallEntry, Meta, Overall, Stats } from "../api";
 import { filterLabel, isFiltered, shortSourceName, subjectLabel } from "../format";
 import { type Html, html, num, raw } from "../html";
-import { categoryTitle, tierName, tierOf, tierRanges } from "../meta";
+import { catchTier, catchTierRanges, categoryTitle, tierName, tierOf, tierRanges } from "../meta";
 import { catchRate, modelName } from "../picker/picker";
 import { PERIOD_WHEN, PERIODS, type Period, SCORE_VIEWS, type ScoreView } from "../state";
 import { briefsSummaryView, briefsView } from "./briefs";
@@ -60,8 +60,6 @@ export const subjectButton = (ctx: Pick<ScorecardContext, "filter" | "meta">): H
   )}${CHEVRON}</button>`;
 
 /** "You caught it 37 times in the last 28 days." */
-const caughtLine = (s: Stats, period: Period) => html`You caught it <b>${num(s.catches)} ${s.catches === 1 ? "time" : "times"}</b> ${PERIOD_WHEN[period]}.`;
-
 const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
 
 /** The hand-written answer, with a screen-reader version. */
@@ -101,13 +99,6 @@ function ladderView(o: Overall, meta: Meta): Html {
   )}</ol>`;
 }
 
-/** Each ranked score gets its own share: the overall one first, your brief tier beside it. */
-function shareRow(s: Stats): Html | "" {
-  const score = s.overall.tier ? html`<button data-action="open-share">Share your score</button>` : "";
-  const briefs = s.briefs.tier ? html`<button${score ? raw(' class="ghost"') : ""} data-action="share-briefs">Share your briefs</button>` : "";
-  return score || briefs ? html`<div class="share">${score}${briefs}</div>` : "";
-}
-
 /** The headline: could it replace you? Both sides of working with AI, one score. */
 function heroView(s: Stats, ctx: ScorecardContext): Html {
   const o = s.overall;
@@ -121,7 +112,7 @@ function heroView(s: Stats, ctx: ScorecardContext): Html {
       <div class="meter">
         ${ladderView(o, ctx.meta)}
         <p class="hand-note">${scoreNote(o, ctx.meta)}</p>
-        ${shareRow(s)}
+        ${o.tier ? html`<div class="share"><button data-action="open-share">Share your score</button></div>` : ""}
       </div>
     </section>`;
 }
@@ -137,16 +128,42 @@ function versusView(s: Stats): Html {
 
 /** Why fewer catches never costs points. */
 const proofNote = (meta: Meta) =>
-  html`<p class="muted small">${meta.catch_proof} catches show you check its work. Past that, more don't add points, so fewer catches because it's getting it right never costs you.</p>`;
+  html`<p class="muted small">${meta.catch_proof} catches prove you check its work. Catching fewer because it got it right never costs you.</p>`;
 
-/** The overview's "Who corrects whom?" half. */
+/** "Always.", hand-written, with a screen-reader version. */
+function catchMark(o: Overall, meta: Meta, still: boolean, small = false): Html {
+  const tier = catchTier(meta, o.catch_tier);
+  return html`<div class="no${small ? " sm" : ""}${tier ? "" : " maybe"}${still ? " still" : ""}" aria-hidden="true">${tier?.verdict ?? "Hmm."}</div>
+      <span class="sr-only">${tier ? `${tier.verdict} Your catch tier is ${tier.name}.` : "Not ranked yet."}</span>`;
+}
+
+/** Why: who caught whom, in one line, with the same counts as "you vs it" beside it. */
+function catchBecause(s: Stats, when: string): Html {
+  if (s.overall.judgment == null) return html`Give it <b>${plural(s.overall.to_rank, "more task")}</b> with a follow-up to get ranked.`;
+  if (!s.catches) return html`You haven't caught it ${when}, so there's no proof yet that you check its work.`;
+  return html`You caught it <b>${plural(s.catches, "time")}</b> ${when}. It caught you ${s.humbled ? plural(s.humbled, "time") : "never"}.`;
+}
+
+/** The next catch tier's target ("Hawk-eyed at 90. You're at 88."). */
+function catchNote(o: Overall, meta: Meta): string {
+  if (o.judgment == null) return `${plural(o.to_rank, "more task")} to get ranked`;
+  const next = catchTier(meta, o.next_catch_tier);
+  return next ? `${next.name} at ${next.floor}. You're at ${o.judgment}.` : "Top tier. Keep checking.";
+}
+
+function catchLadderView(o: Overall, meta: Meta): Html {
+  return html`<ol class="ladder" aria-label="Catch tiers">${catchTierRanges(meta).map((t) => html`<li${t.id === o.catch_tier ? raw(' class="on" aria-current="true"') : ""}><span>${t.name}</span><span>${t.range}</span></li>`)}</ol>`;
+}
+
+/** The overview's "Who corrects whom?" half: the answer, the tier, and a way to the details. */
 function correctsSummaryView(s: Stats, ctx: ScorecardContext): Html {
-  return html`<article class="card mini">
+  const o = s.overall;
+  const tier = catchTier(ctx.meta, o.catch_tier);
+  return html`<article class="card mini catches">
       <div class="eyebrow">Who corrects whom</div>
       <h2 class="q">Do you catch its mistakes?</h2>
-      <p class="because">${caughtLine(s, ctx.period ?? "28d")}</p>
-      ${versusView(s)}
-      ${proofNote(ctx.meta)}
+      <div class="verdict">${catchMark(o, ctx.meta, ctx.still)}<div class="because">${catchBecause(s, PERIOD_WHEN[ctx.period ?? "28d"])}</div></div>
+      <p class="tier-line">${tier ? html`<span class="tier-label"><span>Tier</span>${tier.name}</span>` : ""}<span class="hand-note">${catchNote(o, ctx.meta)}</span></p>
       <div class="share"><button class="ghost" data-action="view" data-id="catches">See catches</button></div>
     </article>`;
 }
@@ -259,18 +276,18 @@ function catchesView(s: Stats, ctx: ScorecardContext): Html {
       )
     : html`<p class="muted">No catches yet.</p>`;
   return html`
-    <section class="card">
+    <section class="card catches">
       <div>
         <div class="eyebrow">Who corrects whom</div>
         <h1 class="q">Do you catch ${subjectButton(ctx)}'s mistakes?</h1>
-        <p class="because">${caughtLine(s, ctx.period ?? "28d")}${
-          s.pct_real_chats_with_catch != null ? ` It slipped up in ${Math.round(s.pct_real_chats_with_catch)}% of your real chats.` : ""
-        }</p>
+        <div class="verdict">${catchMark(s.overall, meta, ctx.still)}<div class="because">${catchBecause(s, PERIOD_WHEN[ctx.period ?? "28d"])}</div></div>
         ${versusView(s)}
       </div>
       <div class="meter">
-        <p class="big-stat"><span class="n">${s.overall.judgment ?? "–"}</span><span class="muted small">judgment ${PERIOD_WHEN[ctx.period ?? "28d"]}, out of 100: you check its work, and it rarely has to correct you</span></p>
+        ${catchLadderView(s.overall, meta)}
+        <p class="hand-note">${catchNote(s.overall, meta)}</p>
         ${proofNote(meta)}
+        ${catchTier(meta, s.overall.catch_tier) ? html`<div class="share"><button data-action="share-catches">Share your catches</button></div>` : ""}
       </div>
     </section>
     <section><div class="head"><h2>Catches per week</h2></div><div class="chart">${chartView(s)}</div></section>

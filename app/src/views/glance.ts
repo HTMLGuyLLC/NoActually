@@ -1,8 +1,8 @@
 // Quick glance: the small window under the menu bar icon. The three answers you'd open the app
-// for (could it replace you, how you catch it, how you brief it) and your goal, nothing more.
+// for (could it replace you, do you make it guess, do you catch it) and your goal, nothing more.
 import type { GoalStatus, Meta, Stats } from "../api";
 import { type Html, html, num } from "../html";
-import { briefTier, landedPct, tierName, tierOf } from "../meta";
+import { briefTier, catchTier, landedPct, tierName } from "../meta";
 import { TAB_ICONS, wordmarkView } from "./chrome";
 import { goalTitle } from "./improve";
 
@@ -11,26 +11,24 @@ const topView = () =>
 
 const openView = (label = "Open app") => html`<div class="g-actions"><button data-action="open-main">${label}</button></div>`;
 
-/** The score, its tier, and how far the next tier is. */
-function scoreView(s: Stats, meta: Meta): Html {
-  const o = s.overall;
-  if (o.score == null)
-    return html`<div class="g-tier"><span class="muted small">${o.to_rank} more ${o.to_rank === 1 ? "task" : "tasks"} to get a score</span></div>`;
-  const next = tierOf(meta, o.next_tier);
-  return html`<div class="g-tier">
-    <span class="tier-label"><span>Score ${o.score}</span>${tierName(meta, o.tier)}</span>
-    ${next ? html`<span class="bar-bg" role="img" aria-label="Score ${o.score} of ${next.floor}"><i data-w="${Math.min(100, Math.round((100 * o.score) / next.floor))}"></i></span>` : ""}
-    <span class="muted small">${next ? `${next.name} at ${next.floor}` : "Top tier"}</span>
-  </div>`;
-}
+const plural = (n: number, one: string) => `${num(n)} ${n === 1 ? one : `${one}s`}`;
 
-/** Catches and briefs side by side, each in a word or two. */
-function pairView(s: Stats, meta: Meta): Html {
-  const tier = briefTier(meta, s.briefs.tier);
-  const week = s.catches_last_7d ? `${s.catches_last_7d}× this week` : "None this week";
-  return html`<div class="g-pair">
-    <div><span class="eyebrow">Catches</span><span class="g-n"><b class="you">${num(s.catches)}</b> <span class="muted">vs</span> <b class="ai">${num(s.humbled)}</b></span><span class="muted small">${week}</span></div>
-    <div><span class="eyebrow">Briefs</span><span class="g-n"><b>${tier ? tier.name : "Not ranked"}</b></span><span class="muted small">${s.briefs.tasks ? `${landedPct(s.briefs)}% landed` : "No tasks yet"}</span></div>
+/** One question, its one-word answer, and a line on why. `word` is null until it's ranked. */
+const answerView = (ask: string, word: string | null, why: string) =>
+  html`<div class="g-ans"><span class="g-ask">${ask}</span><div class="g-line"><span class="g-word${word ? "" : " maybe"}">${word ?? "Hmm."}</span><span class="muted small">${why}</span></div></div>`;
+
+/** The three answers the app gives, as the scorecard words them, over the last 28 days. */
+function answersView(s: Stats, meta: Meta): Html {
+  const o = s.overall;
+  const replace = o.score == null ? `${plural(o.to_rank, "more task")} to get a score` : `Score ${o.score} · ${tierName(meta, o.tier)}`;
+  const brief = briefTier(meta, s.briefs.tier);
+  const guess = brief ? `${landedPct(s.briefs)}% landed · ${brief.name}` : `${plural(s.briefs.to_rank, "more task")} to get ranked`;
+  const caught = catchTier(meta, o.catch_tier);
+  const check = caught ? `You ${num(o.catches)} vs it ${num(o.humbled)} · ${caught.name}` : `${plural(o.to_rank, "more task")} to get ranked`;
+  return html`<div class="g-answers">
+    ${answerView("Could AI replace you?", o.score == null ? null : o.verdict === "no" ? "No." : "Hmm.", replace)}
+    ${answerView("Do you make it guess?", brief?.verdict ?? null, guess)}
+    ${answerView("Do you catch its mistakes?", caught?.verdict ?? null, check)}
   </div>`;
 }
 
@@ -52,12 +50,9 @@ function goalView(st: GoalStatus | null, meta: Meta): Html | "" {
 }
 
 export function glanceView(s: Stats, meta: Meta, goal: GoalStatus | null = null): Html {
-  const no = s.overall.verdict === "no";
   return html`<div class="glance">
     ${topView()}
-    <div class="g-q">Could AI replace you?</div>
-    <div class="g-row"><div class="no sm${no ? "" : " maybe"}">${no ? "No." : "Hmm."}</div>${scoreView(s, meta)}</div>
-    ${pairView(s, meta)}
+    ${answersView(s, meta)}
     ${goalView(goal, meta)}
     ${openView()}
   </div>`;

@@ -20,7 +20,9 @@ mod tier;
 pub use brief::{check, read_prompt, BriefTier, Check, Grade, Prompt, Signal, Signals, Steer, MIN_BRIEFS, WINDOW_DAYS};
 pub use model::{normalize_model, Model};
 pub use redact::{redact, snippet, SNIPPET_CHARS};
-pub use tier::{Answer, Score, Tier, UnknownTier, Window, CATCH_PROOF, DIRECTION_WEIGHT, HUMBLED_BASE, HUMBLED_COST};
+pub use tier::{
+    Answer, CatchTier, Score, Tier, UnknownTier, Window, CATCH_PROOF, DIRECTION_WEIGHT, HUMBLED_BASE, HUMBLED_COST,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -176,7 +178,9 @@ impl Verdict {
 /// 2: placeholder replies are skipped and messages fall back to the chat's model.
 /// 3: approvals ("No, that's fine") aren't pushback; the AI's admission no longer picks the category.
 /// 4: briefs and steering are counted (see [`read_prompt`]), so history is re-read to fill them in.
-pub const RULES_VERSION: u32 = 4;
+/// 5: "you'll know it's fixed when…" says what done is; "in the logs" alone no longer shows proof;
+///    "we want them to come back" says why.
+pub const RULES_VERSION: u32 = 5;
 
 /// Tools write placeholder ids for replies no model wrote (Claude Code's "<synthetic>" for errors,
 /// interruptions and "No response requested").

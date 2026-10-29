@@ -3,7 +3,8 @@
 use crate::{Result, Store};
 use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, Timelike};
 use engine::{
-    Answer, BriefTier, Category, Grade, Label, Score, Signal, Signals, Steer, Tier, Window, MIN_BRIEFS, WINDOW_DAYS,
+    Answer, BriefTier, CatchTier, Category, Grade, Label, Score, Signal, Signals, Steer, Tier, Window, MIN_BRIEFS,
+    WINDOW_DAYS,
 };
 use rusqlite::{params_from_iter, Connection};
 use serde::{Deserialize, Serialize};
@@ -112,6 +113,10 @@ pub struct Overall {
     pub next_tier: Option<Tier>,
     /// The headline answer.
     pub verdict: Answer,
+    /// "Do you catch its mistakes?", from judgment.
+    pub catch_tier: Option<CatchTier>,
+    /// The catch tier above it.
+    pub next_catch_tier: Option<CatchTier>,
     /// Times you caught it in the window.
     pub catches: i64,
     /// Times it caught you in the window.
@@ -593,6 +598,7 @@ fn overall(b: &Briefs, catches: i64, humbled: i64) -> Overall {
 fn overall_of(continued: i64, landed: i64, catches: i64, humbled: i64) -> Overall {
     let score = Score::of(Window { continued, landed, catches, humbled });
     let tier = score.map(|s| s.tier);
+    let catch_tier = score.map(|s| CatchTier::for_judgment(s.judgment));
     Overall {
         score: score.map(|s| s.score),
         direction: score.map(|s| s.direction),
@@ -600,6 +606,8 @@ fn overall_of(continued: i64, landed: i64, catches: i64, humbled: i64) -> Overal
         tier,
         next_tier: tier.and_then(Tier::next),
         verdict: Answer::for_tier(tier),
+        catch_tier,
+        next_catch_tier: catch_tier.and_then(CatchTier::next),
         catches,
         humbled,
         to_rank: (MIN_BRIEFS - continued).max(0),

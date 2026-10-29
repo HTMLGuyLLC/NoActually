@@ -48,6 +48,16 @@ const EXAMPLES: &[(&str, &[Signal])] = &[
     ("send the report at 9 a.m.", &[]),
     ("use pnpm instead of npm", &[]),
     ("I'm 100% sure this has to do with caching", &[]),
+    // Where to look once it's done isn't proof of what's wrong.
+    (
+        "Fix the thing in index.php, but don't touch index2.php and you'll know you fixed it when there's no error in the logs",
+        &[Spot, Done, Limits],
+    ),
+    ("it's done once the page loads in under a second", &[Done]),
+    ("we'll know it works if the checkout email arrives", &[Done]),
+    ("see the logs, it keeps crashing", &[Proof]),
+    ("make the signup emails friendlier, we want them to come back", &[Why]),
+    ("I want you to rename it", &[]),
     ("the login needs to be fixed", &[]),
     ("when the user clicks save, the client sends a bad request", &[]),
     ("Since the last update the app is slow", &[]),

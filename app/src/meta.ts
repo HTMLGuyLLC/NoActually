@@ -24,6 +24,11 @@ export const briefTierRanges = (meta: Meta): (BriefTier & { range: string })[] =
 
 export const briefTier = (meta: Meta, id: string | null): BriefTier | undefined => meta.brief_tiers.find((t) => t.id === id);
 
+/** Catch tiers top-down: "90+", "75–89", … (judgment, out of 100). */
+export const catchTierRanges = (meta: Meta): (BriefTier & { range: string })[] => withRanges(meta.catch_tiers, (f) => `${f}+`);
+
+export const catchTier = (meta: Meta, id: string | null): BriefTier | undefined => meta.catch_tiers.find((t) => t.id === id);
+
 export const steerTitle = (meta: Meta, id: string): string => meta.steers.find((s) => s.id === id)?.title ?? id;
 
 /** A whole percent of `n` in `total`; 0 when there's nothing to divide. */

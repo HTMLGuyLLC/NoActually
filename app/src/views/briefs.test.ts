@@ -86,8 +86,7 @@ describe("briefs on the scorecard and the glance", () => {
   });
 
   it("names the brief tier in the glance once ranked", () => {
-    expect(glanceView(stats(), meta).value).toContain("<b>Architect</b>");
-    expect(glanceView(stats(), meta).value).toContain("95% landed");
-    expect(glanceView(stats({ briefs: briefs({ tier: null }) }), meta).value).toContain("Not ranked");
+    expect(glanceView(stats(), meta).value).toContain('<span class="g-word">Rarely.</span><span class="muted small">95% landed · Architect</span>');
+    expect(glanceView(stats({ briefs: briefs({ tier: null, to_rank: 3 }) }), meta).value).toContain("3 more tasks to get ranked");
   });
 });

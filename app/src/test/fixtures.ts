@@ -26,6 +26,12 @@ export const meta: Meta = {
     { id: "tech_lead", name: "Tech lead", floor: 80, verdict: "Sometimes." },
     { id: "architect", name: "Architect", floor: 90, verdict: "Rarely." },
   ],
+  catch_tiers: [
+    { id: "autopilot", name: "Autopilot", floor: 0, verdict: "Rarely." },
+    { id: "spot_checker", name: "Spot-checker", floor: 50, verdict: "Sometimes." },
+    { id: "reviewer", name: "Reviewer", floor: 75, verdict: "Usually." },
+    { id: "hawk_eyed", name: "Hawk-eyed", floor: 90, verdict: "Always." },
+  ],
   min_briefs: 10,
   brief_window_days: 28,
   signals: [
@@ -88,6 +94,8 @@ export const overall = (over: Partial<Overall> = {}): Overall => ({
   tier: "sharp_eyed",
   next_tier: "irreplaceable",
   verdict: "no",
+  catch_tier: "hawk_eyed",
+  next_catch_tier: null,
   catches: 41,
   humbled: 2,
   to_rank: 0,

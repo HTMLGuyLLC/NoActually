@@ -163,7 +163,33 @@
   "min_week": 5,
   "goal_weeks": 4,
   "humbled_cost": 5,
-  "humbled_base": 30
+  "humbled_base": 30,
+  "catch_tiers": [
+   {
+    "id": "autopilot",
+    "name": "Autopilot",
+    "floor": 0,
+    "verdict": "Rarely."
+   },
+   {
+    "id": "spot_checker",
+    "name": "Spot-checker",
+    "floor": 50,
+    "verdict": "Sometimes."
+   },
+   {
+    "id": "reviewer",
+    "name": "Reviewer",
+    "floor": 75,
+    "verdict": "Usually."
+   },
+   {
+    "id": "hawk_eyed",
+    "name": "Hawk-eyed",
+    "floor": 90,
+    "verdict": "Always."
+   }
+  ]
  },
  "stats": {
   "first_day": "2026-04-01",
@@ -596,6 +622,8 @@
    "tier": "sharp_eyed",
    "next_tier": "irreplaceable",
    "verdict": "no",
+   "catch_tier": "reviewer",
+   "next_catch_tier": "hawk_eyed",
    "catches": 52,
    "humbled": 1,
    "to_rank": 0

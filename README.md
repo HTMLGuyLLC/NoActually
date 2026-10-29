@@ -33,7 +33,7 @@ You correct your AI all day: the function that doesn't exist, the instruction it
 |---|---|---|---|
 | 🧠 | **Could AI replace you?** | Your overall score, 0 to 100, from both questions below | Rubber stamp → Coworker → Sharp-eyed → **Irreplaceable** |
 | 🎯 | ↳ **Do you make it guess?** | How often your tasks land without you adding, clarifying or starting over | Vibes only → Ticket writer → Tech lead → **Architect** |
-| 🧐 | ↳ **Do you catch its mistakes?** | Who corrects whom: you catching it, or it catching you | You 41 · It 2 |
+| 🧐 | ↳ **Do you catch its mistakes?** | Who corrects whom: you catching it, or it catching you | Autopilot → Spot-checker → Reviewer → **Hawk-eyed** |
 
 Better prompts mean fewer mistakes to catch, and that never costs you: once you've caught it a few times (proof you check its work), more catches add nothing.
 
@@ -46,7 +46,7 @@ Better prompts mean fewer mistakes to catch, and that never costs you: once you'
 3. That's it. It backfills your history, then keeps score as you work, from your menu bar (Mac) or system tray (Windows and Linux). Prefer an ordinary app that quits when you close it? Turn off **Keep running in the menu bar** in Settings.
 
 <p align="center">
-  <img src="docs/screenshot-glance.png" alt="The menu bar quick glance: the verdict, your score and tier, your catches versus the AI's, and your brief tier" width="300">
+  <img src="docs/screenshot-glance.png" alt="The menu bar quick glance: the three questions, each answered in a word with why, and your goal" width="300">
 </p>
 
 ## What you get
@@ -168,6 +168,15 @@ judgment  = 100, minus 5 for each 1% of your tasks where the AI had to correct y
 | Sharp-eyed | 80–89 | No. |
 | Coworker | 65–79 | No. |
 | Rubber stamp | under 65 | Hmm. |
+
+Each question below the score gets a one-word answer too. Do you make it guess? goes by how many tasks landed (next section). Do you catch its mistakes? goes by judgment:
+
+| Catch tier | Judgment | Answer |
+|---|---|---|
+| Hawk-eyed | 90+ | Always. |
+| Reviewer | 75–89 | Usually. |
+| Spot-checker | 50–74 | Sometimes. |
+| Autopilot | under 50 | Rarely. |
 
 A few things this gets right on purpose:
 - **Briefing better never costs you.** Past 3 catches, more catches add nothing, so an AI that makes fewer mistakes because you briefed it well doesn't lower your score.

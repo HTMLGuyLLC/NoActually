@@ -6,14 +6,14 @@ import { data, say } from "./dom";
 import { errorText, filterLabel } from "./format";
 import { scheduleCheck } from "./learn/checker";
 import { lessonById } from "./learn/lessons";
-import { briefTier, tierName } from "./meta";
+import { briefTier, catchTier, tierName } from "./meta";
 import type { PickStat } from "./picker/picker";
 import { buildPickItems, sameFilter } from "./picker/picker";
 import { closePicker, openPicker, pickerOpen } from "./picker/popover";
 import { paintUpdate, render, scheduler } from "./render";
-import { drawBriefCard, drawCatchCard, drawShareCard } from "./share/cards";
+import { drawBriefCard, drawCatchCard, drawCatchesCard, drawShareCard } from "./share/cards";
 import { openShareDialog, type Post } from "./share/dialog";
-import { briefShareText, catchShareText, shareText } from "./share/share";
+import { briefShareText, catchesShareText, catchShareText, shareText } from "./share/share";
 import {
   isPeriod,
   isRange,
@@ -79,6 +79,12 @@ const briefsPost = (s: Stats, tier: BriefTier): Post => ({
   image: (shape) => drawBriefCard(s.briefs, tier, shape, when()),
 });
 
+const catchesPost = (s: Stats, tier: BriefTier): Post => ({
+  title: "Share your catches",
+  text: catchesShareText(s.overall, tier, when()),
+  image: (shape) => drawCatchesCard(s.overall, tier, shape, when()),
+});
+
 const catchPost = (e: HallEntry): Post => ({
   title: "Share this catch",
   text: catchShareText(e),
@@ -137,6 +143,11 @@ export const clickActions = {
     const { s, meta } = drawn();
     const tier = briefTier(meta, s.briefs.tier);
     if (tier) openShareDialog(briefsPost(s, tier), b, scheduler.flush);
+  },
+  "share-catches": (b) => {
+    const { s, meta } = drawn();
+    const tier = catchTier(meta, s.overall.catch_tier);
+    if (tier) openShareDialog(catchesPost(s, tier), b, scheduler.flush);
   },
   "share-catch": (b) => {
     const id = Number(data(b, "id"));

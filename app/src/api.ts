@@ -34,6 +34,8 @@ export type Meta = {
   sources: { id: string; name: string }[];
   /** Ascending by floor. */
   brief_tiers: BriefTier[];
+  /** "Do you catch its mistakes?" tiers, by judgment, ascending. */
+  catch_tiers: BriefTier[];
   /** Tasks with a follow-up, in the window, before a brief tier is given. */
   min_briefs: number;
   /** Days of tasks a brief tier looks at. */
@@ -119,6 +121,9 @@ export type Overall = {
   tier: string | null;
   next_tier: string | null;
   verdict: Verdict;
+  /** A catch tier id from `Meta.catch_tiers`, from judgment. */
+  catch_tier: string | null;
+  next_catch_tier: string | null;
   /** Catches and times it caught you, in the window. */
   catches: number;
   humbled: number;

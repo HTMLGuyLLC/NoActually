@@ -139,3 +139,18 @@ describe("clip", () => {
     expect(clip("abcdefghij", 5)).toBe("abcd…");
   });
 });
+
+describe("catches share", () => {
+  it("posts the catch tier's word and who caught whom, numbers only", async () => {
+    const { catchesShareText } = await import("./share");
+    const { catchLines } = await import("./cards");
+    const tier = { id: "hawk_eyed", name: "Hawk-eyed", floor: 90, verdict: "Always." };
+    expect(catchesShareText({ catches: 37, humbled: 1 }, tier)).toBe(
+      "Do I catch my AI's mistakes? Always. I caught it 37 times in the last 28 days, and it caught me 1 time. Catch tier: Hawk-eyed. Do you catch yours? https://github.com/HTMLGuyLLC/NoActually",
+    );
+    expect(catchLines({ catches: 1, humbled: 0, judgment: 96 }, "ever")).toEqual([
+      "I caught it 1 time ever. It caught me 0.",
+      "Judgment 96 of 100: I check its work, and it rarely has to correct me.",
+    ]);
+  });
+});

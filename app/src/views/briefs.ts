@@ -8,7 +8,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 
 /** "86% of your tasks in the last 28 days landed…", or how many more it takes to get ranked. */
 function becauseLine(b: Briefs, meta: Meta, when: string): Html {
   return briefTier(meta, b.tier)
-    ? html`<b>${landedPct(b)}%</b> of your tasks ${when} landed without you adding, clarifying or starting over.`
+    ? html`<b>${landedPct(b)}%</b> of your tasks ${when} landed without more from you.`
     : html`Give it <b>${plural(b.to_rank, "more task")}</b> with a follow-up to get ranked. One-shot tasks can't need steering, so they don't count.`;
 }
 
@@ -30,7 +30,7 @@ export function briefsSummaryView(b: Briefs, meta: Meta, still: boolean, when = 
       <div class="eyebrow">How you brief it</div>
       <h2 class="q">Do you make it guess?</h2>
       ${body}
-      <div class="share">${tier ? html`<button data-action="share-briefs">Share your briefs</button>` : ""}<button class="ghost" data-action="view" data-id="briefs">See briefs</button></div>
+      <div class="share"><button class="ghost" data-action="view" data-id="briefs">See briefs</button></div>
     </article>`;
 }
 
@@ -42,7 +42,7 @@ function verdictView(b: Briefs, meta: Meta, still: boolean, subject: Html | stri
       ${markView(b, meta, still)}
       <div class="because">${becauseLine(b, meta, when)}</div>
     </div>
-    ${gradesView(b, meta)}`;
+    ${b.tier ? html`<p class="muted small">The rest needed you to add more, clarify or start over.</p>` : ""}`;
 }
 
 /** One bar split into sharp / solid / thin, with the numbers spelled out beside it. */
@@ -118,7 +118,7 @@ export function briefsView(b: Briefs, meta: Meta, still: boolean, subject: Html 
       <div class="meter">${ladderView(b, meta)}</div>
     </section>
     <section class="split">
-      <div><div class="head"><h2>What your briefs carry</h2></div>${signalsView(b, meta)}</div>
+      <div><div class="head"><h2>What your briefs carry</h2></div>${gradesView(b, meta)}${signalsView(b, meta)}</div>
       <div><div class="head"><h2>Where steering went</h2></div>${steeringView(b, meta)}</div>
     </section>`;
 }

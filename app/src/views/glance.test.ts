@@ -24,12 +24,13 @@ describe("glanceView", () => {
     expect(m).not.toContain("Share");
   });
 
-  it("puts catches beside briefs", () => {
-    const m = glanceView(stats({ catches: 41, humbled: 2, catches_last_7d: 4 }), meta).value;
-    expect(m).toContain('<b class="you">41</b>');
-    expect(m).toContain('<b class="ai">2</b>');
-    expect(m).toContain("4× this week");
-    expect(glanceView(stats({ catches_last_7d: 0 }), meta).value).toContain("None this week");
+  it("asks the scorecard's three questions, each answered in a word with why", () => {
+    const m = glanceView(stats(), meta).value;
+    expect(m).toContain("Could AI replace you?");
+    expect(m).toContain('<span class="g-word">No.</span><span class="muted small">Score 86 · Sharp-eyed</span>');
+    expect(m).toContain("Do you make it guess?");
+    expect(m).toContain("Do you catch its mistakes?");
+    expect(m).toContain('<span class="g-word">Always.</span><span class="muted small">You 41 vs it 2 · Hawk-eyed</span>');
   });
 
   it("shows a goal only when there is one, with this week's number", () => {

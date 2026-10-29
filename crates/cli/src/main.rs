@@ -300,9 +300,10 @@ fn overall_lines(o: &store::Overall) -> Vec<String> {
                 engine::DIRECTION_WEIGHT
             ),
             format!(
-                "  Who corrects    you {} · it {} in {days} days → {judgment} ({}% of the score)",
+                "  Who corrects    you {} · it {} in {days} days → {judgment}{} ({}% of the score)",
                 o.catches,
                 o.humbled,
+                o.catch_tier.map_or(String::new(), |t| format!(", {}", t.name())),
                 100 - engine::DIRECTION_WEIGHT
             ),
         ],
@@ -443,13 +444,15 @@ mod tests {
             tier: Some(engine::Tier::SharpEyed),
             next_tier: Some(engine::Tier::Irreplaceable),
             verdict: Answer::No,
+            catch_tier: Some(engine::CatchTier::HawkEyed),
+            next_catch_tier: None,
             catches: 41,
             humbled: 2,
             to_rank: 0,
         };
         let text = overall_lines(&o).join("\n");
         assert!(text.starts_with("Could AI replace you? No. Sharp-eyed · score 86  (Irreplaceable at 90)"), "{text}");
-        assert!(text.contains("you 41 · it 2 in 28 days → 95 (30% of the score)"), "{text}");
+        assert!(text.contains("you 41 · it 2 in 28 days → 95, Hawk-eyed (30% of the score)"), "{text}");
         let unranked = store::Overall { score: None, tier: None, verdict: Answer::Hmm, to_rank: 4, ..o };
         assert!(overall_lines(&unranked)[0].contains("Not scored yet: 4 more tasks"));
     }

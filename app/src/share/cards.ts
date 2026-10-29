@@ -1,5 +1,5 @@
 // The share card images, drawn on a canvas on this machine. Always the light theme.
-import type { Briefs, BriefTier, Stats } from "../api";
+import type { Briefs, BriefTier, Overall, Stats } from "../api";
 import { landedPct, percent } from "../meta";
 import { clip, SHARE_URL_SHORT } from "./share";
 
@@ -342,6 +342,56 @@ function drawGradeBar(g: CanvasRenderingContext2D, b: BriefsCard, x: number, y: 
     at += part;
   }
   g.restore();
+}
+
+type CatchesCard = Pick<Overall, "catches" | "humbled" | "judgment">;
+
+const CATCH_QUESTION = "Do I catch my AI's mistakes?";
+export const catchLines = (o: CatchesCard, when = "in the last 28 days"): [string, string] => [
+  `I caught it ${o.catches} ${o.catches === 1 ? "time" : "times"} ${when}. It caught me ${o.humbled}.`,
+  `Judgment ${o.judgment ?? 0} of 100: I check its work, and it rarely has to correct me.`,
+];
+
+/** The catches card: "Do I catch my AI's mistakes?", the tier's answer, and who caught whom. */
+export async function drawCatchesCard(o: CatchesCard, tier: BriefTier, shape: CardShape = "wide", when = "in the last 28 days"): Promise<Blob> {
+  const { c, g } = await canvas(shape, SCORE_FONTS);
+  const { w } = CARD_SIZES[shape];
+  const { ink, muted, pen } = CARD_THEME;
+  const [caught, judged] = catchLines(o, when);
+  const hand = (size: number) => `400 ${size}px 'Gochi Hand'`;
+  g.textBaseline = "alphabetic";
+
+  if (shape === "portrait") {
+    const x = 96;
+    const inner = w - 2 * x;
+    drawWordmark(g, x, 150, 1.4);
+    g.fillStyle = ink;
+    fitFont(g, CATCH_QUESTION, heading, 84, inner, 48);
+    g.fillText(CATCH_QUESTION, x, 300);
+    drawMark(g, tier.verdict, pen, x - 8, 620, fitFont(g, tier.verdict, hand, 240, inner - 40, 120));
+    g.fillStyle = ink;
+    g.font = "500 40px 'Instrument Sans'";
+    for (const [i, l] of wrap(g, caught, inner, 2).entries()) g.fillText(l, x, 760 + i * 52);
+    g.fillStyle = muted;
+    for (const [i, l] of wrap(g, judged, inner, 2).entries()) g.fillText(l, x, 890 + i * 52);
+    drawPill(g, tier.name, x, 1010, 1.5);
+    drawFooter(g, `Do you catch yours?  ${SHARE_URL_SHORT}`, w, 1290, 1.4);
+    return png(c);
+  }
+
+  drawWordmark(g, 140, 78);
+  g.fillStyle = ink;
+  fitFont(g, CATCH_QUESTION, heading, 64, w - 280, 36);
+  g.fillText(CATCH_QUESTION, 140, 190);
+  drawMark(g, tier.verdict, pen, 140, 350, fitFont(g, tier.verdict, hand, 170, w - 320, 90));
+  g.fillStyle = ink;
+  g.font = "500 30px 'Instrument Sans'";
+  g.fillText(caught, 140, 440, w - 280);
+  g.fillStyle = muted;
+  g.fillText(judged, 140, 484, w - 280);
+  drawPill(g, tier.name, 140, 512);
+  drawFooter(g, `Do you catch yours?  ${SHARE_URL_SHORT}`, w, 612);
+  return png(c);
 }
 
 /** The briefs card: "Do I make my AI guess?", the tier's answer, and what landed. */

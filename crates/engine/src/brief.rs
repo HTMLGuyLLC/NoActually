@@ -468,7 +468,8 @@ static PROOF: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         rule("brief.proof.quote", r#""[^"\n]{6,200}""#),
         rule(
             "brief.proof.attached",
-            r"\[(?:image|pasted text) #\d+|\b(?:see|attached|in) (?:the )?(?:screenshot|image|screen ?shot|logs?|output|trace)\b",
+            // "No error in the logs" says where to look when it's done, not what went wrong.
+            r"\[(?:image|pasted text) #\d+|\b(?:see|attached) (?:the )?(?:screenshot|image|screen ?shot|logs?|output|trace)\b|\bin (?:the )?(?:screenshot|image|screen ?shot)\b",
         ),
     ]
 });
@@ -486,6 +487,10 @@ static DONE: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         rule(
             "brief.done.criteria",
             r"\b(?:done when|is done when|definition of done|acceptance criteria|success (?:looks like|means|criteria)|the result should|end result|expected (?:output|result|behaviou?r)|desired (?:output|result|behaviou?r)|so (?:that )?(?:i|we|users?|people) can)\b",
+        ),
+        rule(
+            "brief.done.know",
+            r"\b(?:you|we|i)(?:['’]ll| will) know\b[^.\n]{0,60}\b(?:when|once|if)\b|\b(?:fixed|done|working|works|finished) (?:when|once) (?:there|it|the|no|all|every|you|i|we)\b",
         ),
         rule(
             "brief.done.tests",
@@ -544,7 +549,7 @@ static WHY: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         ),
         rule(
             "brief.why.goal",
-            r"\b(?:the|my|our) (?:goal|point|reason|idea|aim|purpose|plan|intent|use case|problem|issue) (?:is|was|here)\b|(?m:^\s*(?:goal|context|background|why|problem|motivation|use case)\s*:)|\b(?:i'?m|we'?re) trying to\b|\bi want (?:to be able|users|people|it to)\b|\bwe (?:want|need) (?:this|it|to)\b|\bi need (?:this|it) (?:to|for|so)\b",
+            r"\b(?:the|my|our) (?:goal|point|reason|idea|aim|purpose|plan|intent|use case|problem|issue) (?:is|was|here)\b|(?m:^\s*(?:goal|context|background|why|problem|motivation|use case)\s*:)|\b(?:i'?m|we'?re) trying to\b|\bi want (?:to be able|users|people|it to)\b|\bwe (?:want|need) (?:this|it|to)\b|\b(?:we|i) (?:want|need) (?:them|everyone|people|customers|visitors|readers|folks) to\b|\bi need (?:this|it) (?:to|for|so)\b",
         ),
         rule(
             "brief.why.who",
