@@ -33,6 +33,12 @@ export const lessonById = (id: string | null): Lesson | undefined => LESSONS.fin
 
 export const trackOf = (id: string): Track | undefined => TRACKS.find((t) => t.lessons.some((l) => l.id === id));
 
+/** Whether a lesson teaches this signal or kind of steering. */
+export const teaches = (l: Lesson, key: "signal" | "steer", id: string): boolean => key in l.teaches && (l.teaches as Record<string, string>)[key] === id;
+
+/** The lesson that teaches a signal or a kind of steering. */
+export const lessonFor = (key: "signal" | "steer", id: string): Lesson | undefined => LESSONS.find((l) => teaches(l, key, id));
+
 /** The index of the right option, for any kind of question. */
 export const answerIndex = (q: Question): number => (q.kind === "missing" ? q.options.indexOf(q.answer) : q.answer);
 
@@ -55,7 +61,6 @@ export function recommended(b: Prompts | null, meta: Meta, done: readonly string
     .map((s) => s.id)
     .filter((s) => s !== "ai_wrong" && (b.steering[s] ?? 0) > 0)
     .sort((x, y) => (b.steering[y] ?? 0) - (b.steering[x] ?? 0));
-  const teaches = (l: Lesson, key: "signal" | "steer", id: string) => key in l.teaches && (l.teaches as Record<string, string>)[key] === id;
   for (const s of habits) {
     const l = left.find((x) => teaches(x, "signal", s));
     if (l) return l;

@@ -114,7 +114,7 @@ pub struct Overall {
     pub next_tier: Option<Tier>,
     /// The headline answer.
     pub verdict: Answer,
-    /// "Do you correction its mistakes?", from judgment.
+    /// "Do you correct its mistakes?", from judgment.
     pub correction_tier: Option<CorrectionTier>,
     /// The correction tier above it.
     pub next_correction_tier: Option<CorrectionTier>,
@@ -259,7 +259,12 @@ pub(crate) struct View<'a> {
     pub(crate) args: Vec<String>,
 }
 
-impl View<'_> {
+impl<'a> View<'a> {
+    /// Every row: no filter.
+    pub(crate) fn all(conn: &'a Connection) -> Self {
+        View { conn, clause: String::new(), args: vec![] }
+    }
+
     /// Runs `sql` (with `{w}` already holding the filter clause) binding the filter's values
     /// and then `extra`, in that order.
     pub(crate) fn rows<T>(
@@ -301,15 +306,24 @@ fn score_start(since: Option<NaiveDate>, today: NaiveDate) -> NaiveDate {
 fn totals(v: &View, scope: &View, today: NaiveDate, start: NaiveDate) -> Result<Totals> {
     let kinds = CORRECTION_KINDS.as_str();
     let week_ago = (today - Duration::days(6)).to_string();
-    let window = start.to_string();
+    let (window_corrections, window_humbled) = window_sums(scope, start)?;
     Ok(Totals {
         messages: v.sum("AND kind = 'message'", &[])?,
         corrections: v.sum(&format!("AND kind IN {kinds}"), &[])?,
         humbled: v.sum("AND kind = 'humbled'", &[])?,
         corrections_last_7d: scope.sum(&format!("AND kind IN {kinds} AND day >= ?"), &[&week_ago])?,
-        window_corrections: scope.sum(&format!("AND kind IN {kinds} AND day >= ?"), &[&window])?,
-        window_humbled: scope.sum("AND kind = 'humbled' AND day >= ?", &[&window])?,
+        window_corrections,
+        window_humbled,
     })
+}
+
+/// (corrections, humbled) from `start` on.
+fn window_sums(v: &View, start: NaiveDate) -> Result<(i64, i64)> {
+    let from = start.to_string();
+    Ok((
+        v.sum(&format!("AND kind IN {} AND day >= ?", *CORRECTION_KINDS), &[&from])?,
+        v.sum("AND kind = 'humbled' AND day >= ?", &[&from])?,
+    ))
 }
 
 fn day_range(v: &View) -> Result<(Option<String>, Option<String>)> {
@@ -412,7 +426,7 @@ fn weekly(v: &View) -> Result<Vec<WeekRow>> {
 fn models(v: &View) -> Result<Vec<ModelRow>> {
     let mut rows = model_counts(v)?;
     let sql = format!(
-        "SELECT provider, family, version, COUNT(*), COALESCE(SUM(messages >= 2), 0), COALESCE(SUM({}), 0)
+        "SELECT provider, family, version, COUNT(*), COALESCE(SUM({CONTINUED}), 0), COALESCE(SUM({}), 0)
          FROM tasks WHERE 1=1 {} GROUP BY provider, family, version",
         LANDED.as_str(),
         v.clause
@@ -500,6 +514,9 @@ pub(crate) fn pct(n: i64, total: i64) -> f64 {
     (1000.0 * n as f64 / total as f64).round() / 10.0
 }
 
+/// A task that went past its first message, as SQL over `tasks`.
+pub(crate) const CONTINUED: &str = "messages >= 2";
+
 /// `added + clarified + redo`: steering that was on you, not the AI.
 static ON_YOU: LazyLock<String> = LazyLock::new(|| {
     let cols: Vec<&str> = Steer::ALL.iter().filter(|c| c.is_on_you()).map(|c| c.as_str()).collect();
@@ -507,53 +524,69 @@ static ON_YOU: LazyLock<String> = LazyLock::new(|| {
 });
 
 /// A continued task that nothing on you steered, as SQL over `tasks`.
-pub(crate) static LANDED: LazyLock<String> = LazyLock::new(|| format!("(messages >= 2 AND {} = 0)", ON_YOU.as_str()));
+pub(crate) static LANDED: LazyLock<String> = LazyLock::new(|| format!("({CONTINUED} AND {} = 0)", ON_YOU.as_str()));
 
 /// One group of tasks: the signals their prompt carried, whether they continued, whether they landed.
 pub(crate) type Group = (Signals, bool, bool, i64);
 
 /// Counts over `v`; the tier's window (from `start`) over `scope`, the same filter without `since`.
 fn prompts(v: &View, scope: &View, start: NaiveDate) -> Result<Prompts> {
-    let landed = LANDED.as_str();
-    // At most 32 masks x 3 outcomes, so the per-signal math happens here, not in SQL.
-    let sql =
-        format!("SELECT signals, messages >= 2, {landed}, COUNT(*) FROM tasks WHERE 1=1 {} GROUP BY 1, 2, 3", v.clause);
-    let groups: Vec<Group> =
-        v.rows(&sql, &[], |r| Ok((Signals(r.get::<_, u8>(0)?), r.get(1)?, r.get(2)?, r.get(3)?)))?;
-    let mut b = Prompts::default();
+    let groups = task_groups(v)?;
+    let mut p = Prompts::default();
     for (signals, continued, landed, n) in &groups {
-        b.tasks += n;
+        p.tasks += n;
         if *continued {
-            b.continued += n;
+            p.continued += n;
         }
         if *landed {
-            b.landed += n;
+            p.landed += n;
         }
-        *b.grades.entry(Grade::of(*signals).as_str().to_string()).or_insert(0) += n;
-        for s in Signal::ALL.into_iter().filter(|s| signals.has(*s)) {
-            *b.signals.entry(s.as_str().to_string()).or_insert(0) += n;
-        }
+        tally(&mut p.grades, &mut p.signals, *signals, *n);
     }
+    for (c, n) in steer_totals(v)? {
+        p.steering.insert(c.as_str().to_string(), n);
+    }
+    (p.window_tasks, p.window_landed) = window_counts(scope, start)?;
+    p.tier = PromptTier::for_tasks(p.window_landed, p.window_tasks);
+    p.next_tier = p.tier.and_then(PromptTier::next);
+    p.to_rank = (MIN_PROMPTS - p.window_tasks).max(0);
+    p.tip = tip(&groups, p.tasks);
+    Ok(p)
+}
+
+/// Tasks grouped by the signals their prompt carried, whether they continued, whether they landed.
+/// At most 32 masks x 3 outcomes, so the per-signal math happens in Rust, not SQL.
+pub(crate) fn task_groups(v: &View) -> Result<Vec<Group>> {
+    let sql = format!(
+        "SELECT signals, {CONTINUED}, {}, COUNT(*) FROM tasks WHERE 1=1 {} GROUP BY 1, 2, 3",
+        LANDED.as_str(),
+        v.clause
+    );
+    v.rows(&sql, &[], |r| Ok((Signals(r.get::<_, u8>(0)?), r.get(1)?, r.get(2)?, r.get(3)?)))
+}
+
+/// Times each steering cause happened across the view's tasks, in [`Steer::ALL`] order.
+pub(crate) fn steer_totals(v: &View) -> Result<Vec<(Steer, i64)>> {
     let sums: Vec<String> = Steer::ALL.iter().map(|c| format!("COALESCE(SUM({}), 0)", c.as_str())).collect();
     let sql = format!("SELECT {} FROM tasks WHERE 1=1 {}", sums.join(", "), v.clause);
     let row =
         v.rows(&sql, &[], |r| (0..Steer::ALL.len()).map(|i| r.get::<_, i64>(i)).collect::<rusqlite::Result<Vec<_>>>())?;
-    for (c, n) in Steer::ALL.iter().zip(row.into_iter().flatten()) {
-        b.steering.insert(c.as_str().to_string(), n);
+    Ok(Steer::ALL.into_iter().zip(row.into_iter().flatten()).collect())
+}
+
+/// Adds `n` tasks to their grade and to each signal they carry.
+pub(crate) fn tally(grades: &mut BTreeMap<String, i64>, carried: &mut BTreeMap<String, i64>, signals: Signals, n: i64) {
+    *grades.entry(Grade::of(signals).as_str().to_string()).or_insert(0) += n;
+    for s in Signal::ALL.into_iter().filter(|s| signals.has(*s)) {
+        *carried.entry(s.as_str().to_string()).or_insert(0) += n;
     }
-    (b.window_tasks, b.window_landed) = window_counts(scope, start)?;
-    b.tier = PromptTier::for_tasks(b.window_landed, b.window_tasks);
-    b.next_tier = b.tier.and_then(PromptTier::next);
-    b.to_rank = (MIN_PROMPTS - b.window_tasks).max(0);
-    b.tip = tip(&groups, b.tasks);
-    Ok(b)
 }
 
 /// Continued tasks from `start` on, and how many landed.
 fn window_counts(v: &View, start: NaiveDate) -> Result<(i64, i64)> {
     let since = start.to_string();
     let sql = format!(
-        "SELECT COUNT(*), COALESCE(SUM({}), 0) FROM tasks WHERE messages >= 2 {} AND day >= ?",
+        "SELECT COUNT(*), COALESCE(SUM({}), 0) FROM tasks WHERE {CONTINUED} {} AND day >= ?",
         LANDED.as_str(),
         v.clause
     );
@@ -591,9 +624,9 @@ pub(crate) fn tip_for(groups: &[Group], s: Signal) -> Tip {
 static SOURCE_NAMES: LazyLock<Vec<(&'static str, &'static str)>> =
     LazyLock::new(|| sources::all().iter().map(|s| (s.id(), s.name())).collect());
 
-/// The overall score from the window's tasks (already in `b`) and corrections.
-fn overall(b: &Prompts, corrections: i64, humbled: i64) -> Overall {
-    overall_of(b.window_tasks, b.window_landed, corrections, humbled)
+/// The overall score from the window's tasks (already in `p`) and corrections.
+fn overall(p: &Prompts, corrections: i64, humbled: i64) -> Overall {
+    overall_of(p.window_tasks, p.window_landed, corrections, humbled)
 }
 
 fn overall_of(continued: i64, landed: i64, corrections: i64, humbled: i64) -> Overall {
@@ -618,12 +651,10 @@ fn overall_of(continued: i64, landed: i64, corrections: i64, humbled: i64) -> Ov
 impl Store {
     /// Just the overall score across all AI: a few queries, for goals and the tray.
     pub fn overall(&self, today: NaiveDate) -> Result<Overall> {
-        let v = View { conn: self.conn(), clause: String::new(), args: vec![] };
+        let v = View::all(self.conn());
         let start = score_start(None, today);
         let (continued, landed) = window_counts(&v, start)?;
-        let window = start.to_string();
-        let corrections = v.sum(&format!("AND kind IN {} AND day >= ?", *CORRECTION_KINDS), &[&window])?;
-        let humbled = v.sum("AND kind = 'humbled' AND day >= ?", &[&window])?;
+        let (corrections, humbled) = window_sums(&v, start)?;
         Ok(overall_of(continued, landed, corrections, humbled))
     }
 
@@ -706,18 +737,18 @@ mod tests {
 
     #[test]
     fn overall_mixes_the_window_and_waits_for_enough_tasks() {
-        let b = |continued, landed| Prompts {
+        let p = |continued, landed| Prompts {
             window_tasks: continued,
             window_landed: landed,
             to_rank: (MIN_PROMPTS - continued).max(0),
             ..Prompts::default()
         };
-        let o = overall(&b(150, 125), 41, 2);
+        let o = overall(&p(150, 125), 41, 2);
         assert_eq!(
             (o.score, o.tier, o.next_tier, o.verdict),
             (Some(86), Some(Tier::SharpEyed), Some(Tier::Irreplaceable), Answer::No)
         );
-        let o = overall(&b(4, 4), 9, 0);
+        let o = overall(&p(4, 4), 9, 0);
         assert_eq!(
             (o.score, o.tier, o.verdict, o.to_rank, o.corrections),
             (None, None, Answer::Hmm, MIN_PROMPTS - 4, 9)

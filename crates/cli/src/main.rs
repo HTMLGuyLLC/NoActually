@@ -197,7 +197,7 @@ fn run(cmd: Command, store: &mut Store, all: &[Box<dyn sources::Source>]) -> Res
             if json {
                 println!("{}", serde_json::to_string_pretty(&s)?);
             } else {
-                print_card(&s);
+                print_card(&s, filter.since);
             }
         }
         Command::Check { text } => {
@@ -242,12 +242,13 @@ fn print_sources(store: &Store, all: &[Box<dyn sources::Source>]) -> Result<()> 
     Ok(())
 }
 
-fn print_card(s: &store::Stats) {
+fn print_card(s: &store::Stats, since: Option<NaiveDate>) {
     if s.messages == 0 {
         println!("No messages yet. Allow a source and run `noactually sync`.");
         return;
     }
-    for line in overall_lines(&s.overall) {
+    let window = window_label(since);
+    for line in overall_lines(&s.overall, &window) {
         println!("{line}");
     }
     println!("  You vs AI       {} – {}  (all time)", s.corrections, s.humbled);
@@ -276,18 +277,22 @@ fn print_card(s: &store::Stats) {
             println!("    {:<24} {n}", c.title());
         }
     }
-    for line in prompt_lines(&s.prompts) {
+    for line in prompt_lines(&s.prompts, &window) {
         println!("{line}");
     }
 }
 
-/// "Could AI replace you?": the overall score and what it's made of.
-fn overall_lines(o: &store::Overall) -> Vec<String> {
+/// The span the score looks at: from `--since` when given, else the last [`engine::WINDOW_DAYS`] days.
+fn window_label(since: Option<NaiveDate>) -> String {
+    since.map_or_else(|| format!("in {} days", engine::WINDOW_DAYS), |d| format!("since {d}"))
+}
+
+/// "Could AI replace you?": the overall score and what it's made of, over `window`.
+fn overall_lines(o: &store::Overall, window: &str) -> Vec<String> {
     let verdict = match o.verdict {
         Answer::No => "No.",
         Answer::Hmm => "Maybe…",
     };
-    let days = engine::WINDOW_DAYS;
     match (o.score, o.tier, o.direction, o.judgment) {
         (Some(score), Some(tier), Some(direction), Some(judgment)) => vec![
             format!(
@@ -296,11 +301,11 @@ fn overall_lines(o: &store::Overall) -> Vec<String> {
                 o.next_tier.map_or(String::new(), |n| format!("  ({} at {})", n.name(), n.floor()))
             ),
             format!(
-                "  Your prompts    {direction}% of tasks landed in {days} days ({}% of the score)",
+                "  Your prompts    {direction}% of tasks landed {window} ({}% of the score)",
                 engine::DIRECTION_WEIGHT
             ),
             format!(
-                "  Who corrects    you {} · it {} in {days} days → {judgment}{} ({}% of the score)",
+                "  Who corrects    you {} · it {} {window} → {judgment}{} ({}% of the score)",
                 o.corrections,
                 o.humbled,
                 o.correction_tier.map_or(String::new(), |t| format!(", {}", t.name())),
@@ -308,7 +313,7 @@ fn overall_lines(o: &store::Overall) -> Vec<String> {
             ),
         ],
         _ => vec![format!(
-            "Could AI replace you? {verdict} Not scored yet: {} more tasks with a follow-up in {days} days.\n",
+            "Could AI replace you? {verdict} Not scored yet: {} more tasks with a follow-up {window}.\n",
             o.to_rank
         )],
     }
@@ -333,45 +338,45 @@ fn check_lines(text: &str) -> Vec<String> {
     out
 }
 
-/// The "Do you make it guess?" half of the card.
-fn prompt_lines(b: &store::Prompts) -> Vec<String> {
-    if b.tasks == 0 {
+/// The "Do you make it guess?" half of the card; the tier's rate is over `window`.
+fn prompt_lines(p: &store::Prompts, window: &str) -> Vec<String> {
+    if p.tasks == 0 {
         return Vec::new();
     }
-    let pct = |n: i64, of: i64| if of > 0 { 100 * n / of } else { 0 };
-    let recent = pct(b.window_landed, b.window_tasks);
-    let tier = match b.tier {
+    let pct = store::floor_pct;
+    let recent = pct(p.window_landed, p.window_tasks);
+    let tier = match p.tier {
         Some(t) => format!(
-            "{} {}  ({recent}% landed in {} days{})",
+            "{} {}  ({recent}% landed {window}{})",
             t.verdict(),
             t.name(),
-            engine::WINDOW_DAYS,
-            b.next_tier.map_or(String::new(), |n| format!("; {} at {}%", n.name(), n.floor()))
+            p.next_tier.map_or(String::new(), |n| format!("; {} at {}%", n.name(), n.floor()))
         ),
-        None => format!("Hmm. {} more tasks with a follow-up to get ranked", b.to_rank),
+        None => format!("Hmm. {} more tasks with a follow-up to get ranked", p.to_rank),
     };
     let mut out = vec![
         String::new(),
         format!("Do you make it guess? {tier}"),
         format!(
             "  Landed           {}% of {} tasks with a follow-up needed no adding, clarifying or redoing",
-            pct(b.landed, b.continued),
-            b.continued
+            pct(p.landed, p.continued),
+            p.continued
         ),
         format!(
-            "  Sharp prompts    {}%  ({}+ of the 5 signals)",
-            pct(b.grades.get("sharp").copied().unwrap_or(0), b.tasks),
-            engine::Grade::SHARP
+            "  Sharp prompts    {}%  ({}+ of the {} signals)",
+            pct(p.grades.get("sharp").copied().unwrap_or(0), p.tasks),
+            engine::Grade::SHARP,
+            engine::Signal::ALL.len()
         ),
         "\n  Your prompts".into(),
     ];
     for sig in engine::Signal::ALL {
-        let n = b.signals.get(sig.as_str()).copied().unwrap_or(0);
-        out.push(format!("    {:<20} {:>3}%  {}", sig.title(), pct(n, b.tasks), sig.hint()));
+        let n = p.signals.get(sig.as_str()).copied().unwrap_or(0);
+        out.push(format!("    {:<20} {:>3}%  {}", sig.title(), pct(n, p.tasks), sig.hint()));
     }
     out.push("\n  Steering".into());
     for c in engine::Steer::ALL {
-        out.push(format!("    {:<20} {}", c.title(), b.steering.get(c.as_str()).copied().unwrap_or(0)));
+        out.push(format!("    {:<20} {}", c.title(), p.steering.get(c.as_str()).copied().unwrap_or(0)));
     }
     out
 }
@@ -450,11 +455,17 @@ mod tests {
             humbled: 2,
             to_rank: 0,
         };
-        let text = overall_lines(&o).join("\n");
+        let text = overall_lines(&o, &window_label(None)).join("\n");
         assert!(text.starts_with("Could AI replace you? No. Sharp-eyed · score 86  (Irreplaceable at 90)"), "{text}");
         assert!(text.contains("you 41 · it 2 in 28 days → 95, Hawk-eyed (30% of the score)"), "{text}");
         let unranked = store::Overall { score: None, tier: None, verdict: Answer::Hmm, to_rank: 4, ..o };
-        assert!(overall_lines(&unranked)[0].contains("Not scored yet: 4 more tasks"));
+        assert!(overall_lines(&unranked, &window_label(None))[0].contains("Not scored yet: 4 more tasks"));
+        let since = window_label(Some("2026-09-01".parse().unwrap()));
+        let text = overall_lines(&o, &since).join("\n");
+        assert!(text.contains("83% of tasks landed since 2026-09-01"), "{text}");
+        assert!(text.contains("you 41 · it 2 since 2026-09-01 →"), "{text}");
+        assert!(!text.contains("28 days"), "{text}");
+        assert!(overall_lines(&unranked, &since)[0].contains("with a follow-up since 2026-09-01"));
     }
 
     #[test]
@@ -474,12 +485,15 @@ mod tests {
 
     #[test]
     fn prompt_lines_say_the_tier_or_how_far_off_it_is() {
-        assert!(prompt_lines(&store::Prompts::default()).is_empty(), "nothing before the first task");
+        assert!(
+            prompt_lines(&store::Prompts::default(), &window_label(None)).is_empty(),
+            "nothing before the first task"
+        );
         let mut b = store::Prompts { tasks: 10, continued: 8, landed: 6, to_rank: 2, ..Default::default() };
         b.grades.insert("sharp".into(), 3);
         b.signals.insert("why".into(), 5);
         b.steering.insert("added".into(), 1);
-        let text = prompt_lines(&b).join("\n");
+        let text = prompt_lines(&b, &window_label(None)).join("\n");
         assert!(text.contains("Do you make it guess? Hmm. 2 more tasks with a follow-up to get ranked"), "{text}");
         assert!(text.contains("Landed           75% of 8 tasks with a follow-up"), "{text}");
         assert!(text.contains("Sharp prompts    30%"), "{text}");
@@ -488,7 +502,11 @@ mod tests {
         b.tier = Some(engine::PromptTier::TechLead);
         b.next_tier = Some(engine::PromptTier::Architect);
         (b.window_tasks, b.window_landed) = (40, 34);
-        assert!(prompt_lines(&b)[1].ends_with("Sometimes. Tech lead  (85% landed in 28 days; Architect at 90%)"));
+        assert!(prompt_lines(&b, &window_label(None))[1]
+            .ends_with("Sometimes. Tech lead  (85% landed in 28 days; Architect at 90%)"));
+        let since = window_label(Some("2026-09-01".parse().unwrap()));
+        assert!(prompt_lines(&b, &since)[1]
+            .ends_with("Sometimes. Tech lead  (85% landed since 2026-09-01; Architect at 90%)"));
     }
 
     #[test]

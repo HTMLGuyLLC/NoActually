@@ -1,18 +1,18 @@
 // Draws the current view into #app, keeping keyboard focus where it was.
 import { api, demo } from "./api";
 import { captureFocus, must, restoreFocus } from "./dom";
-import { ago, errorText, isFiltered, listNames } from "./format";
+import { ago, errorText, isFiltered, listNames, subjectText } from "./format";
 import { type Html, html } from "./html";
 import { refreshCheck } from "./learn/checker";
 import { closePicker } from "./picker/popover";
 import { createScheduler, isUserBusy } from "./scheduler";
-import { isGlance, periodSince, setAllModels, setCurrent, setLastPromptTier, setLastVerdict, setMeta, state } from "./state";
+import { isGlance, periodSince, setAllModels, setCurrent, setLastCorrectionTier, setLastPromptTier, setLastVerdict, setMeta, state } from "./state";
 import { updateBanner, updateLine } from "./update";
 import { coverage, headerView, statusPillView } from "./views/chrome";
 import { emptyGlanceView, glanceView } from "./views/glance";
 import { improveView } from "./views/improve";
 import { learnView } from "./views/learn";
-import { modelPicker, onboardingView, scorecardView, subjectText } from "./views/scorecard";
+import { modelPicker, onboardingView, scorecardView } from "./views/scorecard";
 import { settingsView } from "./views/settings";
 import { sourcesView, watchingNames } from "./views/sources";
 
@@ -56,7 +56,7 @@ async function view(): Promise<Html> {
       stats: s,
       progress,
       range: state.range,
-      subject: subjectText({ filter: state.filter, meta }),
+      subject: subjectText(state.filter, meta),
       picker: modelPicker({ filter: state.filter, meta }),
       filtered: isFiltered(state.filter),
     });
@@ -68,9 +68,11 @@ async function view(): Promise<Html> {
       period: state.period,
       still: s.overall.verdict === state.lastVerdict,
       promptsStill: s.prompts.tier === state.lastPromptTier,
+      correctionsStill: s.overall.correction_tier === state.lastCorrectionTier,
     });
     setLastVerdict(s.overall.verdict);
     setLastPromptTier(s.prompts.tier);
+    setLastCorrectionTier(s.overall.correction_tier);
   } else body = onboardingView(await watching());
   const banner = state.update ? updateBanner(state.update, state.laterFor) : "";
   return html`<div class="wrap">${headerView(state.tab, state.status, demo, coverage(state.current))}<div id="update-slot">${banner}</div>${body}</div>`;
@@ -99,13 +101,23 @@ async function draw(): Promise<void> {
 export const scheduler = createScheduler({ isBusy: () => isUserBusy(root), draw });
 export const render = scheduler.render;
 
+/** What can hold focus in the sync pill. */
+const PILL_CONTROLS = [".sync-now", ".sync-bad", ".sync-text"];
+
 /** Redraws only the sync status (pill and Settings line), so a check starting never interrupts anything. */
 export function paintStatus(): void {
   const pill = root.querySelector(".sync-pill");
   if (pill) {
-    const hadFocus = pill.contains(document.activeElement);
+    // The pill itself isn't focusable: put focus back on the same kind of control inside the new one.
+    const active = document.activeElement;
+    const hadFocus = pill.contains(active);
+    const kind = PILL_CONTROLS.find((c) => active?.matches(c));
     pill.outerHTML = statusPillView(state.status, demo, coverage(state.current)).value;
-    if (hadFocus) root.querySelector<HTMLElement>(".sync-pill")?.focus();
+    if (hadFocus) {
+      const next = root.querySelector(".sync-pill");
+      const same = kind ? next?.querySelector<HTMLElement>(kind) : null;
+      (same ?? next?.querySelector<HTMLElement>("button, [tabindex]"))?.focus();
+    }
   }
   const line = root.querySelector("#sync-line");
   if (line) line.textContent = `New chats last checked ${ago(state.status.last_sync)}.`;

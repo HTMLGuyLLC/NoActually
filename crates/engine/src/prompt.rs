@@ -198,7 +198,7 @@ impl Steer {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum Prompt {
     /// Started a task.
-    Prompt {
+    Task {
         /// The specifics it carries.
         signals: Signals,
         /// Ids of the rules that fired: what started the task, then one per signal.
@@ -268,14 +268,18 @@ pub fn check(text: &str) -> Check {
     let norm = normalize_quotes(text.trim());
     let t = norm.as_str();
     let not_a_prompt = t.is_empty() || first(&CHATTER, t).is_some() || is_question(t);
-    let Prompt::Prompt { signals, mut rules } = prompt(t, "task.first") else {
-        unreachable!("prompt() always prompts")
-    };
+    let (signals, mut rules) = carried(t, "task.first");
     rules.remove(0);
     Check { signals, grade: Grade::of(signals), rules, not_a_prompt }
 }
 
 fn prompt(t: &str, started_by: &'static str) -> Prompt {
+    let (signals, rules) = carried(t, started_by);
+    Prompt::Task { signals, rules }
+}
+
+/// The specifics `t` carries, and the rules that fired: `started_by` first, then one per signal.
+fn carried(t: &str, started_by: &'static str) -> (Signals, Vec<&'static str>) {
     let mut signals = Signals::default();
     let mut rules = vec![started_by];
     // Pasted material shows the problem, but its words aren't yours: the rest is graded without it.
@@ -294,7 +298,7 @@ fn prompt(t: &str, started_by: &'static str) -> Prompt {
             rules.push(m.rule);
         }
     }
-    Prompt::Prompt { signals, rules }
+    (signals, rules)
 }
 
 /// "What does this do?" and "explain X": asking, not handing over work.
@@ -560,104 +564,6 @@ static WHY: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         rule("prompt.why.now", r"\b(?:currently|at the moment|as of now)\b"),
     ]
 });
-
-/// How well your prompts land: of the tasks in the last [`WINDOW_DAYS`] that went past their first
-/// message, the share you never had to add to, clarify or redo. A one-message task can't need
-/// steering, so it doesn't count either way. The AI getting it wrong doesn't count against you
-/// (that's a correction). Ordered lowest first.
-///
-/// The floors come from one heavy user's history (tasks that continued landed 83–90% of the time
-/// over 28 days, typically 86%). Public chat logs can't set them: casual chats almost never steer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PromptTier {
-    /// Under 70% landed.
-    VibesOnly,
-    /// 70% or more.
-    TicketWriter,
-    /// 80% or more.
-    TechLead,
-    /// 90% or more.
-    Architect,
-}
-
-/// Days of tasks a prompt tier looks at: long enough that one "also…" doesn't swing it.
-pub const WINDOW_DAYS: i64 = 28;
-
-/// Tasks that continued, in the window, needed before a tier is given; fewer says too little.
-pub const MIN_PROMPTS: i64 = 10;
-
-impl PromptTier {
-    /// Every tier, ascending by floor.
-    pub const ALL: [PromptTier; 4] =
-        [PromptTier::VibesOnly, PromptTier::TicketWriter, PromptTier::TechLead, PromptTier::Architect];
-
-    /// Percent of the window's continued tasks that must land.
-    pub const fn floor(self) -> i64 {
-        match self {
-            PromptTier::VibesOnly => 0,
-            PromptTier::TicketWriter => 70,
-            PromptTier::TechLead => 80,
-            PromptTier::Architect => 90,
-        }
-    }
-
-    /// Stable id, as stored and serialized.
-    pub const fn id(self) -> &'static str {
-        match self {
-            PromptTier::VibesOnly => "vibes_only",
-            PromptTier::TicketWriter => "ticket_writer",
-            PromptTier::TechLead => "tech_lead",
-            PromptTier::Architect => "architect",
-        }
-    }
-
-    /// Display name.
-    pub const fn name(self) -> &'static str {
-        match self {
-            PromptTier::VibesOnly => "Vibes only",
-            PromptTier::TicketWriter => "Ticket writer",
-            PromptTier::TechLead => "Tech lead",
-            PromptTier::Architect => "Architect",
-        }
-    }
-
-    /// The answer to "Do you make it guess?" at this tier.
-    pub const fn verdict(self) -> &'static str {
-        match self {
-            PromptTier::VibesOnly => "Constantly.",
-            PromptTier::TicketWriter => "Often.",
-            PromptTier::TechLead => "Sometimes.",
-            PromptTier::Architect => "Rarely.",
-        }
-    }
-
-    /// The tier reached when `landed` of `tasks` landed, or `None` below [`MIN_PROMPTS`] tasks.
-    pub fn for_tasks(landed: i64, tasks: i64) -> Option<PromptTier> {
-        (tasks >= MIN_PROMPTS)
-            .then(|| PromptTier::ALL.into_iter().rev().find(|t| landed * 100 >= t.floor() * tasks))
-            .flatten()
-    }
-
-    /// The tier above this one, if any.
-    pub fn next(self) -> Option<PromptTier> {
-        PromptTier::ALL.into_iter().find(|t| *t > self)
-    }
-}
-
-impl std::fmt::Display for PromptTier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.name())
-    }
-}
-
-impl std::str::FromStr for PromptTier {
-    type Err = crate::UnknownTier;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        PromptTier::ALL.into_iter().find(|t| t.id() == s).ok_or_else(|| crate::UnknownTier(s.to_string()))
-    }
-}
 
 #[cfg(test)]
 #[path = "prompt_tests.rs"]

@@ -1,6 +1,7 @@
 // The prompt checker's live result: grades the draft with the Rust rules as you type. The draft
 // lives only in memory (state.draft); nothing is saved or logged.
 import { api, demo } from "../api";
+import { gradeTitle, hasSignal } from "../meta";
 import { state } from "../state";
 import { checkResultView } from "../views/learn";
 
@@ -26,8 +27,8 @@ export async function refreshCheck(root: ParentNode): Promise<void> {
     const c = await api.checkPrompt(text);
     if (mine !== seq) return;
     out.innerHTML = checkResultView(meta, c, false).value;
-    const count = meta.signals.filter((_, i) => (c.signals & (1 << i)) !== 0).length;
-    const summary = `${meta.grades.find((g) => g.id === c.grade)?.title ?? c.grade}, carries ${count} of ${meta.signals.length}.`;
+    const count = meta.signals.filter((_, i) => hasSignal(c.signals, i)).length;
+    const summary = `${gradeTitle(meta, c.grade)}, carries ${count} of ${meta.signals.length}.`;
     const status = root.querySelector("#check-status");
     if (status && summary !== announced) {
       announced = summary;

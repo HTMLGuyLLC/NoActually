@@ -1,6 +1,6 @@
 // The frame around every page: wordmark, sync status and tabs.
 import type { Stats, SyncStatus } from "../api";
-import { ago } from "../format";
+import { ago, fmtDay } from "../format";
 import { type Html, html, raw } from "../html";
 import { TABS, type Tab } from "../state";
 
@@ -30,7 +30,7 @@ export const TAB_ICONS: Record<Tab, ReturnType<typeof raw>> = {
 
 const REFRESH = raw(`<svg class="refresh" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>`);
 
-const day = (iso: string) => new Date(`${iso}T00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+const day = (iso: string) => fmtDay(iso, { month: "short", day: "numeric", year: "numeric" });
 
 /** "Oct 2, 2026 – Oct 29, 2026 · 2,083 messages": what the numbers cover, for the status's tooltip. */
 export function coverage(s: Pick<Stats, "first_day" | "last_day" | "messages"> | null): string {
@@ -83,4 +83,10 @@ export function ladderView(o: {
       ? html`<li class="on" aria-current="true"><span>${t.name}</span><span><b class="at">${o.at}</b><span class="sr-only">, you're at ${o.at}. Range</span> · ${t.range}</span></li>`
       : html`<li><span>${t.name}</span><span>${t.range}</span></li>`;
   return html`<ol class="ladder" aria-label="${o.label}">${o.tiers.map(row)}</ol>${o.on ? "" : html`<p class="hand-note">${o.unranked}</p>`}`;
+}
+
+/** A verdict word, hand-written, with a screen-reader version. `word` is null until it's ranked ("Hmm."). */
+export function verdictMark(word: string | null, srText: string, still: boolean): Html {
+  return html`<div class="no${word ? "" : " maybe"}${still ? " still" : ""}" aria-hidden="true">${word ?? "Hmm."}</div>
+    <span class="sr-only">${srText}</span>`;
 }

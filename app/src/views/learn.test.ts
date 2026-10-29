@@ -116,7 +116,7 @@ describe("learnView lesson", () => {
     expect(lesson(l.id)).toContain('data-action="lesson-done" data-id="point-at-it" data-done="true">Mark done');
     expect(lesson(l.id, { done: [l.id] })).toContain('data-done="false">Mark not done');
     expect(lesson(l.id)).toContain(`Next: ${LESSONS[1]?.title}`);
-    const last = LESSONS.at(-1);
+    const last = LESSONS[LESSONS.length - 1];
     expect(lesson(last?.id)).not.toContain("Next:");
   });
 

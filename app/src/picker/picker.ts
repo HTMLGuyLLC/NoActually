@@ -1,5 +1,6 @@
 // Model picker logic, kept pure so it can be tested without a window.
 import type { Filter, ModelRow } from "../api";
+import { floorPercent } from "../meta";
 
 /** What a scope's numbers add up to: corrections and messages, and tasks for the prompt score. */
 export type Counts = { corrections: number; messages: number; tasks: number; continued: number; landed: number };
@@ -91,7 +92,7 @@ export function matchPickItems(items: PickItem[], query: string): PickItem[] {
 export const sameFilter = (a: Filter, b: Filter) => JSON.stringify(a) === JSON.stringify(b);
 
 /** "83%" of continued tasks that landed (rounded down, like the tier floors), or "–" with none. */
-export const landedRate = (landed: number, continued: number) => (continued ? `${Math.floor((100 * landed) / continued)}%` : "–");
+export const landedRate = (landed: number, continued: number) => (continued ? `${floorPercent(landed, continued)}%` : "–");
 
 /** "12.5%" of messages that were a correction, or "–" when there were none. */
 export const correctionRate = (corrections: number, messages: number) => (messages ? `${((100 * corrections) / messages).toFixed(1)}%` : "–");

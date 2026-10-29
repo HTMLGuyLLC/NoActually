@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ago, errorText, filterLabel, isFiltered, listNames, localIsoDate, shortSourceName, subjectLabel } from "./format";
+import { ago, errorText, filterLabel, fmtDay, isFiltered, last, listNames, localIsoDate, plural, shortSourceName, subjectLabel, subjectText } from "./format";
 import { meta } from "./test/fixtures";
 
 describe("ago", () => {
@@ -91,5 +91,50 @@ describe("shortSourceName / errorText", () => {
   it("reads Rust's string errors and JS errors alike", () => {
     expect(errorText("database is locked")).toBe("database is locked");
     expect(errorText(new Error("boom"))).toBe("boom");
+  });
+});
+
+describe("last", () => {
+  it("picks from the end, like at(-n)", () => {
+    expect(last([1, 2, 3])).toBe(3);
+    expect(last([1, 2, 3], 2)).toBe(2);
+    expect(last([1], 2)).toBeUndefined();
+    expect(last([])).toBeUndefined();
+  });
+});
+
+describe("plural", () => {
+  it("counts with the right noun", () => {
+    expect(plural(1, "time")).toBe("1 time");
+    expect(plural(0, "time")).toBe("0 times");
+    expect(plural(1234, "task")).toBe(`${(1234).toLocaleString()} tasks`);
+    expect(plural(3, "more task")).toBe("3 more tasks");
+    expect(plural(2, "trophy", "trophies")).toBe("2 trophies");
+  });
+});
+
+describe("fmtDay", () => {
+  it("writes a day as month and day, or with the options given", () => {
+    expect(fmtDay("2026-10-02")).toBe(new Date(2026, 9, 2).toLocaleDateString(undefined, { month: "short", day: "numeric" }));
+    expect(fmtDay("2026-10-02", { month: "short", year: "numeric" })).toContain("2026");
+  });
+});
+
+describe("subjectText", () => {
+  it("says AI until a model is picked", () => {
+    expect(subjectText({}, meta)).toBe("AI");
+    expect(subjectText({ provider: "OpenAI" }, meta)).toBe("OpenAI");
+  });
+});
+
+describe("browser support", () => {
+  // The macOS 12.0 webview is Safari 15.0: no Array.prototype.at (15.4) or roundRect (16).
+  it("uses no API newer than Safari 15.0 in the app's source", () => {
+    const sources = import.meta.glob<string>(["./**/*.ts", "!./**/*.test.ts"], { query: "?raw", import: "default", eager: true });
+    expect(Object.keys(sources).length).toBeGreaterThan(10);
+    for (const [file, text] of Object.entries(sources)) {
+      expect(text, `${file} uses .at(`).not.toMatch(/\.at\(/);
+      expect(text, `${file} uses .roundRect(`).not.toMatch(/\.roundRect\(/);
+    }
   });
 });

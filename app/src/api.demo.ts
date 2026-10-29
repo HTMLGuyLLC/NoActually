@@ -1,5 +1,6 @@
 // The browser demo's stand-in for the Rust side: sample numbers from public/demo.json, read-only.
 import type { ArgsOf, Command, Filter, Goal, GoalStatus, Meta, Overall, Progress, Prompts, ResultOf, SourceInfo, Stats } from "./api";
+import { isFiltered } from "./format";
 import { modelName } from "./picker/picker";
 import { periodSince } from "./state";
 
@@ -79,7 +80,7 @@ export function judge(meta: Meta, w: { continued: number; landed: number; correc
 
 /** The demo narrows its sample numbers by model so the picker visibly does something. */
 export function demoStats({ meta, stats: base }: DemoData, filter: Filter): Stats {
-  if (!Object.values(filter).some((v) => v != null)) return base;
+  if (!isFiltered(filter)) return base;
   const keep = base.models.filter(
     (m) =>
       (!filter.provider || m.provider === filter.provider) &&

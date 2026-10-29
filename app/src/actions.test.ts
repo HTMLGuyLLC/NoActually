@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { meta, source, stats } from "./test/fixtures";
+import { meta, overall, source, stats } from "./test/fixtures";
 
 const allowed = { id: "claude-code", allowed: true, paused: false, backfill_since: null, granted_at: null, start_after: null, paths: [] };
 
@@ -24,6 +24,7 @@ let render: () => Promise<void>;
 let root: HTMLElement;
 let scheduler: import("./scheduler").Scheduler;
 let state: typeof import("./state");
+let paintStatus: () => void;
 
 beforeAll(async () => {
   document.body.innerHTML = `<div id="app"></div>`;
@@ -31,6 +32,7 @@ beforeAll(async () => {
   render = r.render;
   root = r.root;
   scheduler = r.scheduler;
+  paintStatus = r.paintStatus;
   state = await import("./state");
   (await import("./actions")).bindActions(root);
 });
@@ -252,5 +254,48 @@ describe("delegated actions", () => {
     expect(root.textContent).toContain("database is locked");
     await click('[data-action="retry"]');
     expect(root.querySelector(".card")).not.toBeNull();
+  });
+});
+
+describe("sync pill repaint", () => {
+  const active = () => document.activeElement?.className;
+
+  it("keeps focus on the same control inside the new pill", () => {
+    for (const cls of ["sync-now", "sync-text"]) {
+      root.querySelector<HTMLElement>(`.${cls}`)?.focus();
+      expect(active(), cls).toBe(cls);
+      paintStatus();
+      expect(active(), cls).toBe(cls);
+    }
+  });
+
+  it("falls back to the first control when that one is gone", () => {
+    root.querySelector<HTMLElement>(".sync-now")?.focus();
+    state.setStatus({ syncing: false, last_sync: null, last_error: "boom", files_with_errors: 0 });
+    paintStatus();
+    expect(active()).toBe("sync-bad");
+  });
+
+  it("leaves focus alone when it wasn't in the pill", () => {
+    const tab = btn('[data-action="tab"][data-id="improve"]');
+    tab.focus();
+    paintStatus();
+    expect(document.activeElement).toBe(tab);
+  });
+});
+
+describe("verdict scrawl", () => {
+  const still = (sel: string) => root.querySelector(`${sel} .no`)?.classList.contains("still");
+
+  it("replays the corrections verdict only when the correction tier changes", async () => {
+    await render();
+    expect(still(".card.mini.prompts"), "prompts").toBe(true);
+    expect(still(".card.mini.corrections"), "corrections").toBe(true);
+    // Another tier for corrections only: the overall verdict and the prompts verdict stay still.
+    api.stats.mockResolvedValue(stats({ overall: overall({ correction_tier: "autopilot" }) }));
+    await render();
+    expect(still(".card.hero"), "hero").toBe(true);
+    expect(still(".card.mini.prompts"), "prompts").toBe(true);
+    expect(still(".card.mini.corrections"), "corrections").toBe(false);
   });
 });

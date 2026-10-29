@@ -209,7 +209,7 @@ describe("withSince", () => {
     const { withSince } = await import("./api.demo");
     const { stats } = await import("./test/fixtures");
     const s = stats();
-    const last = s.weekly.at(-1)?.week ?? "";
+    const last = s.weekly[s.weekly.length - 1]?.week ?? "";
     const p = withSince(meta, s, last);
     expect(p.weekly).toHaveLength(1);
     expect(p.corrections).toBeLessThan(s.corrections);

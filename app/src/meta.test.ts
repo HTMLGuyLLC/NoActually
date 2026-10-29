@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { categoryTitle, landedPct, percent, promptTier, promptTierRanges, signalTitle, sourceName, steerTitle, tierName, tierOf, tierRanges } from "./meta";
+import {
+  categoryTitle,
+  floorPercent,
+  gradeTitle,
+  hasSignal,
+  landedPct,
+  percent,
+  promptTier,
+  promptTierRanges,
+  signalTitle,
+  sourceName,
+  steerTitle,
+  tierName,
+  tierOf,
+  tierRanges,
+} from "./meta";
 import { meta } from "./test/fixtures";
 
 describe("promptTierRanges", () => {
@@ -67,5 +82,26 @@ describe("lookups", () => {
     expect(tierOf(meta, "legend")).toBeUndefined();
     expect(signalTitle(meta, "why")).toBe("Says why");
     expect(signalTitle(meta, "unknown")).toBe("unknown");
+  });
+});
+
+describe("floorPercent", () => {
+  it("rounds down where percent rounds", () => {
+    expect(percent(897, 1000)).toBe(90);
+    expect(floorPercent(897, 1000)).toBe(89);
+    expect(floorPercent(1, 0)).toBe(0);
+  });
+});
+
+describe("gradeTitle and hasSignal", () => {
+  it("names a grade, falling back to its id", () => {
+    expect(gradeTitle(meta, "sharp")).toBe(meta.grades.find((g) => g.id === "sharp")?.title);
+    expect(gradeTitle(meta, "nope")).toBe("nope");
+  });
+
+  it("reads signal bit i", () => {
+    expect(hasSignal(0b101, 0)).toBe(true);
+    expect(hasSignal(0b101, 1)).toBe(false);
+    expect(hasSignal(0b101, 2)).toBe(true);
   });
 });

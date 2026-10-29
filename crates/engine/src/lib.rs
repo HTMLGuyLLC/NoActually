@@ -3,8 +3,9 @@
 //!
 //! [`classify`] labels one [`Turn`]; [`normalize_model`] splits a raw model id into
 //! provider / family / version; [`redact`] and [`snippet`] decide what text may be kept;
-//! [`Tier`] and [`Answer`] turn a week's corrections into the headline. [`read_prompt`] reads the
-//! same turn for how you prompt: a new task, steering, or neither, and a prompt's [`Signals`].
+//! [`Tier`] and [`Answer`] turn a 28-day score, from tasks plus corrections, into the headline.
+//! [`read_prompt`] reads the same turn for how you prompt: a new task, steering, or neither, and a
+//! prompt's [`Signals`].
 //!
 //! Tests: each module keeps its unit tests inline in `mod tests`; the rule book's behavior
 //! suite lives in `src/tests.rs` because it exercises the whole crate.
@@ -18,13 +19,11 @@ mod rules;
 mod tier;
 
 pub use model::{normalize_model, Model};
-pub use prompt::{
-    check, read_prompt, Check, Grade, Prompt, PromptTier, Signal, Signals, Steer, MIN_PROMPTS, WINDOW_DAYS,
-};
+pub use prompt::{check, read_prompt, Check, Grade, Prompt, Signal, Signals, Steer};
 pub use redact::{redact, snippet, SNIPPET_CHARS};
 pub use tier::{
-    Answer, CorrectionTier, Score, Tier, UnknownTier, Window, CORRECTION_PROOF, DIRECTION_WEIGHT, HUMBLED_BASE,
-    HUMBLED_COST,
+    Answer, CorrectionTier, PromptTier, Score, Tier, UnknownTier, Window, CORRECTION_PROOF, DIRECTION_WEIGHT,
+    HUMBLED_BASE, HUMBLED_COST, MIN_PROMPTS, WINDOW_DAYS,
 };
 
 use serde::{Deserialize, Serialize};

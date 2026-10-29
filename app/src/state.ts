@@ -1,5 +1,6 @@
 // The UI's state: one object, read anywhere, changed only through the named setters below.
 import type { Filter, Meta, ModelRow, Stats, SyncStatus, UpdateStatus, Verdict } from "./api";
+import { localIsoDate } from "./format";
 
 export const TABS = ["score", "improve", "learn", "settings"] as const;
 export type Tab = (typeof TABS)[number];
@@ -10,7 +11,7 @@ export const SCORE_VIEWS = ["overview", "prompts", "corrections", "hall"] as con
 export type ScoreView = (typeof SCORE_VIEWS)[number];
 export const isScoreView = (x: unknown): x is ScoreView => SCORE_VIEWS.some((v) => v === x);
 
-/** How far back the scorecard's counts look. The score and tiers always use their own 28 days. */
+/** How far back the scorecard's counts look. The score and tiers follow the chosen period too. */
 export const PERIODS = ["7d", "28d", "90d", "all"] as const;
 export type Period = (typeof PERIODS)[number];
 export const isPeriod = (x: unknown): x is Period => PERIODS.some((p) => p === x);
@@ -27,7 +28,7 @@ export function periodSince(p: Period, today = new Date()): string {
   const days = PERIOD_DAYS[p];
   if (days == null) return ALL_TIME;
   const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (days - 1));
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return localIsoDate(d);
 }
 
 /** How far back the Improve charts look. */
@@ -52,6 +53,8 @@ export type AppState = {
   lastVerdict: Verdict | null;
   /** The prompt tier last drawn (undefined: none drawn yet), for the same reason. */
   lastPromptTier: string | null | undefined;
+  /** The correction tier last drawn, the same way. */
+  lastCorrectionTier: string | null | undefined;
   meta: Meta | null;
   /** Scorecard: how far back the counts look. */
   period: Period;
@@ -74,6 +77,7 @@ const initial = (): AppState => ({
   laterFor: null,
   lastVerdict: null,
   lastPromptTier: undefined,
+  lastCorrectionTier: undefined,
   meta: null,
   period: "28d",
   range: "12w",
@@ -123,6 +127,9 @@ export function setLastVerdict(verdict: Verdict): void {
 }
 export function setLastPromptTier(tier: string | null): void {
   s.lastPromptTier = tier;
+}
+export function setLastCorrectionTier(tier: string | null): void {
+  s.lastCorrectionTier = tier;
 }
 export function setPeriod(period: Period): void {
   s.period = period;

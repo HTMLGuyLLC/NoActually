@@ -8,7 +8,6 @@
 //! judgment never compares your corrections with the AI's, so prompting better and correcting fewer
 //! mistakes never costs you points.
 
-use crate::prompt::MIN_PROMPTS;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
@@ -110,6 +109,105 @@ impl FromStr for Tier {
     }
 }
 
+/// How well your prompts land: of the tasks in the last [`WINDOW_DAYS`] that went past their first
+/// message, the share you never had to add to, clarify or redo. A one-message task can't need
+/// steering, so it doesn't count either way. The AI getting it wrong doesn't count against you
+/// (that's a correction). Ordered lowest first.
+///
+/// The floors come from one heavy user's history (tasks that continued landed 83–90% of the time
+/// over 28 days, typically 86%). Public chat logs can't set them: casual chats almost never steer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PromptTier {
+    /// Under 70% landed.
+    VibesOnly,
+    /// 70% or more.
+    TicketWriter,
+    /// 80% or more.
+    TechLead,
+    /// 90% or more.
+    Architect,
+}
+
+/// Days of tasks a prompt tier looks at: long enough that one "also…" doesn't swing it.
+pub const WINDOW_DAYS: i64 = 28;
+
+/// Tasks that continued, in the window, needed before a tier is given; fewer says too little.
+pub const MIN_PROMPTS: i64 = 10;
+
+impl PromptTier {
+    /// Every tier, ascending by floor.
+    pub const ALL: [PromptTier; 4] =
+        [PromptTier::VibesOnly, PromptTier::TicketWriter, PromptTier::TechLead, PromptTier::Architect];
+
+    /// Percent of the window's continued tasks that must land.
+    pub const fn floor(self) -> i64 {
+        match self {
+            PromptTier::VibesOnly => 0,
+            PromptTier::TicketWriter => 70,
+            PromptTier::TechLead => 80,
+            PromptTier::Architect => 90,
+        }
+    }
+
+    /// Stable id, as stored and serialized.
+    pub const fn id(self) -> &'static str {
+        match self {
+            PromptTier::VibesOnly => "vibes_only",
+            PromptTier::TicketWriter => "ticket_writer",
+            PromptTier::TechLead => "tech_lead",
+            PromptTier::Architect => "architect",
+        }
+    }
+
+    /// Display name.
+    pub const fn name(self) -> &'static str {
+        match self {
+            PromptTier::VibesOnly => "Vibes only",
+            PromptTier::TicketWriter => "Ticket writer",
+            PromptTier::TechLead => "Tech lead",
+            PromptTier::Architect => "Architect",
+        }
+    }
+
+    /// The answer to "Do you make it guess?" at this tier.
+    pub const fn verdict(self) -> &'static str {
+        match self {
+            PromptTier::VibesOnly => "Constantly.",
+            PromptTier::TicketWriter => "Often.",
+            PromptTier::TechLead => "Sometimes.",
+            PromptTier::Architect => "Rarely.",
+        }
+    }
+
+    /// The tier reached when `landed` of `tasks` landed, or `None` below [`MIN_PROMPTS`] tasks.
+    pub fn for_tasks(landed: i64, tasks: i64) -> Option<PromptTier> {
+        (tasks >= MIN_PROMPTS)
+            .then(|| PromptTier::ALL.into_iter().rev().find(|t| landed * 100 >= t.floor() * tasks))
+            .flatten()
+    }
+
+    /// The tier above this one, if any.
+    pub fn next(self) -> Option<PromptTier> {
+        PromptTier::ALL.into_iter().find(|t| *t > self)
+    }
+}
+
+impl fmt::Display for PromptTier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+impl FromStr for PromptTier {
+    type Err = UnknownTier;
+
+    /// Accepts the id only: prompt tiers were never stored by display name.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        PromptTier::ALL.into_iter().find(|t| t.id() == s).ok_or_else(|| UnknownTier(s.to_string()))
+    }
+}
+
 /// "Could AI replace you?" The headline every view shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -131,8 +229,8 @@ impl Answer {
     }
 }
 
-/// "Do you correction its mistakes?" How judgment reads, in a word (rarely < sometimes < often <
-/// usually; never "always": nobody corrections everything). Ordered from lowest to highest.
+/// "Do you correct its mistakes?" How judgment reads, in a word (rarely < sometimes < often <
+/// usually; never "always": nobody catches everything). Ordered from lowest to highest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CorrectionTier {
@@ -181,7 +279,7 @@ impl CorrectionTier {
         }
     }
 
-    /// The answer to "Do you correction its mistakes?" at this tier.
+    /// The answer to "Do you correct its mistakes?" at this tier.
     pub const fn verdict(self) -> &'static str {
         match self {
             CorrectionTier::Autopilot => "Rarely.",

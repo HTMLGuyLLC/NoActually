@@ -1,8 +1,10 @@
-//! Moments worth a popup: correction counts, tier ups (corrections and prompts), streaks. Pure decisions plus the stored
-//! baseline they're measured from; the app only shows what [`crossed`] returns.
+//! Moments worth a popup: correction counts, tier ups (corrections and prompts), streaks. Pure
+//! decisions plus the stored baseline they're measured from; the app only shows what [`crossed`]
+//! returns.
 
-use crate::{GoalWeek, Result, Stats, Store, GOAL_WEEKS};
-use engine::{PromptTier, Tier};
+use crate::progress::floor_pct;
+use crate::{put_setting, GoalWeek, Result, Stats, Store, GOAL_WEEKS};
+use engine::{PromptTier, Tier, WINDOW_DAYS};
 
 /// Correction totals worth announcing.
 pub const COUNTS: [i64; 9] = [1, 10, 25, 50, 100, 250, 500, 1000, 2500];
@@ -28,7 +30,7 @@ pub struct Snapshot {
     pub score: i64,
     /// Current streak, in days.
     pub streak: i64,
-    /// This week's prompt tier, once ranked.
+    /// The prompt tier over the last [`engine::WINDOW_DAYS`] days, once ranked.
     pub prompt_tier: Option<PromptTier>,
     /// Percent of the window's continued tasks that landed, rounded down like the tier floors.
     pub landed_pct: i64,
@@ -37,16 +39,16 @@ pub struct Snapshot {
 impl Snapshot {
     /// The snapshot in a scorecard.
     pub fn of(s: &Stats) -> Self {
-        let b = &s.prompts;
+        let p = &s.prompts;
         Snapshot {
             corrections: s.corrections,
             corrections_last_7d: s.corrections_last_7d,
             tier: s.overall.tier,
             score: s.overall.score.unwrap_or(0),
             streak: s.current_streak_days,
-            prompt_tier: b.tier,
+            prompt_tier: p.tier,
             // Rounded down, like the tier floors, so the popup never says 95% for a Tech lead week.
-            landed_pct: if b.window_tasks > 0 { 100 * b.window_landed / b.window_tasks } else { 0 },
+            landed_pct: floor_pct(p.window_landed, p.window_tasks),
         }
     }
 }
@@ -80,19 +82,18 @@ pub fn crossed(prev: &Snapshot, now: &Snapshot) -> Vec<Milestone> {
             body: format!("You've corrected your AI {m} times. Could it replace you? Not today."),
         });
     }
-    // Like prompt tiers: a first ranking at the bottom isn't news, climbing is.
+    // A first ranking at the bottom isn't news; climbing is.
     if let Some(t) = now.tier.filter(|t| *t > Tier::RubberStamp && now.tier > prev.tier) {
         out.push(Milestone {
             title: format!("New tier: {}", t.name()),
             body: format!("Could AI replace you? Your score is {}. Open the scorecard to share it.", now.score),
         });
     }
-    // Getting ranked at the bottom isn't news; climbing is.
     if let Some(t) = now.prompt_tier.filter(|t| *t > PromptTier::VibesOnly && now.prompt_tier > prev.prompt_tier) {
         out.push(Milestone {
             title: format!("Prompts: {}", t.name()),
             body: format!(
-                "{}% of your tasks in the last 28 days landed without steering. Open the scorecard to share it.",
+                "{}% of your tasks in the last {WINDOW_DAYS} days landed without steering. Open the scorecard to share it.",
                 now.landed_pct
             ),
         });
@@ -163,10 +164,12 @@ impl Store {
             prompt_tier,
             landed_pct: now.landed_pct,
         };
-        self.set_setting(TOTAL_KEY, &now.corrections.to_string())?;
-        self.set_setting(TIER_KEY, &save_tier)?;
-        self.set_setting(STREAK_KEY, &now.streak.to_string())?;
-        self.set_setting(PROMPT_TIER_KEY, &save_prompt_tier)?;
+        let tx = self.conn().unchecked_transaction()?;
+        put_setting(&tx, TOTAL_KEY, &now.corrections.to_string())?;
+        put_setting(&tx, TIER_KEY, &save_tier)?;
+        put_setting(&tx, STREAK_KEY, &now.streak.to_string())?;
+        put_setting(&tx, PROMPT_TIER_KEY, &save_prompt_tier)?;
+        tx.commit()?;
         Ok((!first_run).then_some(prev))
     }
 }

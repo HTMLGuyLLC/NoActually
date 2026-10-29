@@ -1,10 +1,10 @@
 // "Do you make it guess?": how specific your prompts are and what it took to land them.
 import type { Meta, Prompts } from "../api";
+import { plural } from "../format";
 import { type Html, html, num } from "../html";
 import { landedPct, percent, promptTier, promptTierRanges, steerTitle } from "../meta";
-import { ladderView } from "./chrome";
-
-const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
+import { PERIOD_WHEN } from "../state";
+import { ladderView, verdictMark } from "./chrome";
 
 /** "86% of your tasks in the last 28 days landed…", or how many more it takes to get ranked. */
 function becauseLine(b: Prompts, meta: Meta, when: string): Html {
@@ -16,12 +16,11 @@ function becauseLine(b: Prompts, meta: Meta, when: string): Html {
 /** The verdict word, hand-written, with a screen-reader version. */
 function markView(b: Prompts, meta: Meta, still: boolean): Html {
   const tier = promptTier(meta, b.tier);
-  return html`<div class="no${tier ? "" : " maybe"}${still ? " still" : ""}" aria-hidden="true">${tier?.verdict ?? "Hmm."}</div>
-      <span class="sr-only">${tier ? `${tier.verdict} Your prompt tier is ${tier.name}.` : "Not ranked yet."}</span>`;
+  return verdictMark(tier?.verdict ?? null, tier ? `${tier.verdict} Your prompt tier is ${tier.name}.` : "Not ranked yet.", still);
 }
 
 /** The overview's half: the verdict, the tier, and a way to the details. */
-export function promptsSummaryView(b: Prompts, meta: Meta, still: boolean, when = "in the last 28 days"): Html {
+export function promptsSummaryView(b: Prompts, meta: Meta, still: boolean, when = PERIOD_WHEN["28d"]): Html {
   const tier = promptTier(meta, b.tier);
   const body = b.tasks
     ? html`<div class="verdict">${markView(b, meta, still)}<div class="because">${becauseLine(b, meta, when)}</div></div>
@@ -35,7 +34,7 @@ export function promptsSummaryView(b: Prompts, meta: Meta, still: boolean, when 
     </article>`;
 }
 
-function verdictView(b: Prompts, meta: Meta, still: boolean, subject: Html | string, when: string): Html {
+function verdictView(b: Prompts, meta: Meta, still: boolean, subject: string, when: string): Html {
   return html`
     <div class="eyebrow">How you prompt it</div>
     <h1 class="q">Do you make ${subject} guess?</h1>
@@ -102,9 +101,9 @@ function steeringView(b: Prompts, meta: Meta): Html {
   <p class="muted small">${plural(total, "steering message")}. ${num(total - yours)} were its mistakes (blue), which don't count against you; ${num(yours)} could have been in the prompt (red).</p>`;
 }
 
-/** The Prompts section: verdict card, then what prompts carry and where steering went. `subject` is the
- * model picker ("it" when there's none). */
-export function promptsView(b: Prompts, meta: Meta, still: boolean, subject: Html | string = "it", when = "in the last 28 days"): Html {
+/** The Prompts section: verdict card, then what prompts carry and where steering went. `subject` is who
+ * the question asks about ("it" by default). */
+export function promptsView(b: Prompts, meta: Meta, still: boolean, subject = "it", when = PERIOD_WHEN["28d"]): Html {
   if (!b.tasks) {
     return html`<section class="card prompts"><div><div class="eyebrow">How you prompt it</div><h1 class="q">Do you make ${subject} guess?</h1>
       <p class="muted">No tasks yet. The first message of each chat is its prompt, so start a chat and ask for something.</p></div></section>`;

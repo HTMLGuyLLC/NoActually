@@ -1,7 +1,7 @@
 //! Behavior tests for prompts and steering. Examples mirror real prompts without copying anyone's.
 
 use super::*;
-use crate::{classify, AiMsg};
+use crate::{classify, AiMsg, PromptTier};
 
 fn ai(text: &str) -> AiMsg {
     AiMsg { text: text.into(), model: Some("claude-opus-5-5".into()) }
@@ -19,7 +19,7 @@ fn first_message(human: &str) -> Prompt {
 
 fn signals(human: &str) -> Vec<Signal> {
     match first_message(human) {
-        Prompt::Prompt { signals, .. } => Signal::ALL.into_iter().filter(|s| signals.has(*s)).collect(),
+        Prompt::Task { signals, .. } => Signal::ALL.into_iter().filter(|s| signals.has(*s)).collect(),
         other => panic!("not a prompt: {human:?} -> {other:?}"),
     }
 }
@@ -134,7 +134,7 @@ fn every_example_carries_exactly_its_signals() {
 #[test]
 fn grades_count_signals_not_words() {
     let g = |p: &str| match first_message(p) {
-        Prompt::Prompt { signals, .. } => Grade::of(signals),
+        Prompt::Task { signals, .. } => Grade::of(signals),
         _ => panic!("not a prompt"),
     };
     assert_eq!(g("fix it"), Grade::Thin);
@@ -168,19 +168,19 @@ fn until_a_chat_has_a_task_its_first_request_is_the_prompt() {
         read_prompt(&turn, &classify(&turn), has_task)
     };
     // After a hello or a question, the real request is the prompt.
-    assert!(matches!(msg("add a CSV export to the report page", false), Prompt::Prompt { .. }));
+    assert!(matches!(msg("add a CSV export to the report page", false), Prompt::Task { .. }));
     assert_eq!(msg("add a CSV export to the report page", true), Prompt::Other, "mid-task, it's part of the task");
     assert_eq!(msg("thanks", false), Prompt::Other);
     assert_eq!(msg("I meant the other file", false), Prompt::Other, "nothing to steer, and not a request");
-    assert!(matches!(first_message("make sure the tests pass after the upgrade"), Prompt::Prompt { .. }));
+    assert!(matches!(first_message("make sure the tests pass after the upgrade"), Prompt::Task { .. }));
     // A correction is still a correction, task or not.
     assert!(matches!(msg("that's wrong", false), Prompt::Steer { cause: Steer::AiWrong, .. }));
 }
 
 #[test]
 fn a_chats_first_message_is_its_prompt() {
-    assert!(matches!(first_message("add a CSV export"), Prompt::Prompt { .. }));
-    let Prompt::Prompt { rules, .. } = first_message("add a test for parse_date") else { panic!() };
+    assert!(matches!(first_message("add a CSV export"), Prompt::Task { .. }));
+    let Prompt::Task { rules, .. } = first_message("add a test for parse_date") else { panic!() };
     assert_eq!(rules, ["task.first", "prompt.spot.ident", "prompt.done.tests"], "says what started it, then why");
 }
 
@@ -210,7 +210,7 @@ fn hellos_questions_and_payloads_are_not_prompts() {
         "Is it possible to add dark mode?",
         "/Users/me/app/src/a.ts is broken",
     ] {
-        assert!(matches!(first_message(p), Prompt::Prompt { .. }), "{p:?}");
+        assert!(matches!(first_message(p), Prompt::Task { .. }), "{p:?}");
     }
 }
 
@@ -279,7 +279,7 @@ fn ordinary_replies_are_not_steering() {
 #[test]
 fn a_new_task_partway_through_a_chat() {
     let starts = |human: &str| match read(Some("Done, the export works."), human, "On it.") {
-        Prompt::Prompt { rules, .. } => Some(rules[0]),
+        Prompt::Task { rules, .. } => Some(rules[0]),
         _ => None,
     };
     assert_eq!(starts("great, now add a settings page"), Some("task.now"));

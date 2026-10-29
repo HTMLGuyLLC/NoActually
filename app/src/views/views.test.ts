@@ -17,7 +17,9 @@ describe("scorecardView", () => {
   it("opens on an overview with both verdicts and the section tabs", () => {
     const m = scorecardView(stats(), ctx).value;
     expect(m).toContain('aria-label="Scorecard sections"');
-    expect(m).toMatch(/data-id="overview" data-tip="Overview" aria-current="page"><svg class="tab-icon"[^>]*aria-hidden="true">.*?<\/svg><span class="tab-name">Overview<\/span><\/button>/);
+    expect(m).toMatch(
+      /data-id="overview" data-tip="Overview" aria-current="page"><svg class="tab-icon"[^>]*aria-hidden="true">.*?<\/svg><span class="tab-name">Overview<\/span><\/button>/,
+    );
     expect(m).toContain('data-id="prompts" data-tip="Prompting"');
     expect(m).toContain("Could ");
     expect(m).toContain("Do you make it guess?");
@@ -67,9 +69,13 @@ describe("scorecardView", () => {
 
   it("shows you vs it as one tug-of-war bar, keeping a sliver for a tiny side", () => {
     const view = (corrections: number, humbled: number) => scorecardView(stats({ corrections, humbled }), { ...ctx, view: "corrections" }).value;
-    expect(view(37, 1)).toContain('<i class="you" data-w="97"></i><i class="ai"></i>');
-    expect(view(180, 1)).toContain('data-w="98"');
-    expect(view(5, 0)).toContain('data-w="100"');
+    const yours = (corrections: number, humbled: number) => view(corrections, humbled).match(/<i class="you" data-w="(\d+)"><\/i>/)?.[1];
+    expect(yours(37, 1)).toBe("97");
+    expect(yours(180, 1)).toBe("98");
+    expect(yours(1, 180)).toBe("2");
+    expect(yours(5, 0)).toBe("100");
+    expect(yours(0, 5)).toBe("0");
+    expect(yours(0, 0)).toBe("50");
     expect(view(0, 0)).toContain('class="tug empty"');
   });
 
@@ -94,6 +100,14 @@ describe("scorecardView", () => {
 
   it("keeps the scrawl still when the verdict didn't change", () => {
     expect(scorecardView(stats(), { ...ctx, still: true }).value).toContain('class="no still"');
+  });
+
+  it("keeps each verdict's scrawl on its own flag", () => {
+    const count = (c: object) => scorecardView(stats(), { ...ctx, ...c }).value.match(/class="no still"/g)?.length ?? 0;
+    expect(count({ still: true })).toBe(1);
+    expect(count({ promptsStill: true })).toBe(1);
+    expect(count({ correctionsStill: true })).toBe(1);
+    expect(count({ still: true, promptsStill: true, correctionsStill: true })).toBe(3);
   });
 
   it("names a filter only in the model picker, with no chip to repeat it", () => {

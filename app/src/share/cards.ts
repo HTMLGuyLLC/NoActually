@@ -1,7 +1,9 @@
 // The share card images, drawn on a canvas on this machine. Always the light theme.
 import type { Overall, Prompts, PromptTier, Stats } from "../api";
+import { plural } from "../format";
 import { landedPct, percent } from "../meta";
-import { clip, SHARE_URL_SHORT } from "./share";
+import { PERIOD_WHEN } from "../state";
+import { type CorrectionLike, clip, SHARE_URL_SHORT } from "./share";
 
 /** The light theme's colors (style.css :root), which the cards always use whatever the app's theme. */
 export const CARD_THEME = {
@@ -12,6 +14,8 @@ export const CARD_THEME = {
   onPen: "#ffffff",
   ai: "#3b5bdb",
   aiSoft: "#e7ecfd",
+  /** The empty part of a bar. */
+  track: "#dfe3ee",
 } as const;
 
 /**
@@ -41,6 +45,17 @@ async function canvas(shape: CardShape, fonts: string[]): Promise<{ c: HTMLCanva
 
 const png = (c: HTMLCanvasElement) =>
   new Promise<Blob>((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error("Couldn't draw the card."))), "image/png"));
+
+/** A rounded-rectangle path (CanvasRenderingContext2D.roundRect needs Safari 16). */
+function roundedRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const k = Math.min(r, w / 2, h / 2);
+  g.moveTo(x + k, y);
+  g.arcTo(x + w, y, x + w, y + h, k);
+  g.arcTo(x + w, y + h, x, y + h, k);
+  g.arcTo(x, y + h, x, y, k);
+  g.arcTo(x, y, x + w, y, k);
+  g.closePath();
+}
 
 /** The logo: the icon's mark, then "No, Actually..." in ink, with the text baseline at `y`. */
 function drawWordmark(g: CanvasRenderingContext2D, x: number, y: number, scale = 1) {
@@ -92,7 +107,7 @@ function drawPill(g: CanvasRenderingContext2D, label: string, x: number, y: numb
   const h = 40 * scale;
   g.fillStyle = CARD_THEME.pen;
   g.beginPath();
-  g.roundRect(x, y, g.measureText(text).width + 36 * scale, h, h / 2);
+  roundedRect(g, x, y, g.measureText(text).width + 36 * scale, h, h / 2);
   g.fill();
   g.fillStyle = CARD_THEME.onPen;
   g.fillText(text, x + 18 * scale, y + 26 * scale);
@@ -134,15 +149,14 @@ type ScoreCard = Pick<Stats, "overall" | "corrections_last_7d" | "corrections" |
 
 const SCORE_FONTS = ["800 64px 'Bricolage Grotesque Variable'", "400 200px 'Gochi Hand'", "500 24px 'Instrument Sans'", "600 18px 'JetBrains Mono'"];
 const heading = (size: number) => `800 ${size}px 'Bricolage Grotesque Variable'`;
+const hand = (size: number) => `400 ${size}px 'Gochi Hand'`;
 /** "Score 86. 83% of my tasks landed." or, before a score, this week's corrections. */
 const timesLine = (s: ScoreCard) =>
   s.overall.score == null
-    ? `I corrected it ${s.corrections_last_7d} ${s.corrections_last_7d === 1 ? "time" : "times"} this week.`
+    ? `I corrected it ${plural(s.corrections_last_7d, "time")} this week.`
     : `Score ${s.overall.score}. ${s.overall.direction}% of my tasks landed.`;
 const pctLine = (s: ScoreCard, when: string) =>
-  s.overall.score == null
-    ? null
-    : `I corrected it ${s.overall.corrections} ${s.overall.corrections === 1 ? "time" : "times"} to its ${s.overall.humbled} ${when}.`;
+  s.overall.score == null ? null : `I corrected it ${plural(s.overall.corrections, "time")} to its ${s.overall.humbled} ${when}.`;
 
 /** Hand-written `text`, rotated like a red-pen mark, baseline at (x, y). */
 function drawMark(g: CanvasRenderingContext2D, text: string, color: string, x: number, y: number, size: number) {
@@ -150,7 +164,7 @@ function drawMark(g: CanvasRenderingContext2D, text: string, color: string, x: n
   g.translate(x, y);
   g.rotate((-6 * Math.PI) / 180);
   g.fillStyle = color;
-  g.font = `400 ${size}px 'Gochi Hand'`;
+  g.font = hand(size);
   g.fillText(text, 0, 0);
   g.restore();
 }
@@ -162,7 +176,7 @@ function drawVerdict(g: CanvasRenderingContext2D, s: ScoreCard, x: number, y: nu
 }
 
 /** The score card. `tier` is the tier's display name. */
-export async function drawShareCard(s: ScoreCard, who: string, tier: string, shape: CardShape = "wide", when = "in the last 28 days"): Promise<Blob> {
+export async function drawShareCard(s: ScoreCard, who: string, tier: string, shape: CardShape = "wide", when = PERIOD_WHEN["28d"]): Promise<Blob> {
   const { c, g } = await canvas(shape, SCORE_FONTS);
   const { w } = CARD_SIZES[shape];
   const { ink, muted } = CARD_THEME;
@@ -217,8 +231,6 @@ export async function drawShareCard(s: ScoreCard, who: string, tier: string, sha
   drawFooter(g, `What's your score?  ${SHARE_URL_SHORT}`, w, 612);
   return png(c);
 }
-
-type CorrectionLike = { model: string; human: string | null; ai: string | null };
 
 /** Wraps text to lines no wider than `max` px in the current font, ending in "…" if it was cut. */
 export function wrap(g: Pick<CanvasRenderingContext2D, "measureText">, text: string, max: number, maxLines: number): string[] {
@@ -297,7 +309,7 @@ export async function drawCorrectionCard(e: CorrectionLike, shape: CardShape = "
   if (reply.length) {
     g.fillStyle = aiSoft;
     g.beginPath();
-    g.roundRect(x, y, inner, boxH, 14 * k);
+    roundedRect(g, x, y, inner, boxH, 14 * k);
     g.fill();
     g.fillStyle = ai;
     g.font = `600 ${16 * k}px 'JetBrains Mono'`;
@@ -315,7 +327,7 @@ export async function drawCorrectionCard(e: CorrectionLike, shape: CardShape = "
 type PromptsCard = Pick<Prompts, "window_landed" | "window_tasks" | "grades" | "tasks">;
 
 const PROMPT_QUESTION = "Do I make my AI guess?";
-export const promptLines = (b: PromptsCard, when = "in the last 28 days"): [string, string] => [
+export const promptLines = (b: PromptsCard, when = PERIOD_WHEN["28d"]): [string, string] => [
   `${landedPct(b)}% of my tasks ${when} landed without steering.`,
   `${percent(b.grades.sharp ?? 0, b.tasks)}% of all my prompts were sharp.`,
 ];
@@ -328,13 +340,13 @@ function drawGradeBar(g: CanvasRenderingContext2D, b: PromptsCard, x: number, y:
   const parts: [string, string][] = [
     ["sharp", CARD_THEME.pen],
     ["solid", CARD_THEME.ink],
-    ["thin", "#dfe3ee"],
+    ["thin", CARD_THEME.track],
   ];
   g.save();
   g.beginPath();
-  g.roundRect(x, y, w, h, h / 3);
+  roundedRect(g, x, y, w, h, h / 3);
   g.clip();
-  g.fillStyle = "#dfe3ee";
+  g.fillStyle = CARD_THEME.track;
   g.fillRect(x, y, w, h);
   let at = x;
   for (const [id, color] of parts) {
@@ -349,18 +361,17 @@ function drawGradeBar(g: CanvasRenderingContext2D, b: PromptsCard, x: number, y:
 type CorrectionsCard = Pick<Overall, "corrections" | "humbled" | "judgment">;
 
 const CORRECTION_QUESTION = "Do I correct my AI's mistakes?";
-export const correctionLines = (o: CorrectionsCard, when = "in the last 28 days"): [string, string] => [
-  `I corrected it ${o.corrections} ${o.corrections === 1 ? "time" : "times"} ${when}. It corrected me ${o.humbled}.`,
+export const correctionLines = (o: CorrectionsCard, when = PERIOD_WHEN["28d"]): [string, string] => [
+  `I corrected it ${plural(o.corrections, "time")} ${when}. It corrected me ${o.humbled}.`,
   `Judgment ${o.judgment ?? 0} of 100: I check its work, and it rarely has to correct me.`,
 ];
 
 /** The corrections card: "Do I correct my AI's mistakes?", the tier's answer, and who corrected whom. */
-export async function drawCorrectionsCard(o: CorrectionsCard, tier: PromptTier, shape: CardShape = "wide", when = "in the last 28 days"): Promise<Blob> {
+export async function drawCorrectionsCard(o: CorrectionsCard, tier: PromptTier, shape: CardShape = "wide", when = PERIOD_WHEN["28d"]): Promise<Blob> {
   const { c, g } = await canvas(shape, SCORE_FONTS);
   const { w } = CARD_SIZES[shape];
   const { ink, muted, pen } = CARD_THEME;
   const [corrected, judged] = correctionLines(o, when);
-  const hand = (size: number) => `400 ${size}px 'Gochi Hand'`;
   g.textBaseline = "alphabetic";
 
   if (shape === "portrait") {
@@ -397,12 +408,11 @@ export async function drawCorrectionsCard(o: CorrectionsCard, tier: PromptTier, 
 }
 
 /** The prompts card: "Do I make my AI guess?", the tier's answer, and what landed. */
-export async function drawPromptCard(b: PromptsCard, tier: PromptTier, shape: CardShape = "wide", when = "in the last 28 days"): Promise<Blob> {
+export async function drawPromptCard(b: PromptsCard, tier: PromptTier, shape: CardShape = "wide", when = PERIOD_WHEN["28d"]): Promise<Blob> {
   const { c, g } = await canvas(shape, SCORE_FONTS);
   const { w } = CARD_SIZES[shape];
   const { ink, muted, pen } = CARD_THEME;
   const [landed, sharp] = promptLines(b, when);
-  const hand = (size: number) => `400 ${size}px 'Gochi Hand'`;
   g.textBaseline = "alphabetic";
 
   if (shape === "portrait") {

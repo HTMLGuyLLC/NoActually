@@ -2,7 +2,7 @@
 //! bests, and what works for you. Read side, plus the goal you set and the weeks it already
 //! closed (frozen, so a later rebuild or import can't take back a week you earned).
 
-use crate::stats::{monday_of, tip_for, Group, View, CORRECTION_KINDS, LANDED};
+use crate::stats::{monday_of, steer_totals, tally, task_groups, tip_for, View, CONTINUED, CORRECTION_KINDS, LANDED};
 use crate::{Error, Filter, Result, Store, Tip};
 use chrono::{Duration, NaiveDate};
 use engine::{Grade, Signal, Signals, Steer, Tier, MIN_PROMPTS};
@@ -106,7 +106,7 @@ impl Goal {
     pub fn validate(&self) -> Result<()> {
         let ok = match self.kind {
             GoalKind::Habit { .. } => (5..=95).contains(&self.target),
-            GoalKind::Steer { steer } => steer.is_on_you() && (0..=50).contains(&self.target),
+            GoalKind::Steer { steer } => steer.is_on_you() && (0..=STEER_CAP).contains(&self.target),
             GoalKind::Tier { tier } => tier > Tier::RubberStamp,
         };
         if ok {
@@ -253,7 +253,10 @@ pub struct Progress {
     pub insights: Insights,
 }
 
-type TaskRow = (String, Signals, bool, bool, i64, [i64; 4], [i64; 4]);
+/// One count per steering cause, in [`Steer::ALL`] order.
+type PerSteer = [i64; Steer::ALL.len()];
+
+type TaskRow = (String, Signals, bool, bool, i64, PerSteer, PerSteer);
 
 /// Tasks per week (from `since`, when given), plus messages and corrections from `daily`.
 fn task_weeks(v: &View, since: Option<NaiveDate>) -> Result<BTreeMap<NaiveDate, HistoryWeek>> {
@@ -261,7 +264,7 @@ fn task_weeks(v: &View, since: Option<NaiveDate>) -> Result<BTreeMap<NaiveDate, 
     let any: Vec<String> = Steer::ALL.iter().map(|c| format!("SUM({} > 0)", c.as_str())).collect();
     let after = if since.is_some() { " AND day >= ?" } else { "" };
     let sql = format!(
-        "SELECT day, signals, messages >= 2, {}, COUNT(*), {}, {} FROM tasks WHERE 1=1 {}{after} GROUP BY 1, 2, 3, 4",
+        "SELECT day, signals, {CONTINUED}, {}, COUNT(*), {}, {} FROM tasks WHERE 1=1 {}{after} GROUP BY 1, 2, 3, 4",
         LANDED.as_str(),
         sums.join(", "),
         any.join(", "),
@@ -270,10 +273,22 @@ fn task_weeks(v: &View, since: Option<NaiveDate>) -> Result<BTreeMap<NaiveDate, 
     let since_s = since.map(|d| d.to_string());
     let extra: Vec<&str> = since_s.iter().map(String::as_str).collect();
     let rows: Vec<TaskRow> = v.rows(&sql, &extra, |r| {
-        let four = |at: usize| -> rusqlite::Result<[i64; 4]> {
-            Ok([r.get(at)?, r.get(at + 1)?, r.get(at + 2)?, r.get(at + 3)?])
+        let per_steer = |at: usize| -> rusqlite::Result<PerSteer> {
+            let mut out = [0; Steer::ALL.len()];
+            for (i, n) in out.iter_mut().enumerate() {
+                *n = r.get(at + i)?;
+            }
+            Ok(out)
         };
-        Ok((r.get(0)?, Signals(r.get(1)?), r.get(2)?, r.get(3)?, r.get(4)?, four(5)?, four(9)?))
+        Ok((
+            r.get(0)?,
+            Signals(r.get(1)?),
+            r.get(2)?,
+            r.get(3)?,
+            r.get(4)?,
+            per_steer(5)?,
+            per_steer(5 + Steer::ALL.len())?,
+        ))
     })?;
     let mut weeks: BTreeMap<NaiveDate, HistoryWeek> = BTreeMap::new();
     for (day, signals, continued, landed, n, steering, steered) in rows {
@@ -283,10 +298,7 @@ fn task_weeks(v: &View, since: Option<NaiveDate>) -> Result<BTreeMap<NaiveDate, 
         w.tasks += n;
         w.continued += if continued { n } else { 0 };
         w.landed += if landed { n } else { 0 };
-        *w.grades.entry(Grade::of(signals).as_str().to_string()).or_insert(0) += n;
-        for s in Signal::ALL.into_iter().filter(|s| signals.has(*s)) {
-            *w.signals.entry(s.as_str().to_string()).or_insert(0) += n;
-        }
+        tally(&mut w.grades, &mut w.signals, signals, n);
         for (i, c) in Steer::ALL.iter().enumerate() {
             *w.steering.entry(c.as_str().to_string()).or_insert(0) += steering[i];
             *w.steered.entry(c.as_str().to_string()).or_insert(0) += steered[i];
@@ -340,7 +352,7 @@ fn goal_value(kind: GoalKind, w: &HistoryWeek) -> (i64, i64) {
 }
 
 /// Percent rounded down (a habit target is a floor: 49.9% isn't 50%).
-fn floor_pct(n: i64, total: i64) -> i64 {
+pub fn floor_pct(n: i64, total: i64) -> i64 {
     if total > 0 {
         100 * n / total
     } else {
@@ -505,29 +517,18 @@ fn bests(weeks: &[HistoryWeek]) -> (Best, Best) {
 }
 
 fn insights(v: &View) -> Result<Insights> {
-    let sql = format!(
-        "SELECT signals, messages >= 2, {}, COUNT(*) FROM tasks WHERE 1=1 {} GROUP BY 1, 2, 3",
-        LANDED.as_str(),
-        v.clause
-    );
-    let groups: Vec<Group> =
-        v.rows(&sql, &[], |r| Ok((Signals(r.get::<_, u8>(0)?), r.get(1)?, r.get(2)?, r.get(3)?)))?;
+    let groups = task_groups(v)?;
     let signals =
         Signal::ALL.into_iter().map(|s| tip_for(&groups, s)).filter(|t| t.landed_with_without.is_some()).collect();
 
-    let sums: Vec<String> = Steer::ALL.iter().map(|c| format!("COALESCE(SUM({}), 0)", c.as_str())).collect();
-    let sql = format!("SELECT {} FROM tasks WHERE 1=1 {}", sums.join(", "), v.clause);
-    let row =
-        v.rows(&sql, &[], |r| (0..Steer::ALL.len()).map(|i| r.get::<_, i64>(i)).collect::<rusqlite::Result<Vec<_>>>())?;
-    let counts: Vec<(Steer, i64)> =
-        Steer::ALL.into_iter().zip(row.into_iter().flatten()).filter(|(c, _)| c.is_on_you()).collect();
+    let counts: Vec<(Steer, i64)> = steer_totals(v)?.into_iter().filter(|(c, _)| c.is_on_you()).collect();
     let total: i64 = counts.iter().map(|c| c.1).sum();
     let steer = (total >= INSIGHT_STEER_MIN)
         .then(|| counts.iter().max_by_key(|c| c.1).map(|(c, n)| (*c, floor_pct(*n, total))))
         .flatten();
 
     let sql = format!(
-        "SELECT family, COALESCE(SUM(messages >= 2), 0), COALESCE(SUM({}), 0) FROM tasks WHERE 1=1 {} GROUP BY family",
+        "SELECT family, COALESCE(SUM({CONTINUED}), 0), COALESCE(SUM({}), 0) FROM tasks WHERE 1=1 {} GROUP BY family",
         LANDED.as_str(),
         v.clause
     );
@@ -612,7 +613,7 @@ impl Store {
             status.done = self.trophy_for(goal.id)?.is_some() || score.is_some_and(|s| s >= tier.floor());
             return Ok(status);
         }
-        let v = View { conn: self.conn(), clause: String::new(), args: vec![] };
+        let v = View::all(self.conn());
         let live = task_weeks(&v, Some(goal.start))?;
         let frozen = self.frozen_weeks(&goal)?;
         // A finished goal stops at the week it was finished: later weeks aren't part of it.
@@ -673,15 +674,14 @@ impl Store {
         }
         let score = self.overall(today)?.score;
         let status = self.goal_status(goal, today, score)?;
-        let frozen = self.frozen_weeks(&goal)?;
         let mut newly_met = Vec::new();
         let tx = self.conn().unchecked_transaction()?;
-        for w in status.weeks.iter().filter(|w| w.state != WeekState::Open && !frozen.contains_key(&w.week)) {
-            tx.execute(
+        for w in status.weeks.iter().filter(|w| w.state != WeekState::Open) {
+            let added = tx.execute(
                 "INSERT OR IGNORE INTO goal_weeks (goal, week, count, value, state) VALUES (?1, ?2, ?3, ?4, ?5)",
                 params![goal.id, w.week.to_string(), w.count, w.value, w.state.as_str()],
             )?;
-            if w.state == WeekState::Met {
+            if added == 1 && w.state == WeekState::Met {
                 newly_met.push(*w);
             }
         }
@@ -701,7 +701,7 @@ impl Store {
         let (clause, args) = f.sql();
         let v = View { conn: self.conn(), clause, args };
         let weeks = history(&v, today)?;
-        let all = View { conn: self.conn(), clause: String::new(), args: vec![] };
+        let all = View::all(self.conn());
         let all_weeks = if *f == Filter::default() { weeks.clone() } else { history(&all, today)? };
         let overall = self.overall(today)?;
         let goal = self.goal()?.map(|g| self.goal_status(g, today, overall.score)).transpose()?;
@@ -778,7 +778,7 @@ mod tests {
         }
     }
 
-    const DONE: u8 = 4; // Signal::Done's bit
+    const DONE: u8 = Signal::Done.bit();
 
     fn habit(s: &Store, target: i64, start: &str) -> Goal {
         s.set_goal(GoalKind::Habit { signal: Signal::Done }, target, d(start), 1).unwrap()
@@ -826,6 +826,18 @@ mod tests {
         let w = |state| GoalWeek { week: d("2026-10-05"), count: 0, value: 0, state };
         assert_eq!(streak(&[w(Missed), w(Met), w(Paused), w(Met), w(Open)]), 2);
         assert_eq!(longest_streak([Met, Met, Missed, Met, Paused, Met, Met]), 3);
+    }
+
+    #[test]
+    fn a_met_week_is_reported_once_however_often_it_closes() {
+        let s = Store::open_in_memory().unwrap();
+        habit(&s, 50, "2026-09-28");
+        tasks(&s, "2026-09-28", 5, DONE, 1, 0);
+        let first = s.close_goal_weeks(d("2026-10-06")).unwrap();
+        assert_eq!((first.newly_met.len(), first.met, first.finished), (1, 1, None));
+        let again = s.close_goal_weeks(d("2026-10-06")).unwrap();
+        assert_eq!((again.newly_met.len(), again.met), (0, 1), "already frozen, so not announced again");
+        assert_eq!(s.conn().query_row("SELECT COUNT(*) FROM goal_weeks", [], |r| r.get::<_, i64>(0)).unwrap(), 1);
     }
 
     #[test]

@@ -122,7 +122,7 @@ pub fn spawn(handle: AppHandle, app: Arc<App>, tx: mpsc::Sender<Msg>, rx: mpsc::
                     lock(&app.status).syncing = false;
                 }
             };
-            guarded(false); // correction up on anything written while the app was closed
+            guarded(false); // catch up on anything written while the app was closed
             let mut last = std::time::Instant::now();
             loop {
                 let mut sources_changed = false;

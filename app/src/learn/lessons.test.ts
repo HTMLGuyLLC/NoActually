@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { meta, prompts } from "../test/fixtures";
-import { answerIndex, LESSONS, lessonById, recommended, SIGNAL_HINTS, TRACKS, trackOf } from "./lessons";
+import { answerIndex, LESSONS, lessonById, lessonFor, recommended, SIGNAL_HINTS, TRACKS, trackOf } from "./lessons";
 
 const ids = LESSONS.map((l) => l.id);
 const signalIds = meta.signals.map((s) => s.id);
@@ -129,5 +129,13 @@ describe("recommended", () => {
     const done = ["set-limits", "say-why", "show-it"];
     expect(pick(b(), done)).not.toBeUndefined();
     expect(done).not.toContain(pick(b(), done));
+  });
+});
+
+describe("lessonFor", () => {
+  it("finds the lesson that teaches a signal or a kind of steering", () => {
+    expect(lessonFor("signal", "spot")?.teaches).toEqual({ signal: "spot" });
+    expect(lessonFor("steer", "added")?.teaches).toEqual({ steer: "added" });
+    expect(lessonFor("signal", "nope")).toBeUndefined();
   });
 });

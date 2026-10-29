@@ -2,7 +2,7 @@
 //!
 //! [`Store`] owns one SQLite connection: consent and settings, per-file checkpoints, daily
 //! counts, and correction events whose text obeys the [`Retention`] level. [`sync`] reads whatever
-//! changed in the allowed sources; [`Store::stats`] answers every view; [`milestones`] decides
+//! changed in the allowed sources; [`Store::stats`] and [`Store::progress`] answer every view; [`milestones`] decides
 //! which moments deserve a popup.
 //!
 //! Tests: small pure helpers keep their tests inline in `mod tests`; the store's behavior suite
@@ -19,10 +19,10 @@ mod stats;
 mod sync;
 
 pub use error::{Error, Result};
-pub use meta::{meta, CategoryInfo, Meta, PromptTierInfo, SignalInfo, SourceInfo, TierInfo, Titled};
+pub use meta::{meta, CategoryInfo, Meta, SignalInfo, SourceInfo, TierInfo, Titled, VerdictTierInfo};
 pub use progress::{
-    Bests, Goal, GoalKind, GoalNews, GoalStatus, GoalWeek, HistoryWeek, Insights, ModelLanded, Progress, Trophy,
-    WeekState, GOAL_WEEKS, MIN_WEEK,
+    floor_pct, Bests, Goal, GoalKind, GoalNews, GoalStatus, GoalWeek, HistoryWeek, Insights, ModelLanded, Progress,
+    Trophy, WeekState, GOAL_WEEKS, MIN_WEEK,
 };
 pub use stats::{Filter, HallEntry, ModelRow, Overall, Prompts, Stats, Tip, WeekRow};
 pub use sync::{sync, SyncReport};
@@ -303,11 +303,7 @@ impl Store {
 
     /// Sets an app-owned value.
     pub fn set_setting(&self, key: &str, value: &str) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            params![key, value],
-        )?;
-        Ok(())
+        put_setting(&self.conn, key, value)
     }
 
     // ---- consent -----------------------------------------------------------------------
@@ -502,7 +498,7 @@ impl Store {
             let has_task: bool =
                 tx.query_row("SELECT EXISTS(SELECT 1 FROM tasks WHERE session = ?1)", [&session], |r| r.get(0))?;
             match read_prompt(&st.turn, &v, has_task) {
-                Prompt::Prompt { signals, .. } => tx.execute(
+                Prompt::Task { signals, .. } => tx.execute(
                     "INSERT INTO tasks (day, source, session, provider, family, version, signals) VALUES (?1,?2,?3,?4,?5,?6,?7)",
                     params![day, source, session, provider, family, version, signals.0],
                 )?,
@@ -605,8 +601,17 @@ impl Store {
     }
 }
 
+/// Saves one setting on `conn`, which may be a transaction.
+fn put_setting(conn: &Connection, key: &str, value: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![key, value],
+    )?;
+    Ok(())
+}
+
 /// The text kept for one event at a retention level. Always redacted. The next reply holds the
-/// admission (correction) or the correction (humbled).
+/// AI's admission (for a correction) or its pushback (humbled).
 struct EventText {
     human_full: Option<String>,
     ai_full: Option<String>,

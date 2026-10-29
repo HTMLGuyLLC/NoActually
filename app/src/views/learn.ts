@@ -3,7 +3,7 @@
 import type { Check, Meta, Prompts } from "../api";
 import { type Html, html } from "../html";
 import { answerIndex, LESSONS, type Lesson, lessonById, type Question, recommended, SIGNAL_HINTS, TRACKS, trackOf } from "../learn/lessons";
-import { signalTitle } from "../meta";
+import { gradeTitle, hasSignal, signalTitle } from "../meta";
 
 export type LearnContext = { meta: Meta; prompts: Prompts | null; done: readonly string[]; lesson: string | null; draft: string; demo: boolean };
 
@@ -15,8 +15,8 @@ const chips = (meta: Meta, ids: string[]) =>
 /** The checker's verdict for a draft: grade, which signals it has, and a nudge for each missing one. */
 export function checkResultView(meta: Meta, c: Check | null, empty: boolean): Html {
   if (empty || !c) return html`<p class="muted small">Type or paste a prompt. Each thing it carries lights up.</p>`;
-  const has = (i: number) => (c.signals & (1 << i)) !== 0;
-  const grade = meta.grades.find((g) => g.id === c.grade)?.title ?? c.grade;
+  const has = (i: number) => hasSignal(c.signals, i);
+  const grade = gradeTitle(meta, c.grade);
   const missing = meta.signals.filter((_, i) => !has(i));
   return html`<div class="check-grade is-${c.grade}"><b>${grade}</b> · carries ${meta.signals.filter((_, i) => has(i)).length} of ${meta.signals.length}</div>
     <ul class="check-signals">${meta.signals.map(

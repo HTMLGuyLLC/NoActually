@@ -1,9 +1,10 @@
 // Improve: are you getting better? Last week at a glance, the one goal you're working on, how your
 // numbers trend, your personal bests and trophies, and what your own history says works.
 import type { Goal, GoalKind, GoalStatus, GoalWeek, HistoryWeek, Meta, Progress, Stats } from "../api";
+import { fmtDay, last, plural } from "../format";
 import { type Html, html, num, raw } from "../html";
-import { LESSONS } from "../learn/lessons";
-import { signalTitle, steerTitle, tierName } from "../meta";
+import { lessonFor } from "../learn/lessons";
+import { floorPercent, signalTitle, steerTitle, tierName, tierOf } from "../meta";
 import { RANGES, type Range } from "../state";
 import { lineChart, type Point, sparkline, stackChart } from "./charts";
 
@@ -39,9 +40,6 @@ const add = (a: Record<string, number>, b: Record<string, number>) => {
   for (const [k, v] of Object.entries(b)) out[k] = (out[k] ?? 0) + v;
   return out;
 };
-
-const fmtDay = (iso: string, opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" }) =>
-  new Date(`${iso}T00:00`).toLocaleDateString(undefined, opts);
 
 /**
  * The range's weeks as chart points. When a typical week has fewer than `minWeek` tasks, weeks
@@ -81,7 +79,7 @@ export function buckets(weeks: HistoryWeek[], range: Range, minWeek: number): { 
   return { points: [...months.values()], monthly };
 }
 
-const pctOf = (n: number, total: number) => (total > 0 ? Math.floor((100 * n) / total) : null);
+const pctOf = (n: number, total: number) => (total > 0 ? floorPercent(n, total) : null);
 
 /** "Says why" → "say why", for "Prompts that say why landed…". */
 const verbPhrase = (title: string) => title.toLowerCase().replace(/^(\w+?)s\b/, "$1");
@@ -117,16 +115,15 @@ function thisWeekLine(st: GoalStatus, meta: Meta): string {
   if (g.kind === "tier")
     return st.score == null
       ? "Not scored yet: you need more tasks with a follow-up."
-      : `Your score is ${st.score}. ${tierName(meta, g.tier)} starts at ${meta.tiers.find((t) => t.id === g.tier)?.floor ?? "?"}.`;
-  const w = st.weeks.at(-1);
+      : `Your score is ${st.score}. ${tierName(meta, g.tier)} starts at ${tierOf(meta, g.tier)?.floor ?? "?"}.`;
+  const w = last(st.weeks);
   if (w?.state !== "open") return "";
-  const unit = g.kind === "habit" ? "prompts" : "tasks";
   // The meter above already shows the percent; this says how many and what's left.
-  const so = `${w.count} ${w.count === 1 ? unit.replace(/s$/, "") : unit} so far.`;
+  const so = `${plural(w.count, g.kind === "habit" ? "prompt" : "task")} so far.`;
   if (g.kind === "habit") {
     if (st.need == null) return `${so} Out of reach this week; next week starts fresh.`;
     return st.need
-      ? `${so} ${st.need} more ${st.need === 1 ? "prompt" : "prompts"} that ${verbPhrase(signalTitle(meta, g.signal))} would hit it.`
+      ? `${so} ${plural(st.need, "more prompt", "more prompts")} that ${verbPhrase(signalTitle(meta, g.signal))} would hit it.`
       : `${so} On track.`;
   }
   return w.count >= meta.min_week && w.value <= g.target ? `${so} On track.` : so;
@@ -156,12 +153,12 @@ const goalValue = (g: GoalKind & { target: number }) => JSON.stringify({ ...kind
 function goalMeter(st: GoalStatus, meta: Meta): Html | "" {
   const g = st.goal;
   if (g.kind === "tier") {
-    const floor = meta.tiers.find((t) => t.id === g.tier)?.floor ?? 100;
+    const floor = tierOf(meta, g.tier)?.floor ?? 100;
     if (st.score == null) return "";
     return html`<div class="goal-meter"><span class="big">${st.score}</span><span class="of">of ${floor} to reach ${tierName(meta, g.tier)}</span>
       <span class="bar-bg" role="img" aria-label="Score ${st.score} of ${floor}"><i data-w="${Math.min(100, Math.round((100 * st.score) / floor))}"></i></span></div>`;
   }
-  const w = st.weeks.at(-1);
+  const w = last(st.weeks);
   if (w?.state !== "open") return "";
   const word = g.kind === "habit" ? "at least" : "at most";
   return html`<div class="goal-meter"><span class="big">${w.value}%</span><span class="of">this week · aim for ${word} ${g.target}%</span></div>`;
@@ -194,9 +191,9 @@ function goalView(p: Progress, meta: Meta, filtered: boolean): Html {
 /** Last full week against the week before: what moved. */
 function recapView(weeks: HistoryWeek[], meta: Meta): Html | "" {
   const done = weeks.slice(0, -1); // the last one is this week, still under way
-  const last = done.at(-1);
-  const before = done.at(-2);
-  if (!last || !before || last.tasks < meta.min_week) return "";
+  const latest = last(done);
+  const before = last(done, 2);
+  if (!latest || !before || latest.tasks < meta.min_week) return "";
   const landed = (w: HistoryWeek) => pctOf(w.landed, w.continued);
   const sharp = (w: HistoryWeek) => pctOf(w.grades.sharp ?? 0, w.tasks);
   // Fewer corrections isn't worse (it may be getting things right), so that row's change isn't colored.
@@ -205,10 +202,10 @@ function recapView(weeks: HistoryWeek[], meta: Meta): Html | "" {
     const arrow = diff == null || diff === 0 ? "" : diff > 0 ? `▲ ${diff}` : `▼ ${-diff}`;
     return html`<div class="recap-row"><span>${name}</span><b>${a ?? "–"}${a != null ? unit : ""}</b><span class="delta${neutral || !diff ? "" : diff > 0 ? " up" : " down"}">${arrow}</span></div>`;
   };
-  return html`<section class="recap"><div class="eyebrow">Last week · ${fmtDay(last.week)}</div>
-    ${row("Tasks landed", landed(last), landed(before))}
-    ${row("Sharp prompts", sharp(last), sharp(before))}
-    ${row("Corrections", last.corrections, before.corrections, "", true)}
+  return html`<section class="recap"><div class="eyebrow">Last week · ${fmtDay(latest.week)}</div>
+    ${row("Tasks landed", landed(latest), landed(before))}
+    ${row("Sharp prompts", sharp(latest), sharp(before))}
+    ${row("Corrections", latest.corrections, before.corrections, "", true)}
     <p class="muted small">Compared with the week before.</p>
   </section>`;
 }
@@ -221,7 +218,7 @@ function trendsView(ctx: ImproveContext): Html {
   const landed: Point[] = points.map((b) => ({ label: b.label, value: pctOf(b.landed, b.continued), weak: weak(b.continued) }));
   const strong = landed.filter((x) => x.value != null && !x.weak);
   const firstStrong = strong[0];
-  const lastStrong = strong.at(-1);
+  const lastStrong = last(strong);
   const landedSummary =
     firstStrong && lastStrong
       ? `Tasks landed went from ${firstStrong.value}% (${firstStrong.label}) to ${lastStrong.value}% (${lastStrong.label}).`
@@ -229,7 +226,7 @@ function trendsView(ctx: ImproveContext): Html {
   const bands = meta.prompt_tiers.slice(1).map((t) => ({ from: t.floor, name: t.name }));
   const signals = meta.signals.map((s) => {
     const pts = points.map((b) => ({ label: b.label, value: pctOf(b.signals[s.id] ?? 0, b.tasks), weak: weak(b.tasks) }));
-    const now = pts.filter((x) => x.value != null && !x.weak).at(-1)?.value;
+    const now = last(pts.filter((x) => x.value != null && !x.weak))?.value;
     return html`<div class="cat sig"><span>${s.title}<small class="muted">${s.hint}</small></span>${sparkline(pts, `${s.title} per ${per}`)}<span class="n">${now != null ? `${now}%` : "–"}</span></div>`;
   });
   const labels = points.map((b) => b.label);
@@ -262,7 +259,7 @@ function bestsView(p: Progress, filtered: boolean): Html {
   return html`<section class="stats">
     ${stat(b.landed ? `${b.landed[0]}%` : "–", b.landed ? `best 4 weeks landed · to ${fmtDay(b.landed[1])}` : "best 4 weeks landed")}
     ${stat(b.sharp ? `${b.sharp[0]}%` : "–", b.sharp ? `sharpest week · ${fmtDay(b.sharp[1])}` : "sharpest week")}
-    ${stat(`${b.goal_streak} ${b.goal_streak === 1 ? "week" : "weeks"}`, "longest goal streak")}
+    ${stat(plural(b.goal_streak, "week"), "longest goal streak")}
     ${stat(`${p.trophies.length}`, p.trophies.length === 1 ? "trophy" : "trophies")}
   </section>`;
 }
@@ -274,9 +271,6 @@ function trophiesView(p: Progress, meta: Meta): Html | "" {
       html`<li><span aria-hidden="true">🏆</span> <b>${goalTitle(t.goal, meta)}</b> <span class="muted small">${fmtDay(t.done, { month: "short", year: "numeric" })}</span></li>`,
   )}</ul></section>`;
 }
-
-/** The lesson that teaches a signal or a kind of steering. */
-const lessonFor = (key: "signal" | "steer", id: string) => LESSONS.find((l) => key in l.teaches && (l.teaches as Record<string, string>)[key] === id);
 
 function insightsView(p: Progress, meta: Meta): Html {
   const i = p.insights;

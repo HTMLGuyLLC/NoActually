@@ -1,8 +1,9 @@
 // Quick glance: the small window under the menu bar icon. The three answers you'd open the app
 // for (could it replace you, do you make it guess, do you correct it) and your goal, nothing more.
 import type { GoalStatus, Meta, Stats } from "../api";
+import { last, plural } from "../format";
 import { type Html, html, num } from "../html";
-import { correctionTier, landedPct, promptTier, tierName } from "../meta";
+import { correctionTier, landedPct, promptTier, tierName, tierOf } from "../meta";
 import { TAB_ICONS, wordmarkView } from "./chrome";
 import { goalTitle } from "./improve";
 
@@ -10,8 +11,6 @@ const topView = () =>
   html`<div class="g-top">${wordmarkView("brand small")}<button class="g-gear" data-action="open-main" data-id="settings" aria-label="Settings">${TAB_ICONS.settings}</button></div>`;
 
 const openView = (label = "Open app") => html`<div class="g-actions"><button data-action="open-main">${label}</button></div>`;
-
-const plural = (n: number, one: string) => `${num(n)} ${n === 1 ? one : `${one}s`}`;
 
 /** One question, its one-word answer, and a line on why. `word` is null until it's ranked. */
 const answerView = (ask: string, word: string | null, why: string) =>
@@ -36,13 +35,13 @@ function answersView(s: Stats, meta: Meta): Html {
 function goalView(st: GoalStatus | null, meta: Meta): Html | "" {
   if (!st) return "";
   const g = st.goal;
-  const w = st.weeks.at(-1);
+  const w = last(st.weeks);
   const line = st.done
     ? "Done 🏆"
     : g.kind === "tier"
       ? st.score == null
         ? "Not scored yet"
-        : `Score ${st.score} of ${meta.tiers.find((t) => t.id === g.tier)?.floor ?? "?"}`
+        : `Score ${st.score} of ${tierOf(meta, g.tier)?.floor ?? "?"}`
       : w?.state === "open"
         ? `${w.value}% this week · aim for ${g.kind === "habit" ? "at least" : "at most"} ${g.target}%`
         : `${st.met} of ${st.needed} weeks met`;

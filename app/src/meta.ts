@@ -34,13 +34,20 @@ export const steerTitle = (meta: Meta, id: string): string => meta.steers.find((
 /** A whole percent of `n` in `total`; 0 when there's nothing to divide. */
 export const percent = (n: number, total: number): number => (total > 0 ? Math.round((100 * n) / total) : 0);
 
-/** Percent of the window's tasks that landed, rounded down like the tier floors (89.7% is 89%, Tech lead). */
-export const landedPct = (b: Pick<Prompts, "window_landed" | "window_tasks">): number =>
-  b.window_tasks > 0 ? Math.floor((100 * b.window_landed) / b.window_tasks) : 0;
+/** The same, rounded down like the tier floors (89.7% is 89%, Tech lead). */
+export const floorPercent = (n: number, total: number): number => (total > 0 ? Math.floor((100 * n) / total) : 0);
 
-export const tierName = (meta: Meta, id: string | null): string => (id ? (meta.tiers.find((t) => t.id === id)?.name ?? id) : "Not scored yet");
+/** Percent of the window's tasks that landed, rounded down. */
+export const landedPct = (b: Pick<Prompts, "window_landed" | "window_tasks">): number => floorPercent(b.window_landed, b.window_tasks);
 
 export const tierOf = (meta: Meta, id: string | null): Tier | undefined => meta.tiers.find((t) => t.id === id);
+
+export const tierName = (meta: Meta, id: string | null): string => (id ? (tierOf(meta, id)?.name ?? id) : "Not scored yet");
+
+export const gradeTitle = (meta: Meta, id: string): string => meta.grades.find((g) => g.id === id)?.title ?? id;
+
+/** Whether the checker found signal number `i` (the nth in `meta.signals`) in a prompt: bit `i` of `bits`. */
+export const hasSignal = (bits: number, i: number): boolean => (bits & (1 << i)) !== 0;
 
 export const signalTitle = (meta: Meta, id: string): string => meta.signals.find((s) => s.id === id)?.title ?? id;
 

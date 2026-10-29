@@ -26,9 +26,9 @@ pub struct Meta {
     /// In display order.
     pub sources: Vec<SourceInfo>,
     /// Prompt tiers, ascending by floor.
-    pub prompt_tiers: Vec<PromptTierInfo>,
-    /// "Do you correction its mistakes?" tiers, by judgment, ascending.
-    pub correction_tiers: Vec<PromptTierInfo>,
+    pub prompt_tiers: Vec<VerdictTierInfo>,
+    /// "Do you correct its mistakes?" tiers, by judgment, ascending.
+    pub correction_tiers: Vec<VerdictTierInfo>,
     /// Continued tasks in the window before a prompt tier is given.
     pub min_prompts: i64,
     /// Days of tasks a prompt tier looks at.
@@ -49,12 +49,12 @@ pub struct Meta {
 
 /// A tier with a one-word answer: prompt tiers and correction tiers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct PromptTierInfo {
+pub struct VerdictTierInfo {
     /// Stable id (`tech_lead`).
     pub id: &'static str,
     /// Display name.
     pub name: &'static str,
-    /// Percent of the window's continued tasks that must land.
+    /// The number needed to reach it.
     pub floor: i64,
     /// Its answer ("Sometimes.").
     pub verdict: &'static str,
@@ -121,11 +121,11 @@ pub fn meta(sources: &[Box<dyn Source>]) -> Meta {
         sources: sources.iter().map(|s| SourceInfo { id: s.id(), name: s.name() }).collect(),
         prompt_tiers: PromptTier::ALL
             .iter()
-            .map(|t| PromptTierInfo { id: t.id(), name: t.name(), floor: t.floor(), verdict: t.verdict() })
+            .map(|t| VerdictTierInfo { id: t.id(), name: t.name(), floor: t.floor(), verdict: t.verdict() })
             .collect(),
         correction_tiers: CorrectionTier::ALL
             .iter()
-            .map(|t| PromptTierInfo { id: t.id(), name: t.name(), floor: t.floor(), verdict: t.verdict() })
+            .map(|t| VerdictTierInfo { id: t.id(), name: t.name(), floor: t.floor(), verdict: t.verdict() })
             .collect(),
         min_prompts: MIN_PROMPTS,
         prompt_window_days: WINDOW_DAYS,

@@ -1,12 +1,12 @@
 // The scorecard: the overall score and its two halves (prompts, who corrects whom), the weekly
 // chart, model and category breakdowns, and the hall of fame.
 import type { Filter, HallEntry, Meta, Overall, Stats } from "../api";
-import { filterLabel, isFiltered, shortSourceName, subjectLabel } from "../format";
+import { fmtDay, plural, shortSourceName, subjectLabel, subjectText } from "../format";
 import { type Html, html, num, raw } from "../html";
 import { categoryTitle, correctionTier, correctionTierRanges, tierName, tierOf, tierRanges } from "../meta";
 import { correctionRate, modelName } from "../picker/picker";
 import { PERIOD_WHEN, PERIODS, type Period, SCORE_VIEWS, type ScoreView } from "../state";
-import { ladderView, svg } from "./chrome";
+import { ladderView, svg, verdictMark } from "./chrome";
 import { promptsSummaryView, promptsView } from "./prompts";
 
 export type ScorecardContext = {
@@ -16,11 +16,16 @@ export type ScorecardContext = {
   still: boolean;
   /** The same, for the prompts verdict. */
   promptsStill?: boolean;
+  /** The same, for the corrections verdict. */
+  correctionsStill?: boolean;
   /** Which section is showing (default: the overview). */
   view?: ScoreView;
   /** How far back the counts look (default: 28 days). */
   period?: Period;
 };
+
+/** The context with its defaults filled in once, for the views below. */
+type Ctx = ScorecardContext & { period: Period; when: string; promptsStill: boolean; correctionsStill: boolean };
 
 const PERIOD_TITLES: Record<Period, string> = { "7d": "7 days", "28d": "28 days", "90d": "90 days", all: "All time" };
 const PERIOD_EYEBROW: Record<Period, string> = { "7d": "Last 7 days", "28d": "Last 28 days", "90d": "Last 90 days", all: "All time" };
@@ -52,10 +57,6 @@ const VIEW_ICONS: Record<ScoreView, Html> = {
 
 const CHEVRON = raw(`<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>`);
 
-/** The model picker, shown as the question's subject ("Could [Claude Opus 5.5] replace you?"). One per page. */
-/** Who the questions ask about, in plain words: "AI", or the model the picker narrowed to. */
-export const subjectText = (ctx: Pick<ScorecardContext, "filter" | "meta">): string => (isFiltered(ctx.filter) ? filterLabel(ctx.filter, ctx.meta) : "AI");
-
 /** The model picker, beside the time range, so it reads as filtering the whole page. */
 export const modelPicker = (ctx: Pick<ScorecardContext, "filter" | "meta">): Html =>
   html`<button id="model-trigger" class="model-pick" data-action="model-picker" aria-haspopup="listbox" aria-expanded="false" aria-label="Model: ${subjectLabel(
@@ -63,14 +64,14 @@ export const modelPicker = (ctx: Pick<ScorecardContext, "filter" | "meta">): Htm
     ctx.meta,
   )}. Pick a model">${subjectLabel(ctx.filter, ctx.meta)}${CHEVRON}</button>`;
 
-/** "You corrected it 37 times in the last 28 days." */
-const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
-
 /** The hand-written answer, with a screen-reader version. */
-function answerView(o: Overall, meta: Meta, still: boolean, small = false): Html {
+function answerView(o: Overall, meta: Meta, still: boolean): Html {
   const no = o.verdict === "no";
-  return html`<div class="no${small ? " sm" : ""}${no ? "" : " maybe"}${still ? " still" : ""}" aria-hidden="true">${no ? "No." : "Hmm."}</div>
-    <span class="sr-only">${no ? "No." : "Not yet."} ${o.tier ? `Your tier is ${tierName(meta, o.tier)}, score ${o.score}.` : "Not scored yet."}</span>`;
+  return verdictMark(
+    no ? "No." : null,
+    `${no ? "No." : "Not yet."} ${o.tier ? `Your tier is ${tierName(meta, o.tier)}, score ${o.score}.` : "Not scored yet."}`,
+    still,
+  );
 }
 
 /** Why the answer is what it is: the two parts, or how far a score is. */
@@ -102,13 +103,13 @@ function scoreLadderView(o: Overall, meta: Meta): Html {
 }
 
 /** The headline: could it replace you? Both sides of working with AI, one score. */
-function heroView(s: Stats, ctx: ScorecardContext): Html {
+function heroView(s: Stats, ctx: Ctx): Html {
   const o = s.overall;
   return html`<section class="card hero">
       <div>
-        <div class="eyebrow">${PERIOD_EYEBROW[ctx.period ?? "28d"]}</div>
-        <h1 class="q">Could ${subjectText(ctx)} replace you?</h1>
-        <div class="verdict">${answerView(o, ctx.meta, ctx.still)}<div class="because">${scoreBecause(o, PERIOD_WHEN[ctx.period ?? "28d"])}</div></div>
+        <div class="eyebrow">${PERIOD_EYEBROW[ctx.period]}</div>
+        <h1 class="q">Could ${subjectText(ctx.filter, ctx.meta)} replace you?</h1>
+        <div class="verdict">${answerView(o, ctx.meta, ctx.still)}<div class="because">${scoreBecause(o, ctx.when)}</div></div>
         ${partsView(o, ctx.meta)}
       </div>
       <div class="meter">
@@ -118,12 +119,11 @@ function heroView(s: Stats, ctx: ScorecardContext): Html {
     </section>`;
 }
 
-/** You vs it: all time, and in the window. */
 /** You vs it as a tug of war: one bar, your share from the left, its share from the right. */
 function versusView(s: Stats): Html {
   const total = s.corrections + s.humbled;
-  // Each side that has any keeps a sliver, so 180 to 1 still shows the 1.
-  const yours = total ? Math.min(98, Math.max(s.humbled ? 2 : 100, Math.round((100 * s.corrections) / total))) : 50;
+  // Each side that has any keeps a sliver, so 180 to 1 still shows the 1. A side with none gets none.
+  const yours = total ? Math.min(s.humbled ? 98 : 100, Math.max(s.corrections ? 2 : 0, Math.round((100 * s.corrections) / total))) : 50;
   return html`<div class="score">
       <div class="side you"><span class="eyebrow">You corrected it</span><span class="n">${num(s.corrections)}</span></div>
       <div class="side ai"><span class="eyebrow">It corrected you</span><span class="n">${num(s.humbled)}</span></div>
@@ -136,10 +136,9 @@ const proofNote = (meta: Meta) =>
   html`<p class="muted small">${meta.correction_proof} corrections prove you check its work. Correcting it less because it got it right never costs you.</p>`;
 
 /** "Usually.", hand-written, with a screen-reader version. */
-function correctionMark(o: Overall, meta: Meta, still: boolean, small = false): Html {
+function correctionMark(o: Overall, meta: Meta, still: boolean): Html {
   const tier = correctionTier(meta, o.correction_tier);
-  return html`<div class="no${small ? " sm" : ""}${tier ? "" : " maybe"}${still ? " still" : ""}" aria-hidden="true">${tier?.verdict ?? "Hmm."}</div>
-      <span class="sr-only">${tier ? `${tier.verdict} Your correction tier is ${tier.name}.` : "Not ranked yet."}</span>`;
+  return verdictMark(tier?.verdict ?? null, tier ? `${tier.verdict} Your correction tier is ${tier.name}.` : "Not ranked yet.", still);
 }
 
 /** Why: who corrected whom, in one line, with the same counts as "you vs it" beside it. */
@@ -167,13 +166,13 @@ function correctionLadderView(o: Overall, meta: Meta): Html {
 }
 
 /** The overview's "Who corrects whom?" half: the answer, the tier, and a way to the details. */
-function correctsSummaryView(s: Stats, ctx: ScorecardContext): Html {
+function correctsSummaryView(s: Stats, ctx: Ctx): Html {
   const o = s.overall;
   const tier = correctionTier(ctx.meta, o.correction_tier);
   return html`<article class="card mini corrections">
       <div class="eyebrow">Who corrects whom</div>
       <h2 class="q">Do you correct its mistakes?</h2>
-      <div class="verdict">${correctionMark(o, ctx.meta, ctx.still)}<div class="because">${correctionBecause(s, PERIOD_WHEN[ctx.period ?? "28d"])}</div></div>
+      <div class="verdict">${correctionMark(o, ctx.meta, ctx.correctionsStill)}<div class="because">${correctionBecause(s, ctx.when)}</div></div>
       <p class="tier-line">${tier ? html`<span class="tier-label"><span>Tier</span>${tier.name}</span>` : ""}<span class="hand-note">${correctionNote(o, ctx.meta)}</span></p>
       <div class="share"><button class="ghost" data-action="view" data-id="corrections">See corrections</button></div>
     </article>`;
@@ -207,7 +206,7 @@ export function chartView(s: Stats): Html {
     const d = new Date(`${w.week}T00:00`);
     return html`<rect x="${x}" y="${barTop}" width="${bwid}" height="${y(0) - barTop}" rx="3" class="bar"><title>Week of ${d.toLocaleDateString()}: ${w.corrections} corrections, ${w.messages} messages</title></rect>${
       busiest ? html`<text x="${x + bwid / 2}" y="${barTop - 6}" text-anchor="middle" class="peak-label">Most: ${w.corrections}</text>` : ""
-    }${i % 2 === 0 ? html`<text x="${x + bwid / 2}" y="${H - 10}" text-anchor="middle">${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</text>` : ""}`;
+    }${i % 2 === 0 ? html`<text x="${x + bwid / 2}" y="${H - 10}" text-anchor="middle">${fmtDay(w.week)}</text>` : ""}`;
   });
   return html`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Corrections per week" aria-describedby="chart-summary">${grid}${bars}</svg>
     <p class="sr-only" id="chart-summary">${chartSummary(weeks)}</p>`;
@@ -218,9 +217,7 @@ export function chartSummary(weeks: Stats["weekly"]): string {
   const first = weeks[0];
   const peak = weeks.reduce<Stats["weekly"][number] | undefined>((p, w) => (!p || w.corrections > p.corrections ? w : p), undefined);
   if (!first || !peak) return "No weeks yet.";
-  const fmt = (iso: string) => new Date(`${iso}T00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  const weeksText = `${weeks.length} ${weeks.length === 1 ? "week" : "weeks"}`;
-  return `${weeksText} from ${fmt(first.week)}. Most corrections: ${peak.corrections}, the week of ${fmt(peak.week)}.`;
+  return `${weeks.length} ${weeks.length === 1 ? "week" : "weeks"} from ${fmtDay(first.week)}. Most corrections: ${peak.corrections}, the week of ${fmtDay(peak.week)}.`;
 }
 
 export function hallView(entries: HallEntry[]): Html {
@@ -251,11 +248,11 @@ function viewsNav(view: ScoreView): Html {
 }
 
 /** The headline score, then its two halves side by side, each linking to its details. */
-function overviewView(s: Stats, ctx: ScorecardContext): Html {
+function overviewView(s: Stats, ctx: Ctx): Html {
   return html`
     ${heroView(s, ctx)}
     <section class="duo">
-      ${promptsSummaryView(s.prompts, ctx.meta, ctx.promptsStill ?? false, PERIOD_WHEN[ctx.period ?? "28d"])}
+      ${promptsSummaryView(s.prompts, ctx.meta, ctx.promptsStill, ctx.when)}
       ${correctsSummaryView(s, ctx)}
     </section>
     ${statsView(s)}`;
@@ -271,7 +268,7 @@ function statsView(s: Stats): Html {
     </section>`;
 }
 
-function correctionsView(s: Stats, ctx: ScorecardContext): Html {
+function correctionsView(s: Stats, ctx: Ctx): Html {
   const { meta } = ctx;
   const cats = Object.entries(s.categories).sort((a, b) => b[1] - a[1]);
   const topCat = cats[0]?.[1] ?? 1;
@@ -291,8 +288,8 @@ function correctionsView(s: Stats, ctx: ScorecardContext): Html {
     <section class="card corrections">
       <div>
         <div class="eyebrow">Who corrects whom</div>
-        <h1 class="q">Do you correct <span class="nowrap">${subjectText(ctx)}'s</span> mistakes?</h1>
-        <div class="verdict">${correctionMark(s.overall, meta, ctx.still)}<div class="because">${correctionBecause(s, PERIOD_WHEN[ctx.period ?? "28d"])}</div></div>
+        <h1 class="q">Do you correct <span class="nowrap">${subjectText(ctx.filter, ctx.meta)}'s</span> mistakes?</h1>
+        <div class="verdict">${correctionMark(s.overall, meta, ctx.correctionsStill)}<div class="because">${correctionBecause(s, ctx.when)}</div></div>
         ${versusView(s)}
       </div>
       <div class="meter">
@@ -342,12 +339,12 @@ function awardView(key: string, count: number, entries: HallEntry[], meta: Meta)
   </article>`;
 }
 
-function hallSection(s: Stats, ctx: ScorecardContext): Html {
+function hallSection(s: Stats, ctx: Ctx): Html {
   const keys = [...ctx.meta.categories.map((c) => c.id), ""];
   const count = (k: string) => (k ? (s.categories[k] ?? 0) : s.humbled);
   // Most earned first; unearned last, in display order.
   const order = keys.map((k, i) => ({ k, i, n: count(k) })).sort((x, y) => Number(y.n > 0) - Number(x.n > 0) || y.n - x.n || x.i - y.i);
-  return html`<section><div class="head"><h2>Hall of fame · ${subjectText(ctx)}</h2><p class="muted">The best correction for each award, picked from your history. Snippets are redacted and kept per your privacy setting.</p></div>
+  return html`<section><div class="head"><h2>Hall of fame · ${subjectText(ctx.filter, ctx.meta)}</h2><p class="muted">The best correction for each award, picked from your history. Snippets are redacted and kept per your privacy setting.</p></div>
     <div class="awards">${order.map(({ k, n }) =>
       awardView(
         k,
@@ -358,19 +355,27 @@ function hallSection(s: Stats, ctx: ScorecardContext): Html {
     )}</div></section>`;
 }
 
-export function scorecardView(s: Stats, ctx: ScorecardContext): Html {
+export function scorecardView(s: Stats, input: ScorecardContext): Html {
+  const period = input.period ?? "28d";
+  const ctx: Ctx = {
+    ...input,
+    period,
+    when: PERIOD_WHEN[period],
+    promptsStill: input.promptsStill ?? false,
+    correctionsStill: input.correctionsStill ?? false,
+  };
   const { meta } = ctx;
   const view = ctx.view ?? "overview";
   const body =
     view === "corrections"
       ? correctionsView(s, ctx)
       : view === "prompts"
-        ? promptsView(s.prompts, meta, ctx.promptsStill ?? false, subjectText(ctx), PERIOD_WHEN[ctx.period ?? "28d"])
+        ? promptsView(s.prompts, meta, ctx.promptsStill, subjectText(ctx.filter, meta), ctx.when)
         : view === "hall"
           ? hallSection(s, ctx)
           : overviewView(s, ctx);
   return html`
-    <div class="views-row">${viewsNav(view)}<div class="filters">${modelPicker(ctx)}${periodNav(ctx.period ?? "28d")}</div></div>
+    <div class="views-row">${viewsNav(view)}<div class="filters">${modelPicker(ctx)}${periodNav(period)}</div></div>
     <div class="view-body">${body}</div>`;
 }
 
