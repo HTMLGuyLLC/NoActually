@@ -6,7 +6,7 @@ import { type Html, html, num, raw } from "../html";
 import { categoryTitle, correctionTier, correctionTierRanges, tierName, tierOf, tierRanges } from "../meta";
 import { correctionRate, modelName } from "../picker/picker";
 import { PERIOD_WHEN, PERIODS, type Period, SCORE_VIEWS, type ScoreView } from "../state";
-import { answerWord, byAnswer, ladderView, shareButton, svg, tierBlurb, verdictMark } from "./chrome";
+import { answerWord, byAnswer, ladderView, sectionNav, shareButton, svg, tierBlurb, verdictMark } from "./chrome";
 import { promptsSummaryView, promptsView } from "./prompts";
 
 export type ScorecardContext = {
@@ -234,10 +234,7 @@ export function hallView(entries: HallEntry[]): Html {
 
 /** The sub-tabs. Plain buttons, like the main nav, with the current one marked. */
 function viewsNav(view: ScoreView): Html {
-  return html`<nav class="views" aria-label="Scorecard sections">${SCORE_VIEWS.map(
-    (v) =>
-      html`<button class="tab${v === view ? " on" : ""}" data-action="view" data-id="${v}" data-tip="${VIEW_TITLES[v]}"${v === view ? raw(' aria-current="page"') : ""}>${VIEW_ICONS[v]}<span class="tab-name">${VIEW_TITLES[v]}</span></button>`,
-  )}</nav>`;
+  return sectionNav({ label: "Scorecard sections", action: "view", items: SCORE_VIEWS, current: view, titles: VIEW_TITLES, icons: VIEW_ICONS });
 }
 
 /** The headline score, then its two halves side by side, each linking to its details. */

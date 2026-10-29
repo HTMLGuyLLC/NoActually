@@ -14,7 +14,7 @@ import { improveView } from "./views/improve";
 import { learnView } from "./views/learn";
 import { modelPicker, onboardingView, scorecardView } from "./views/scorecard";
 import { settingsView } from "./views/settings";
-import { sourcesView, watchingNames } from "./views/sources";
+import { watchingNames } from "./views/sources";
 
 export const root: HTMLElement = must("#app");
 
@@ -46,7 +46,7 @@ async function view(): Promise<Html> {
       api.getAutostart().catch(() => false),
       api.getMenuBar(),
     ]);
-    body = html`${sourcesView(sources, state.status)}${settingsView({ retention, autostart, menuBar, update: state.update, demo })}`;
+    body = settingsView({ pane: state.settingsPane, sources, status: state.status, retention, autostart, menuBar, update: state.update, demo });
   } else if (state.tab === "learn") {
     body = learnView({ meta, prompts: s.messages ? s.prompts : null, done: await api.learned(), lesson: state.lesson, draft: state.draft, demo });
   } else if (state.tab === "improve") {

@@ -10,6 +10,9 @@ export const isTab = (x: unknown): x is Tab => TABS.some((t) => t === x);
 export const SCORE_VIEWS = ["overview", "corrections", "prompts", "hall"] as const;
 export type ScoreView = (typeof SCORE_VIEWS)[number];
 export const isScoreView = (x: unknown): x is ScoreView => SCORE_VIEWS.some((v) => v === x);
+export const SETTINGS_PANES = ["sources", "general", "privacy"] as const;
+export type SettingsPane = (typeof SETTINGS_PANES)[number];
+export const isSettingsPane = (x: unknown): x is SettingsPane => SETTINGS_PANES.some((v) => v === x);
 
 /** How far back the scorecard's counts look. The score and tiers follow the chosen period too. */
 export const PERIODS = ["7d", "28d", "90d", "all"] as const;
@@ -40,6 +43,8 @@ export type AppState = {
   tab: Tab;
   /** Which scorecard section is showing. */
   view: ScoreView;
+  /** Settings: which sub-tab is open. */
+  settingsPane: SettingsPane;
   filter: Filter;
   /** Every model, from the last unfiltered stats; the picker lists these even while narrowed. */
   allModels: ModelRow[];
@@ -72,6 +77,7 @@ export type AppState = {
 const initial = (): AppState => ({
   tab: "score",
   view: "overview",
+  settingsPane: "sources",
   filter: {},
   allModels: [],
   status: { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 },
@@ -97,6 +103,9 @@ export const isGlance = typeof location !== "undefined" && location.hash === "#g
 
 export function setTab(tab: Tab): void {
   s.tab = tab;
+}
+export function setSettingsPane(pane: SettingsPane): void {
+  s.settingsPane = pane;
 }
 export function setView(view: ScoreView): void {
   s.view = view;

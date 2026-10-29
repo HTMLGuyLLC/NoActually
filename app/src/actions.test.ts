@@ -130,9 +130,17 @@ describe("delegated actions", () => {
     btn('[data-action="tab"][data-id="settings"]').focus();
     await toTab("settings");
     expect(state.state.tab).toBe("settings");
-    expect(root.querySelector("h2")?.textContent).toBe("Sources");
+    expect(root.querySelector("section#sources")).not.toBeNull();
     expect(btn('[aria-current="page"]').dataset.id).toBe("settings");
     expect(document.activeElement).toBe(btn('[data-action="tab"][data-id="settings"]'));
+  });
+
+  it("Choose sources opens the Sources sub-tab, even if another was open", async () => {
+    state.setTab("settings");
+    state.setSettingsPane("privacy");
+    root.insertAdjacentHTML("beforeend", '<button data-action="go-sources">Choose sources</button>');
+    await click('[data-action="go-sources"]');
+    expect(state.state.settingsPane).toBe("sources");
   });
 
   it("opens Settings at Sources from Choose sources, with no Sources tab of its own", async () => {
@@ -140,7 +148,7 @@ describe("delegated actions", () => {
     root.insertAdjacentHTML("beforeend", '<button data-action="go-sources">Choose sources</button>');
     await click('[data-action="go-sources"]');
     expect(state.state.tab).toBe("settings");
-    expect(root.querySelector("section#sources h2")?.textContent).toBe("Sources");
+    expect(root.querySelector("section#sources")).not.toBeNull();
   });
 
   it("opens the app on a named tab, and ignores a name that isn't a tab", async () => {
@@ -272,6 +280,7 @@ describe("delegated actions", () => {
 
   it("saves privacy settings, clamped", async () => {
     await toTab("settings");
+    await click('[data-action="settings-pane"][data-id="privacy"]');
     const full = root.querySelector<HTMLInputElement>("#full-days");
     if (full) full.value = "99999";
     await click('[data-action="save-privacy"]');
@@ -281,6 +290,7 @@ describe("delegated actions", () => {
 
   it("un-ticks a toggle the backend refused", async () => {
     await toTab("settings");
+    await click('[data-action="settings-pane"][data-id="general"]');
     api.setAutostart.mockRejectedValueOnce("nope");
     const box = root.querySelector<HTMLInputElement>("#autostart");
     if (!box) throw new Error("no autostart box");

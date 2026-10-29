@@ -30,7 +30,7 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 - Cards drop labels that repeated the question or the time picker. Scrolling lists leave room for the scrollbar.
 - Prompting has a **Prompts per week** chart: each week's prompts split into the ones that were clear the first time and the ones that needed more from you, the same tasks your prompt tier counts.
 - Corrections per week no longer colors the busiest week as if it were the good one; it's labeled "Most" instead.
-- The header keeps Scorecard, Improve and Learn labeled; Settings is an icon button, and Sources is its first section.
+- The header keeps Scorecard, Improve and Learn labeled; Settings is an icon button with sub-tabs: Sources, General and Privacy. **Choose sources** opens the Sources tab.
 - The quick glance asks the scorecard's three questions, each answered in a word with a short why, plus your goal with this week's number. A gear opens Settings and **Open app** opens the scorecard; the share and copy buttons are gone (share from the app).
 - Live tracking checks at most once a minute while an AI tool is writing (it used to check a few seconds after every write). Under the menu, a refresh button checks now, and hovering the status shows the dates and messages the numbers cover.
 - The Hall of fame is an awards wall: one award per kind of correction (and Touché for the times it corrected you), each with its count and best snippet first, ranked the same way every time: pinned, then admitted, then with both sides kept, then the punchiest line, then the newest. Unearned awards wait, dimmed.

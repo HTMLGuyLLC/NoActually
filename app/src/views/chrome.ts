@@ -111,3 +111,19 @@ export const shareButton = (action: string, label = "Share", o: { id?: number; g
   const cls = [o.ghost ? "ghost" : "", o.small ? "small" : "", "share-btn-icon"].filter(Boolean).join(" ");
   return html`<button class="${cls}" data-action="${action}"${o.id == null ? "" : html` data-id="${o.id}"`}>${SHARE_ICON}${label}</button>`;
 };
+
+/** A page's sub-tabs: plain buttons, like the main nav, with the current one marked. Each has an
+ * icon; on narrow windows only the icons show and the name moves into a tooltip. */
+export function sectionNav<T extends string>(o: {
+  label: string;
+  action: string;
+  items: readonly T[];
+  current: T;
+  titles: Record<T, string>;
+  icons: Record<T, Html>;
+}): Html {
+  return html`<nav class="views" aria-label="${o.label}">${o.items.map(
+    (v) =>
+      html`<button class="tab${v === o.current ? " on" : ""}" data-action="${o.action}" data-id="${v}" data-tip="${o.titles[v]}"${v === o.current ? raw(' aria-current="page"') : ""}>${o.icons[v]}<span class="tab-name">${o.titles[v]}</span></button>`,
+  )}</nav>`;
+}

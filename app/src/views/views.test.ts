@@ -309,6 +309,9 @@ describe("sourcesView", () => {
     expect(m).toContain('data-action="sync-now">Check for updates</button>');
     expect(m).toContain('id="sync-line">New chats last checked');
     const g = settingsView({
+      pane: "general",
+      sources: [],
+      status,
       retention: { level: "snippet", full_days: 30, snippet_days: 365 },
       autostart: false,
       menuBar: true,
@@ -386,6 +389,9 @@ describe("parseRetention", () => {
 
 describe("settingsView", () => {
   const base = {
+    pane: "general" as const,
+    sources: [source()],
+    status: { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 },
     retention: { level: "snippet" as const, full_days: 30, snippet_days: 365 },
     autostart: true,
     menuBar: true,
@@ -393,11 +399,18 @@ describe("settingsView", () => {
     demo: false,
   };
 
-  it("checks the saved level and toggles", () => {
-    const m = settingsView(base).value;
-    expect(m).toContain('value="snippet" data-action="level" checked');
-    expect(m).toContain('id="autostart" data-action="autostart" type="checkbox" checked');
-    expect(m).toContain('max="3650"');
+  it("shows one sub-tab at a time: Sources, General or Privacy", () => {
+    const tabs = (pane: "sources" | "general" | "privacy") => settingsView({ ...base, pane }).value;
+    expect(tabs("general")).toContain('data-action="settings-pane" data-id="general" data-tip="General" aria-current="page"');
+    expect(tabs("general")).not.toContain('name="level"');
+    expect(tabs("sources")).toContain('<section id="sources">');
+    expect(tabs("sources")).not.toContain('id="menu-bar"');
+    // The tab names the pane, so the pane doesn't repeat it as a heading.
+    expect(tabs("privacy")).not.toContain("<h2>");
+    const privacy = tabs("privacy");
+    expect(privacy).toContain('value="snippet" data-action="level" checked');
+    expect(privacy).toContain('max="3650"');
+    expect(tabs("general")).toContain('id="autostart" data-action="autostart" type="checkbox" checked');
   });
 
   it("checks the menu-bar toggle when it's on, and leaves it clear when off", () => {

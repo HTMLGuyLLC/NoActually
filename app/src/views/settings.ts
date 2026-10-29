@@ -1,7 +1,10 @@
-// Settings: launch at login, updates, sync, and what's kept for the Hall of Fame.
-import { isLevel, type Level, type Retention, type UpdateStatus } from "../api";
+// Settings: sources, launch and updates, and what's kept for the Hall of Fame, as sub-tabs.
+import { isLevel, type Level, type Retention, type SourceInfo, type SyncStatus, type UpdateStatus } from "../api";
 import { type Html, html, raw } from "../html";
+import { SETTINGS_PANES, type SettingsPane } from "../state";
 import { updateLine } from "../update";
+import { sectionNav, svg } from "./chrome";
+import { sourcesView } from "./sources";
 
 /** Retention days are a u32 on the Rust side; anything past ten years is "forever" in practice. */
 export const RETENTION_MIN_DAYS = 1;
@@ -24,19 +27,47 @@ export function parseRetention(f: RetentionFields): Retention {
   return { level: f.level, full_days: days(f.fullDays, DEFAULT_FULL_DAYS), snippet_days: days(f.snippetDays, DEFAULT_SNIPPET_DAYS) };
 }
 
-export type SettingsContext = { retention: Retention; autostart: boolean; menuBar: boolean; update: UpdateStatus | null; demo: boolean };
+export type SettingsContext = {
+  pane: SettingsPane;
+  sources: SourceInfo[];
+  status: SyncStatus;
+  retention: Retention;
+  autostart: boolean;
+  menuBar: boolean;
+  update: UpdateStatus | null;
+  demo: boolean;
+};
 
 const attr = (on: boolean, name: string) => (on ? raw(` ${name}`) : "");
 
-export function settingsView({ retention: r, autostart, menuBar, update, demo }: SettingsContext): Html {
-  const opt = (level: Level, title: string, body: string) =>
-    html`<label class="level${r.level === level ? " on" : ""}"><input type="radio" name="level" value="${level}" data-action="level"${attr(
-      r.level === level,
-      "checked",
-    )}/><span><b>${title}</b><br/><span class="muted small">${body}</span></span></label>`;
+const PANE_TITLES: Record<SettingsPane, string> = { sources: "Sources", general: "General", privacy: "Privacy" };
+const PANE_ICONS: Record<SettingsPane, Html> = {
+  // Folders stacked: where the history comes from.
+  sources: svg("M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"),
+  // Sliders.
+  general: svg("M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4"),
+  // A padlock.
+  privacy: svg("M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3"),
+};
+
+/** Settings: Sources, General and Privacy as sub-tabs, one showing at a time. */
+export function settingsView(ctx: SettingsContext): Html {
+  const nav = sectionNav({
+    label: "Settings sections",
+    action: "settings-pane",
+    items: SETTINGS_PANES,
+    current: ctx.pane,
+    titles: PANE_TITLES,
+    icons: PANE_ICONS,
+  });
+  const body = ctx.pane === "sources" ? sourcesView(ctx.sources, ctx.status) : ctx.pane === "general" ? generalView(ctx) : privacyView(ctx);
+  return html`<div class="views-row">${nav}</div><div class="view-body">${body}</div>`;
+}
+
+function generalView({ autostart, menuBar, update, demo }: SettingsContext): Html {
   const off = attr(demo, "disabled");
   return html`
-    <section><div class="head"><h2>General</h2></div>
+    <section>
       <div class="settings-row">
         <label class="toggle"><input id="menu-bar" data-action="menu-bar" type="checkbox"${attr(menuBar, "checked")}${off}/><span>Keep running in the menu bar</span></label>
         <span class="muted small">On: closing the window keeps it counting from the menu bar (the system tray on Windows and Linux). Off: it's an ordinary app that only counts while it's open, and quits when you close it.</span>
@@ -53,8 +84,17 @@ export function settingsView({ retention: r, autostart, menuBar, update, demo }:
         <button class="ghost" data-action="check-update"${off}>Check for app updates</button>
         <span class="muted small" id="update-line" aria-live="polite">${update ? updateLine(update) : ""}</span>
       </div>
-    </section>
-    <section><div class="head"><h2>Privacy</h2>
+    </section>`;
+}
+
+function privacyView({ retention: r }: SettingsContext): Html {
+  const opt = (level: Level, title: string, body: string) =>
+    html`<label class="level${r.level === level ? " on" : ""}"><input type="radio" name="level" value="${level}" data-action="level"${attr(
+      r.level === level,
+      "checked",
+    )}/><span><b>${title}</b><br/><span class="muted small">${body}</span></span></label>`;
+  return html`
+    <section><div class="head">
       <p class="muted">Ordinary messages are never stored, only counted. This controls what's kept for corrections you'll see in the Hall of Fame. Text always steps down as it ages, never up.</p></div>
       <div class="levels">
         ${opt("full", "Full message", "Your whole message and the start of the AI's reply. Secrets, emails and links are still redacted.")}

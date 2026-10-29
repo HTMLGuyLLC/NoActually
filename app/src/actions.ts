@@ -18,6 +18,7 @@ import {
   isPeriod,
   isRange,
   isScoreView,
+  isSettingsPane,
   isTab,
   PERIOD_WHEN,
   setAutoUpdate,
@@ -28,6 +29,7 @@ import {
   setLesson,
   setPeriod,
   setRange,
+  setSettingsPane,
   setTab,
   setView,
   state,
@@ -164,10 +166,16 @@ export const clickActions = {
     setView("overview");
     return render();
   },
-  "go-sources": async () => {
+  "go-sources": () => {
     setTab("settings");
-    await render();
-    document.getElementById("sources")?.scrollIntoView({ block: "start" });
+    setSettingsPane("sources");
+    return render();
+  },
+  "settings-pane": (b) => {
+    const pane = data(b, "id");
+    if (!isSettingsPane(pane)) throw new Error(`Unknown settings section: ${pane}`);
+    setSettingsPane(pane);
+    return render();
   },
   tab: (b) => {
     const tab = data(b, "id");
