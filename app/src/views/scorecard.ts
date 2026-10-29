@@ -119,10 +119,6 @@ function heroView(s: Stats, ctx: Ctx): Html {
     </section>`;
 }
 
-/** Why fewer corrections never costs points. */
-const proofNote = (meta: Meta) =>
-  html`<p class="muted small">${meta.correction_proof} corrections prove you check its work. Correcting it less because it got it right never costs you.</p>`;
-
 /** "Usually.", hand-written, with a screen-reader version. */
 function correctionMark(o: Overall, meta: Meta, still: boolean): Html {
   const tier = correctionTier(meta, o.correction_tier);
@@ -290,7 +286,6 @@ function correctionsView(s: Stats, ctx: Ctx): Html {
       </div>
       <div class="meter">
         ${correctionLadderView(s.overall, meta)}
-        ${proofNote(meta)}
         ${correctionTier(meta, s.overall.correction_tier) ? html`<div class="share"><button data-action="share-corrections">Share your corrections</button></div>` : ""}
       </div>
     </section>

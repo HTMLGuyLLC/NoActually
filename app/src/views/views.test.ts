@@ -181,9 +181,9 @@ describe("overview hero", () => {
     expect(hero({ score: null, tier: null, next_tier: null, verdict: "hmm", to_rank: 1 })).toContain("<b>1 more task</b> with");
   });
 
-  it("says why fewer corrections never costs points", () => {
+  it("keeps the corrections ladder free of fine print", () => {
     const m = scorecardView(stats(), { ...ctx, view: "corrections" }).value;
-    expect(m).toContain("3 corrections prove you check its work. Correcting it less because it got it right never costs you.");
+    expect(m).not.toContain("corrections prove you check its work");
   });
 
   it("escapes names from meta and unknown ids", () => {
