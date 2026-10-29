@@ -1,4 +1,4 @@
-// "Do you make it guess?": how specific your briefs are and what it took to land them.
+// "Do you make it guess?": how specific your prompts are and what it took to land them.
 import type { Briefs, Meta } from "../api";
 import { type Html, html, num } from "../html";
 import { briefTier, briefTierRanges, landedPct, percent, steerTitle } from "../meta";
@@ -17,7 +17,7 @@ function becauseLine(b: Briefs, meta: Meta, when: string): Html {
 function markView(b: Briefs, meta: Meta, still: boolean): Html {
   const tier = briefTier(meta, b.tier);
   return html`<div class="no${tier ? "" : " maybe"}${still ? " still" : ""}" aria-hidden="true">${tier?.verdict ?? "Hmm."}</div>
-      <span class="sr-only">${tier ? `${tier.verdict} Your brief tier is ${tier.name}.` : "Not ranked yet."}</span>`;
+      <span class="sr-only">${tier ? `${tier.verdict} Your prompt tier is ${tier.name}.` : "Not ranked yet."}</span>`;
 }
 
 /** The overview's half: the verdict, the tier, and a way to the details. */
@@ -26,18 +26,18 @@ export function briefsSummaryView(b: Briefs, meta: Meta, still: boolean, when = 
   const body = b.tasks
     ? html`<div class="verdict">${markView(b, meta, still)}<div class="because">${becauseLine(b, meta, when)}</div></div>
         <p class="tier-line">${tier ? html`<span class="tier-label"><span>Tier</span>${tier.name}</span>` : ""}<span class="hand-note">${ladderNote(b, meta)}</span></p>`
-    : html`<p class="muted">No tasks yet. The first message of each chat is its brief.</p>`;
+    : html`<p class="muted">No tasks yet. The first message of each chat is its prompt.</p>`;
   return html`<article class="card mini briefs">
-      <div class="eyebrow">How you brief it</div>
+      <div class="eyebrow">How you prompt it</div>
       <h2 class="q">Do you make it guess?</h2>
       ${body}
-      <div class="share"><button class="ghost" data-action="view" data-id="briefs">See briefs</button></div>
+      <div class="share"><button class="ghost" data-action="view" data-id="briefs">See prompts</button></div>
     </article>`;
 }
 
 function verdictView(b: Briefs, meta: Meta, still: boolean, subject: Html | string, when: string): Html {
   return html`
-    <div class="eyebrow">How you brief it</div>
+    <div class="eyebrow">How you prompt it</div>
     <h1 class="q">Do you make ${subject} guess?</h1>
     <div class="verdict">
       ${markView(b, meta, still)}
@@ -52,9 +52,9 @@ function gradesView(b: Briefs, meta: Meta): Html {
   const parts = top.map((g) => ({ ...g, pct: percent(b.grades[g.id] ?? 0, b.tasks) }));
   const label = parts.map((p) => `${p.pct}% ${p.title.toLowerCase()}`).join(", ");
   return html`<div class="grades">
-    <div class="grade-bar" role="img" aria-label="Your briefs: ${label}">${parts.map((p) => html`<i class="g-${p.id}" data-w="${p.pct}"></i>`)}</div>
+    <div class="grade-bar" role="img" aria-label="Your prompts: ${label}">${parts.map((p) => html`<i class="g-${p.id}" data-w="${p.pct}"></i>`)}</div>
     <ul class="grade-key">${parts.map((p) => html`<li><i class="g-${p.id}" aria-hidden="true"></i>${p.title} <b>${p.pct}%</b></li>`)}</ul>
-    <p class="muted small">Sharp briefs carry ${meta.sharp_signals}+ of the ${meta.signals.length} things below. Questions aren't graded.</p>
+    <p class="muted small">Sharp prompts carry ${meta.sharp_signals}+ of the ${meta.signals.length} things below. Questions aren't graded.</p>
   </div>`;
 }
 
@@ -67,8 +67,8 @@ function ladderNote(b: Briefs, meta: Meta): string {
 
 function briefLadderView(b: Briefs, meta: Meta): Html {
   return html`
-    ${ladderView({ label: "Brief tiers", tiers: briefTierRanges(meta), on: b.tier, at: b.tier ? `${landedPct(b)}%` : null, unranked: ladderNote(b, meta) })}
-    ${b.tier ? html`<div class="share"><button data-action="share-briefs">Share your briefs</button></div>` : ""}`;
+    ${ladderView({ label: "Prompt tiers", tiers: briefTierRanges(meta), on: b.tier, at: b.tier ? `${landedPct(b)}%` : null, unranked: ladderNote(b, meta) })}
+    ${b.tier ? html`<div class="share"><button data-action="share-briefs">Share your prompts</button></div>` : ""}`;
 }
 
 function signalsView(b: Briefs, meta: Meta): Html {
@@ -84,9 +84,9 @@ function tipView(b: Briefs, meta: Meta): Html | "" {
   const s = tip && meta.signals.find((x) => x.id === tip.signal);
   if (!tip || !s) return "";
   const proof = tip.landed_with_without
-    ? html` Your briefs that do landed <b>${Math.round(tip.landed_with_without[0])}%</b> of the time, vs ${Math.round(tip.landed_with_without[1])}% without.`
+    ? html` Your prompts that do landed <b>${Math.round(tip.landed_with_without[0])}%</b> of the time, vs ${Math.round(tip.landed_with_without[1])}% without.`
     : "";
-  return html`<p class="tip"><span class="hand">Try this:</span> <b>${s.title.toLowerCase()}</b> (${s.hint}). Only ${Math.round(tip.pct_of_briefs)}% of your briefs do.${proof}</p>`;
+  return html`<p class="tip"><span class="hand">Try this:</span> <b>${s.title.toLowerCase()}</b> (${s.hint}). Only ${Math.round(tip.pct_of_briefs)}% of your prompts do.${proof}</p>`;
 }
 
 function steeringView(b: Briefs, meta: Meta): Html {
@@ -99,15 +99,15 @@ function steeringView(b: Briefs, meta: Meta): Html {
     (c) =>
       html`<div class="cat${c.id === "ai_wrong" ? " ai" : ""}"><span>${steerTitle(meta, c.id)}</span><span class="bar-bg"><i data-w="${c.n ? Math.max(2, (c.n / top) * 100) : 0}"></i></span><span class="n">${num(c.n)}</span></div>`,
   )}</div>
-  <p class="muted small">${plural(total, "steering message")}. ${num(total - yours)} were its mistakes (blue), which don't count against you; ${num(yours)} could have been in the brief (red).</p>`;
+  <p class="muted small">${plural(total, "steering message")}. ${num(total - yours)} were its mistakes (blue), which don't count against you; ${num(yours)} could have been in the prompt (red).</p>`;
 }
 
 /** The Briefs section: verdict card, then what briefs carry and where steering went. `subject` is the
  * model picker ("it" when there's none). */
 export function briefsView(b: Briefs, meta: Meta, still: boolean, subject: Html | string = "it", when = "in the last 28 days"): Html {
   if (!b.tasks) {
-    return html`<section class="card briefs"><div><div class="eyebrow">How you brief it</div><h1 class="q">Do you make ${subject} guess?</h1>
-      <p class="muted">No tasks yet. The first message of each chat is its brief, so start a chat and ask for something.</p></div></section>`;
+    return html`<section class="card briefs"><div><div class="eyebrow">How you prompt it</div><h1 class="q">Do you make ${subject} guess?</h1>
+      <p class="muted">No tasks yet. The first message of each chat is its prompt, so start a chat and ask for something.</p></div></section>`;
   }
   return html`
     <section class="card briefs">
@@ -115,7 +115,7 @@ export function briefsView(b: Briefs, meta: Meta, still: boolean, subject: Html 
       <div class="meter">${briefLadderView(b, meta)}</div>
     </section>
     <section class="split">
-      <div><div class="head"><h2>What your briefs carry</h2></div>${gradesView(b, meta)}${signalsView(b, meta)}</div>
+      <div><div class="head"><h2>What your prompts carry</h2></div>${gradesView(b, meta)}${signalsView(b, meta)}</div>
       <div><div class="head"><h2>Where steering went</h2></div>${steeringView(b, meta)}</div>
     </section>`;
 }

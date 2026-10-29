@@ -1,5 +1,5 @@
-name: Wrong catch (false positive or miss)
-description: A message was counted as a catch when it should not be, or missed when it should count.
+name: Wrong correction (false positive or miss)
+description: A message was counted as a correction when it should not be, or missed when it should count.
 labels: [rules]
 body:
   - type: markdown
@@ -12,7 +12,7 @@ body:
     attributes:
       label: What went wrong
       options:
-        - Counted as a catch, but should not be
+        - Counted as a correction, but should not be
         - Not counted, but should be
         - Wrong label
     validations:
@@ -32,7 +32,7 @@ body:
     id: expected
     attributes:
       label: Label you expected
-      options: [Confirmed, Admitted, Claimed, Humbled, None (not a catch)]
+      options: [Confirmed, Admitted, Claimed, Humbled, None (not a correction)]
     validations:
       required: true
   - type: input

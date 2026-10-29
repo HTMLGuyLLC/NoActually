@@ -11,9 +11,9 @@ describe("pickStatView", () => {
   const item: PickItem = { filter: {}, label: "x", path: "", depth: 0, catches: 60, messages: 100, tasks: 1200, continued: 10, landed: 8 };
   const none: PickItem = { ...item, catches: 0, messages: 0, tasks: 0, continued: 0, landed: 0 };
 
-  it("shows catches for the catches pages", () => {
-    expect(pickStatView(item, "catches").value).toBe("<b>60</b> catches · 60.0%");
-    expect(pickStatView(none, "catches").value).toBe("<b>0</b> catches · –");
+  it("shows corrections for the corrections pages", () => {
+    expect(pickStatView(item, "catches").value).toBe("<b>60</b> corrections · 60.0%");
+    expect(pickStatView(none, "catches").value).toBe("<b>0</b> corrections · –");
   });
 
   it("shows landed and tasks for the briefs page", () => {
@@ -22,8 +22,8 @@ describe("pickStatView", () => {
   });
 
   it("shows both rates for the overview", () => {
-    expect(pickStatView(item, "both").value).toBe("<b>60.0%</b> caught · <b>80%</b> landed");
-    expect(pickStatView(none, "both").value).toBe("<b>–</b> caught · <b>–</b> landed");
+    expect(pickStatView(item, "both").value).toBe("<b>60.0%</b> corrected · <b>80%</b> landed");
+    expect(pickStatView(none, "both").value).toBe("<b>–</b> corrected · <b>–</b> landed");
   });
 });
 
@@ -114,10 +114,10 @@ describe("model picker popover", () => {
   it("shows the chosen stat beside each model", () => {
     openPicker(trigger, { items, stat: "briefs", isSelected: () => false, onChoose, onClose });
     expect(must("#pick-opt-0").textContent).toContain("landed");
-    expect(must("#pick-opt-0").textContent).not.toContain("catches");
+    expect(must("#pick-opt-0").textContent).not.toContain("corrections");
     closePicker(false);
     open();
-    expect(must("#pick-opt-0").textContent).toContain("catches");
+    expect(must("#pick-opt-0").textContent).toContain("corrections");
   });
 
   it("replaces an open picker instead of stacking a second", () => {

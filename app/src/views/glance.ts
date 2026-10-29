@@ -1,5 +1,5 @@
 // Quick glance: the small window under the menu bar icon. The three answers you'd open the app
-// for (could it replace you, do you make it guess, do you catch it) and your goal, nothing more.
+// for (could it replace you, do you make it guess, do you correct it) and your goal, nothing more.
 import type { GoalStatus, Meta, Stats } from "../api";
 import { type Html, html, num } from "../html";
 import { briefTier, catchTier, landedPct, tierName } from "../meta";
@@ -28,7 +28,7 @@ function answersView(s: Stats, meta: Meta): Html {
   return html`<div class="g-answers">
     ${answerView("Could AI replace you?", o.score == null ? null : o.verdict === "no" ? "No." : "Hmm.", replace)}
     ${answerView("Do you make it guess?", brief?.verdict ?? null, guess)}
-    ${answerView("Do you catch its mistakes?", caught?.verdict ?? null, check)}
+    ${answerView("Do you correct its mistakes?", caught?.verdict ?? null, check)}
   </div>`;
 }
 
@@ -58,9 +58,9 @@ export function glanceView(s: Stats, meta: Meta, goal: GoalStatus | null = null)
   </div>`;
 }
 
-/** Before the first catch. `watching` names the sources being read right now (empty: none allowed yet). */
+/** Before the first correction. `watching` names the sources being read right now (empty: none allowed yet). */
 export function emptyGlanceView(watching: string): Html {
   return watching
-    ? html`<div class="glance empty-glance">${topView()}<span class="eyebrow"><i class="dot live"></i> Watching ${watching}</span><div class="g-q">No catches yet.</div><p class="muted small">Your score shows up after your first catch.</p>${openView()}</div>`
+    ? html`<div class="glance empty-glance">${topView()}<span class="eyebrow"><i class="dot live"></i> Watching ${watching}</span><div class="g-q">No corrections yet.</div><p class="muted small">Your score shows up after your first correction.</p>${openView()}</div>`
     : html`<div class="glance empty-glance">${topView()}<div class="g-q">Could AI replace you?</div><p class="muted small">Pick which AI tools to count, then find out.</p>${openView("Set up")}</div>`;
 }

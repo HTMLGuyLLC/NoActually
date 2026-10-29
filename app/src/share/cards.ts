@@ -98,16 +98,16 @@ function drawPill(g: CanvasRenderingContext2D, label: string, x: number, y: numb
   g.fillText(text, x + 18 * scale, y + 26 * scale);
 }
 
-/** "I CAUGHT IT 177  vs  3 IT CAUGHT ME" between x and x + w, with the rule on top at `y`. */
+/** "I CORRECTED IT 177  vs  3 IT CORRECTED ME" between x and x + w, with the rule on top at `y`. */
 function drawScoreLine(g: CanvasRenderingContext2D, s: ScoreCard, x: number, y: number, w: number, scale = 1) {
   const { ink, muted, pen, ai } = CARD_THEME;
   g.fillStyle = ink;
   g.fillRect(x, y, w, 3 * scale);
   g.font = `600 ${16 * scale}px 'JetBrains Mono'`;
   g.fillStyle = muted;
-  g.fillText("I CAUGHT IT", x, y + 40 * scale);
+  g.fillText("I CORRECTED IT", x, y + 40 * scale);
   g.textAlign = "right";
-  g.fillText("IT CAUGHT ME", x + w, y + 40 * scale);
+  g.fillText("IT CORRECTED ME", x + w, y + 40 * scale);
   g.font = `800 ${64 * scale}px 'Bricolage Grotesque Variable'`;
   g.fillStyle = ai;
   g.fillText(String(s.humbled), x + w, y + 110 * scale);
@@ -134,13 +134,13 @@ type ScoreCard = Pick<Stats, "overall" | "catches_last_7d" | "catches" | "humble
 
 const SCORE_FONTS = ["800 64px 'Bricolage Grotesque Variable'", "400 200px 'Gochi Hand'", "500 24px 'Instrument Sans'", "600 18px 'JetBrains Mono'"];
 const heading = (size: number) => `800 ${size}px 'Bricolage Grotesque Variable'`;
-/** "Score 86. 83% of my tasks landed." or, before a score, this week's catches. */
+/** "Score 86. 83% of my tasks landed." or, before a score, this week's corrections. */
 const timesLine = (s: ScoreCard) =>
   s.overall.score == null
-    ? `I caught it ${s.catches_last_7d} ${s.catches_last_7d === 1 ? "time" : "times"} this week.`
+    ? `I corrected it ${s.catches_last_7d} ${s.catches_last_7d === 1 ? "time" : "times"} this week.`
     : `Score ${s.overall.score}. ${s.overall.direction}% of my tasks landed.`;
 const pctLine = (s: ScoreCard, when: string) =>
-  s.overall.score == null ? null : `I caught it ${s.overall.catches} ${s.overall.catches === 1 ? "time" : "times"} to its ${s.overall.humbled} ${when}.`;
+  s.overall.score == null ? null : `I corrected it ${s.overall.catches} ${s.overall.catches === 1 ? "time" : "times"} to its ${s.overall.humbled} ${when}.`;
 
 /** Hand-written `text`, rotated like a red-pen mark, baseline at (x, y). */
 function drawMark(g: CanvasRenderingContext2D, text: string, color: string, x: number, y: number, size: number) {
@@ -260,7 +260,7 @@ export async function drawCatchCard(e: CatchLike, shape: CardShape = "wide"): Pr
 
   g.fillStyle = ink;
   g.font = heading(54 * k);
-  const title = `I caught ${e.model || "my AI"} being wrong.`;
+  const title = `I corrected ${e.model || "my AI"}.`;
   // One line squeezes a long model name to fit (fillText's max width); more lines wrap it.
   const titleLines = L.titleLines > 1 ? wrap(g, title, inner, L.titleLines) : [title];
   let y: number = L.titleY;
@@ -315,7 +315,7 @@ type BriefsCard = Pick<Briefs, "window_landed" | "window_tasks" | "grades" | "ta
 const BRIEF_QUESTION = "Do I make my AI guess?";
 export const briefLines = (b: BriefsCard, when = "in the last 28 days"): [string, string] => [
   `${landedPct(b)}% of my tasks ${when} landed without steering.`,
-  `${percent(b.grades.sharp ?? 0, b.tasks)}% of all my briefs were sharp.`,
+  `${percent(b.grades.sharp ?? 0, b.tasks)}% of all my prompts were sharp.`,
 ];
 
 /** "SHARP 20% · SOLID 24% · THIN 56%": the bar's key. */
@@ -346,13 +346,13 @@ function drawGradeBar(g: CanvasRenderingContext2D, b: BriefsCard, x: number, y: 
 
 type CatchesCard = Pick<Overall, "catches" | "humbled" | "judgment">;
 
-const CATCH_QUESTION = "Do I catch my AI's mistakes?";
+const CATCH_QUESTION = "Do I correct my AI's mistakes?";
 export const catchLines = (o: CatchesCard, when = "in the last 28 days"): [string, string] => [
-  `I caught it ${o.catches} ${o.catches === 1 ? "time" : "times"} ${when}. It caught me ${o.humbled}.`,
+  `I corrected it ${o.catches} ${o.catches === 1 ? "time" : "times"} ${when}. It corrected me ${o.humbled}.`,
   `Judgment ${o.judgment ?? 0} of 100: I check its work, and it rarely has to correct me.`,
 ];
 
-/** The catches card: "Do I catch my AI's mistakes?", the tier's answer, and who caught whom. */
+/** The catches card: "Do I correct my AI's mistakes?", the tier's answer, and who corrected whom. */
 export async function drawCatchesCard(o: CatchesCard, tier: BriefTier, shape: CardShape = "wide", when = "in the last 28 days"): Promise<Blob> {
   const { c, g } = await canvas(shape, SCORE_FONTS);
   const { w } = CARD_SIZES[shape];
@@ -375,7 +375,7 @@ export async function drawCatchesCard(o: CatchesCard, tier: BriefTier, shape: Ca
     g.fillStyle = muted;
     for (const [i, l] of wrap(g, judged, inner, 2).entries()) g.fillText(l, x, 890 + i * 52);
     drawPill(g, tier.name, x, 1010, 1.5);
-    drawFooter(g, `Do you catch yours?  ${SHARE_URL_SHORT}`, w, 1290, 1.4);
+    drawFooter(g, `Do you correct yours?  ${SHARE_URL_SHORT}`, w, 1290, 1.4);
     return png(c);
   }
 
@@ -390,7 +390,7 @@ export async function drawCatchesCard(o: CatchesCard, tier: BriefTier, shape: Ca
   g.fillStyle = muted;
   g.fillText(judged, 140, 484, w - 280);
   drawPill(g, tier.name, 140, 512);
-  drawFooter(g, `Do you catch yours?  ${SHARE_URL_SHORT}`, w, 612);
+  drawFooter(g, `Do you correct yours?  ${SHARE_URL_SHORT}`, w, 612);
   return png(c);
 }
 

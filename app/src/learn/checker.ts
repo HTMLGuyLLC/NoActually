@@ -1,4 +1,4 @@
-// The brief checker's live result: grades the draft with the Rust rules as you type. The draft
+// The prompt checker's live result: grades the draft with the Rust rules as you type. The draft
 // lives only in memory (state.draft); nothing is saved or logged.
 import { api, demo } from "../api";
 import { state } from "../state";

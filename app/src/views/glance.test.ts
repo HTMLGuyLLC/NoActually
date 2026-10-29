@@ -29,7 +29,7 @@ describe("glanceView", () => {
     expect(m).toContain("Could AI replace you?");
     expect(m).toContain('<span class="g-word">No.</span><span class="muted small">Score 86 · Sharp-eyed</span>');
     expect(m).toContain("Do you make it guess?");
-    expect(m).toContain("Do you catch its mistakes?");
+    expect(m).toContain("Do you correct its mistakes?");
     expect(m).toContain('<span class="g-word">Usually.</span><span class="muted small">You 41 vs it 2 · Hawk-eyed</span>');
   });
 
@@ -43,7 +43,7 @@ describe("glanceView", () => {
     expect(glanceView(stats(), meta, status({ kind: "tier", tier: "irreplaceable" } as Partial<Goal>, { score: 86 })).value).toContain("Score 86 of 90");
   });
 
-  it("keeps the gear and Open app before the first catch", () => {
+  it("keeps the gear and Open app before the first correction", () => {
     for (const m of [emptyGlanceView("").value, emptyGlanceView("Codex").value]) {
       expect(m).toContain('data-id="settings"');
       expect(m).toContain('data-action="open-main"');

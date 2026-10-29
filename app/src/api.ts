@@ -16,7 +16,7 @@ export type Retention = { level: Level; full_days: number; snippet_days: number 
 
 /** Static app data from Rust: the one place tiers, category titles and source names are defined. */
 export type Tier = { id: string; name: string; floor: number };
-/** A brief tier: `floor` is the percent of the week's tasks that must land. */
+/** A prompt tier: `floor` is the percent of the week's tasks that must land. */
 export type BriefTier = Tier & { verdict: string };
 export type Titled = { id: string; title: string };
 export type Meta = {
@@ -34,11 +34,11 @@ export type Meta = {
   sources: { id: string; name: string }[];
   /** Ascending by floor. */
   brief_tiers: BriefTier[];
-  /** "Do you catch its mistakes?" tiers, by judgment, ascending. */
+  /** "Do you correct its mistakes?" tiers, by judgment, ascending. */
   catch_tiers: BriefTier[];
-  /** Tasks with a follow-up, in the window, before a brief tier is given. */
+  /** Tasks with a follow-up, in the window, before a prompt tier is given. */
   min_briefs: number;
-  /** Days of tasks a brief tier looks at. */
+  /** Days of tasks a prompt tier looks at. */
   brief_window_days: number;
   /** What a brief can carry, in display order. */
   signals: (Titled & { hint: string })[];
@@ -81,10 +81,10 @@ export type HallEntry = {
   pinned: boolean;
 };
 export type WeekRow = { week: string; messages: number; catches: number };
-/** The signal your briefs carry least; the with/without rates only when your history backs them. */
+/** The signal your prompts carry least; the with/without rates only when your history backs them. */
 export type Tip = { signal: string; pct_of_briefs: number; landed_with_without: [number, number] | null };
 /**
- * How you brief it. A task "landed" when you never had to add to, clarify or redo it. Only tasks
+ * How you prompt it. A task "landed" when you never had to add to, clarify or redo it. Only tasks
  * with a follow-up (`continued`) count toward landing: a one-shot task can't need steering.
  */
 export type Briefs = {
@@ -94,7 +94,7 @@ export type Briefs = {
   /** Continued tasks in the last `Meta.brief_window_days` days, and how many of them landed. */
   window_tasks: number;
   window_landed: number;
-  /** A brief tier id from `Meta.brief_tiers`, or null until there are enough tasks. */
+  /** A prompt tier id from `Meta.brief_tiers`, or null until there are enough tasks. */
   tier: string | null;
   /** The tier above it; its floor is the target to show. */
   next_tier: string | null;
@@ -121,10 +121,10 @@ export type Overall = {
   tier: string | null;
   next_tier: string | null;
   verdict: Verdict;
-  /** A catch tier id from `Meta.catch_tiers`, from judgment. */
+  /** A correction tier id from `Meta.catch_tiers`, from judgment. */
   catch_tier: string | null;
   next_catch_tier: string | null;
-  /** Catches and times it caught you, in the window. */
+  /** Catches and times it corrected you, in the window. */
   catches: number;
   humbled: number;
   to_rank: number;

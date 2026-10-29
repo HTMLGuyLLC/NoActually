@@ -11,7 +11,7 @@ describe("briefsView", () => {
     const m = view();
     expect(m).toContain("Do you make it guess?");
     expect(m).toContain(">Rarely.</div>");
-    expect(m).toContain('<span class="sr-only">Rarely. Your brief tier is Architect.</span>');
+    expect(m).toContain('<span class="sr-only">Rarely. Your prompt tier is Architect.</span>');
     expect(m).toContain("<b>95%</b> of your tasks in the last 28 days landed");
     expect(m).toContain('<li class="on" aria-current="true"><span>Architect</span><span><b class="at">95%</b>');
     expect(m).toContain("<span>Ticket writer</span><span>70–79%</span>");
@@ -36,7 +36,7 @@ describe("briefsView", () => {
   });
 
   it("spells out the grade mix for screen readers, sharp first", () => {
-    expect(view()).toContain('aria-label="Your briefs: 20% sharp, 30% solid, 50% thin"');
+    expect(view()).toContain('aria-label="Your prompts: 20% sharp, 30% solid, 50% thin"');
     expect(view()).toContain('class="g-sharp" data-w="20"');
   });
 
@@ -47,10 +47,10 @@ describe("briefsView", () => {
   });
 
   it("tips the weakest signal, quoting the gap only when Rust found one", () => {
-    expect(view()).toContain("<b>sets limits</b> (don&#39;t, only, keep, without). Only 10% of your briefs do.");
+    expect(view()).toContain("<b>sets limits</b> (don&#39;t, only, keep, without). Only 10% of your prompts do.");
     expect(view()).not.toContain("landed <b>");
     const m = view({ tip: { signal: "why", pct_of_briefs: 20, landed_with_without: [93.3, 80] } });
-    expect(m).toContain("Your briefs that do landed <b>93%</b> of the time, vs 80% without.");
+    expect(m).toContain("Your prompts that do landed <b>93%</b> of the time, vs 80% without.");
     expect(view({ tip: null })).not.toContain("Try this");
     expect(view({ tip: { signal: "gone", pct_of_briefs: 1, landed_with_without: null } })).not.toContain("Try this");
   });
@@ -58,7 +58,7 @@ describe("briefsView", () => {
   it("splits steering between the AI and the brief", () => {
     const m = view();
     expect(m).toContain('class="cat ai"><span>It got it wrong</span>');
-    expect(m).toContain("25 steering messages. 12 were its mistakes (blue), which don't count against you; 13 could have been in the brief (red).");
+    expect(m).toContain("25 steering messages. 12 were its mistakes (blue), which don't count against you; 13 could have been in the prompt (red).");
     expect(view({ steering: { ai_wrong: 0, added: 0, clarified: 0, redo: 0 } })).toContain("No steering yet.");
   });
 
@@ -86,7 +86,7 @@ describe("briefs on the scorecard and the glance", () => {
     expect(m).toContain('class="no" aria-hidden="true">Rarely.');
   });
 
-  it("names the brief tier in the glance once ranked", () => {
+  it("names the prompt tier in the glance once ranked", () => {
     expect(glanceView(stats(), meta).value).toContain('<span class="g-word">Rarely.</span><span class="muted small">95% landed · Architect</span>');
     expect(glanceView(stats({ briefs: briefs({ tier: null, to_rank: 3 }) }), meta).value).toContain("3 more tasks to get ranked");
   });

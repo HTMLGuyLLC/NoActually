@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>A scoreboard for you vs. your AI.</b><br>
-  Brief it well, catch it when it's wrong, and find out if it could really replace you.<br>
+  Prompt it well, correct it when it's wrong, and find out if it could really replace you.<br>
   Tiers to climb, goals to hit, lessons to level up, and a card worth bragging about.
 </p>
 
@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot-scorecard.png" alt="The No, Actually... scorecard overview: the overall score and tier, with how you brief it and who corrects whom below" width="820">
+  <img src="docs/screenshot-scorecard.png" alt="The No, Actually... scorecard overview: the overall score and tier, with how you prompt it and who corrects whom below" width="820">
 </p>
 
 ---
@@ -33,9 +33,9 @@ You correct your AI all day: the function that doesn't exist, the instruction it
 |---|---|---|---|
 | 🧠 | **Could AI replace you?** | Your overall score, 0 to 100, from both questions below | Rubber stamp → Coworker → Sharp-eyed → **Irreplaceable** |
 | 🎯 | ↳ **Do you make it guess?** | How often your tasks land without you adding, clarifying or starting over | Vibes only → Ticket writer → Tech lead → **Architect** |
-| 🧐 | ↳ **Do you catch its mistakes?** | Who corrects whom: you catching it, or it catching you | Autopilot → Spot-checker → Reviewer → **Hawk-eyed** |
+| 🧐 | ↳ **Do you correct its mistakes?** | Who corrects whom: you correcting it, or it correcting you | Autopilot → Spot-checker → Reviewer → **Hawk-eyed** |
 
-Better prompts mean fewer mistakes to catch, and that never costs you: once you've caught it a few times (proof you check its work), more catches add nothing.
+Better prompts mean fewer mistakes to correct, and that never costs you: once you've corrected it a few times (proof you check its work), more corrections add nothing.
 
 > **💸 Costs nothing to run.** No AI does the judging, so there's no API key, no tokens spent and no subscription. Fixed, readable rules score your chats right on your computer: the same history always gives the same score, and nothing is uploaded.
 
@@ -52,13 +52,13 @@ Better prompts mean fewer mistakes to catch, and that never costs you: once you'
 ## What you get
 
 - **A verdict and a score.** "Could Claude replace you? **No.** Score 86, Sharp-eyed." Updated as you work, over the last 28 days.
-- **A brief score.** "Do you make it guess? **Sometimes.** 85% of your tasks landed." Plus what your briefs carry, where the steering went, and one tip backed by your own history.
-- **Improve.** One weekly goal picked from your own numbers ("Set limits in 25% of your briefs"), streaks, trophies, personal bests, last week's recap, and charts of how you're trending.
-- **Learn.** 12 one-minute lessons in three tracks (the 5 habits, steer less, catch more), quick quizzes, and a brief checker that grades a draft as you type, with the same rules as your score.
+- **A prompt score.** "Do you make it guess? **Sometimes.** 85% of your tasks landed." Plus what your prompts carry, where the steering went, and one tip backed by your own history.
+- **Improve.** One weekly goal picked from your own numbers ("Set limits in 25% of your prompts"), streaks, trophies, personal bests, last week's recap, and charts of how you're trending.
+- **Learn.** 12 one-minute lessons in three tracks (the 5 habits, steer less, correct more), quick quizzes, and a prompt checker that grades a draft as you type, with the same rules as your score.
 - **Any time window.** 7 days, 28 days, 90 days or all time: the whole scorecard follows the picker, score included. Every part of the score is a rate, so tiers mean the same thing in any window.
 - **Every model, side by side.** All AI, one provider, one family, or one exact version (say, Claude Opus 5.5). The picker shows the numbers that page is about.
-- **A Hall of Fame** of awards, one per kind of catch: The Fabulist (made it up), Selective Hearing, The Blind Spot, “Fixed” It, Big Brain Energy, and Touché for the times it caught you. Each shows its best snippet, picked the same way every time. Pin the ones you want to keep forever.
-- **Popups** for your 10th catch, a new tier, a streak, a goal week met, or a goal done.
+- **A Hall of Fame** of awards, one per kind of correction: The Fabulist (made it up), Selective Hearing, The Blind Spot, “Fixed” It, Big Brain Energy, and Touché for the times it corrected you. Each shows its best snippet, picked the same way every time. Pin the ones you want to keep forever.
+- **Popups** for your 10th correction, a new tier, a streak, a goal week met, or a goal done.
 - **Made to brag.** Share cards for X, LinkedIn, Bluesky, Threads, Reddit, Facebook, WhatsApp and Instagram. You always see exactly what will be posted before anything goes anywhere.
 
 ## Private and secure by design
@@ -69,7 +69,7 @@ Your AI chats can hold code, keys, client names and half-formed ideas. This app 
 |---|---|
 | 🔒 **Local only** | No accounts, no servers, no telemetry, no analytics. Fonts are bundled. The only network use is an update check against GitHub and a share link you click yourself. The update check carries no account, ID, stats or chat data (GitHub sees your IP address, as with any download), and you can turn it off. |
 | ✋ **Asks first** | Every source is off until you **Allow** it. Pause it, stop it, or **Forget** it (deletes everything it read) any time. |
-| 🔢 **Numbers, not chats** | Ordinary messages are only counted, never stored. For catches you pick **full text**, **snippet** (the default) or **category only**, and kept text steps down on a timer you set. Briefs, goals and lessons store numbers only, never words, and the brief checker saves nothing you type. |
+| 🔢 **Numbers, not chats** | Ordinary messages are only counted, never stored. For corrections you pick **full text**, **snippet** (the default) or **category only**, and kept text steps down on a timer you set. Prompts, goals and lessons store numbers only, never words, and the prompt checker saves nothing you type. |
 | ✂️ **Redacted** | Keys, emails, links, home paths and long numbers are stripped from any text kept. It's pattern-based, so it can miss things: pick **category only** if that matters. |
 | ✅ **Verifiable** | MIT open source. The Mac app is signed and notarized by Apple, updates are signed, and every release ships `SHA256SUMS.txt`. |
 
@@ -108,21 +108,21 @@ The engine is native Rust, and the window uses your system's built-in web view i
 </details>
 
 <details>
-<summary><b>If I brief it better, it makes fewer mistakes. Doesn't that lower my score?</b></summary>
+<summary><b>If I prompt it better, it makes fewer mistakes. Doesn't that lower my score?</b></summary>
 
-No. Catches only have to show you check its work: 3 in 28 days is full credit, and more add nothing. After that, what counts is how rarely the AI has to correct *you*, per task. Most of the score (70%) is how often your tasks land, so briefing better is the fastest way up.
+No. Corrections only have to show you check its work: 3 in 28 days is full credit, and more add nothing. After that, what counts is how rarely the AI has to correct *you*, per task. Most of the score (70%) is how often your tasks land, so prompting better is the fastest way up.
 </details>
 
 <details>
-<summary><b>Is a low brief score bad?</b></summary>
+<summary><b>Is a low prompt score bad?</b></summary>
 
-It's a nudge, not a grade on you. "Landed" means nothing *on you* followed the task: you didn't add to it, clarify it or start it over. The AI getting it wrong never counts against you; that's a catch for you instead. One-shot tasks don't count at all, since they can't need steering.
+It's a nudge, not a grade on you. "Landed" means nothing *on you* followed the task: you didn't add to it, clarify it or start it over. The AI getting it wrong never counts against you; that's a correction for you instead. One-shot tasks don't count at all, since they can't need steering.
 </details>
 
 <details>
 <summary><b>It counted something wrong. Now what?</b></summary>
 
-Rules miss sometimes. Open a [**Wrong catch**](https://github.com/HTMLGuyLLC/NoActually/issues/new/choose) issue with the message redacted. Fixes usually come with a test for your example, so they stay fixed. When rules change, your score is rebuilt from history automatically.
+Rules miss sometimes. Open a [**Wrong correction**](https://github.com/HTMLGuyLLC/NoActually/issues/new/choose) issue with the message redacted. Fixes usually come with a test for your example, so they stay fixed. When rules change, your score is rebuilt from history automatically.
 </details>
 
 <details>
@@ -156,10 +156,10 @@ Over the window you pick (the last 28 days unless you choose another), once it h
 ```
 score = 70% × direction + 30% × judgment
 
-direction = % of your tasks that landed (see "How a brief is graded")
+direction = % of your tasks that landed (see "How a prompt is graded")
 judgment  = 100, minus 5 for each 1% of your tasks where the AI had to correct you
             (counted against at least 30 tasks, so a quiet month isn't wiped out),
-            scaled down until you've caught it 3 times
+            scaled down until you've corrected it 3 times
 ```
 
 | Tier | Score | Answer |
@@ -169,9 +169,9 @@ judgment  = 100, minus 5 for each 1% of your tasks where the AI had to correct y
 | Coworker | 65–79 | No. |
 | Rubber stamp | under 65 | Hmm. |
 
-Each question below the score gets a one-word answer too. Do you make it guess? goes by how many tasks landed (next section). Do you catch its mistakes? goes by judgment:
+Each question below the score gets a one-word answer too. Do you make it guess? goes by how many tasks landed (next section). Do you correct its mistakes? goes by judgment:
 
-| Catch tier | Judgment | Answer |
+| Correction tier | Judgment | Answer |
 |---|---|---|
 | Hawk-eyed | 90+ | Usually. |
 | Reviewer | 75–89 | Often. |
@@ -179,11 +179,11 @@ Each question below the score gets a one-word answer too. Do you make it guess? 
 | Autopilot | under 50 | Rarely. |
 
 A few things this gets right on purpose:
-- **Briefing better never costs you.** Past 3 catches, more catches add nothing, so an AI that makes fewer mistakes because you briefed it well doesn't lower your score.
-- **No catches at all caps you.** Landing everything but never catching anything is a Coworker (70) at best: there's no sign you check its work.
-- **Being corrected counts, per task.** If the AI keeps catching *you*, judgment drops. It's measured per task, never against your catches, so it doesn't depend on how often the AI is wrong.
+- **Prompting better never costs you.** Past 3 corrections, more corrections add nothing, so an AI that makes fewer mistakes because you prompted it well doesn't lower your score.
+- **No corrections at all caps you.** Landing everything but never correcting anything is a Coworker (70) at best: there's no sign you check its work.
+- **Being corrected counts, per task.** If the AI keeps correcting *you*, judgment drops. It's measured per task, never against your corrections, so it doesn't depend on how often the AI is wrong.
 
-### How a catch is counted
+### How a correction is counted
 
 | Label | Rule |
 |---|---|
@@ -192,12 +192,12 @@ A few things this gets right on purpose:
 | **Claimed** | Your message opens with "no, that…", "still not working", "you missed"… (not when you're answering its question) |
 | **Humbled** | The AI corrects *you* ("Actually…", "Not quite") |
 
-Adding context ("also", "fyi", "I forgot to mention") never counts against the AI. Each catch is charged to the model that wrote the reply you corrected.
+Adding context ("also", "fyi", "I forgot to mention") never counts against the AI. Each correction is charged to the model that wrote the reply you corrected.
 
-### How a brief is graded
+### How a prompt is graded
 
 - **A task** starts with a chat's first message, or a later one that opens with "now…", "next:" or "new task". Hellos, "continue" and questions ("what does this do?") aren't tasks.
-- **A brief's grade** counts what it carries, never its length:
+- **A prompt's grade** counts what it carries, never its length:
   - **points at it**: a file, function, link or `code`
   - **shows it**: an error, output, an example, anything pasted
   - **says what done is**: the expected result, tests, a format
@@ -205,16 +205,16 @@ Adding context ("also", "fyi", "I forgot to mention") never counts against the A
   - **says why**: the goal or context
 
   Three or more is **sharp**, two is **solid**, fewer is **thin**. Pasted blocks count as showing it, but their words aren't graded as yours.
-- **Steering** is a later message that redirects the task. Either the AI got it wrong (a catch), or it's on you: **added more** ("also…", "I forgot to mention"), **clarified** ("I meant…", "to be clear") or **started over** ("scrap that", "revert it").
+- **Steering** is a later message that redirects the task. Either the AI got it wrong (a correction), or it's on you: **added more** ("also…", "I forgot to mention"), **clarified** ("I meant…", "to be clear") or **started over** ("scrap that", "revert it").
 - **A task landed** when nothing on you followed it. The tier is the share of tasks with a follow-up that landed over the last 28 days (at least 10 of them): Vibes only, Ticket writer 70%+, Tech lead 80%+, Architect 90%+.
 
-The tip names the thing your briefs carry least. It only quotes "briefs that do landed X% vs Y%" when your own history shows a real gap.
+The tip names the thing your prompts carry least. It only quotes "prompts that do landed X% vs Y%" when your own history shows a real gap.
 
 ### How goals work
 
-- **One goal at a time**, across all AI: a habit ("set limits in 25% of your briefs"), a ceiling on one kind of steering ("keep 'you added more' to 15% of tasks"), or a tier to reach.
+- **One goal at a time**, across all AI: a habit ("set limits in 25% of your prompts"), a ceiling on one kind of steering ("keep 'you added more' to 15% of tasks"), or a tier to reach.
 - **Suggested from your numbers.** A habit goal asks for 15 points more than your last 8 weeks, capped at 80%, so it's a stretch, not a wall.
-- **Weeks run Monday to Sunday**, local time, counting only tasks from the day you set the goal. A week needs 5 briefs to count; quieter weeks pause the goal instead of breaking your streak.
+- **Weeks run Monday to Sunday**, local time, counting only tasks from the day you set the goal. A week needs 5 prompts to count; quieter weeks pause the goal instead of breaking your streak.
 - **Met 4 weeks, it's done**, and it goes on your trophy shelf. Finished weeks are frozen, so a rules update or an import can't take back a week you earned.
 
 ### Where the thresholds come from
@@ -227,10 +227,10 @@ There's no public benchmark for weekly per-person scores, so every threshold was
 
 What that showed:
 
-- The catch rate agrees across sources: 1 in 47 messages for the author, 1 in 41 in WildChat.
-- Public chats are short and almost never steer, so the brief floors come from one heavy user, whose typical month landed 86% (Tech lead). Expect them to move as more people's numbers exist.
-- Longer briefs didn't steer less. Bigger tasks get both longer briefs and more back-and-forth, which is why the tier scores outcomes, not length.
-- The overall score puts the author's typical month at 86 (Sharp-eyed): 83% of 150 tasks landed, 41 catches, and the AI corrected them twice.
+- The correction rate agrees across sources: 1 in 47 messages for the author, 1 in 41 in WildChat.
+- Public chats are short and almost never steer, so the prompt floors come from one heavy user, whose typical month landed 86% (Tech lead). Expect them to move as more people's numbers exist.
+- Longer prompts didn't steer less. Bigger tasks get both longer prompts and more back-and-forth, which is why the tier scores outcomes, not length.
+- The overall score puts the author's typical month at 86 (Sharp-eyed): 83% of 150 tasks landed, 41 corrections, and the AI corrected them twice.
 
 ## Supported tools
 
@@ -293,12 +293,12 @@ cargo run --release -p noactually-cli -- stats --family "Claude Opus"
 cargo run --release -p noactually-cli -- check "Fix the crash in checkout.ts. Done when the tests pass."
 ```
 
-`stats` prints the overall score and both halves. `check "<brief>"` grades a draft brief, like the app's checker. Set `NOACTUALLY_DB=/path/to/test.db` to use a different database than your real one. Every command is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#command-line).
+`stats` prints the overall score and both halves. `check "<prompt>"` grades a draft prompt, like the app's checker. Set `NOACTUALLY_DB=/path/to/test.db` to use a different database than your real one. Every command is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#command-line).
 
 ### How it's built
 
 ```
-crates/engine    catch rules, brief grading, the overall score, model names, redaction: pure Rust, no I/O, WASM-ready
+crates/engine    correction rules, prompt grading, the overall score, model names, redaction: pure Rust, no I/O, WASM-ready
 crates/sources   one adapter per AI tool (Claude Code, Codex, exports…)
 crates/store     SQLite: consent, checkpoints, daily counts, tasks, goals, retention, rules versioning
 crates/cli       the `noactually` command
@@ -307,7 +307,7 @@ app/             Tauri 2 desktop app: menu bar, scorecard, Improve and Learn, no
 
 - **Crash-safe checkpoints.** A turn is only counted once its reply exists, and each file's writes commit in a single transaction.
 - **Hashed message keys.** Resumed sessions, forks and re-imports are never counted twice.
-- **Rules versioning.** When the rules change, scores are rebuilt from history. Pinned catches are always kept; other history counts again only if its files still exist.
+- **Rules versioning.** When the rules change, scores are rebuilt from history. Pinned corrections are always kept; other history counts again only if its files still exist.
 
 The full design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -315,7 +315,7 @@ The full design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 Issues and PRs are welcome. Good places to start:
 - Support for another AI tool
-- A rule that miscounted one of your chats (use the **Wrong catch** form, and redact the text first)
+- A rule that miscounted one of your chats (use the **Wrong correction** form, and redact the text first)
 - Polish on the app
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md), then run the same checks as CI with [just](https://github.com/casey/just) (`brew install just` or `cargo install just`):

@@ -7,8 +7,8 @@ import { catchRate, landedRate, matchPickItems, type PickItem, type PickStat } f
 /** The numbers beside one model, for what the page is about. */
 export function pickStatView(i: PickItem, stat: PickStat): Html {
   if (stat === "briefs") return html`<b>${landedRate(i.landed, i.continued)}</b> landed · ${num(i.tasks)} tasks`;
-  if (stat === "both") return html`<b>${catchRate(i.catches, i.messages)}</b> caught · <b>${landedRate(i.landed, i.continued)}</b> landed`;
-  return html`<b>${num(i.catches)}</b> catches · ${catchRate(i.catches, i.messages)}`;
+  if (stat === "both") return html`<b>${catchRate(i.catches, i.messages)}</b> corrected · <b>${landedRate(i.landed, i.continued)}</b> landed`;
+  return html`<b>${num(i.catches)}</b> corrections · ${catchRate(i.catches, i.messages)}`;
 }
 
 export type PickerOptions = {

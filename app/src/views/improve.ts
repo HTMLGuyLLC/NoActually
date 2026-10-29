@@ -83,14 +83,14 @@ export function buckets(weeks: HistoryWeek[], range: Range, minWeek: number): { 
 
 const pctOf = (n: number, total: number) => (total > 0 ? Math.floor((100 * n) / total) : null);
 
-/** "Says why" → "say why", for "Briefs that say why landed…". */
+/** "Says why" → "say why", for "Prompts that say why landed…". */
 const verbPhrase = (title: string) => title.toLowerCase().replace(/^(\w+?)s\b/, "$1");
 
 /** What a goal asks, in a sentence. */
 export function goalTitle(g: GoalKind & { target: number }, meta: Meta): string {
   if (g.kind === "habit") {
     const phrase = verbPhrase(signalTitle(meta, g.signal));
-    return `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)} in ${g.target}% of your briefs each week`;
+    return `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)} in ${g.target}% of your prompts each week`;
   }
   if (g.kind === "steer") {
     const steer = `“${steerTitle(meta, g.steer).toLowerCase()}”`;
@@ -103,7 +103,7 @@ const WEEK_MARK: Record<GoalWeek["state"], string> = { met: "✓", missed: "✗"
 const WEEK_WORD: Record<GoalWeek["state"], string> = { met: "met", missed: "missed", paused: "too few tasks", open: "in progress" };
 
 function goalWeeksView(st: GoalStatus, meta: Meta): Html {
-  const unit = st.goal.kind === "habit" ? "briefs" : "tasks";
+  const unit = st.goal.kind === "habit" ? "prompts" : "tasks";
   return html`<ol class="goal-weeks" aria-label="Weeks so far">${st.weeks.map(
     (w) =>
       html`<li class="gw ${w.state}" title="Week of ${fmtDay(w.week)}: ${w.value}% of ${w.count} ${unit} (${WEEK_WORD[w.state]})"><span aria-hidden="true">${WEEK_MARK[w.state]}</span><span class="sr-only">Week of ${fmtDay(w.week)}: ${w.value}% of ${w.count} ${unit}, ${WEEK_WORD[w.state]}.</span></li>`,
@@ -120,13 +120,13 @@ function thisWeekLine(st: GoalStatus, meta: Meta): string {
       : `Your score is ${st.score}. ${tierName(meta, g.tier)} starts at ${meta.tiers.find((t) => t.id === g.tier)?.floor ?? "?"}.`;
   const w = st.weeks.at(-1);
   if (w?.state !== "open") return "";
-  const unit = g.kind === "habit" ? "briefs" : "tasks";
+  const unit = g.kind === "habit" ? "prompts" : "tasks";
   // The meter above already shows the percent; this says how many and what's left.
   const so = `${w.count} ${w.count === 1 ? unit.replace(/s$/, "") : unit} so far.`;
   if (g.kind === "habit") {
     if (st.need == null) return `${so} Out of reach this week; next week starts fresh.`;
     return st.need
-      ? `${so} ${st.need} more ${st.need === 1 ? "brief" : "briefs"} that ${verbPhrase(signalTitle(meta, g.signal))} would hit it.`
+      ? `${so} ${st.need} more ${st.need === 1 ? "prompt" : "prompts"} that ${verbPhrase(signalTitle(meta, g.signal))} would hit it.`
       : `${so} On track.`;
   }
   return w.count >= meta.min_week && w.value <= g.target ? `${so} On track.` : so;
@@ -207,8 +207,8 @@ function recapView(weeks: HistoryWeek[], meta: Meta): Html | "" {
   };
   return html`<section class="recap"><div class="eyebrow">Last week · ${fmtDay(last.week)}</div>
     ${row("Tasks landed", landed(last), landed(before))}
-    ${row("Sharp briefs", sharp(last), sharp(before))}
-    ${row("Catches", last.catches, before.catches, "", true)}
+    ${row("Sharp prompts", sharp(last), sharp(before))}
+    ${row("Corrections", last.catches, before.catches, "", true)}
     <p class="muted small">Compared with the week before.</p>
   </section>`;
 }
@@ -246,12 +246,12 @@ function trendsView(ctx: ImproveContext): Html {
     <section><div class="head"><h2>Tasks that landed</h2><p class="muted">Per ${per}. Hollow dots had fewer than ${meta.min_week} tasks with a follow-up, so they're left off the line.</p></div>
       <div class="chart">${lineChart({ id: "landed", label: `Percent of tasks that landed, per ${per}`, summary: landedSummary, points: landed, bands, unit: "%", min: landedFloor(landed) })}</div></section>
     <section class="split">
-      <div><div class="head"><h2>What your briefs carry</h2></div><div class="cats">${signals}</div></div>
-      <div><div class="head"><h2>Brief grades</h2></div><div class="chart">${stackChart({ id: "grades", label: `Briefs by grade, per ${per}`, summary: `Briefs by grade over ${points.length} ${per}s.`, labels, series: gradeSeries, width: HALF, height: 220 })}</div></div>
+      <div><div class="head"><h2>What your prompts carry</h2></div><div class="cats">${signals}</div></div>
+      <div><div class="head"><h2>Prompt grades</h2></div><div class="chart">${stackChart({ id: "grades", label: `Prompts by grade, per ${per}`, summary: `Prompts by grade over ${points.length} ${per}s.`, labels, series: gradeSeries, width: HALF, height: 220 })}</div></div>
     </section>
     <section class="split">
       <div><div class="head"><h2>Where steering went</h2></div><div class="chart">${stackChart({ id: "steering", label: `Steering messages by cause, per ${per}`, summary: `${num(totalSteer)} steering messages over ${points.length} ${per}s.`, labels, series: steerSeries, width: HALF, height: 220 })}</div></div>
-      <div><div class="head"><h2>Catches per 100 messages</h2></div><div class="chart">${lineChart({ id: "rate", label: `Catches per 100 messages, per ${per}`, summary: "How often you caught a mistake, per 100 messages.", points: rate, max: rateMax, width: HALF, height: 220 })}</div></div>
+      <div><div class="head"><h2>Corrections per 100 messages</h2></div><div class="chart">${lineChart({ id: "rate", label: `Corrections per 100 messages, per ${per}`, summary: "How often you corrected a mistake, per 100 messages.", points: rate, max: rateMax, width: HALF, height: 220 })}</div></div>
     </section>`;
 }
 
@@ -286,7 +286,7 @@ function insightsView(p: Progress, meta: Meta): Html {
     const [w, wo] = t.landed_with_without;
     const l = lessonFor("signal", t.signal);
     items.push(
-      html`<li>Briefs that ${verbPhrase(signalTitle(meta, t.signal))} landed <b>${Math.round(w)}%</b> of the time, vs ${Math.round(wo)}% without.${l ? html` <button class="link" data-action="open-lesson" data-id="${l.id}">${l.title} →</button>` : ""}</li>`,
+      html`<li>Prompts that ${verbPhrase(signalTitle(meta, t.signal))} landed <b>${Math.round(w)}%</b> of the time, vs ${Math.round(wo)}% without.${l ? html` <button class="link" data-action="open-lesson" data-id="${l.id}">${l.title} →</button>` : ""}</li>`,
     );
   }
   if (i.steer) {

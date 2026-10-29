@@ -12,19 +12,19 @@ macOS may show its own "access data from other apps" prompt for some sources. Sa
 
 | Data | Stored | Text? | Lifetime |
 |---|---|---|---|
-| Ordinary messages (not catches) | Counts only, per day, source and model | Never | Forever (just numbers) |
-| Sessions | Hashed id, source, day range, message and catch counts | Never | Forever |
-| Tasks (briefs) | Day, source, hashed chat id, model, which of 5 signals the brief carried, message and steering counts | Never | Forever |
+| Ordinary messages (not corrections) | Counts only, per day, source and model | Never | Forever (just numbers) |
+| Sessions | Hashed id, source, day range, message and correction counts | Never | Forever |
+| Tasks (prompts) | Day, source, hashed chat id, model, which of 5 signals the prompt carried, message and steering counts | Never | Forever |
 | Your goal | What it asks for (a signal, a kind of steering or a tier), its target percent and start day | Never | Until you drop it |
 | Goal weeks and trophies | Each finished week's count, percent and result; finished goals and the day | Never | Forever (kept even after Forget, since they're totals across sources) |
 | Lessons done | The ids of lessons you marked done | Never | Forever |
-| Catch / humbled events | Time, source, model, label, category, matched rule ids | Per retention level | Per TTL |
+| Correction / humbled events | Time, source, model, label, category, matched rule ids | Per retention level | Per TTL |
 | File checkpoints | Path, byte offset, size, modified time | Never | Until you forget the source |
 | Message fingerprints | Short hashes of message ids, so copies are never counted twice | Never | Until you forget the source |
 
 ## Retention levels
 
-You choose how much catch text to keep:
+You choose how much correction text to keep:
 
 | Level | What's kept | Default TTL, then... |
 |---|---|---|
@@ -32,7 +32,7 @@ You choose how much catch text to keep:
 | Snippet (default) | The matched sentence from each side, 140 characters or less, redacted | 365 days, then Category |
 | Category only | No text at all | Forever |
 
-Levels only step down (Full, then Snippet, then Category). The step-down runs after every check (at launch, when files change, and every 5 minutes). You pick the starting level and both TTLs. Pinning a catch to the Hall of Fame keeps its text until you unpin it.
+Levels only step down (Full, then Snippet, then Category). The step-down runs after every check (at launch, when files change, and every 5 minutes). You pick the starting level and both TTLs. Pinning a correction to the Hall of Fame keeps its text until you unpin it.
 
 ## Redaction
 

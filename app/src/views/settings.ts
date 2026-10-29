@@ -43,7 +43,7 @@ export function settingsView({ retention: r, autostart, menuBar, update, demo }:
       </div>
       <div class="settings-row">
         <label class="toggle"><input id="autostart" data-action="autostart" type="checkbox"${attr(autostart, "checked")}${off}/><span>Launch at login</span></label>
-        <span class="muted small">${menuBar ? "Starts quietly in the menu bar so new catches are counted." : "Opens the app when you log in."}</span>
+        <span class="muted small">${menuBar ? "Starts quietly in the menu bar so new corrections are counted." : "Opens the app when you log in."}</span>
       </div>
       <div class="settings-row">
         <label class="toggle"><input id="auto-update" data-action="auto-update" type="checkbox"${attr(!!update?.auto, "checked")}${off}/><span>Check for app updates automatically</span></label>
@@ -55,7 +55,7 @@ export function settingsView({ retention: r, autostart, menuBar, update, demo }:
       </div>
     </section>
     <section><div class="head"><h2>Privacy</h2>
-      <p class="muted">Ordinary messages are never stored, only counted. This controls what's kept for catches you'll see in the Hall of Fame. Text always steps down as it ages, never up.</p></div>
+      <p class="muted">Ordinary messages are never stored, only counted. This controls what's kept for corrections you'll see in the Hall of Fame. Text always steps down as it ages, never up.</p></div>
       <div class="levels">
         ${opt("full", "Full message", "Your whole message and the start of the AI's reply. Secrets, emails and links are still redacted.")}
         ${opt("snippet", "Snippet (recommended)", "Only the sentence that matched, up to 140 characters, redacted.")}
@@ -66,6 +66,6 @@ export function settingsView({ retention: r, autostart, menuBar, update, demo }:
         <label>Keep snippets for <input id="snippet-days" type="number" min="${RETENTION_MIN_DAYS}" max="${RETENTION_MAX_DAYS}" value="${r.snippet_days}"/> days, then category only</label>
         <button data-action="save-privacy">Save</button><span id="privacy-status" class="muted small" role="status" aria-live="polite"></span>
       </div>
-      <p class="muted small">Pinned catches keep their text until you unpin them.</p>
+      <p class="muted small">Pinned corrections keep their text until you unpin them.</p>
     </section>`;
 }

@@ -1,7 +1,7 @@
 // Display names and ranges from the Rust side's `meta` command. Nothing here hard-codes Rust's tables.
 import type { Briefs, BriefTier, Meta, Tier } from "./api";
 
-/** A tier with the range shown on the ladder: "0–2", "7–14", "15+ catches/wk". */
+/** A tier with the range shown on the ladder: "0–2", "7–14", "15+ corrections/wk". */
 export type TierRange = Tier & { range: string };
 
 /** Tiers top-down (as a ladder shows them), each with a range up to the next floor; `top` labels the last. */
@@ -19,12 +19,12 @@ function withRanges<T extends Tier>(tiers: T[], top: (floor: number) => string, 
 /** Overall tiers top-down: "90+", "80–89", … */
 export const tierRanges = (meta: Meta): TierRange[] => withRanges(meta.tiers, (f) => `${f}+`);
 
-/** Brief tiers top-down: "95%+ landed", "90–94%", … */
+/** Prompt tiers top-down: "95%+ landed", "90–94%", … */
 export const briefTierRanges = (meta: Meta): (BriefTier & { range: string })[] => withRanges(meta.brief_tiers, (f) => `${f}%+ landed`, "%");
 
 export const briefTier = (meta: Meta, id: string | null): BriefTier | undefined => meta.brief_tiers.find((t) => t.id === id);
 
-/** Catch tiers top-down: "90+", "75–89", … (judgment, out of 100). */
+/** Correction tiers top-down: "90+", "75–89", … (judgment, out of 100). */
 export const catchTierRanges = (meta: Meta): (BriefTier & { range: string })[] => withRanges(meta.catch_tiers, (f) => `${f}+`);
 
 export const catchTier = (meta: Meta, id: string | null): BriefTier | undefined => meta.catch_tiers.find((t) => t.id === id);

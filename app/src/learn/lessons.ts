@@ -36,11 +36,11 @@ export const trackOf = (id: string): Track | undefined => TRACKS.find((t) => t.l
 /** The index of the right option, for any kind of question. */
 export const answerIndex = (q: Question): number => (q.kind === "missing" ? q.options.indexOf(q.answer) : q.answer);
 
-/** Signals your briefs carry in more than this share are habits you have: no need to push them. */
+/** Signals your prompts carry in more than this share are habits you have: no need to push them. */
 const HABIT_PCT = 60;
 
 /**
- * The lesson to do next: the habit your briefs carry least (one you don't have yet), then the
+ * The lesson to do next: the habit your prompts carry least (one you don't have yet), then the
  * steering you do most, then anything left in order. Lessons already done are skipped.
  */
 export function recommended(b: Briefs | null, meta: Meta, done: readonly string[]): Lesson | undefined {

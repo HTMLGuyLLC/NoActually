@@ -1,4 +1,4 @@
-// Learn: how to brief any AI well. A live brief checker, three short tracks of lessons, and a
+// Learn: how to prompt any AI well. A live prompt checker, three short tracks of lessons, and a
 // quiz in each. Nothing here needs your history; with it, the next lesson is picked for you.
 import type { Briefs, Check, Meta } from "../api";
 import { type Html, html } from "../html";
@@ -14,7 +14,7 @@ const chips = (meta: Meta, ids: string[]) =>
 
 /** The checker's verdict for a draft: grade, which signals it has, and a nudge for each missing one. */
 export function checkResultView(meta: Meta, c: Check | null, empty: boolean): Html {
-  if (empty || !c) return html`<p class="muted small">Type or paste a brief. Each thing it carries lights up.</p>`;
+  if (empty || !c) return html`<p class="muted small">Type or paste a prompt. Each thing it carries lights up.</p>`;
   const has = (i: number) => (c.signals & (1 << i)) !== 0;
   const grade = meta.grades.find((g) => g.id === c.grade)?.title ?? c.grade;
   const missing = meta.signals.filter((_, i) => !has(i));
@@ -23,7 +23,7 @@ export function checkResultView(meta: Meta, c: Check | null, empty: boolean): Ht
       (s, i) =>
         html`<li class="${has(i) ? "on" : ""}"><span aria-hidden="true">${has(i) ? "✓" : "·"}</span> ${s.title}<span class="sr-only">${has(i) ? ": yes" : ": not yet"}</span></li>`,
     )}</ul>
-    ${c.not_a_brief ? html`<p class="muted small">This reads as a question or a hello. Your history only grades requests as briefs.</p>` : ""}
+    ${c.not_a_brief ? html`<p class="muted small">This reads as a question or a hello. Your history only grades requests as prompts.</p>` : ""}
     ${missing.length ? html`<ul class="check-hints">${missing.slice(0, 2).map((s) => html`<li>${SIGNAL_HINTS[s.id] ?? s.hint}</li>`)}</ul>` : html`<p class="hand-note">Nothing left to guess.</p>`}`;
 }
 
@@ -31,9 +31,9 @@ function checkerView(ctx: LearnContext): Html {
   const note = ctx.demo ? html`<p class="muted small">In the app, the checker grades as you type with the same rules as your score.</p>` : "";
   return html`<section class="card checker">
     <div>
-      <div class="eyebrow">Brief checker</div>
+      <div class="eyebrow">Prompt checker</div>
       <h2 class="q">Will it have to guess?</h2>
-      <label class="sr-only" for="draft">Your brief</label>
+      <label class="sr-only" for="draft">Your prompt</label>
       <textarea id="draft" data-action="draft" rows="6" maxlength="8000" spellcheck="true" placeholder="Fix the crash in checkout.ts when the cart is empty. Done when the tests pass. Don't change the API.">${ctx.draft}</textarea>
       <div class="share"><button class="ghost" data-action="copy-draft">Copy</button><button class="ghost" data-action="clear-draft">Clear</button><span class="sr-only" id="draft-status" role="status" aria-live="polite"></span></div>
       <p class="muted small">Nothing you type here is saved.</p>
@@ -64,13 +64,13 @@ function homeView(ctx: LearnContext): Html {
   const next = recommended(ctx.briefs, ctx.meta, done);
   const graduated = done.length === LESSONS.length;
   return html`
-    <section class="toolbar"><span class="eyebrow">Learn to brief it · ${done.length} of ${LESSONS.length} lessons</span></section>
+    <section class="toolbar"><span class="eyebrow">Learn to prompt it · ${done.length} of ${LESSONS.length} lessons</span></section>
     ${checkerView(ctx)}
     ${
       graduated
         ? html`<section class="card mini graduate"><div class="eyebrow">All three tracks</div><h2 class="q">Graduate 🎓</h2><p>Every lesson done. Keep the checker handy, and watch Improve to see it pay off.</p></section>`
         : next
-          ? html`<section class="next-lesson"><span class="eyebrow">${ctx.briefs?.tasks ? "Picked for you, from your briefs" : "Start here"}</span>
+          ? html`<section class="next-lesson"><span class="eyebrow">${ctx.briefs?.tasks ? "Picked for you, from your prompts" : "Start here"}</span>
             <button class="lesson-next" data-action="lesson" data-id="${next.id}"><b>${next.title}</b><span class="muted">${next.why}</span><span class="go" aria-hidden="true">→</span></button></section>`
           : ""
     }

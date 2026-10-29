@@ -221,7 +221,7 @@ const handlers: Handlers = {
   },
   // The rules run in Rust; the browser demo can't grade a draft, and says so.
   check_brief: () => {
-    throw new Error("The brief checker runs in the app.");
+    throw new Error("The prompt checker runs in the app.");
   },
   learned: () => visit.learned,
   set_learned: ({ id, done }) => {

@@ -100,7 +100,7 @@ describe("recommended", () => {
     expect(pick(b(), ["set-limits", "say-why"])).toBe("show-it");
   });
 
-  it("treats a signal carried in more than 60% of briefs as a habit you have", () => {
+  it("treats a signal carried in more than 60% of prompts as a habit you have", () => {
     const strong = { spot: 90, proof: 90, done: 90, limits: 61, why: 90 };
     expect(pick(b({ signals: strong }))).not.toBe("set-limits");
     expect(pick(b({ signals: { ...strong, limits: 60 } }))).toBe("set-limits");

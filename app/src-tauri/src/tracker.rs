@@ -70,7 +70,7 @@ fn sync_once(handle: &AppHandle, app: &App, quiet: bool) {
         Ok(r) => {
             if r.files_read > 0 {
                 log::info!(
-                    "synced {} files: {} messages, {} catches in {:?}",
+                    "synced {} files: {} messages, {} corrections in {:?}",
                     r.files_read,
                     r.messages,
                     r.catches,
@@ -104,7 +104,7 @@ fn update_tray(handle: &AppHandle, app: &App) {
     if let Some(tray) = handle.tray_by_id("tray") {
         let tip = match (o.score, o.tier) {
             (Some(score), Some(tier)) => format!("No, Actually... · {} · score {score}", tier.name()),
-            _ => format!("No, Actually... · {} catches in {} days", o.catches, engine::WINDOW_DAYS),
+            _ => format!("No, Actually... · {} corrections in {} days", o.catches, engine::WINDOW_DAYS),
         };
         let _ = tray.set_tooltip(Some(tip));
     }

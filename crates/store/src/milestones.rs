@@ -76,8 +76,8 @@ pub fn crossed(prev: &Snapshot, now: &Snapshot) -> Vec<Milestone> {
     let mut out = Vec::new();
     if let Some(m) = COUNTS.iter().rev().find(|m| prev.catches < **m && now.catches >= **m) {
         out.push(Milestone {
-            title: format!("Your {} catch!", ordinal(*m)),
-            body: format!("You've caught your AI {m} times. Could it replace you? Not today."),
+            title: format!("Your {} correction!", ordinal(*m)),
+            body: format!("You've corrected your AI {m} times. Could it replace you? Not today."),
         });
     }
     // Like brief tiers: a first ranking at the bottom isn't news, climbing is.
@@ -90,7 +90,7 @@ pub fn crossed(prev: &Snapshot, now: &Snapshot) -> Vec<Milestone> {
     // Getting ranked at the bottom isn't news; climbing is.
     if let Some(t) = now.brief_tier.filter(|t| *t > BriefTier::VibesOnly && now.brief_tier > prev.brief_tier) {
         out.push(Milestone {
-            title: format!("Briefs: {}", t.name()),
+            title: format!("Prompts: {}", t.name()),
             body: format!(
                 "{}% of your tasks in the last 28 days landed without steering. Open the scorecard to share it.",
                 now.landed_pct
@@ -100,7 +100,7 @@ pub fn crossed(prev: &Snapshot, now: &Snapshot) -> Vec<Milestone> {
     if let Some(s) = STREAKS.iter().rev().find(|s| prev.streak < **s && now.streak >= **s) {
         out.push(Milestone {
             title: format!("{s}-day streak"),
-            body: format!("You've caught a mistake {s} days in a row."),
+            body: format!("You've corrected a mistake {s} days in a row."),
         });
     }
     out
@@ -229,9 +229,9 @@ mod tests {
     fn announces_the_biggest_count_crossed_once() {
         let m = crossed(&snap(8, Tier::Coworker, 0), &snap(27, Tier::Coworker, 0));
         assert_eq!(m.len(), 1);
-        assert_eq!(m[0].title, "Your 25th catch!");
+        assert_eq!(m[0].title, "Your 25th correction!");
         assert_eq!(crossed(&snap(27, Tier::Coworker, 0), &snap(27, Tier::Coworker, 0)), vec![]);
-        assert_eq!(crossed(&snap(0, Tier::RubberStamp, 0), &snap(1, Tier::RubberStamp, 0))[0].title, "Your 1st catch!");
+        assert_eq!(crossed(&snap(0, Tier::RubberStamp, 0), &snap(1, Tier::RubberStamp, 0))[0].title, "Your 1st correction!");
     }
 
     #[test]
@@ -253,7 +253,7 @@ mod tests {
         assert_eq!(
             m,
             vec![Milestone {
-                title: "Briefs: Tech lead".into(),
+                title: "Prompts: Tech lead".into(),
                 body: "92% of your tasks in the last 28 days landed without steering. Open the scorecard to share it."
                     .into()
             }]

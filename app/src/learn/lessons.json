@@ -10,7 +10,7 @@
     {
       "id": "habits",
       "title": "The 5 habits",
-      "blurb": "Five things a good brief carries, whoever you hand it to.",
+      "blurb": "Five things a good prompt carries, whoever you hand it to.",
       "lessons": [
         {
           "id": "point-at-it",
@@ -35,14 +35,14 @@
           "quiz": [
             {
               "kind": "sharper",
-              "question": "Which brief is sharper?",
+              "question": "Which prompt is sharper?",
               "options": ["Fix the slow search.", "The search in `searchProducts` is slow. It should return in under 200ms."],
               "answer": 1,
               "explain": "It names the exact function, so there's no hunt and no guess."
             },
             {
               "kind": "missing",
-              "question": "What's this brief missing?",
+              "question": "What's this prompt missing?",
               "brief": "The welcome email should use the customer's first name. Don't change the subject line.",
               "options": ["spot", "done", "limits"],
               "answer": "spot",
@@ -73,14 +73,14 @@
           "quiz": [
             {
               "kind": "sharper",
-              "question": "Which brief is sharper?",
+              "question": "Which prompt is sharper?",
               "options": ["Expected the order date, but every row in the CSV export shows 1970-01-01.", "The CSV export gives weird dates."],
               "answer": 0,
               "explain": "It shows what you saw and what you wanted, so the gap is plain."
             },
             {
               "kind": "missing",
-              "question": "What's this brief missing?",
+              "question": "What's this prompt missing?",
               "brief": "In report.py, the monthly totals look off. They should match the bank statement.",
               "options": ["spot", "proof", "done"],
               "answer": "proof",
@@ -111,14 +111,14 @@
           "quiz": [
             {
               "kind": "sharper",
-              "question": "Which brief is sharper?",
+              "question": "Which prompt is sharper?",
               "options": ["Make the Q3 report better.", "Update the Q3 report so the summary fits on one page, as a bulleted list."],
               "answer": 1,
               "explain": "You'll know it's done when it fits on one page as a list."
             },
             {
               "kind": "missing",
-              "question": "What's this brief missing?",
+              "question": "What's this prompt missing?",
               "brief": "Rename getUser to fetchUser because the old name confuses new hires. Don't touch the tests.",
               "options": ["spot", "done", "limits", "why"],
               "answer": "done",
@@ -149,14 +149,14 @@
           "quiz": [
             {
               "kind": "sharper",
-              "question": "Which brief is sharper?",
+              "question": "Which prompt is sharper?",
               "options": ["Tidy up checkout.ts.", "Tidy up checkout.ts. Don't rename anything and don't add new packages."],
               "answer": 1,
               "explain": "Same task, but now the names and the packages are safe."
             },
             {
               "kind": "missing",
-              "question": "What's this brief missing?",
+              "question": "What's this prompt missing?",
               "brief": "In about.html, fix the typo in the first paragraph because the founders spotted it. It should say 'founded in 2019'.",
               "options": ["spot", "done", "limits", "why"],
               "answer": "limits",
@@ -183,14 +183,14 @@
           "quiz": [
             {
               "kind": "sharper",
-              "question": "Which brief is sharper?",
+              "question": "Which prompt is sharper?",
               "options": ["Cache the price list because the supplier lets us call them once a minute.", "Cache the price list."],
               "answer": 0,
               "explain": "Knowing the reason tells you how long the cache can last."
             },
             {
               "kind": "missing",
-              "question": "What's this brief missing?",
+              "question": "What's this prompt missing?",
               "brief": "Add a dark mode toggle to settings.tsx. Don't change the default theme. Done when it remembers the choice.",
               "options": ["spot", "done", "limits", "why"],
               "answer": "why",
@@ -223,19 +223,19 @@
           "tips": [
             "Before you send, ask yourself: what would I add next?",
             "List every must-have in the first message.",
-            "If you catch yourself typing 'also', it belonged in the brief."
+            "If you catch yourself typing 'also', it belonged in the prompt."
           ],
           "quiz": [
             {
               "kind": "sharper",
-              "question": "Which brief is sharper?",
+              "question": "Which prompt is sharper?",
               "options": ["Add a search box to the help page.", "Add a search box to help.html. It should search titles only, and it must work on phones."],
               "answer": 1,
               "explain": "The phone part is said up front, not sent later as an 'also'."
             },
             {
               "kind": "missing",
-              "question": "What's this brief missing?",
+              "question": "What's this prompt missing?",
               "brief": "Add a CSV export to orders.ts. It should include tax. Don't change the table.",
               "options": ["spot", "done", "limits", "why"],
               "answer": "why",
@@ -266,7 +266,7 @@
           "quiz": [
             {
               "kind": "sharper",
-              "question": "Which brief is sharper?",
+              "question": "Which prompt is sharper?",
               "options": ["Make the button bigger.", "Make the Save button on the settings page 48px tall. Leave the Cancel button alone."],
               "answer": 1,
               "explain": "Which button, how big, and which one to skip. Nothing left to guess."
@@ -296,7 +296,7 @@
           "quiz": [
             {
               "kind": "sharper",
-              "question": "Which brief is sharper?",
+              "question": "Which prompt is sharper?",
               "options": [
                 "Rewrite the billing module.",
                 "Rewrite the billing module. First give me the plan as a list, and don't change any files until I approve it."
@@ -306,7 +306,7 @@
             },
             {
               "kind": "missing",
-              "question": "What's this brief missing?",
+              "question": "What's this prompt missing?",
               "brief": "Split utils.ts into smaller files. Give me the plan as a list first. Don't move anything yet.",
               "options": ["spot", "done", "limits", "why"],
               "answer": "why",
@@ -337,7 +337,7 @@
           "quiz": [
             {
               "kind": "sharper",
-              "question": "Which brief is sharper?",
+              "question": "Which prompt is sharper?",
               "options": [
                 "Plan the offsite for my team of 12. Ask me questions first if anything is unclear. Don't book anything yet.",
                 "Plan the team offsite."
@@ -351,7 +351,7 @@
     },
     {
       "id": "catch",
-      "title": "Catch more",
+      "title": "Correct more",
       "blurb": "Check the work before you trust it.",
       "lessons": [
         {
@@ -384,7 +384,7 @@
             },
             {
               "kind": "sharper",
-              "question": "Which brief is sharper?",
+              "question": "Which prompt is sharper?",
               "options": [
                 "Use the parseCsv helper for the import.",
                 "Use the parseCsv helper for the import. First show me the file where parseCsv is defined, and don't write a new one."
@@ -424,7 +424,7 @@
             },
             {
               "kind": "sharper",
-              "question": "Which brief is sharper?",
+              "question": "Which prompt is sharper?",
               "options": ["Fix the login timeout.", "Fix the login timeout in session.ts. Make sure the tests pass, and add one for an expired session."],
               "answer": 1,
               "explain": "It says where, and how you'll both know it works."

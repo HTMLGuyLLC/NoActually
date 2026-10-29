@@ -1,5 +1,5 @@
 // Share text, network links and the dialog's guidance. All made on this machine from numbers only
-// (or, for a single catch, the stored and already redacted snippet the person can edit first).
+// (or, for a single correction, the stored and already redacted snippet the person can edit first).
 import type { Briefs, BriefTier, Overall, Stats } from "../api";
 import { type Html, html } from "../html";
 
@@ -19,19 +19,19 @@ export function shareText(s: ScoreLike, who: string, tier: string, when = "in th
   const answer = o.verdict === "no" ? "No." : "Maybe…";
   if (o.score == null) {
     const times = s.catches_last_7d === 1 ? "time" : "times";
-    return `Could ${who} replace me? ${answer} I caught it ${s.catches_last_7d} ${times} this week. Me ${s.catches}, ${who} ${s.humbled}. What's your score? ${SHARE_URL}`;
+    return `Could ${who} replace me? ${answer} I corrected it ${s.catches_last_7d} ${times} this week. Me ${s.catches}, ${who} ${s.humbled}. What's your score? ${SHARE_URL}`;
   }
-  return `Could ${who} replace me? ${answer} My score is ${o.score} (${tier}): ${o.direction}% of my tasks landed without steering, and I caught it ${o.catches} ${o.catches === 1 ? "time" : "times"} to its ${o.humbled} ${when}. What's yours? ${SHARE_URL}`;
+  return `Could ${who} replace me? ${answer} My score is ${o.score} (${tier}): ${o.direction}% of my tasks landed without steering, and I corrected it ${o.catches} ${o.catches === 1 ? "time" : "times"} to its ${o.humbled} ${when}. What's yours? ${SHARE_URL}`;
 }
 
 /** The briefs score, ready to post: the tier's answer and how many tasks landed. Numbers only. */
 export function briefShareText(b: Pick<Briefs, "window_landed" | "window_tasks">, tier: BriefTier, when = "in the last 28 days") {
-  return `Do I make my AI guess? ${tier.verdict} ${landedPct(b)}% of my tasks ${when} landed without me adding, clarifying or starting over. Brief tier: ${tier.name}. Do you make yours guess? ${SHARE_URL}`;
+  return `Do I make my AI guess? ${tier.verdict} ${landedPct(b)}% of my tasks ${when} landed without me adding, clarifying or starting over. Prompt tier: ${tier.name}. Do you make yours guess? ${SHARE_URL}`;
 }
 
-/** The catches answer, ready to post: the tier's word and who caught whom. Numbers only. */
+/** The catches answer, ready to post: the tier's word and who corrected whom. Numbers only. */
 export function catchesShareText(o: Pick<Overall, "catches" | "humbled">, tier: BriefTier, when = "in the last 28 days") {
-  return `Do I catch my AI's mistakes? ${tier.verdict} I caught it ${times(o.catches)} ${when}, and it caught me ${times(o.humbled)}. Catch tier: ${tier.name}. Do you catch yours? ${SHARE_URL}`;
+  return `Do I correct my AI's mistakes? ${tier.verdict} I corrected it ${times(o.catches)} ${when}, and it corrected me ${times(o.humbled)}. Correction tier: ${tier.name}. Do you correct yours? ${SHARE_URL}`;
 }
 
 import type { CardShape } from "./cards";
@@ -49,7 +49,7 @@ export type ShareTarget = {
 
 /**
  * Each network's own "share" link, pre-filled with `text` where the network allows it. For a
- * score that's numbers and the project link; for a catch it's the redacted, clipped snippet,
+ * score that's numbers and the project link; for a correction it's the redacted, clipped snippet,
  * which the share dialog shows (and lets the person edit) before anything opens.
  */
 export function shareTargets(text: string, url = SHARE_URL): ShareTarget[] {
@@ -115,5 +115,5 @@ export function catchShareText(e: CatchLike, url = SHARE_URL) {
   const who = e.model || "my AI";
   const you = e.human ? ` Me: “${clip(e.human, 90)}”` : "";
   const ai = e.ai ? ` ${who}: “${clip(e.ai, 90)}”` : "";
-  return `I caught ${who} being wrong.${you}${ai} Could AI replace me? No, actually. ${url}`;
+  return `I corrected ${who}.${you}${ai} Could AI replace me? No, actually. ${url}`;
 }

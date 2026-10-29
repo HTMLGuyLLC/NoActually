@@ -57,7 +57,7 @@ function sourceRow(s: SourceInfo): Html {
 export function sourcesView(list: SourceInfo[], status: SyncStatus): Html {
   return html`
     <section id="sources"><div class="head"><h2>Sources</h2>
-      <p class="muted">Nothing is read until you allow it. No, Actually... reads your messages and the AI's replies on this computer to count catches. Nothing leaves this machine.</p></div>
+      <p class="muted">Nothing is read until you allow it. No, Actually... reads your messages and the AI's replies on this computer to count corrections. Nothing leaves this machine.</p></div>
       <div class="sources">${list.map(sourceRow)}</div>
       <p class="muted small">Stop reading keeps your scores. Forget also deletes everything that source produced.</p>
       <div class="settings-row">

@@ -50,7 +50,7 @@ export type AppState = {
   laterFor: string | null;
   /** The verdict last drawn, so the scrawl only plays when it changes, not on every background redraw. */
   lastVerdict: Verdict | null;
-  /** The brief tier last drawn (undefined: none drawn yet), for the same reason. */
+  /** The prompt tier last drawn (undefined: none drawn yet), for the same reason. */
   lastBriefTier: string | null | undefined;
   meta: Meta | null;
   /** Scorecard: how far back the counts look. */
@@ -59,7 +59,7 @@ export type AppState = {
   range: Range;
   /** Learn: the lesson open, or null for the list. */
   lesson: string | null;
-  /** Learn: what's typed in the brief checker. Never saved. */
+  /** Learn: what's typed in the prompt checker. Never saved. */
   draft: string;
 };
 

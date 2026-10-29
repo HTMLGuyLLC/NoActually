@@ -181,7 +181,7 @@ describe("delegated actions", () => {
   it("switches scorecard sections", async () => {
     expect(root.querySelector('[data-action="view"][aria-current="page"]')?.textContent).toBe("Overview");
     await click('[data-action="view"][data-id="briefs"]');
-    expect(root.querySelector('[data-action="view"][aria-current="page"]')?.textContent).toBe("Briefs");
+    expect(root.querySelector('[data-action="view"][aria-current="page"]')?.textContent).toBe("Prompts");
     expect(root.textContent).toContain("Where steering went");
   });
 
@@ -193,7 +193,7 @@ describe("delegated actions", () => {
     expect(root.querySelector('[data-action="view"][aria-current="page"]')?.textContent).toBe("Overview");
   });
 
-  it("pins and unpins a catch", async () => {
+  it("pins and unpins a correction", async () => {
     await click('[data-action="view"][data-id="hall"]');
     await click('[data-action="pin"][data-id="1"]');
     expect(api.pin).toHaveBeenCalledWith(1, true);

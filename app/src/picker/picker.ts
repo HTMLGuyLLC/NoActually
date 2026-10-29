@@ -1,7 +1,7 @@
 // Model picker logic, kept pure so it can be tested without a window.
 import type { Filter, ModelRow } from "../api";
 
-/** What a scope's numbers add up to: catches and messages, and tasks for the brief score. */
+/** What a scope's numbers add up to: corrections and messages, and tasks for the prompt score. */
 export type Counts = { catches: number; messages: number; tasks: number; continued: number; landed: number };
 export type PickItem = Counts & { filter: Filter; label: string; path: string; depth: number };
 /** Which numbers the picker shows beside each model: the ones the page is about. */
@@ -93,5 +93,5 @@ export const sameFilter = (a: Filter, b: Filter) => JSON.stringify(a) === JSON.s
 /** "83%" of continued tasks that landed (rounded down, like the tier floors), or "–" with none. */
 export const landedRate = (landed: number, continued: number) => (continued ? `${Math.floor((100 * landed) / continued)}%` : "–");
 
-/** "12.5%" of messages that were a catch, or "–" when there were none. */
+/** "12.5%" of messages that were a correction, or "–" when there were none. */
 export const catchRate = (catches: number, messages: number) => (messages ? `${((100 * catches) / messages).toFixed(1)}%` : "–");

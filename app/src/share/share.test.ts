@@ -9,16 +9,16 @@ describe("shareText", () => {
   it("brags with the score and its tier, numbers only, and links to the project", () => {
     const t = shareText(stats(), "Claude Opus 5.5", "Sharp-eyed");
     expect(t).toBe(
-      `Could Claude Opus 5.5 replace me? No. My score is 86 (Sharp-eyed): 83% of my tasks landed without steering, and I caught it 41 times to its 2 in the last 28 days. What's yours? ${SHARE_URL}`,
+      `Could Claude Opus 5.5 replace me? No. My score is 86 (Sharp-eyed): 83% of my tasks landed without steering, and I corrected it 41 times to its 2 in the last 28 days. What's yours? ${SHARE_URL}`,
     );
   });
 
-  it("falls back to this week's catches before there is a score, and handles the singular", () => {
+  it("falls back to this week's corrections before there is a score, and handles the singular", () => {
     const s = stats({ overall: overall(unranked), catches_last_7d: 1 });
     expect(shareText(s, "AI", "Not scored yet")).toBe(
-      `Could AI replace me? Maybe… I caught it 1 time this week. Me 177, AI 3. What's your score? ${SHARE_URL}`,
+      `Could AI replace me? Maybe… I corrected it 1 time this week. Me 177, AI 3. What's your score? ${SHARE_URL}`,
     );
-    expect(shareText(stats({ overall: overall(unranked), catches_last_7d: 17 }), "AI", "")).toContain("I caught it 17 times this week.");
+    expect(shareText(stats({ overall: overall(unranked), catches_last_7d: 17 }), "AI", "")).toContain("I corrected it 17 times this week.");
   });
 
   it("follows the verdict, never re-deriving it from the score", () => {
@@ -32,12 +32,12 @@ describe("briefShareText", () => {
     const tier = meta.brief_tiers[2];
     if (!tier) throw new Error("fixture");
     expect(briefShareText(briefs(), tier)).toBe(
-      `Do I make my AI guess? Sometimes. 95% of my tasks in the last 28 days landed without me adding, clarifying or starting over. Brief tier: Tech lead. Do you make yours guess? ${SHARE_URL}`,
+      `Do I make my AI guess? Sometimes. 95% of my tasks in the last 28 days landed without me adding, clarifying or starting over. Prompt tier: Tech lead. Do you make yours guess? ${SHARE_URL}`,
     );
   });
 
   it("matches the card's lines", () => {
-    expect(briefLines(briefs())).toEqual(["95% of my tasks in the last 28 days landed without steering.", "20% of all my briefs were sharp."]);
+    expect(briefLines(briefs())).toEqual(["95% of my tasks in the last 28 days landed without steering.", "20% of all my prompts were sharp."]);
     expect(briefLines(briefs(), "ever")[0]).toBe("95% of my tasks ever landed without steering.");
     expect(gradeKey(briefs())).toBe("SHARP 20%  ·  SOLID 30%  ·  THIN 50%");
   });
@@ -121,7 +121,7 @@ describe("catchShareText", () => {
   it("quotes both sides, clipped, and links the project", () => {
     const t = catchShareText({ model: "Claude Opus 5", human: "that's not a real page", ai: "You're right, that route doesn't exist." });
     expect(t).toBe(
-      `I caught Claude Opus 5 being wrong. Me: “that's not a real page” Claude Opus 5: “You're right, that route doesn't exist.” Could AI replace me? No, actually. ${SHARE_URL}`,
+      `I corrected Claude Opus 5. Me: “that's not a real page” Claude Opus 5: “You're right, that route doesn't exist.” Could AI replace me? No, actually. ${SHARE_URL}`,
     );
     const long = catchShareText({ model: "GPT", human: "x".repeat(300), ai: null });
     expect(long).toContain("…”");
@@ -129,7 +129,7 @@ describe("catchShareText", () => {
   });
 
   it("works when only the category was kept", () => {
-    expect(catchShareText({ model: "", human: null, ai: null })).toBe(`I caught my AI being wrong. Could AI replace me? No, actually. ${SHARE_URL}`);
+    expect(catchShareText({ model: "", human: null, ai: null })).toBe(`I corrected my AI. Could AI replace me? No, actually. ${SHARE_URL}`);
   });
 });
 
@@ -141,15 +141,15 @@ describe("clip", () => {
 });
 
 describe("catches share", () => {
-  it("posts the catch tier's word and who caught whom, numbers only", async () => {
+  it("posts the correction tier's word and who corrected whom, numbers only", async () => {
     const { catchesShareText } = await import("./share");
     const { catchLines } = await import("./cards");
     const tier = { id: "hawk_eyed", name: "Hawk-eyed", floor: 90, verdict: "Usually." };
     expect(catchesShareText({ catches: 37, humbled: 1 }, tier)).toBe(
-      "Do I catch my AI's mistakes? Usually. I caught it 37 times in the last 28 days, and it caught me 1 time. Catch tier: Hawk-eyed. Do you catch yours? https://github.com/HTMLGuyLLC/NoActually",
+      "Do I correct my AI's mistakes? Usually. I corrected it 37 times in the last 28 days, and it corrected me 1 time. Correction tier: Hawk-eyed. Do you correct yours? https://github.com/HTMLGuyLLC/NoActually",
     );
     expect(catchLines({ catches: 1, humbled: 0, judgment: 96 }, "ever")).toEqual([
-      "I caught it 1 time ever. It caught me 0.",
+      "I corrected it 1 time ever. It corrected me 0.",
       "Judgment 96 of 100: I check its work, and it rarely has to correct me.",
     ]);
   });

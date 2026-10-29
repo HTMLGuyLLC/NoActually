@@ -36,7 +36,7 @@ function periodNav(period: Period): Html {
   )}</select>`;
 }
 
-const VIEW_TITLES: Record<ScoreView, string> = { overview: "Overview", briefs: "Briefs", catches: "Catches", hall: "Hall of fame" };
+const VIEW_TITLES: Record<ScoreView, string> = { overview: "Overview", briefs: "Prompts", catches: "Corrections", hall: "Hall of fame" };
 
 /** Line icons beside each section's name (decoration: the name is the label). */
 const VIEW_ICONS: Record<ScoreView, Html> = {
@@ -44,7 +44,7 @@ const VIEW_ICONS: Record<ScoreView, Html> = {
   overview: svg("M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z"),
   // A page with lines: what you wrote.
   briefs: svg("M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5"),
-  // A check in a circle: a mistake caught.
+  // A check in a circle: a mistake corrected.
   catches: svg("M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12l3 3 5-6"),
   // A star.
   hall: svg("M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"),
@@ -63,7 +63,7 @@ export const modelPicker = (ctx: Pick<ScorecardContext, "filter" | "meta">): Htm
     ctx.meta,
   )}. Pick a model">${subjectLabel(ctx.filter, ctx.meta)}${CHEVRON}</button>`;
 
-/** "You caught it 37 times in the last 28 days." */
+/** "You corrected it 37 times in the last 28 days." */
 const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
 
 /** The hand-written answer, with a screen-reader version. */
@@ -77,7 +77,7 @@ function answerView(o: Overall, meta: Meta, still: boolean, small = false): Html
 function scoreBecause(o: Overall, when: string): Html {
   if (o.score == null)
     return html`Give it <b>${plural(o.to_rank, "more task")}</b> with a follow-up to get a score. One-shot tasks can't need steering, so they don't count.`;
-  return html`Score <b>${o.score}</b>. Your tasks landed <b>${o.direction}%</b> of the time, and you caught it <b>${plural(o.catches, "time")}</b> to its ${num(o.humbled)} ${when}.`;
+  return html`Score <b>${o.score}</b>. Your tasks landed <b>${o.direction}%</b> of the time, and you corrected it <b>${plural(o.catches, "time")}</b> to its ${num(o.humbled)} ${when}.`;
 }
 
 /** The next tier's target ("Irreplaceable at 90. You're at 86."). */
@@ -92,7 +92,7 @@ function partsView(o: Overall, meta: Meta): Html {
   const part = (label: string, value: number | null, weight: number, hint: string) =>
     html`<div class="part"><span class="part-name">${label}<small class="muted">${hint} · ${weight}% of the score</small></span><span class="bar-bg"><i data-w="${value ?? 0}"></i></span><span class="n">${value ?? "–"}</span></div>`;
   return html`<div class="parts" role="group" aria-label="What the score is made of">
-    ${part("Your briefs", o.direction, meta.direction_weight, "tasks that landed")}
+    ${part("Your prompts", o.direction, meta.direction_weight, "tasks that landed")}
     ${part("Who corrects whom", o.judgment, 100 - meta.direction_weight, "how rarely it has to correct you")}
   </div>`;
 }
@@ -121,31 +121,31 @@ function heroView(s: Stats, ctx: ScorecardContext): Html {
 /** You vs it: all time, and in the window. */
 function versusView(s: Stats): Html {
   return html`<div class="score">
-      <div class="side you"><span class="eyebrow">You caught it</span><span class="n">${num(s.catches)}</span></div>
+      <div class="side you"><span class="eyebrow">You corrected it</span><span class="n">${num(s.catches)}</span></div>
       <div class="vs">vs</div>
-      <div class="side ai"><span class="eyebrow">It caught you</span><span class="n">${num(s.humbled)}</span></div>
+      <div class="side ai"><span class="eyebrow">It corrected you</span><span class="n">${num(s.humbled)}</span></div>
     </div>`;
 }
 
 /** Why fewer catches never costs points. */
 const proofNote = (meta: Meta) =>
-  html`<p class="muted small">${meta.catch_proof} catches prove you check its work. Catching fewer because it got it right never costs you.</p>`;
+  html`<p class="muted small">${meta.catch_proof} corrections prove you check its work. Correcting it less because it got it right never costs you.</p>`;
 
 /** "Usually.", hand-written, with a screen-reader version. */
 function catchMark(o: Overall, meta: Meta, still: boolean, small = false): Html {
   const tier = catchTier(meta, o.catch_tier);
   return html`<div class="no${small ? " sm" : ""}${tier ? "" : " maybe"}${still ? " still" : ""}" aria-hidden="true">${tier?.verdict ?? "Hmm."}</div>
-      <span class="sr-only">${tier ? `${tier.verdict} Your catch tier is ${tier.name}.` : "Not ranked yet."}</span>`;
+      <span class="sr-only">${tier ? `${tier.verdict} Your correction tier is ${tier.name}.` : "Not ranked yet."}</span>`;
 }
 
-/** Why: who caught whom, in one line, with the same counts as "you vs it" beside it. */
+/** Why: who corrected whom, in one line, with the same counts as "you vs it" beside it. */
 function catchBecause(s: Stats, when: string): Html {
   if (s.overall.judgment == null) return html`Give it <b>${plural(s.overall.to_rank, "more task")}</b> with a follow-up to get ranked.`;
-  if (!s.catches) return html`You haven't caught it ${when}, so there's no proof yet that you check its work.`;
-  return html`You caught it <b>${plural(s.catches, "time")}</b> ${when}. It caught you ${s.humbled ? plural(s.humbled, "time") : "never"}.`;
+  if (!s.catches) return html`You haven't corrected it ${when}, so there's no proof yet that you check its work.`;
+  return html`You corrected it <b>${plural(s.catches, "time")}</b> ${when}. It corrected you ${s.humbled ? plural(s.humbled, "time") : "never"}.`;
 }
 
-/** The next catch tier's target ("Hawk-eyed at 90. You're at 88."). */
+/** The next correction tier's target ("Hawk-eyed at 90. You're at 88."). */
 function catchNote(o: Overall, meta: Meta): string {
   if (o.judgment == null) return `${plural(o.to_rank, "more task")} to get ranked`;
   const next = catchTier(meta, o.next_catch_tier);
@@ -154,7 +154,7 @@ function catchNote(o: Overall, meta: Meta): string {
 
 function catchLadderView(o: Overall, meta: Meta): Html {
   return ladderView({
-    label: "Catch tiers",
+    label: "Correction tiers",
     tiers: catchTierRanges(meta),
     on: o.catch_tier,
     at: o.judgment == null ? null : String(o.judgment),
@@ -168,10 +168,10 @@ function correctsSummaryView(s: Stats, ctx: ScorecardContext): Html {
   const tier = catchTier(ctx.meta, o.catch_tier);
   return html`<article class="card mini catches">
       <div class="eyebrow">Who corrects whom</div>
-      <h2 class="q">Do you catch its mistakes?</h2>
+      <h2 class="q">Do you correct its mistakes?</h2>
       <div class="verdict">${catchMark(o, ctx.meta, ctx.still)}<div class="because">${catchBecause(s, PERIOD_WHEN[ctx.period ?? "28d"])}</div></div>
       <p class="tier-line">${tier ? html`<span class="tier-label"><span>Tier</span>${tier.name}</span>` : ""}<span class="hand-note">${catchNote(o, ctx.meta)}</span></p>
-      <div class="share"><button class="ghost" data-action="view" data-id="catches">See catches</button></div>
+      <div class="share"><button class="ghost" data-action="view" data-id="catches">See corrections</button></div>
     </article>`;
 }
 
@@ -201,11 +201,11 @@ export function chartView(s: Stats): Html {
     // The busiest week gets a label, not a color: more catches isn't better, so no week stands out as the good one.
     const busiest = w.catches > 0 && w.catches === peak && weeks.findIndex((v) => v.catches === peak) === i;
     const d = new Date(`${w.week}T00:00`);
-    return html`<rect x="${x}" y="${barTop}" width="${bwid}" height="${y(0) - barTop}" rx="3" class="bar"><title>Week of ${d.toLocaleDateString()}: ${w.catches} catches, ${w.messages} messages</title></rect>${
+    return html`<rect x="${x}" y="${barTop}" width="${bwid}" height="${y(0) - barTop}" rx="3" class="bar"><title>Week of ${d.toLocaleDateString()}: ${w.catches} corrections, ${w.messages} messages</title></rect>${
       busiest ? html`<text x="${x + bwid / 2}" y="${barTop - 6}" text-anchor="middle" class="peak-label">Most: ${w.catches}</text>` : ""
     }${i % 2 === 0 ? html`<text x="${x + bwid / 2}" y="${H - 10}" text-anchor="middle">${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</text>` : ""}`;
   });
-  return html`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Catches per week" aria-describedby="chart-summary">${grid}${bars}</svg>
+  return html`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Corrections per week" aria-describedby="chart-summary">${grid}${bars}</svg>
     <p class="sr-only" id="chart-summary">${chartSummary(weeks)}</p>`;
 }
 
@@ -216,12 +216,12 @@ export function chartSummary(weeks: Stats["weekly"]): string {
   if (!first || !peak) return "No weeks yet.";
   const fmt = (iso: string) => new Date(`${iso}T00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   const weeksText = `${weeks.length} ${weeks.length === 1 ? "week" : "weeks"}`;
-  return `${weeksText} from ${fmt(first.week)}. Most catches: ${peak.catches}, the week of ${fmt(peak.week)}.`;
+  return `${weeksText} from ${fmt(first.week)}. Most corrections: ${peak.catches}, the week of ${fmt(peak.week)}.`;
 }
 
 export function hallView(entries: HallEntry[]): Html {
   if (!entries.length) {
-    return html`<p class="muted">No saved catches to show. Your privacy setting may be "category only", or the text has aged out. Counts are unaffected.</p>`;
+    return html`<p class="muted">No saved corrections to show. Your privacy setting may be "category only", or the text has aged out. Counts are unaffected.</p>`;
   }
   return html`<div class="fame">${entries.map(
     (e) => html`
@@ -260,10 +260,10 @@ function overviewView(s: Stats, ctx: ScorecardContext): Html {
 function statsView(s: Stats): Html {
   const peak = s.peak_hour == null ? "–" : new Date(2000, 0, 1, s.peak_hour).toLocaleTimeString(undefined, { hour: "numeric" });
   return html`<section class="stats">
-      <div class="stat"><span class="v">${num(s.catches)}</span><span class="l">catches</span></div>
-      <div class="stat"><span class="v">${s.pct_real_chats_with_catch != null ? `${Math.round(s.pct_real_chats_with_catch)}%` : "–"}</span><span class="l">of real chats had a catch</span></div>
+      <div class="stat"><span class="v">${num(s.catches)}</span><span class="l">corrections</span></div>
+      <div class="stat"><span class="v">${s.pct_real_chats_with_catch != null ? `${Math.round(s.pct_real_chats_with_catch)}%` : "–"}</span><span class="l">of real chats had a correction</span></div>
       <div class="stat"><span class="v">${s.best_streak_days} days</span><span class="l">best streak · now ${s.current_streak_days}</span></div>
-      <div class="stat"><span class="v">${s.messages_per_catch ? `1 in ${s.messages_per_catch}` : "–"}</span><span class="l">messages is a catch · peak ${peak}</span></div>
+      <div class="stat"><span class="v">${s.messages_per_catch ? `1 in ${s.messages_per_catch}` : "–"}</span><span class="l">messages is a correction · peak ${peak}</span></div>
     </section>`;
 }
 
@@ -282,37 +282,37 @@ function catchesView(s: Stats, ctx: ScorecardContext): Html {
         ([k, v]) =>
           html`<div class="cat"><span>${categoryTitle(meta, k)}</span><span class="bar-bg"><i data-w="${Math.max(2, (v / topCat) * 100)}"></i></span><span class="n">${v}</span></div>`,
       )
-    : html`<p class="muted">No catches yet.</p>`;
+    : html`<p class="muted">No corrections yet.</p>`;
   return html`
     <section class="card catches">
       <div>
         <div class="eyebrow">Who corrects whom</div>
-        <h1 class="q">Do you catch <span class="nowrap">${subjectText(ctx)}'s</span> mistakes?</h1>
+        <h1 class="q">Do you correct <span class="nowrap">${subjectText(ctx)}'s</span> mistakes?</h1>
         <div class="verdict">${catchMark(s.overall, meta, ctx.still)}<div class="because">${catchBecause(s, PERIOD_WHEN[ctx.period ?? "28d"])}</div></div>
         ${versusView(s)}
       </div>
       <div class="meter">
         ${catchLadderView(s.overall, meta)}
         ${proofNote(meta)}
-        ${catchTier(meta, s.overall.catch_tier) ? html`<div class="share"><button data-action="share-catches">Share your catches</button></div>` : ""}
+        ${catchTier(meta, s.overall.catch_tier) ? html`<div class="share"><button data-action="share-catches">Share your corrections</button></div>` : ""}
       </div>
     </section>
-    <section><div class="head"><h2>Catches per week</h2></div><div class="chart">${chartView(s)}</div></section>
+    <section><div class="head"><h2>Corrections per week</h2></div><div class="chart">${chartView(s)}</div></section>
     <section class="split">
       <div>
         <div class="head"><h2>By model</h2></div>
-        <div class="models-scroll" tabindex="0" role="region" aria-label="Catches by model"><table class="models"><thead><tr><th>Model</th><th>Catches</th><th>Messages</th><th>Rate</th></tr></thead><tbody>
+        <div class="models-scroll" tabindex="0" role="region" aria-label="Corrections by model"><table class="models"><thead><tr><th>Model</th><th>Corrections</th><th>Messages</th><th>Rate</th></tr></thead><tbody>
         ${models}
         </tbody></table></div>
       </div>
       <div>
-        <div class="head"><h2>What you catch</h2></div>
+        <div class="head"><h2>What you correct</h2></div>
         <div class="cats">${catRows}</div>
       </div>
     </section>`;
 }
 
-/** One award per kind of catch, plus one for the times it caught you. Keys are category ids ("" is humbled). */
+/** One award per kind of catch, plus one for the times it corrected you. Keys are category ids ("" is humbled). */
 export const AWARDS: Record<string, { emoji: string; name: string; blurb: string }> = {
   made_it_up: { emoji: "🦄", name: "The Fabulist", blurb: "Made it up with a straight face." },
   ignored_instructions: { emoji: "🙉", name: "Selective Hearing", blurb: "You said it. It heard something else." },
@@ -320,7 +320,7 @@ export const AWARDS: Record<string, { emoji: string; name: string; blurb: string
   missed_something: { emoji: "🙈", name: "The Blind Spot", blurb: "It was right there. Right. There." },
   still_broken: { emoji: "🔧", name: "“Fixed” It", blurb: "Declared victory. The bug disagreed." },
   just_wrong: { emoji: "🧠", name: "Big Brain Energy", blurb: "Confidently, spectacularly wrong." },
-  "": { emoji: "🪞", name: "Touché", blurb: "The times it caught you. Fair's fair." },
+  "": { emoji: "🪞", name: "Touché", blurb: "The times it corrected you. Fair's fair." },
 };
 
 /** An award: its count, its best snippet, and the runners-up. Unearned awards wait, dimmed. */
@@ -343,7 +343,7 @@ function hallSection(s: Stats, ctx: ScorecardContext): Html {
   const count = (k: string) => (k ? (s.categories[k] ?? 0) : s.humbled);
   // Most earned first; unearned last, in display order.
   const order = keys.map((k, i) => ({ k, i, n: count(k) })).sort((x, y) => Number(y.n > 0) - Number(x.n > 0) || y.n - x.n || x.i - y.i);
-  return html`<section><div class="head"><h2>Hall of fame · ${subjectText(ctx)}</h2><p class="muted">The best catch for each award, picked from your history. Snippets are redacted and kept per your privacy setting.</p></div>
+  return html`<section><div class="head"><h2>Hall of fame · ${subjectText(ctx)}</h2><p class="muted">The best correction for each award, picked from your history. Snippets are redacted and kept per your privacy setting.</p></div>
     <div class="awards">${order.map(({ k, n }) =>
       awardView(
         k,
@@ -376,10 +376,10 @@ export function onboardingView(watching: string): Html {
     // Allowed, but nothing counted yet (picked "From now on", or the tool has no history yet).
     return html`<section class="empty"><span class="eyebrow"><i class="dot live"></i> Watching ${watching}</span>
       <h1 class="q">You're all set.</h1>
-      <p>Your next chats will be counted as they happen. The first time you catch your AI being wrong, your scorecard shows up here.</p>
+      <p>Your next chats will be counted as they happen. The first time you correct your AI, your scorecard shows up here.</p>
       <button class="ghost" data-action="go-sources">Manage sources</button></section>`;
   }
   return html`<section class="empty"><h1 class="q">Let's see if AI could replace you.</h1>
-    <p>No, Actually... counts the times you caught your AI being wrong, privately, on this computer. Pick which tools it may read.</p>
+    <p>No, Actually... counts the times you corrected your AI, privately, on this computer. Pick which tools it may read.</p>
     <button data-action="go-sources">Choose sources</button></section>`;
 }

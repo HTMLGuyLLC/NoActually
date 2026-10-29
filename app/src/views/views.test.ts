@@ -20,7 +20,7 @@ describe("scorecardView", () => {
     expect(m).toMatch(/data-id="overview" aria-current="page"><svg class="tab-icon"[^>]*aria-hidden="true">.*?<\/svg>Overview<\/button>/);
     expect(m).toContain("Could ");
     expect(m).toContain("Do you make it guess?");
-    expect(m).toContain("Do you catch its mistakes?");
+    expect(m).toContain("Do you correct its mistakes?");
     expect(m).toContain('data-action="view" data-id="catches"');
     expect(m).not.toContain("Hall of fame ·");
   });
@@ -46,19 +46,19 @@ describe("scorecardView", () => {
 
   it("draws the breakdowns from Rust's data in the catches section", () => {
     const m = scorecardView(stats(), { ...ctx, view: "catches" }).value;
-    expect(m).toContain("Do you catch");
+    expect(m).toContain("Do you correct");
     expect(m).toContain("Flat-out wrong"); // category title from meta
     expect(m).toContain('data-w="100"'); // the top category's bar; width set through CSSOM
     expect(m).not.toContain("style=");
   });
 
-  it("answers the catches section in a word, with the catch tiers and a share", () => {
+  it("answers the catches section in a word, with the correction tiers and a share", () => {
     const m = scorecardView(stats(), { ...ctx, view: "catches" }).value;
     expect(m).toContain('aria-hidden="true">Usually.</div>');
-    expect(m).toContain('<ol class="ladder" aria-label="Catch tiers">');
+    expect(m).toContain('<ol class="ladder" aria-label="Correction tiers">');
     expect(m).toContain('<span>Hawk-eyed</span><span><b class="at">95</b>');
     expect(m).toContain("<span>Spot-checker</span><span>50–74</span>");
-    expect(m).toContain('data-action="share-catches">Share your catches</button>');
+    expect(m).toContain('data-action="share-catches">Share your corrections</button>');
     const unranked = scorecardView(stats({ overall: overall({ judgment: null, catch_tier: null, to_rank: 3 }) }), { ...ctx, view: "catches" }).value;
     expect(unranked).toContain(">Hmm.</div>");
     expect(unranked).not.toContain("share-catches");
@@ -109,19 +109,19 @@ describe("overview hero", () => {
   it("shows the score, the tier and why, with a share button once scored", () => {
     const m = hero();
     expect(m).toContain("Last 28 days");
-    expect(m).toContain("Score <b>86</b>. Your tasks landed <b>83%</b> of the time, and you caught it <b>41 times</b> to its 2 in the last 28 days.");
+    expect(m).toContain("Score <b>86</b>. Your tasks landed <b>83%</b> of the time, and you corrected it <b>41 times</b> to its 2 in the last 28 days.");
     expect(m).toContain("Your tier is Sharp-eyed, score 86.");
     expect(m).not.toContain("Irreplaceable at 90. You&#39;re at 86."); // the row says it
     expect(m).toContain('data-action="open-share"');
-    // The overview shares the score; Briefs and Catches each share their own answer.
+    // The overview shares the score; Prompts and Corrections each share their own answer.
     expect(m).not.toContain("share-briefs");
     expect(m).not.toContain("share-catches");
   });
 
-  it("answers Do you catch its mistakes? in a word on the overview, with its tier", () => {
+  it("answers Do you correct its mistakes? in a word on the overview, with its tier", () => {
     const m = hero({ catch_tier: "reviewer", next_catch_tier: "hawk_eyed", judgment: 88 }, { catches: 41, humbled: 2 });
     expect(m).toContain('aria-hidden="true">Often.</div>');
-    expect(m).toContain("You caught it <b>41 times</b> in the last 28 days. It caught you 2 times.");
+    expect(m).toContain("You corrected it <b>41 times</b> in the last 28 days. It corrected you 2 times.");
     expect(m).toContain("<span>Tier</span>Reviewer");
     expect(m).toContain("Hawk-eyed at 90. You&#39;re at 88.");
   });
@@ -129,7 +129,7 @@ describe("overview hero", () => {
   it("shows the two parts as bars with their weights from meta", () => {
     const m = hero();
     expect(m).toContain('aria-label="What the score is made of"');
-    expect(m).toContain("Your briefs<small");
+    expect(m).toContain("Your prompts<small");
     expect(m).toContain("tasks that landed · 70% of the score");
     expect(m).toContain('data-w="83"');
     expect(m).toContain("Who corrects whom<small");
@@ -159,7 +159,7 @@ describe("overview hero", () => {
 
   it("says why fewer catches never costs points", () => {
     const m = scorecardView(stats(), { ...ctx, view: "catches" }).value;
-    expect(m).toContain("3 catches prove you check its work. Catching fewer because it got it right never costs you.");
+    expect(m).toContain("3 corrections prove you check its work. Correcting it less because it got it right never costs you.");
   });
 
   it("escapes names from meta and unknown ids", () => {
@@ -184,7 +184,7 @@ describe("hallView", () => {
   });
 
   it("explains an empty hall", () => {
-    expect(hallView([]).value).toContain("No saved catches to show.");
+    expect(hallView([]).value).toContain("No saved corrections to show.");
   });
 });
 
@@ -193,7 +193,7 @@ describe("chartView", () => {
     const m = chartView(stats()).value;
     expect(m).not.toContain("hot");
     expect(m.match(/class="peak-label">Most: /g)).toHaveLength(1);
-    expect(m).toContain('aria-label="Catches per week"');
+    expect(m).toContain('aria-label="Corrections per week"');
     expect(m).toContain('aria-describedby="chart-summary"');
   });
 
@@ -203,7 +203,7 @@ describe("chartView", () => {
 
   it("summarises the chart in words for screen readers", () => {
     const t = chartSummary(stats().weekly);
-    expect(t).toMatch(/^2 weeks from .+\. Most catches: 16, the week of .+\.$/);
+    expect(t).toMatch(/^2 weeks from .+\. Most corrections: 16, the week of .+\.$/);
     expect(chartSummary(stats().weekly.slice(0, 1))).toMatch(/^1 week from /);
     expect(chartSummary([])).toBe("No weeks yet.");
   });
@@ -232,7 +232,7 @@ describe("onboarding and glance", () => {
     expect(m).toContain('<span class="g-word maybe">Hmm.</span>');
   });
 
-  it("has an empty glance before the first catch", () => {
+  it("has an empty glance before the first correction", () => {
     expect(emptyGlanceView("").value).toContain("Set up");
     safe(emptyGlanceView(HOSTILE).value);
   });
@@ -378,13 +378,13 @@ describe("settingsView", () => {
 });
 
 describe("scorecard period picker", () => {
-  it("marks the period, words the catch count for it, and uses it for the score too", async () => {
+  it("marks the period, words the correction count for it, and uses it for the score too", async () => {
     const { scorecardView } = await import("./scorecard");
     const view = (period: "7d" | "28d" | "90d" | "all") =>
       scorecardView(stats({ overall: overall({ catches: 37 }) }), { meta, filter: {}, still: true, period }).value;
     const week = view("7d");
     expect(week).toContain('data-action="period" data-id="7d" aria-current="true"');
-    expect(week).toContain("you caught it <b>37 times</b> to its 2 in the last 7 days.");
+    expect(week).toContain("you corrected it <b>37 times</b> to its 2 in the last 7 days.");
     // Everything follows the period, the score included: no disclaimer needed.
     expect(week).toContain('<div class="eyebrow">Last 7 days</div>');
     expect(week).not.toContain("always uses");
@@ -426,7 +426,7 @@ describe("status and refresh", () => {
 });
 
 describe("hall of fame awards", () => {
-  it("gives each kind of catch an award, best snippet first, most earned first, unearned dimmed", async () => {
+  it("gives each kind of correction an award, best snippet first, most earned first, unearned dimmed", async () => {
     const { scorecardView, AWARDS } = await import("./scorecard");
     const s = stats({
       categories: { made_it_up: 2, just_wrong: 9 },

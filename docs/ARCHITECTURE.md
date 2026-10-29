@@ -5,7 +5,7 @@ Goals, in order: **private by default, reliable, fast, deterministic.**
 ```
 crates/engine    noactually-engine:  pure rules: classify a turn, normalize model ids, redact, build snippets. No I/O. Compiles to WASM.
 crates/sources   noactually-sources: one adapter per AI tool: detect, backfill, tail. Turns files into `Turn`s.
-crates/store     noactually-store:   SQLite: consent + settings, file checkpoints, daily aggregates, catch events, retention sweeps.
+crates/store     noactually-store:   SQLite: consent + settings, file checkpoints, daily aggregates, correction events, retention sweeps.
 crates/cli       noactually-cli:     the `noactually` binary. Same code path as the app.
 app/             noactually-app:     Tauri 2: tray quick-glance, full window, notifications, update checks. Thin shell over the crates.
 ```
@@ -24,7 +24,7 @@ source files ──adapter──▶ SourceTurn { source, session, ts, key, turn:
                        engine::classify  (fixed rules, no network, no LLM)
                               │
                ┌──────────────┼────────────────┐
-        daily aggregates   session tally    catch event (text kept per retention level)
+        daily aggregates   session tally    correction event (text kept per retention level)
 ```
 
 A **turn** is one human message plus the AI reply before it and the AI reply after it. The adapter only emits a turn once the next AI reply exists (or the next human message arrives), so live tailing and backfill produce identical results.
@@ -33,7 +33,7 @@ A **turn** is one human message plus the AI reply before it and the AI reply aft
 
 Nothing is read until the user allows it.
 
-- First launch lists every **detected** source with the exact path it would read and what it reads ("your messages and the AI's replies, to count catches"). Each is off until the user taps **Allow**.
+- First launch lists every **detected** source with the exact path it would read and what it reads ("your messages and the AI's replies, to count corrections"). Each is off until the user taps **Allow**.
 - Per source: allow/revoke, backfill window (everything, since a date, or none), pause.
 - **Revoke** stops reading and keeps scores. **Forget** also deletes that source's events, aggregates and checkpoints.
 - Nothing leaves the machine. Share cards render locally. The only network use is the update check (see [Updates](#updates)) and opening a share URL the user taps. A future global board is a separate opt-in that sends numbers only.
@@ -61,7 +61,7 @@ The `noactually` binary shares the engine and database with the app:
 | `import <source> <path>` | Add an export file or folder (`chatgpt-export`, `claude-ai-export`) |
 | `sync` | Read anything new from allowed sources |
 | `stats [--source S] [--provider P] [--family F] [--version V] [--json]` | Print the scorecard |
-| `retention <full\|snippet\|category> [--full-days N] [--snippet-days N]` | Set how catch text is kept |
+| `retention <full\|snippet\|category> [--full-days N] [--snippet-days N]` | Set how correction text is kept |
 
 **Database location.** One function, `store::default_db_path()`, picks the file for both the CLI and the app: `app.noactually/noactually.db` in your OS app-data folder. Set `NOACTUALLY_DB=/path/to/file.db` to use another database (development, demos, tests). `WA_DB` is still read as a deprecated fallback.
 
@@ -69,15 +69,15 @@ The `noactually` binary shares the engine and database with the app:
 
 | Data | Stored | Text? | Lifetime |
 |---|---|---|---|
-| Ordinary messages (not catches) | Counts only, per day × source × model | Never | Forever (just numbers) |
-| Sessions | Hashed id, source, day range, message and catch counts | Never | Forever |
-| Tasks (briefs) | Day, source, hashed chat id, model, a 5-bit mask of the signals the brief carried, message and steering counts | Never | Forever |
+| Ordinary messages (not corrections) | Counts only, per day × source × model | Never | Forever (just numbers) |
+| Sessions | Hashed id, source, day range, message and correction counts | Never | Forever |
+| Tasks (prompts) | Day, source, hashed chat id, model, a 5-bit mask of the signals the prompt carried, message and steering counts | Never | Forever |
 | Goal weeks, trophies | A goal's finished weeks (count, percent, met/missed/paused), frozen; finished goals. Not score tables: rebuilds and Forget leave them | Never | Forever |
-| Catch / humbled events | Time, source, model, label, category, matched rule ids | Per retention level | Per TTL |
+| Correction / humbled events | Time, source, model, label, category, matched rule ids | Per retention level | Per TTL |
 | File checkpoints | Path, byte offset, size, modified time | Never | Until the source is forgotten |
 | Message fingerprints | Short hashes of message ids (dedupe) | Never | Until the source is forgotten |
 
-### Retention levels for catch text
+### Retention levels for correction text
 
 | Level | What's kept | Default TTL, then… |
 |---|---|---|
@@ -85,7 +85,7 @@ The `noactually` binary shares the engine and database with the app:
 | **Snippet** (default) | The matched sentence from each side, ≤140 chars, redacted (emails, URLs, keys, numbers, home paths) | 365 days → Category |
 | **Category only** | No text at all | Forever |
 
-Levels only ever step down (Full → Snippet → Category), on a sweep after every sync. The user picks the starting level and both TTLs. **Pinning** a catch to the Hall of Fame keeps its text until unpinned.
+Levels only ever step down (Full → Snippet → Category), on a sweep after every sync. The user picks the starting level and both TTLs. **Pinning** a correction to the Hall of Fame keeps its text until unpinned.
 
 Snippets are cut deterministically from the matched sentence. Summaries would need a model, so they aren't in the scoring path. An optional local-model summary (Ollama / LM Studio) can come later as an explicit opt-in.
 
@@ -103,7 +103,7 @@ Each AI reply's raw model id is normalized to three levels:
 
 Aggregates store all three, so every view can filter by all models, a provider, a family, or one exact version.
 
-**Attribution.** A catch is charged to the model that wrote the reply you corrected (the *previous* AI reply). Humbled events go to the model that corrected you (the *next* reply).
+**Attribution.** A correction is charged to the model that wrote the reply you corrected (the *previous* AI reply). Humbled events go to the model that corrected you (the *next* reply).
 
 ## Sources
 
@@ -125,7 +125,7 @@ Adding a source means implementing the `Source` trait in `crates/sources`: `root
 - Every write for a file happens in one SQLite transaction with its checkpoint update.
 - Every message has a stable key (the tool's message id, or a hash of session + time + text). Its hash is stored in `seen`, so resumed sessions, forks, re-imports and rewritten files never count twice.
 - If a file shrinks or is rewritten, it's re-read from zero. Keys block the duplicates.
-- The watcher is a trigger, not the source of truth. A 5-minute sync catches anything the OS missed, and launch catches up on anything written while the app was closed.
+- The watcher is a trigger, not the source of truth. A 5-minute sync picks up anything the OS missed, and launch catches up on anything written while the app was closed.
 - The first sync only records a milestone baseline, so backfilling history never fires notifications.
 - Claude Code deletes old transcripts (about 30 days by default). Aggregates live in our database, so history survives that.
 

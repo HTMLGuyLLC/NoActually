@@ -39,7 +39,7 @@ describe("refreshCheck", () => {
     state.setDraft("   ");
     await refreshCheck(root);
     expect(checkBrief).not.toHaveBeenCalled();
-    expect(root.textContent).toContain("Type or paste a brief");
+    expect(root.textContent).toContain("Type or paste a prompt");
   });
 
   it("says so when a check fails", async () => {

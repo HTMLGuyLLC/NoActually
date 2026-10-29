@@ -48,11 +48,11 @@ describe("learnView home", () => {
     expect(m).toContain('<span class="sr-only"> (done)</span>');
   });
 
-  it("starts at the first lesson with no data, and picks one from your briefs with it", () => {
+  it("starts at the first lesson with no data, and picks one from your prompts with it", () => {
     expect(home()).toContain("Start here");
     expect(home()).toContain('class="lesson-next" data-action="lesson" data-id="point-at-it"');
     const m = home({ briefs: briefs({ tasks: 100, signals: { spot: 90, proof: 90, done: 90, limits: 20, why: 90 } }) });
-    expect(m).toContain("Picked for you, from your briefs");
+    expect(m).toContain("Picked for you, from your prompts");
     expect(m).toContain('class="lesson-next" data-action="lesson" data-id="set-limits"');
   });
 
@@ -127,7 +127,7 @@ describe("learnView lesson", () => {
   });
 
   it("falls back to the home page for an unknown lesson", () => {
-    expect(lesson("nope")).toContain("Learn to brief it");
+    expect(lesson("nope")).toContain("Learn to prompt it");
   });
 
   it("escapes signal titles from meta", () => {
@@ -140,9 +140,9 @@ describe("checkResultView", () => {
   const check = (over: Partial<Check> = {}): Check => ({ signals: 0, grade: "thin", rules: [], not_a_brief: false, ...over });
 
   it("asks for a brief when empty, or when there's no result", () => {
-    expect(checkResultView(meta, null, true).value).toContain("Type or paste a brief.");
-    expect(checkResultView(meta, check(), true).value).toContain("Type or paste a brief.");
-    expect(checkResultView(meta, null, false).value).toContain("Type or paste a brief.");
+    expect(checkResultView(meta, null, true).value).toContain("Type or paste a prompt.");
+    expect(checkResultView(meta, check(), true).value).toContain("Type or paste a prompt.");
+    expect(checkResultView(meta, null, false).value).toContain("Type or paste a prompt.");
   });
 
   it("lights up the signals in a sharp check, and says there's nothing missing at five", () => {

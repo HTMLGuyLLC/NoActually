@@ -83,7 +83,7 @@ fn examples_grade_the_way_the_lessons_say() {
             }
             let c = check(text);
             if c.not_a_brief {
-                wrong.push(format!("{id}.{side} reads as not a brief: {text:?}"));
+                wrong.push(format!("{id}.{side} reads as not a prompt: {text:?}"));
             }
             grades.push(c.grade);
         }
@@ -145,7 +145,7 @@ fn every_quiz_has_exactly_one_right_answer() {
                     }
                     for o in &options {
                         if check(o).not_a_brief {
-                            wrong.push(format!("{at}: option reads as not a brief: {o:?}"));
+                            wrong.push(format!("{at}: option reads as not a prompt: {o:?}"));
                         }
                     }
                 }
@@ -163,7 +163,7 @@ fn every_quiz_has_exactly_one_right_answer() {
                         wrong.push(format!("{at}: answer {answer:?} is not one of the options"));
                     }
                     if has.contains(answer) {
-                        wrong.push(format!("{at}: the brief already has {answer:?}: {brief:?} ({has:?})"));
+                        wrong.push(format!("{at}: the prompt already has {answer:?}: {brief:?} ({has:?})"));
                     }
                     for o in options.iter().filter(|o| **o != answer) {
                         if !has.contains(*o) {
@@ -171,12 +171,12 @@ fn every_quiz_has_exactly_one_right_answer() {
                         }
                     }
                     if check(brief).not_a_brief {
-                        wrong.push(format!("{at}: the brief reads as not a brief: {brief:?}"));
+                        wrong.push(format!("{at}: the prompt reads as not a prompt: {brief:?}"));
                     }
                 }
                 "pick" => {
                     if track != "catch" {
-                        wrong.push(format!("{at}: pick quizzes are only for the catch track"));
+                        wrong.push(format!("{at}: pick quizzes are only for the correction track"));
                     }
                     if !(2..=4).contains(&options.len()) {
                         wrong.push(format!("{at}: a pick quiz has 2 to 4 options, has {}", options.len()));

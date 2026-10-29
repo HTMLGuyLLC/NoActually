@@ -20,7 +20,7 @@ USAGE
   noactually import <source> <path>      Import an export file or folder (chatgpt-export, claude-ai-export)
   noactually sync                        Read anything new from allowed sources
   noactually stats [filters] [--json]    Scorecard. Filters: --source --provider --family --version --since
-  noactually check <brief>               What a draft brief carries, graded like your history (nothing is saved)
+  noactually check <prompt>              What a draft prompt carries, graded like your history (nothing is saved)
   noactually retention <full|snippet|category> [--full-days N] [--snippet-days N]
 
 Data lives in NOACTUALLY_DB, or app.noactually/noactually.db in your app data folder (shared with the desktop app).
@@ -119,9 +119,9 @@ fn parse_args(args: &[String]) -> Result<Command> {
             };
             Command::Stats { filter, json: a.has("--json") }
         }
-        // The whole rest is the brief, so it's never read as flags.
+        // The whole rest is the prompt, so it's never read as flags.
         "check" if !rest.is_empty() => Command::Check { text: rest.join(" ") },
-        "check" => bail!("missing brief: noactually check \"Fix the crash in checkout.ts…\""),
+        "check" => bail!("missing prompt: noactually check \"Fix the crash in checkout.ts…\""),
         "retention" => {
             let a = Args::split(rest, &["--full-days", "--snippet-days"], &[])?;
             Command::Retention {
@@ -182,7 +182,7 @@ fn run(cmd: Command, store: &mut Store, all: &[Box<dyn sources::Source>]) -> Res
             let t = std::time::Instant::now();
             let r = store::sync(store, all)?;
             println!(
-                "Read {} files: {} messages, {} catches ({:.1}s)",
+                "Read {} files: {} messages, {} corrections ({:.1}s)",
                 r.files_read,
                 r.messages,
                 r.catches,
@@ -258,19 +258,19 @@ fn print_card(s: &store::Stats) {
         s.last_day.as_deref().unwrap_or("?")
     );
     if let Some(n) = s.messages_per_catch {
-        println!("  1 catch every   {n} messages");
+        println!("  1 correction every {n} messages");
     }
     if let Some(p) = s.pct_real_chats_with_catch {
-        println!("  Real chats      {p}% of {} had a catch", s.real_chats);
+        println!("  Real chats      {p}% of {} had a correction", s.real_chats);
     }
     println!("  Streak          {} days now, best {}", s.current_streak_days, s.best_streak_days);
     println!("\n  By model");
     for m in s.models.iter().filter(|m| m.messages > 0).take(10) {
         let name = if m.version.is_empty() { m.family.clone() } else { format!("{} {}", m.family, m.version) };
         let rate = 100.0 * m.catches as f64 / m.messages as f64;
-        println!("    {:<24} {:>5} catches  {:>6} msgs  {:>4.1}%", name, m.catches, m.messages, rate);
+        println!("    {:<24} {:>5} corrections  {:>6} msgs  {:>4.1}%", name, m.catches, m.messages, rate);
     }
-    println!("\n  Catches by kind");
+    println!("\n  Corrections by kind");
     for c in engine::Category::ALL {
         if let Some(n) = s.categories.get(c.as_str()) {
             println!("    {:<24} {n}", c.title());
@@ -296,7 +296,7 @@ fn overall_lines(o: &store::Overall) -> Vec<String> {
                 o.next_tier.map_or(String::new(), |n| format!("  ({} at {})", n.name(), n.floor()))
             ),
             format!(
-                "  Your briefs     {direction}% of tasks landed in {days} days ({}% of the score)",
+                "  Your prompts    {direction}% of tasks landed in {days} days ({}% of the score)",
                 engine::DIRECTION_WEIGHT
             ),
             format!(
@@ -314,11 +314,11 @@ fn overall_lines(o: &store::Overall) -> Vec<String> {
     }
 }
 
-/// `noactually check "<brief>"`: what a draft brief carries, with the same rules scoring uses.
+/// `noactually check "<prompt>"`: what a draft prompt carries, with the same rules scoring uses.
 fn check_lines(text: &str) -> Vec<String> {
     let c = engine::check(text);
     let mut out = vec![format!(
-        "{} ({} of {} things a brief can carry)",
+        "{} ({} of {} things a prompt can carry)",
         c.grade.title(),
         c.signals.count(),
         engine::Signal::ALL.len()
@@ -328,7 +328,7 @@ fn check_lines(text: &str) -> Vec<String> {
         out.push(format!("  {mark} {:<18} {}", s.title(), s.hint()));
     }
     if c.not_a_brief {
-        out.push("  (Reads as a question or a hello: your history doesn't grade those as briefs.)".into());
+        out.push("  (Reads as a question or a hello: your history doesn't grade those as prompts.)".into());
     }
     out
 }
@@ -359,11 +359,11 @@ fn brief_lines(b: &store::Briefs) -> Vec<String> {
             b.continued
         ),
         format!(
-            "  Sharp briefs     {}%  ({}+ of the 5 signals)",
+            "  Sharp prompts    {}%  ({}+ of the 5 signals)",
             pct(b.grades.get("sharp").copied().unwrap_or(0), b.tasks),
             engine::Grade::SHARP
         ),
-        "\n  Your briefs".into(),
+        "\n  Your prompts".into(),
     ];
     for sig in engine::Signal::ALL {
         let n = b.signals.get(sig.as_str()).copied().unwrap_or(0);
@@ -427,9 +427,9 @@ mod tests {
     #[test]
     fn check_reads_the_whole_rest_as_the_brief() {
         assert_eq!(parse("check --fix the thing").unwrap(), Command::Check { text: "--fix the thing".into() });
-        assert!(err("check").starts_with("missing brief"));
+        assert!(err("check").starts_with("missing prompt"));
         let lines = check_lines("Fix the crash in `checkout.ts`. Done when the tests pass. Don't touch the API.");
-        assert_eq!(lines[0], "Sharp (3 of 5 things a brief can carry)");
+        assert_eq!(lines[0], "Sharp (3 of 5 things a prompt can carry)");
         assert!(lines.iter().any(|l| l.starts_with("  ✓ Points at it")));
         assert!(lines.iter().any(|l| l.starts_with("  · Says why")));
         assert!(check_lines("how does this work?").last().unwrap().contains("question"));
@@ -482,7 +482,7 @@ mod tests {
         let text = brief_lines(&b).join("\n");
         assert!(text.contains("Do you make it guess? Hmm. 2 more tasks with a follow-up to get ranked"), "{text}");
         assert!(text.contains("Landed           75% of 8 tasks with a follow-up"), "{text}");
-        assert!(text.contains("Sharp briefs     30%"), "{text}");
+        assert!(text.contains("Sharp prompts    30%"), "{text}");
         assert!(text.contains("Says why              50%"), "{text}");
         assert!(text.contains("You added more       1"), "{text}");
         b.tier = Some(engine::BriefTier::TechLead);

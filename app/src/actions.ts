@@ -74,19 +74,19 @@ const scorePost = (s: Stats, meta: Meta): Post => {
 };
 
 const briefsPost = (s: Stats, tier: BriefTier): Post => ({
-  title: "Share your briefs",
+  title: "Share your prompts",
   text: briefShareText(s.briefs, tier, when()),
   image: (shape) => drawBriefCard(s.briefs, tier, shape, when()),
 });
 
 const catchesPost = (s: Stats, tier: BriefTier): Post => ({
-  title: "Share your catches",
+  title: "Share your corrections",
   text: catchesShareText(s.overall, tier, when()),
   image: (shape) => drawCatchesCard(s.overall, tier, shape, when()),
 });
 
 const catchPost = (e: HallEntry): Post => ({
-  title: "Share this catch",
+  title: "Share this correction",
   text: catchShareText(e),
   image: (shape) => drawCatchCard(e, shape),
   quotesChat: !!(e.human || e.ai),
@@ -227,7 +227,7 @@ export const clickActions = {
       () => true,
       () => false,
     );
-    say(b.parentElement?.querySelector("#draft-status") ?? null, ok ? "Copied your brief." : "Couldn't copy.");
+    say(b.parentElement?.querySelector("#draft-status") ?? null, ok ? "Copied your prompt." : "Couldn't copy.");
   },
   "clear-draft": () => {
     setDraft("");
@@ -359,7 +359,7 @@ export function bindActions(root: HTMLElement): void {
       report(err);
     }
   });
-  // Typing in the brief checker: kept in memory and re-graded when typing pauses.
+  // Typing in the prompt checker: kept in memory and re-graded when typing pauses.
   root.addEventListener("input", (e) => {
     const el = e.target;
     if (!(el instanceof HTMLTextAreaElement) || el.dataset.action !== "draft") return;

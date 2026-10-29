@@ -6,29 +6,30 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ### Added
 
-- **Could AI replace you?** is now an overall score from 0 to 100 over the last 28 days: 70% how often your tasks land, 30% judgment (how rarely the AI has to correct you, per task, once you've caught it 3 times). Tiers: Rubber stamp, Coworker 65+, Sharp-eyed 80+, Irreplaceable 90+. Catching fewer mistakes because you briefed well never costs points. Overall and brief tiers are announced once, the first time you reach each one.
-- **Improve** tab: one weekly goal suggested from your numbers (a habit, a steering ceiling or a higher tier), judged once each week is over, with week-by-week marks, streaks that pause on quiet weeks, trophies, personal bests, last week's recap, charts (tasks landed with tier bands, what your briefs carry, grades, steering, catch rate) over 12 weeks, 6 months or all time, and "what works for you" from your own history. Finished goal weeks are frozen. Popups when a goal week is met and when a goal is done.
-- **Learn** tab: 12 one-minute lessons in three tracks (the 5 habits, steer less, catch more), each with a before/after, a template and a quick quiz, plus a brief checker that grades a draft as you type with the same rules as your score and saves nothing. The next lesson is picked from your briefs. A test grades every lesson example with the real rules and fails if the copy names a product, model or version.
-- **Do you catch its mistakes?** now has a one-word answer and tiers from judgment: Autopilot (Rarely.), Spot-checker 50+ (Sometimes.), Reviewer 75+ (Often.), Hawk-eyed 90+ (Usually.), with **Share your catches** on the Catches page. The overview shares your score; Briefs and Catches each share their own answer.
-- `noactually check "<brief>"` grades a draft brief from the command line.
+- **Could AI replace you?** is now an overall score from 0 to 100 over the last 28 days: 70% how often your tasks land, 30% judgment (how rarely the AI has to correct you, per task, once you've corrected it 3 times). Tiers: Rubber stamp, Coworker 65+, Sharp-eyed 80+, Irreplaceable 90+. Correcting fewer mistakes because you prompted well never costs points. Overall and prompt tiers are announced once, the first time you reach each one.
+- **Improve** tab: one weekly goal suggested from your numbers (a habit, a steering ceiling or a higher tier), judged once each week is over, with week-by-week marks, streaks that pause on quiet weeks, trophies, personal bests, last week's recap, charts (tasks landed with tier bands, what your prompts carry, grades, steering, correction rate) over 12 weeks, 6 months or all time, and "what works for you" from your own history. Finished goal weeks are frozen. Popups when a goal week is met and when a goal is done.
+- **Learn** tab: 12 one-minute lessons in three tracks (the 5 habits, steer less, correct more), each with a before/after, a template and a quick quiz, plus a prompt checker that grades a draft as you type with the same rules as your score and saves nothing. The next lesson is picked from your prompts. A test grades every lesson example with the real rules and fails if the copy names a product, model or version.
+- **Do you correct its mistakes?** now has a one-word answer and tiers from judgment: Autopilot (Rarely.), Spot-checker 50+ (Sometimes.), Reviewer 75+ (Often.), Hawk-eyed 90+ (Usually.), with **Share your corrections** on the Corrections page. The overview shares your score; Prompts and Corrections each share their own answer.
+- `noactually check "<prompt>"` grades a draft prompt from the command line.
 - Settings: **Keep running in the menu bar**. Off makes it an ordinary app with no menu bar or tray icon that quits when its window closes.
 
 ### Changed
 
-- A time picker on the scorecard (7 days, 28 days, 90 days, all time) sets how far back the whole scorecard looks: the score and tiers, catches, you vs it, briefs, the chart, models, categories and the hall of fame. Popups, goals, the quick glance and the tray stay on the last 28 days. `noactually stats --since YYYY-MM-DD` does the same.
-- The Briefs page leads with its answer and one line of why; the sharp/solid/thin bar moved down to What your briefs carry.
-- Brief rules: "you'll know it's fixed when…" and "done once…" say what done is; "no error in the logs" is no longer proof; "we want them to come back" says why. History is re-read once to apply them.
+- The app says **prompts** and **corrections** instead of briefs and catches, everywhere you read it.
+- A time picker on the scorecard (7 days, 28 days, 90 days, all time) sets how far back the whole scorecard looks: the score and tiers, corrections, you vs it, prompts, the chart, models, categories and the hall of fame. Popups, goals, the quick glance and the tray stay on the last 28 days. `noactually stats --since YYYY-MM-DD` does the same.
+- The Prompts page leads with its answer and one line of why; the sharp/solid/thin bar moved down to What your prompts carry.
+- Prompt rules: "you'll know it's fixed when…" and "done once…" say what done is; "no error in the logs" is no longer proof; "we want them to come back" says why. History is re-read once to apply them.
 - **Check for updates** (new chats) moved to Sources; the updater's button is now **Check for app updates**.
 - The model picker sits beside the time range (on the scorecard and Improve), so it's clear it filters the whole page; the questions name the model in plain text ("Could AI replace you?"). The "Showing … only" chip is gone: pick All AI to go back.
 - Tier ladders show your number in your tier's row, instead of a note below.
-- Catches per week no longer colors the busiest week as if it were the good one; it's labeled "Most" instead.
+- Corrections per week no longer colors the busiest week as if it were the good one; it's labeled "Most" instead.
 - The header keeps Scorecard, Improve and Learn labeled; Settings is an icon button, and Sources is its first section.
 - The quick glance asks the scorecard's three questions, each answered in a word with a short why, plus your goal with this week's number. A gear opens Settings and **Open app** opens the scorecard; the share and copy buttons are gone (share from the app).
 - Live tracking checks at most once a minute while an AI tool is writing (it used to check a few seconds after every write). Under the menu, a refresh button checks now, and hovering the status shows the dates and messages the numbers cover.
-- The Hall of fame is an awards wall: one award per kind of catch (and Touché for the times it caught you), each with its count and best snippet first, ranked the same way every time: pinned, then admitted, then with both sides kept, then the punchiest line, then the newest. Unearned awards wait, dimmed.
+- The Hall of fame is an awards wall: one award per kind of correction (and Touché for the times it corrected you), each with its count and best snippet first, ranked the same way every time: pinned, then admitted, then with both sides kept, then the punchiest line, then the newest. Unearned awards wait, dimmed.
 - Improve leads with your goal: a bigger card with one number to watch (this week's percent, or your score against the tier). Last week's recap sits beside it.
-- The model picker shows the numbers the page is about: landed % on Briefs, catches on Catches and Hall of fame, both on the overview.
-- Scorecard sections run Overview, Briefs, Catches, Hall of fame. The Catches section asks "Do you catch its mistakes?" and shows your judgment score.
+- The model picker shows the numbers the page is about: landed % on Prompts, corrections on Corrections and Hall of fame, both on the overview.
+- Scorecard sections run Overview, Prompts, Corrections, Hall of fame. The Corrections section asks "Do you correct its mistakes?" and shows your judgment score.
 - The top tabs show icons only on narrow windows.
 
 ## [0.3.0] - 2026-10-28

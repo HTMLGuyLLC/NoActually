@@ -268,7 +268,7 @@ impl Store {
     // ---- settings ----------------------------------------------------------------------
 
     /// The retention settings, or the defaults if never set. A saved value that can't be read
-    /// (say, written by a newer version) means new catches keep no text, never the defaults,
+    /// (say, written by a newer version) means new corrections keep no text, never the defaults,
     /// which might keep more than the user chose.
     pub fn retention(&self) -> Result<Retention> {
         Ok(self.saved_retention()?.unwrap_or(Retention { level: Level::Category, ..Retention::default() }))
@@ -281,7 +281,7 @@ impl Store {
             Ok(r) => Ok(Some(r)),
             Err(e) => {
                 log::error!(
-                    "the saved retention setting is unreadable ({e}); new catches keep no text until it is set again"
+                    "the saved retention setting is unreadable ({e}); new corrections keep no text until it is set again"
                 );
                 Ok(None)
             }

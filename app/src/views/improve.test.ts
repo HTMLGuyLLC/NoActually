@@ -75,13 +75,13 @@ describe("buckets", () => {
 
 describe("goalTitle", () => {
   it("says what each kind of goal asks", () => {
-    expect(goalTitle({ kind: "habit", signal: "why", target: 40 }, meta)).toBe("Say why in 40% of your briefs each week");
+    expect(goalTitle({ kind: "habit", signal: "why", target: 40 }, meta)).toBe("Say why in 40% of your prompts each week");
     expect(goalTitle({ kind: "steer", steer: "redo", target: 10 }, meta)).toBe("Keep “you started over” to 10% of your tasks or fewer each week");
     expect(goalTitle({ kind: "tier", tier: "coworker", target: 0 }, meta)).toBe("Reach Coworker");
   });
 
   it("falls back to the id for anything unknown", () => {
-    expect(goalTitle({ kind: "habit", signal: "new_one", target: 50 }, meta)).toContain("New_one in 50% of your briefs each week");
+    expect(goalTitle({ kind: "habit", signal: "new_one", target: 50 }, meta)).toContain("New_one in 50% of your prompts each week");
     expect(goalTitle({ kind: "tier", tier: "legend", target: 0 }, meta)).toBe("Reach legend");
   });
 });
@@ -135,7 +135,7 @@ describe("improveView goal", () => {
     const m = view(progress());
     expect(m).toContain("Pick one thing to get better at");
     expect(m).toContain("Try this:");
-    expect(m).toContain("Set limits in 30% of your briefs each week");
+    expect(m).toContain("Set limits in 30% of your prompts each week");
     expect(m).toContain(
       'data-action="start-goal" data-goal="{&quot;kind&quot;:&quot;habit&quot;,&quot;signal&quot;:&quot;limits&quot;,&quot;target&quot;:30}">Start this goal',
     );
@@ -155,7 +155,7 @@ describe("improveView goal", () => {
   it("shows a goal under way with a mark and spoken text for each week", () => {
     const m = view(progress({ goal: status() }));
     expect(m).toContain("Your goal · since");
-    expect(m).toContain("Say why in 40% of your briefs each week");
+    expect(m).toContain("Say why in 40% of your prompts each week");
     expect(m).toContain("<b>1</b> of 4 weeks met");
     expect(m).toContain('<ol class="goal-weeks" aria-label="Weeks so far">');
     for (const [state, mark] of [
@@ -167,9 +167,9 @@ describe("improveView goal", () => {
       expect(m).toContain(`class="gw ${state}"`);
       expect(m).toContain(`<span aria-hidden="true">${mark}</span><span class="sr-only">Week of`);
     }
-    expect(m).toMatch(/<span class="sr-only">Week of [^<]+: 45% of 20 briefs, met\.<\/span>/);
-    expect(m).toMatch(/<span class="sr-only">Week of [^<]+: 20% of 2 briefs, too few tasks\.<\/span>/);
-    expect(m).toContain("Weeks with fewer than 5 briefs pause the goal instead of breaking the streak.");
+    expect(m).toMatch(/<span class="sr-only">Week of [^<]+: 45% of 20 prompts, met\.<\/span>/);
+    expect(m).toMatch(/<span class="sr-only">Week of [^<]+: 20% of 2 prompts, too few tasks\.<\/span>/);
+    expect(m).toContain("Weeks with fewer than 5 prompts pause the goal instead of breaking the streak.");
     expect(m).not.toContain("Try this:");
     expect(m).toContain("Drop this goal");
     expect(m).toContain("Change goal");
@@ -177,9 +177,9 @@ describe("improveView goal", () => {
   });
 
   it("says how many more briefs would hit a habit goal this week", () => {
-    expect(view(progress({ goal: status({ need: 2 }) }))).toContain("12 briefs so far. 2 more briefs that say why would hit it.");
-    expect(view(progress({ goal: status({ need: 1 }) }))).toContain("1 more brief that say why would hit it.");
-    expect(view(progress({ goal: status({ need: 0 }) }))).toContain("12 briefs so far. On track.");
+    expect(view(progress({ goal: status({ need: 2 }) }))).toContain("12 prompts so far. 2 more prompts that say why would hit it.");
+    expect(view(progress({ goal: status({ need: 1 }) }))).toContain("1 more prompt that say why would hit it.");
+    expect(view(progress({ goal: status({ need: 0 }) }))).toContain("12 prompts so far. On track.");
   });
 
   it("mentions a streak only past one week", () => {
@@ -269,8 +269,8 @@ describe("improveView recap, bests and trophies", () => {
     expect(m).toContain("Last week · ");
     expect(m).toContain("<span>Tasks landed</span><b>75%</b>");
     expect(m).toContain("▼ 16");
-    expect(m).toContain("<span>Sharp briefs</span><b>25%</b>");
-    expect(m).toContain("<span>Catches</span><b>8</b>");
+    expect(m).toContain("<span>Sharp prompts</span><b>25%</b>");
+    expect(m).toContain("<span>Corrections</span><b>8</b>");
   });
 
   it("marks a rise with an up arrow", () => {
@@ -300,7 +300,7 @@ describe("improveView recap, bests and trophies", () => {
     expect(view(progress())).toContain('<span class="l">trophies</span>');
     const m = view(progress({ trophies: [t] }));
     expect(m).toContain("Trophy shelf");
-    expect(m).toContain("<b>Say why in 40% of your briefs each week</b>");
+    expect(m).toContain("<b>Say why in 40% of your prompts each week</b>");
     expect(m).toContain('<span class="v">1</span><span class="l">trophy</span>');
   });
 });
@@ -318,9 +318,9 @@ describe("improveView insights", () => {
     ];
     const m = view(progress({ insights: { signals, steer: null, models: [] } }));
     expect(m).toContain('<ul class="insights">');
-    expect(m).toContain("Briefs that say why landed <b>93%</b> of the time, vs 80% without.");
+    expect(m).toContain("Prompts that say why landed <b>93%</b> of the time, vs 80% without.");
     expect(m).toContain('data-action="open-lesson" data-id="say-why"');
-    expect(count(m, "<li>Briefs that")).toBe(1);
+    expect(count(m, "<li>Prompts that")).toBe(1);
     expect(m).not.toContain("Not enough history yet.");
   });
 
