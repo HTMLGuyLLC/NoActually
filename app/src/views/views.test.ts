@@ -17,7 +17,8 @@ describe("scorecardView", () => {
   it("opens on an overview with both verdicts and the section tabs", () => {
     const m = scorecardView(stats(), ctx).value;
     expect(m).toContain('aria-label="Scorecard sections"');
-    expect(m).toMatch(/data-id="overview" aria-current="page"><svg class="tab-icon"[^>]*aria-hidden="true">.*?<\/svg>Overview<\/button>/);
+    expect(m).toMatch(/data-id="overview" data-tip="Overview" aria-current="page"><svg class="tab-icon"[^>]*aria-hidden="true">.*?<\/svg><span class="tab-name">Overview<\/span><\/button>/);
+    expect(m).toContain('data-id="prompts" data-tip="Prompting"');
     expect(m).toContain("Could ");
     expect(m).toContain("Do you make it guess?");
     expect(m).toContain("Do you correct its mistakes?");
@@ -62,6 +63,14 @@ describe("scorecardView", () => {
     const unranked = scorecardView(stats({ overall: overall({ judgment: null, correction_tier: null, to_rank: 3 }) }), { ...ctx, view: "corrections" }).value;
     expect(unranked).toContain(">Hmm.</div>");
     expect(unranked).not.toContain("share-corrections");
+  });
+
+  it("shows you vs it as one tug-of-war bar, keeping a sliver for a tiny side", () => {
+    const view = (corrections: number, humbled: number) => scorecardView(stats({ corrections, humbled }), { ...ctx, view: "corrections" }).value;
+    expect(view(37, 1)).toContain('<i class="you" data-w="97"></i><i class="ai"></i>');
+    expect(view(180, 1)).toContain('data-w="98"');
+    expect(view(5, 0)).toContain('data-w="100"');
+    expect(view(0, 0)).toContain('class="tug empty"');
   });
 
   it("says so when there are no corrections in the window yet", () => {

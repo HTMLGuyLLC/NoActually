@@ -36,7 +36,7 @@ function periodNav(period: Period): Html {
   )}</select>`;
 }
 
-const VIEW_TITLES: Record<ScoreView, string> = { overview: "Overview", prompts: "Prompts", corrections: "Corrections", hall: "Hall of fame" };
+const VIEW_TITLES: Record<ScoreView, string> = { overview: "Overview", prompts: "Prompting", corrections: "Corrections", hall: "Hall of fame" };
 
 /** Line icons beside each section's name (decoration: the name is the label). */
 const VIEW_ICONS: Record<ScoreView, Html> = {
@@ -119,11 +119,15 @@ function heroView(s: Stats, ctx: ScorecardContext): Html {
 }
 
 /** You vs it: all time, and in the window. */
+/** You vs it as a tug of war: one bar, your share from the left, its share from the right. */
 function versusView(s: Stats): Html {
+  const total = s.corrections + s.humbled;
+  // Each side that has any keeps a sliver, so 180 to 1 still shows the 1.
+  const yours = total ? Math.min(98, Math.max(s.humbled ? 2 : 100, Math.round((100 * s.corrections) / total))) : 50;
   return html`<div class="score">
       <div class="side you"><span class="eyebrow">You corrected it</span><span class="n">${num(s.corrections)}</span></div>
-      <div class="vs">vs</div>
       <div class="side ai"><span class="eyebrow">It corrected you</span><span class="n">${num(s.humbled)}</span></div>
+      <div class="tug${total ? "" : " empty"}" role="img" aria-label="${total ? `${yours}% of the corrections were yours` : "No corrections yet"}"><i class="you" data-w="${total ? yours : 50}"></i><i class="ai"></i></div>
     </div>`;
 }
 
@@ -242,7 +246,7 @@ export function hallView(entries: HallEntry[]): Html {
 function viewsNav(view: ScoreView): Html {
   return html`<nav class="views" aria-label="Scorecard sections">${SCORE_VIEWS.map(
     (v) =>
-      html`<button class="tab${v === view ? " on" : ""}" data-action="view" data-id="${v}"${v === view ? raw(' aria-current="page"') : ""}>${VIEW_ICONS[v]}${VIEW_TITLES[v]}</button>`,
+      html`<button class="tab${v === view ? " on" : ""}" data-action="view" data-id="${v}" data-tip="${VIEW_TITLES[v]}"${v === view ? raw(' aria-current="page"') : ""}>${VIEW_ICONS[v]}<span class="tab-name">${VIEW_TITLES[v]}</span></button>`,
   )}</nav>`;
 }
 
