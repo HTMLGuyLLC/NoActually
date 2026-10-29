@@ -66,7 +66,7 @@ describe("scorecardView", () => {
     expect(m).toContain('<span>Religiously</span><span><b class="at">95</b>');
     expect(m).toContain("<span>Sometimes</span><span>50–74</span>");
     expect(m).toContain('<p class="tier-blurb"><b>Hawk-eyed.</b> You catch AI slipping nearly every time.</p>');
-    expect(m).toContain('data-action="share-corrections">Share your corrections</button>');
+    expect(m).toMatch(/data-action="share-corrections"><svg[^>]*>.*?<\/svg>Share<\/button>/);
     const unranked = scorecardView(stats({ overall: overall({ judgment: null, correction_tier: null, to_rank: 3 }) }), { ...ctx, view: "corrections" }).value;
     expect(unranked).toContain(">Hmm.</div>");
     expect(unranked).not.toContain("share-corrections");
@@ -143,9 +143,10 @@ describe("overview hero", () => {
     expect(m).toContain("Your tier is Sharp-eyed, score 86.");
     expect(m).not.toContain("Irreplaceable at 90. You&#39;re at 86."); // the row says it
     expect(m).toContain('data-action="open-share"');
-    // The overview shares the score; Prompts and Corrections each share their own answer.
-    expect(m).not.toContain("share-prompts");
-    expect(m).not.toContain("share-corrections");
+    // Each overview card shares its own answer next to its See button, with the share icon.
+    expect(m).toContain('data-action="share-prompts"><svg class="btn-icon"');
+    expect(m).toContain('data-action="share-corrections"><svg class="btn-icon"');
+    expect(m).toContain('data-action="open-share"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true">');
   });
 
   it("answers Do you correct it? in a word on the overview, with its tier", () => {

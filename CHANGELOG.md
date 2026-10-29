@@ -26,6 +26,7 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 - Tier ladders show your number in your tier's row, instead of a note below. Prompting and Corrections label their rows by the answer (Rarely, Sometimes, Often, Religiously); the tier's name and a line on what it means sit under the answer ("Hawk-eyed. You catch AI slipping nearly every time.").
 - Click (or hover) a bar in Tasks per week or Corrections per week to see that week's breakdown: what the tasks needed, or which kinds of corrections, and how often it corrected you. Every tooltip is the app's own now, charts included.
 - The Hall of fame flips between an award's entries with ‹ › arrows instead of expanding, and each entry is quieter: your quote in ink, no category chip (the award names it).
+- Share buttons carry a share icon and a short label (Share your score, Share) everywhere, and each overview card can share its own answer next to its See button.
 - Cards drop labels that repeated the question or the time picker. Scrolling lists leave room for the scrollbar.
 - Prompting has a **Prompts per week** chart: each week's prompts split into the ones that were clear the first time and the ones that needed more from you, the same tasks your prompt tier counts.
 - Corrections per week no longer colors the busiest week as if it were the good one; it's labeled "Most" instead.

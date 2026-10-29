@@ -100,3 +100,14 @@ export const answerWord = (t: { verdict: string }): string => t.verdict.replace(
 /** The tier's name and what it means, under its answer: "Hawk-eyed. You catch AI slipping nearly every time." */
 export const tierBlurb = (tier: { name: string; blurb: string } | undefined): Html | "" =>
   tier ? html`<p class="tier-blurb"><b>${tier.name}.</b> ${tier.blurb}</p>` : "";
+
+/** The share icon: a box with an arrow leaving it. */
+const SHARE_ICON = raw(
+  `<svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>`,
+);
+
+/** Every share button looks the same: the icon and a short label. `id` names what to share. */
+export const shareButton = (action: string, label = "Share", o: { id?: number; ghost?: boolean; small?: boolean } = {}): Html => {
+  const cls = [o.ghost ? "ghost" : "", o.small ? "small" : "", "share-btn-icon"].filter(Boolean).join(" ");
+  return html`<button class="${cls}" data-action="${action}"${o.id == null ? "" : html` data-id="${o.id}"`}>${SHARE_ICON}${label}</button>`;
+};

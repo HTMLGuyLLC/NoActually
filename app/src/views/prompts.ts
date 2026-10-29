@@ -5,7 +5,7 @@ import { type Html, html, num } from "../html";
 import { landedPct, percent, promptTier, promptTierRanges, steerTitle } from "../meta";
 import { PERIOD_WHEN, type Period } from "../state";
 import { stackChart } from "./charts";
-import { answerWord, byAnswer, ladderView, tierBlurb, verdictMark } from "./chrome";
+import { answerWord, byAnswer, ladderView, shareButton, tierBlurb, verdictMark } from "./chrome";
 
 /** "86% of your prompts in the last 28 days were clear the first time…", or how many more it takes to get ranked. */
 function becauseLine(b: Prompts, meta: Meta, when: string): Html {
@@ -30,7 +30,7 @@ export function promptsSummaryView(b: Prompts, meta: Meta, still: boolean, when 
   return html`<article class="card mini prompts">
       <h2 class="q">Do you make it guess?</h2>
       ${body}
-      <div class="share"><button class="ghost" data-action="view" data-id="prompts">See prompts</button></div>
+      <div class="share">${tier ? shareButton("share-prompts") : ""}<button class="ghost" data-action="view" data-id="prompts">See prompts</button></div>
     </article>`;
 }
 
@@ -67,7 +67,7 @@ function ladderNote(b: Prompts, meta: Meta): string {
 function promptLadderView(b: Prompts, meta: Meta): Html {
   return html`
     ${ladderView({ label: "Prompt tiers", tiers: byAnswer(promptTierRanges(meta)), on: b.tier, at: b.tier ? `${landedPct(b)}%` : null, unranked: ladderNote(b, meta) })}
-    ${b.tier ? html`<div class="share"><button data-action="share-prompts">Share your prompts</button></div>` : ""}`;
+    ${b.tier ? html`<div class="share">${shareButton("share-prompts")}</div>` : ""}`;
 }
 
 function signalsView(b: Prompts, meta: Meta): Html {

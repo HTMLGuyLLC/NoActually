@@ -6,7 +6,7 @@ import { type Html, html, num, raw } from "../html";
 import { categoryTitle, correctionTier, correctionTierRanges, tierName, tierOf, tierRanges } from "../meta";
 import { correctionRate, modelName } from "../picker/picker";
 import { PERIOD_WHEN, PERIODS, type Period, SCORE_VIEWS, type ScoreView } from "../state";
-import { answerWord, byAnswer, ladderView, svg, tierBlurb, verdictMark } from "./chrome";
+import { answerWord, byAnswer, ladderView, shareButton, svg, tierBlurb, verdictMark } from "./chrome";
 import { promptsSummaryView, promptsView } from "./prompts";
 
 export type ScorecardContext = {
@@ -114,7 +114,7 @@ function heroView(s: Stats, ctx: Ctx): Html {
       </div>
       <div class="meter">
         ${scoreLadderView(o, ctx.meta)}
-        ${o.tier ? html`<div class="share"><button data-action="open-share">Share your score</button></div>` : ""}
+        ${o.tier ? html`<div class="share">${shareButton("open-share", "Share your score")}</div>` : ""}
       </div>
     </section>`;
 }
@@ -157,7 +157,7 @@ function correctsSummaryView(s: Stats, ctx: Ctx): Html {
       <h2 class="q">Do you correct it?</h2>
       <div class="verdict">${correctionMark(o, ctx.meta, ctx.correctionsStill)}<div class="because">${correctionBecause(s, ctx.when)}</div></div>
       ${tierBlurb(tier)}<p class="hand-note">${correctionNote(o, ctx.meta)}</p>
-      <div class="share"><button class="ghost" data-action="view" data-id="corrections">See corrections</button></div>
+      <div class="share">${tier ? shareButton("share-corrections") : ""}<button class="ghost" data-action="view" data-id="corrections">See corrections</button></div>
     </article>`;
 }
 
@@ -225,7 +225,7 @@ export function hallView(entries: HallEntry[]): Html {
         ${e.human ? html`<div class="you-said">“${e.human}”</div>` : ""}
         ${e.ai ? html`<div class="ai-said"><b>${e.model || shortSourceName(e.source_name)}:</b> ${e.ai}</div>` : ""}
         <div class="correction-actions">
-          <button class="ghost small" data-action="share-correction" data-id="${e.id}">Share</button>
+          ${shareButton("share-correction", "Share", { id: e.id, ghost: true, small: true })}
           <button class="ghost small" data-action="pin" data-id="${e.id}" data-pinned="${String(e.pinned)}">${e.pinned ? "Unpin" : "Pin, keep forever"}</button>
         </div>
       </article>`,
@@ -286,7 +286,7 @@ function correctionsView(s: Stats, ctx: Ctx): Html {
       </div>
       <div class="meter">
         ${correctionLadderView(s.overall, meta)}
-        ${correctionTier(meta, s.overall.correction_tier) ? html`<div class="share"><button data-action="share-corrections">Share your corrections</button></div>` : ""}
+        ${correctionTier(meta, s.overall.correction_tier) ? html`<div class="share">${shareButton("share-corrections")}</div>` : ""}
       </div>
     </section>
     <section><div class="head"><h2>Corrections per week</h2></div><div class="chart">${chartView(s, meta)}</div></section>

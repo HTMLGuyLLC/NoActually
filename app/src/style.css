@@ -481,3 +481,8 @@ button.link:hover { filter: none }
   @keyframes pulse { to { opacity: .3 } }
 }
 
+
+/* Share buttons carry the share icon before their label. */
+.share-btn-icon { display: inline-flex; align-items: center; gap: 7px }
+.btn-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.small .btn-icon { width: 13px; height: 13px }
