@@ -56,6 +56,11 @@ const EXAMPLES: &[(&str, &[Signal])] = &[
     ("it's done once the page loads in under a second", &[Done]),
     ("we'll know it works if the checkout email arrives", &[Done]),
     ("see the logs, it keeps crashing", &[Proof]),
+    // A route points at a page, like a URL does.
+    ("fix the bubble at the top of /hi", &[Spot]),
+    ("the /api/users endpoint returns 500 error responses", &[Spot, Proof]),
+    ("make it short and/or simple, ok?", &[]),
+    ("it broke on 10/29", &[]),
     ("make the signup emails friendlier, we want them to come back", &[Why]),
     ("I want you to rename it", &[]),
     ("the login needs to be fixed", &[]),

@@ -183,7 +183,8 @@ impl Verdict {
 /// 5: "you'll know it's fixed when…" says what done is; "in the logs" alone no longer shows proof;
 ///    "we want them to come back" says why.
 /// 6: rule ids say prompt, not brief (history is re-read so stored ids match).
-pub const RULES_VERSION: u32 = 6;
+/// 7: a route on its own ("/hi", "/api/users") points at it.
+pub const RULES_VERSION: u32 = 7;
 
 /// Tools write placeholder ids for replies no model wrote (Claude Code's "<synthetic>" for errors,
 /// interruptions and "No response requested").

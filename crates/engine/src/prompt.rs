@@ -436,6 +436,8 @@ static SPOT: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         rule("prompt.spot.dir", r"(?:^|[\s(\[`'])(?:~|\.{1,2})?/?[A-Za-z_][\w.-]*/[\w.-]+/"),
         rule("prompt.spot.mention", r"(?:^|\s)@[\w-]*[/.][\w./-]+"),
         rule("prompt.spot.url", r"\bhttps?://\S+|\blocalhost:\d+|\bwww\.\S+\.\w+"),
+        // A route or path on its own word ("/hi", "/api/users"), not "and/or", "10/29" or "/s".
+        rule("prompt.spot.route", r#"(?:^|[\s(\[`'"])/[a-z0-9][\w-]+(?:/[\w.-]+)*/?(?:[\s.,;:!?)\]`'"]|$)"#),
         rule("prompt.spot.code", r"`[^`\n]{2,80}`"),
         rule_unless(
             "prompt.spot.ident",
