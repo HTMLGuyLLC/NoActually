@@ -91,12 +91,12 @@ export function verdictMark(word: string | null, srText: string, still: boolean)
     <span class="sr-only">${srText}</span>`;
 }
 
-/** Word-answered tiers label their ladder rows by the answer ("Usually"), plainer than the name. */
+/** Word-answered tiers label their ladder rows by the answer ("Religiously"), plainer than the name. */
 export const byAnswer = <T extends { verdict: string }>(tiers: T[]): (T & { name: string })[] => tiers.map((t) => ({ ...t, name: answerWord(t) }));
 
-/** A tier's answer as a label, without its full stop: "Usually". */
+/** A tier's answer as a label, without its full stop: "Religiously". */
 export const answerWord = (t: { verdict: string }): string => t.verdict.replace(/\.$/, "");
 
-/** The tier's name and what it means, under its answer: "Hawk-eyed. You usually catch AI slipping." */
+/** The tier's name and what it means, under its answer: "Hawk-eyed. You catch AI slipping nearly every time." */
 export const tierBlurb = (tier: { name: string; blurb: string } | undefined): Html | "" =>
   tier ? html`<p class="tier-blurb"><b>${tier.name}.</b> ${tier.blurb}</p>` : "";

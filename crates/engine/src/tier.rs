@@ -240,7 +240,7 @@ impl Answer {
 }
 
 /// "Do you correct it?" How judgment reads, in a word (rarely < sometimes < often <
-/// usually; never "always": nobody catches everything). Ordered from lowest to highest.
+/// religiously; never "always": nobody catches everything). Ordered from lowest to highest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CorrectionTier {
@@ -295,7 +295,7 @@ impl CorrectionTier {
             CorrectionTier::Autopilot => "Rarely.",
             CorrectionTier::SpotChecker => "Sometimes.",
             CorrectionTier::Reviewer => "Often.",
-            CorrectionTier::HawkEyed => "Usually.",
+            CorrectionTier::HawkEyed => "Religiously.",
         }
     }
 
@@ -305,7 +305,7 @@ impl CorrectionTier {
             CorrectionTier::Autopilot => "Most of its slips get past you.",
             CorrectionTier::SpotChecker => "Some of its slips get past you.",
             CorrectionTier::Reviewer => "You often catch it slipping.",
-            CorrectionTier::HawkEyed => "You usually catch AI slipping.",
+            CorrectionTier::HawkEyed => "You catch AI slipping nearly every time.",
         }
     }
 

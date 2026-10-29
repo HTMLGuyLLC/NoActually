@@ -119,7 +119,7 @@ function heroView(s: Stats, ctx: Ctx): Html {
     </section>`;
 }
 
-/** "Usually.", hand-written, with a screen-reader version. */
+/** "Religiously.", hand-written, with a screen-reader version. */
 function correctionMark(o: Overall, meta: Meta, still: boolean): Html {
   const tier = correctionTier(meta, o.correction_tier);
   return verdictMark(tier?.verdict ?? null, tier ? `${tier.verdict} Your correction tier is ${tier.name}.` : "Not ranked yet.", still);

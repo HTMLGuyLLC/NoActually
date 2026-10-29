@@ -173,7 +173,7 @@ Each question below the score gets a one-word answer too. Do you make it guess? 
 
 | Correction tier | Judgment | Answer |
 |---|---|---|
-| Hawk-eyed | 90+ | Usually. |
+| Hawk-eyed | 90+ | Religiously. |
 | Reviewer | 75–89 | Often. |
 | Spot-checker | 50–74 | Sometimes. |
 | Autopilot | under 50 | Rarely. |

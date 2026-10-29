@@ -30,7 +30,7 @@ export const meta: Meta = {
     { id: "autopilot", name: "Autopilot", floor: 0, verdict: "Rarely.", blurb: "Most of its slips get past you." },
     { id: "spot_checker", name: "Spot-checker", floor: 50, verdict: "Sometimes.", blurb: "Some of its slips get past you." },
     { id: "reviewer", name: "Reviewer", floor: 75, verdict: "Often.", blurb: "You often catch it slipping." },
-    { id: "hawk_eyed", name: "Hawk-eyed", floor: 90, verdict: "Usually.", blurb: "You usually catch AI slipping." },
+    { id: "hawk_eyed", name: "Hawk-eyed", floor: 90, verdict: "Religiously.", blurb: "You catch AI slipping nearly every time." },
   ],
   min_prompts: 10,
   prompt_window_days: 28,
