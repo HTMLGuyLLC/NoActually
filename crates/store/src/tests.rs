@@ -147,8 +147,8 @@ fn weekly_buckets_split_on_monday() {
     assert_eq!(
         w,
         vec![
-            WeekRow { week: d("2026-10-19"), messages: 1, corrections: 1 },
-            WeekRow { week: d("2026-10-26"), messages: 1, corrections: 0 }
+            WeekRow { week: d("2026-10-19"), messages: 1, corrections: 1, ..WeekRow::default() },
+            WeekRow { week: d("2026-10-26"), messages: 1, corrections: 0, ..WeekRow::default() }
         ]
     );
 }
@@ -776,6 +776,10 @@ fn a_window_moves_the_counts_and_the_score() {
     assert_eq!((all.messages, all.corrections, all.prompts.tasks), (30, 6, 12));
     assert_eq!((week.messages, week.corrections, week.prompts.tasks), (10, 2, 2), "counts follow the window");
     assert_eq!(week.weekly.len(), 1);
+    // Tasks land in the week they started; all 12 here continued and nothing steered them.
+    let continued: i64 = all.weekly.iter().map(|w| w.continued).sum();
+    let landed: i64 = all.weekly.iter().map(|w| w.landed).sum();
+    assert_eq!((continued, landed), (12, 12), "weekly tasks add up to the scorecard's");
     // The score follows the window too: 2 tasks this week, too few to score.
     assert_eq!((week.prompts.window_tasks, week.overall.score, week.overall.corrections), (2, None, 2));
     assert_eq!(all.prompts.window_tasks, 11, "no window: the last 28 days");

@@ -22,6 +22,7 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 - **Check for updates** (new chats) moved to Sources; the updater's button is now **Check for app updates**.
 - The model picker sits beside the time range (on the scorecard and Improve), so it's clear it filters the whole page; the questions name the model in plain text ("Could AI replace you?"). The "Showing … only" chip is gone: pick All AI to go back.
 - Tier ladders show your number in your tier's row, instead of a note below.
+- Prompting has a **Tasks per week** chart: each week's tasks split into the ones that landed and the ones that needed more from you, the same tasks your prompt tier counts. You vs it on Corrections is a tug-of-war bar.
 - Corrections per week no longer colors the busiest week as if it were the good one; it's labeled "Most" instead.
 - The header keeps Scorecard, Improve and Learn labeled; Settings is an icon button, and Sources is its first section.
 - The quick glance asks the scorecard's three questions, each answered in a word with a short why, plus your goal with this week's number. A gear opens Settings and **Open app** opens the scorecard; the share and copy buttons are gone (share from the app).

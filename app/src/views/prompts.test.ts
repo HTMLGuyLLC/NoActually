@@ -90,4 +90,16 @@ describe("prompts on the scorecard and the glance", () => {
     expect(glanceView(stats(), meta).value).toContain('<span class="g-word">Rarely.</span><span class="muted small">95% landed · Architect</span>');
     expect(glanceView(stats({ prompts: prompts({ tier: null, to_rank: 3 }) }), meta).value).toContain("3 more tasks to get ranked");
   });
+
+  it("charts tasks per week as landed vs needed more, adding up to each week's tasks", () => {
+    const weekly = stats().weekly;
+    const m = promptsView(prompts(), meta, true, "AI", "in the last 28 days", weekly).value;
+    expect(m).toContain("<h2>Tasks per week</h2>");
+    expect(m).toContain("Landed without more from you");
+    expect(m).toContain("Needed more from you");
+    expect(m).toContain(": Landed without more from you 17</title>");
+    expect(m).toContain(": Needed more from you 3</title>");
+    expect(m).toContain("17 of 20 tasks landed without more from you.");
+    expect(promptsView(prompts(), meta, true, "AI", "in the last 28 days", []).value).toContain("No tasks with a follow-up yet.");
+  });
 });

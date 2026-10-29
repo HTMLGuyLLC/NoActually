@@ -10,7 +10,7 @@ const base = stats({
   models: [row("Anthropic", "Claude Opus", "5", 75, 300, 200), row("OpenAI", "GPT Astra", "6", 25, 100)],
   prompts: prompts({ continued: 110, window_tasks: 40, window_landed: 38 }),
   categories: { just_wrong: 8, made_it_up: 1 },
-  weekly: [{ week: "2026-10-19", messages: 40, corrections: 12 }],
+  weekly: [{ week: "2026-10-19", messages: 40, corrections: 12, continued: 10, landed: 8 }],
   hall_of_fame: [hallEntry({ id: 1, model: "Claude Opus 5" }), hallEntry({ id: 2, model: "GPT Astra 6" })],
 });
 const data = { meta, stats: base, progress: progress() };

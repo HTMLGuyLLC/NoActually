@@ -370,7 +370,7 @@ export function scorecardView(s: Stats, input: ScorecardContext): Html {
     view === "corrections"
       ? correctionsView(s, ctx)
       : view === "prompts"
-        ? promptsView(s.prompts, meta, ctx.promptsStill, subjectText(ctx.filter, meta), ctx.when)
+        ? promptsView(s.prompts, meta, ctx.promptsStill, subjectText(ctx.filter, meta), ctx.when, s.weekly)
         : view === "hall"
           ? hallSection(s, ctx)
           : overviewView(s, ctx);

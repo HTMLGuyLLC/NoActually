@@ -1,9 +1,10 @@
 // "Do you make it guess?": how specific your prompts are and what it took to land them.
-import type { Meta, Prompts } from "../api";
-import { plural } from "../format";
+import type { Meta, Prompts, WeekRow } from "../api";
+import { fmtDay, plural } from "../format";
 import { type Html, html, num } from "../html";
 import { landedPct, percent, promptTier, promptTierRanges, steerTitle } from "../meta";
 import { PERIOD_WHEN } from "../state";
+import { stackChart } from "./charts";
 import { ladderView, verdictMark } from "./chrome";
 
 /** "86% of your tasks in the last 28 days landed…", or how many more it takes to get ranked. */
@@ -103,7 +104,29 @@ function steeringView(b: Prompts, meta: Meta): Html {
 
 /** The Prompts section: verdict card, then what prompts carry and where steering went. `subject` is who
  * the question asks about ("it" by default). */
-export function promptsView(b: Prompts, meta: Meta, still: boolean, subject = "it", when = PERIOD_WHEN["28d"]): Html {
+/** Tasks per week, split into the ones that landed and the ones that needed more from you: the
+ * same tasks the prompt tier counts, so the bars add up to the number at the top. */
+function weeksView(weekly: WeekRow[]): Html {
+  const weeks = weekly.slice(-20);
+  if (!weeks.some((w) => w.continued)) return html`<p class="muted">No tasks with a follow-up yet.</p>`;
+  const recent = weeks.filter((w) => w.continued);
+  const last = recent[recent.length - 1];
+  const summary = last
+    ? `${plural(weeks.length, "week")} from ${fmtDay(weeks[0]?.week ?? last.week)}. The latest, the week of ${fmtDay(last.week)}: ${last.landed} of ${plural(last.continued, "task")} landed without more from you.`
+    : "";
+  return stackChart({
+    id: "prompt-weeks",
+    label: "Tasks per week",
+    summary,
+    labels: weeks.map((w) => fmtDay(w.week)),
+    series: [
+      { title: "Landed without more from you", values: weeks.map((w) => w.landed) },
+      { title: "Needed more from you", values: weeks.map((w) => w.continued - w.landed) },
+    ],
+  });
+}
+
+export function promptsView(b: Prompts, meta: Meta, still: boolean, subject = "it", when = PERIOD_WHEN["28d"], weekly: WeekRow[] = []): Html {
   if (!b.tasks) {
     return html`<section class="card prompts"><div><div class="eyebrow">How you prompt it</div><h1 class="q">Do you make ${subject} guess?</h1>
       <p class="muted">No tasks yet. The first message of each chat is its prompt, so start a chat and ask for something.</p></div></section>`;
@@ -113,6 +136,7 @@ export function promptsView(b: Prompts, meta: Meta, still: boolean, subject = "i
       <div>${verdictView(b, meta, still, subject, when)}</div>
       <div class="meter">${promptLadderView(b, meta)}</div>
     </section>
+    <section><div class="head"><h2>Tasks per week</h2><p class="muted">Tasks with a follow-up. One-shot tasks can't need more from you, so they don't count.</p></div><div class="chart">${weeksView(weekly)}</div></section>
     <section class="split">
       <div><div class="head"><h2>What your prompts carry</h2></div>${gradesView(b, meta)}${signalsView(b, meta)}</div>
       <div><div class="head"><h2>Where steering went</h2></div>${steeringView(b, meta)}</div>

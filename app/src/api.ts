@@ -80,7 +80,8 @@ export type HallEntry = {
   ai: string | null;
   pinned: boolean;
 };
-export type WeekRow = { week: string; messages: number; corrections: number };
+/** One week: messages and corrections, and the tasks started that week (with a follow-up, and of those, landed). */
+export type WeekRow = { week: string; messages: number; corrections: number; continued: number; landed: number };
 /** The signal your prompts carry least; the with/without rates only when your history backs them. */
 export type Tip = { signal: string; pct_of_prompts: number; landed_with_without: [number, number] | null };
 /**

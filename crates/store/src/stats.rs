@@ -135,6 +135,10 @@ pub struct WeekRow {
     pub messages: i64,
     /// Corrections that week.
     pub corrections: i64,
+    /// Tasks started that week that went past their first message.
+    pub continued: i64,
+    /// Of those, the ones nothing on you steered.
+    pub landed: i64,
 }
 
 /// One correction (or humbled moment) shown in the hall of fame.
@@ -413,14 +417,34 @@ fn weekly(v: &View) -> Result<Vec<WeekRow>> {
          FROM daily WHERE 1=1 {} GROUP BY day",
         *CORRECTION_KINDS, v.clause
     );
-    let mut weeks: BTreeMap<NaiveDate, (i64, i64)> = BTreeMap::new();
+    let mut weeks: BTreeMap<NaiveDate, WeekRow> = BTreeMap::new();
+    let mut add = |day: String, f: &mut dyn FnMut(&mut WeekRow)| {
+        if let Ok(d) = day.parse::<NaiveDate>() {
+            let week = monday_of(d);
+            f(weeks.entry(week).or_insert_with(|| WeekRow { week, ..WeekRow::default() }));
+        }
+    };
     for (day, m, k) in v.rows(&sql, &[], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?)))? {
-        let Ok(d) = day.parse::<NaiveDate>() else { continue };
-        let e = weeks.entry(monday_of(d)).or_default();
-        e.0 += m;
-        e.1 += k;
+        add(day, &mut |w| {
+            w.messages += m;
+            w.corrections += k;
+        });
     }
-    Ok(weeks.into_iter().map(|(week, (messages, corrections))| WeekRow { week, messages, corrections }).collect())
+    // Tasks by the day they started, so "landed per week" reads the same tasks the prompt tier does.
+    let tasks = format!(
+        "SELECT day, COALESCE(SUM({CONTINUED}), 0), COALESCE(SUM({}), 0) FROM tasks WHERE 1=1 {} GROUP BY day",
+        LANDED.as_str(),
+        v.clause
+    );
+    for (day, c, l) in
+        v.rows(&tasks, &[], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?)))?
+    {
+        add(day, &mut |w| {
+            w.continued += c;
+            w.landed += l;
+        });
+    }
+    Ok(weeks.into_values().collect())
 }
 
 fn models(v: &View) -> Result<Vec<ModelRow>> {
