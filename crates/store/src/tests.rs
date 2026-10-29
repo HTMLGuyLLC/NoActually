@@ -738,3 +738,40 @@ fn no_tip_once_every_signal_is_common() {
     assert_eq!(b.grades.get("sharp"), Some(&4));
     assert_eq!(b.tip, None);
 }
+
+#[test]
+fn a_window_moves_the_counts_but_never_the_score() {
+    let s = Store::open_in_memory().unwrap();
+    let day = |ago: i64| (today() - chrono::Duration::days(ago)).to_string();
+    let count = |ago: i64, kind: &str, n: i64| {
+        s.conn()
+            .execute(
+                "INSERT INTO daily (day, source, provider, family, version, kind, category, n)
+                 VALUES (?1, 'claude-code', 'Anthropic', 'Claude Opus', '5.5', ?2, ?3, ?4)",
+                rusqlite::params![day(ago), kind, if kind == "message" { "" } else { "made_it_up" }, n],
+            )
+            .unwrap();
+    };
+    for ago in [1, 20, 200] {
+        count(ago, "message", 10);
+        count(ago, "confirmed", 2);
+    }
+    for ago in [2, 3, 15, 16, 17, 18, 19, 21, 22, 23, 24, 300] {
+        s.conn()
+            .execute(
+                "INSERT INTO tasks (day, source, session, provider, family, version, signals, messages)
+                 VALUES (?1, 'claude-code', 's', 'Anthropic', 'Claude Opus', '5.5', 4, 2)",
+                [day(ago)],
+            )
+            .unwrap();
+    }
+    let all = s.stats(&Filter::default(), today()).unwrap();
+    let week =
+        s.stats(&Filter { since: Some(today() - chrono::Duration::days(6)), ..Default::default() }, today()).unwrap();
+    assert_eq!((all.messages, all.catches, all.briefs.tasks), (30, 6, 12));
+    assert_eq!((week.messages, week.catches, week.briefs.tasks), (10, 2, 2), "counts follow the window");
+    assert_eq!(week.weekly.len(), 1);
+    assert_eq!(week.overall, all.overall, "the score always looks at its own 28 days");
+    assert_eq!((week.briefs.tier, week.briefs.tasks_last_28d), (all.briefs.tier, 11));
+    assert_eq!(week.catches_last_7d, all.catches_last_7d);
+}

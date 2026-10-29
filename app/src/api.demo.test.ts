@@ -196,3 +196,17 @@ describe("demoCall", () => {
     });
   });
 });
+
+describe("withSince", () => {
+  it("shrinks the counts to the period but keeps the score", async () => {
+    const { withSince } = await import("./api.demo");
+    const { stats } = await import("./test/fixtures");
+    const s = stats();
+    const last = s.weekly.at(-1)?.week ?? "";
+    const p = withSince(s, last);
+    expect(p.weekly).toHaveLength(1);
+    expect(p.catches).toBeLessThan(s.catches);
+    expect(p.overall).toEqual(s.overall);
+    expect(withSince(s, null)).toBe(s);
+  });
+});

@@ -205,7 +205,7 @@ describe("delegated actions", () => {
     await render();
     await click('[data-action="clear-filter"]');
     expect(state.state.filter).toEqual({});
-    expect(api.stats).toHaveBeenLastCalledWith({});
+    expect(api.stats).toHaveBeenLastCalledWith({ since: state.periodSince("28d") });
   });
 
   it("holds a background refresh while the picker is open and applies it when it closes", async () => {

@@ -55,6 +55,7 @@ Better prompts mean fewer mistakes to catch, and that never costs you: once you'
 - **A brief score.** "Do you make it guess? **Sometimes.** 85% of your tasks landed." Plus what your briefs carry, where the steering went, and one tip backed by your own history.
 - **Improve.** One weekly goal picked from your own numbers ("Set limits in 25% of your briefs"), streaks, trophies, personal bests, last week's recap, and charts of how you're trending.
 - **Learn.** 12 one-minute lessons in three tracks (the 5 habits, steer less, catch more), quick quizzes, and a brief checker that grades a draft as you type, with the same rules as your score.
+- **Any time window.** This week, 28 days, 90 days or all time: every count on the scorecard follows the picker (the score itself always uses the last 28 days, so tiers stay comparable).
 - **Every model, side by side.** All AI, one provider, one family, or one exact version (say, Claude Opus 5.5). The picker shows the numbers that page is about.
 - **A Hall of Fame** of your best catches, as redacted snippets. Pin the ones you want to keep forever.
 - **Popups** for your 10th catch, a new tier, a streak, a goal week met, or a goal done.

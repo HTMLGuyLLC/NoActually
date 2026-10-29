@@ -1,5 +1,5 @@
 // The browser demo's stand-in for the Rust side: sample numbers from public/demo.json, read-only.
-import type { ArgsOf, Command, Filter, Goal, GoalStatus, Meta, Overall, Progress, ResultOf, SourceInfo, Stats } from "./api";
+import type { ArgsOf, Briefs, Command, Filter, Goal, GoalStatus, Meta, Overall, Progress, ResultOf, SourceInfo, Stats } from "./api";
 import { modelName } from "./picker/picker";
 
 export type DemoData = { meta: Meta; stats: Stats; progress: Progress };
@@ -107,6 +107,48 @@ export function demoStats({ meta, stats: base }: DemoData, filter: Filter): Stat
   };
 }
 
+/**
+ * The demo's stand-in for a period: counts shrink to the share of weekly catches since `since`;
+ * the score and the tiers' windows stay, as in Rust.
+ */
+export function withSince(s: Stats, since: string | null): Stats {
+  if (!since) return s;
+  const total = s.weekly.reduce((t, w) => t + w.catches, 0);
+  // A week counts when any of its days is on or after `since`.
+  const weekly = s.weekly.filter((w) => new Date(`${w.week}T00:00`).getTime() + 6 * 86_400_000 >= new Date(`${since}T00:00`).getTime());
+  const share = total ? weekly.reduce((t, w) => t + w.catches, 0) / total : 0;
+  const scale = (n: number) => Math.round(n * share);
+  const each = (r: Record<string, number>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, scale(v)]));
+  const briefs: Briefs = {
+    ...s.briefs,
+    tasks: scale(s.briefs.tasks),
+    continued: scale(s.briefs.continued),
+    landed: scale(s.briefs.landed),
+    grades: each(s.briefs.grades),
+    signals: each(s.briefs.signals),
+    steering: each(s.briefs.steering),
+  };
+  return {
+    ...s,
+    first_day: since > (s.first_day ?? "") ? since : s.first_day,
+    messages: scale(s.messages),
+    catches: scale(s.catches),
+    humbled: scale(s.humbled),
+    categories: each(s.categories),
+    weekly,
+    models: s.models.map((m) => ({
+      ...m,
+      catches: scale(m.catches),
+      messages: scale(m.messages),
+      humbled: scale(m.humbled),
+      tasks: scale(m.tasks),
+      continued: scale(m.continued),
+      landed: scale(m.landed),
+    })),
+    briefs,
+  };
+}
+
 const sourceState = (id: string) => ({ id, allowed: true, paused: false, backfill_since: null, granted_at: null, start_after: null, paths: [] });
 
 const demoSources: SourceInfo[] = [
@@ -125,7 +167,7 @@ const fresh = (goal: Goal): GoalStatus => ({ goal, weeks: [], met: 0, streak: 0,
 /** Every command has a demo answer; changes are accepted and ignored. */
 const handlers: Handlers = {
   meta: async () => (await demoData()).meta,
-  stats: async ({ filter }) => demoStats(await demoData(), filter),
+  stats: async ({ filter: { since, ...filter } }) => withSince(demoStats(await demoData(), filter), since ?? null),
   list_sources: () => demoSources,
   allow_source: () => null,
   revoke_source: () => null,

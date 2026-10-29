@@ -38,6 +38,10 @@ pub struct Filter {
     pub family: Option<String>,
     /// A version ("5.5"). Usually set together with `family`.
     pub version: Option<String>,
+    /// Only days from this one on. Counts follow it; the score, tiers and "this week" don't:
+    /// they always look at their own fixed windows.
+    #[serde(default)]
+    pub since: Option<NaiveDate>,
 }
 
 impl Filter {
@@ -57,6 +61,11 @@ impl Filter {
                 sql.push_str(" = ?");
                 args.push(v.clone());
             }
+        }
+        // Every table this filters (daily, events, tasks) has a local `day`.
+        if let Some(since) = self.since {
+            sql.push_str(" AND day >= ?");
+            args.push(since.to_string());
         }
         (sql, args)
     }
@@ -274,7 +283,8 @@ struct Totals {
     humbled_28d: i64,
 }
 
-fn totals(v: &View, today: NaiveDate) -> Result<Totals> {
+/// Counts over `v`; the fixed windows over `scope` (the same filter without `since`).
+fn totals(v: &View, scope: &View, today: NaiveDate) -> Result<Totals> {
     let kinds = CATCH_KINDS.as_str();
     let week_ago = (today - Duration::days(6)).to_string();
     let window = (today - Duration::days(WINDOW_DAYS - 1)).to_string();
@@ -282,9 +292,9 @@ fn totals(v: &View, today: NaiveDate) -> Result<Totals> {
         messages: v.sum("AND kind = 'message'", &[])?,
         catches: v.sum(&format!("AND kind IN {kinds}"), &[])?,
         humbled: v.sum("AND kind = 'humbled'", &[])?,
-        catches_last_7d: v.sum(&format!("AND kind IN {kinds} AND day >= ?"), &[&week_ago])?,
-        catches_28d: v.sum(&format!("AND kind IN {kinds} AND day >= ?"), &[&window])?,
-        humbled_28d: v.sum("AND kind = 'humbled' AND day >= ?", &[&window])?,
+        catches_last_7d: scope.sum(&format!("AND kind IN {kinds} AND day >= ?"), &[&week_ago])?,
+        catches_28d: scope.sum(&format!("AND kind IN {kinds} AND day >= ?"), &[&window])?,
+        humbled_28d: scope.sum("AND kind = 'humbled' AND day >= ?", &[&window])?,
     })
 }
 
@@ -313,11 +323,12 @@ fn labels_and_categories(v: &View) -> Result<(BTreeMap<String, i64>, BTreeMap<St
 }
 
 /// (real chats, real chats with a catch). Chats only know their source, not a model, so this
-/// respects the source filter alone.
-fn real_chats(conn: &Connection, source: Option<&str>) -> Result<(i64, i64)> {
+/// respects the source filter alone, plus `since` (chats still going on or after it).
+fn real_chats(conn: &Connection, source: Option<&str>, since: Option<NaiveDate>) -> Result<(i64, i64)> {
     Ok(conn.query_row(
-        "SELECT COUNT(*), COALESCE(SUM(catches > 0), 0) FROM sessions WHERE messages >= ?1 AND (?2 IS NULL OR source = ?2)",
-        rusqlite::params![REAL_CHAT, source],
+        "SELECT COUNT(*), COALESCE(SUM(catches > 0), 0) FROM sessions
+         WHERE messages >= ?1 AND (?2 IS NULL OR source = ?2) AND (?3 IS NULL OR last_day >= ?3)",
+        rusqlite::params![REAL_CHAT, source, since.map(|d| d.to_string())],
         |r| Ok((r.get(0)?, r.get(1)?)),
     )?)
 }
@@ -475,7 +486,8 @@ pub(crate) static LANDED: LazyLock<String> = LazyLock::new(|| format!("(messages
 /// One group of tasks: the signals their brief carried, whether they continued, whether they landed.
 pub(crate) type Group = (Signals, bool, bool, i64);
 
-fn briefs(v: &View, today: NaiveDate) -> Result<Briefs> {
+/// Counts over `v`; the tier's window over `scope` (the same filter without `since`).
+fn briefs(v: &View, scope: &View, today: NaiveDate) -> Result<Briefs> {
     let landed = LANDED.as_str();
     // At most 32 masks x 3 outcomes, so the per-signal math happens here, not in SQL.
     let sql =
@@ -503,7 +515,7 @@ fn briefs(v: &View, today: NaiveDate) -> Result<Briefs> {
     for (c, n) in Steer::ALL.iter().zip(row.into_iter().flatten()) {
         b.steering.insert(c.as_str().to_string(), n);
     }
-    (b.tasks_last_28d, b.landed_last_28d) = window_tasks(v, today)?;
+    (b.tasks_last_28d, b.landed_last_28d) = window_tasks(scope, today)?;
     b.tier = BriefTier::for_tasks(b.landed_last_28d, b.tasks_last_28d);
     b.next_tier = b.tier.and_then(BriefTier::next);
     b.to_rank = (MIN_BRIEFS - b.tasks_last_28d).max(0);
@@ -589,12 +601,14 @@ impl Store {
     pub fn stats(&self, f: &Filter, today: NaiveDate) -> Result<Stats> {
         let (clause, args) = f.sql();
         let v = View { conn: self.conn(), clause, args };
-        let t = totals(&v, today)?;
+        let (scope_clause, scope_args) = Filter { since: None, ..f.clone() }.sql();
+        let scope = View { conn: self.conn(), clause: scope_clause, args: scope_args };
+        let t = totals(&v, &scope, today)?;
         let (first_day, last_day) = day_range(&v)?;
         let (labels, categories) = labels_and_categories(&v)?;
-        let (real_chats, real_with_catch) = real_chats(self.conn(), f.source.as_deref())?;
+        let (real_chats, real_with_catch) = real_chats(self.conn(), f.source.as_deref(), f.since)?;
         let (best_streak_days, current_streak_days) = streaks(&catch_days(&v)?, today);
-        let briefs = briefs(&v, today)?;
+        let briefs = briefs(&v, &scope, today)?;
         Ok(Stats {
             first_day,
             last_day,

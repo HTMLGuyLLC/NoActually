@@ -10,6 +10,20 @@ export const SCORE_VIEWS = ["overview", "briefs", "catches", "hall"] as const;
 export type ScoreView = (typeof SCORE_VIEWS)[number];
 export const isScoreView = (x: unknown): x is ScoreView => SCORE_VIEWS.some((v) => v === x);
 
+/** How far back the scorecard's counts look. The score and tiers always use their own 28 days. */
+export const PERIODS = ["7d", "28d", "90d", "all"] as const;
+export type Period = (typeof PERIODS)[number];
+export const isPeriod = (x: unknown): x is Period => PERIODS.some((p) => p === x);
+const PERIOD_DAYS: Record<Period, number | null> = { "7d": 7, "28d": 28, "90d": 90, all: null };
+
+/** The first day a period covers, as a local date ("2026-10-02"), or null for all time. */
+export function periodSince(p: Period, today = new Date()): string | null {
+  const days = PERIOD_DAYS[p];
+  if (days == null) return null;
+  const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (days - 1));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 /** How far back the Improve charts look. */
 export const RANGES = ["12w", "6m", "all"] as const;
 export type Range = (typeof RANGES)[number];
@@ -33,6 +47,8 @@ export type AppState = {
   /** The brief tier last drawn (undefined: none drawn yet), for the same reason. */
   lastBriefTier: string | null | undefined;
   meta: Meta | null;
+  /** Scorecard: how far back the counts look. */
+  period: Period;
   /** Improve: how far back the charts look. */
   range: Range;
   /** Learn: the lesson open, or null for the list. */
@@ -53,6 +69,7 @@ const initial = (): AppState => ({
   lastVerdict: null,
   lastBriefTier: undefined,
   meta: null,
+  period: "28d",
   range: "12w",
   lesson: null,
   draft: "",
@@ -100,6 +117,9 @@ export function setLastVerdict(verdict: Verdict): void {
 }
 export function setLastBriefTier(tier: string | null): void {
   s.lastBriefTier = tier;
+}
+export function setPeriod(period: Period): void {
+  s.period = period;
 }
 export function setRange(range: Range): void {
   s.range = range;

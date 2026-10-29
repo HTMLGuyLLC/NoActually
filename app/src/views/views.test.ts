@@ -115,7 +115,7 @@ describe("overview hero", () => {
     expect(m).toContain("Not scored yet.");
     expect(m).toContain('data-w="0"');
     expect(m).not.toContain('data-action="open-share"');
-    expect(m).not.toContain('aria-current="true"'); // no tier on the ladder
+    expect(m).not.toMatch(/<li class="on" aria-current="true"/); // no tier on the ladder
   });
 
   it("says task, not tasks, for one", () => {
@@ -324,5 +324,28 @@ describe("settingsView", () => {
     const m = settingsView({ ...base, demo: true }).value;
     expect(m).toContain('data-action="check-update" disabled');
     expect(m).toContain('id="menu-bar" data-action="menu-bar" type="checkbox" checked disabled');
+  });
+});
+
+describe("scorecard period picker", () => {
+  it("marks the period, words the catch count for it, and notes the score keeps its own window", async () => {
+    const { scorecardView } = await import("./scorecard");
+    const view = (period: "7d" | "28d" | "90d" | "all") => scorecardView(stats({ catches: 37 }), { meta, filter: {}, still: true, period }).value;
+    const week = view("7d");
+    expect(week).toContain('data-action="period" data-id="7d" aria-current="true"');
+    expect(week).toContain("You caught it <b>37 times</b> in the last 7 days.");
+    expect(week).toContain("the score always uses these");
+    expect(view("28d")).not.toContain("the score always uses these");
+    expect(view("all")).toContain("<b>37 times</b> in all.");
+  });
+});
+
+describe("periodSince", () => {
+  it("counts the period back from today, local time, and is null for all time", async () => {
+    const { periodSince } = await import("../state");
+    const today = new Date(2026, 2, 1); // 1 March
+    expect(periodSince("7d", today)).toBe("2026-02-23");
+    expect(periodSince("28d", today)).toBe("2026-02-02");
+    expect(periodSince("all", today)).toBeNull();
   });
 });

@@ -6,7 +6,7 @@ import { type Html, html } from "./html";
 import { refreshCheck } from "./learn/checker";
 import { closePicker } from "./picker/popover";
 import { createScheduler, isUserBusy } from "./scheduler";
-import { isGlance, setAllModels, setCurrent, setLastBriefTier, setLastVerdict, setMeta, state } from "./state";
+import { isGlance, periodSince, setAllModels, setCurrent, setLastBriefTier, setLastVerdict, setMeta, state } from "./state";
 import { updateBanner, updateLine } from "./update";
 import { headerView, statusPillView } from "./views/chrome";
 import { emptyGlanceView, glanceView } from "./views/glance";
@@ -22,7 +22,9 @@ const watching = async () => listNames(watchingNames(await api.sources()));
 
 async function view(): Promise<Html> {
   const meta = state.meta ?? setMeta(await api.meta());
-  const s = await api.stats(state.filter);
+  // Only the scorecard's counts follow its period; everything else reads all of history.
+  const scorecard = !isGlance && state.tab === "score";
+  const s = await api.stats(scorecard ? { ...state.filter, since: periodSince(state.period) } : state.filter);
   setCurrent(s);
   if (!isFiltered(state.filter)) setAllModels(s.models);
   if (isGlance) return s.messages ? glanceView(s, meta) : emptyGlanceView(await watching());
@@ -49,6 +51,7 @@ async function view(): Promise<Html> {
       meta,
       filter: state.filter,
       view: state.view,
+      period: state.period,
       still: s.overall.verdict === state.lastVerdict,
       briefsStill: s.briefs.tier === state.lastBriefTier,
     });

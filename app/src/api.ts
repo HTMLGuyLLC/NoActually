@@ -6,6 +6,8 @@ import { demoCall } from "./api.demo";
 export const demo = !isTauri();
 
 export type Filter = { source?: string | null; provider?: string | null; family?: string | null; version?: string | null };
+/** A filter plus a window: only days from `since` (local YYYY-MM-DD) on. Counts follow it; the score doesn't. */
+export type StatsFilter = Filter & { since?: string | null };
 export type Level = "full" | "snippet" | "category";
 export const LEVELS: readonly Level[] = ["full", "snippet", "category"];
 export const isLevel = (x: unknown): x is Level => LEVELS.some((l) => l === x);
@@ -219,7 +221,7 @@ export type SourceInfo = { id: string; name: string; kind: "live" | "import"; ro
 /** Every command the UI calls: its arguments (camelCase, as Tauri expects) and what it returns. */
 export type Commands = {
   meta: { args: undefined; result: Meta };
-  stats: { args: { filter: Filter }; result: Stats };
+  stats: { args: { filter: StatsFilter }; result: Stats };
   list_sources: { args: undefined; result: SourceInfo[] };
   allow_source: { args: { id: string; since: string | null; fromNow: boolean }; result: null };
   revoke_source: { args: { id: string }; result: null };
@@ -261,7 +263,7 @@ function call<C extends Command>(cmd: C, args: ArgsOf<C>): Promise<ResultOf<C>> 
 
 export const api = {
   meta: () => call("meta", undefined),
-  stats: (filter: Filter) => call("stats", { filter }),
+  stats: (filter: StatsFilter) => call("stats", { filter }),
   sources: () => call("list_sources", undefined),
   allow: (id: string, since: string | null, fromNow: boolean) => call("allow_source", { id, since, fromNow }),
   revoke: (id: string) => call("revoke_source", { id }),

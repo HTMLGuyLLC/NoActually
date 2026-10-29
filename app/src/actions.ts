@@ -14,7 +14,22 @@ import { paintUpdate, render, scheduler } from "./render";
 import { drawBriefCard, drawCatchCard, drawShareCard } from "./share/cards";
 import { openShareDialog, type Post } from "./share/dialog";
 import { briefShareText, catchShareText, shareText } from "./share/share";
-import { isRange, isScoreView, isTab, setAutoUpdate, setDraft, setFilter, setLaterFor, setLesson, setRange, setTab, setView, state } from "./state";
+import {
+  isPeriod,
+  isRange,
+  isScoreView,
+  isTab,
+  setAutoUpdate,
+  setDraft,
+  setFilter,
+  setLaterFor,
+  setLesson,
+  setPeriod,
+  setRange,
+  setTab,
+  setView,
+  state,
+} from "./state";
 import { judgeQuiz } from "./views/learn";
 import { parseRetention } from "./views/settings";
 import { allowArgs } from "./views/sources";
@@ -157,6 +172,12 @@ export const clickActions = {
     const view = data(b, "id");
     if (!isScoreView(view)) throw new Error(`Unknown view: ${view}`);
     setView(view);
+    return render();
+  },
+  period: (b) => {
+    const p = data(b, "id");
+    if (!isPeriod(p)) throw new Error(`Unknown period: ${p}`);
+    setPeriod(p);
     return render();
   },
   range: (b) => {

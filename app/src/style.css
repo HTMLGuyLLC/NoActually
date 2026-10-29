@@ -90,6 +90,11 @@ nav { display: flex; gap: 6px }
 #update-slot:empty { display: none }
 
 .toolbar { display: flex; justify-content: space-between; align-items: end; gap: 12px; flex-wrap: wrap; margin-bottom: -20px }
+/* The scorecard's period picker: a compact segmented row, no underline. */
+.views.period { border: 0; padding: 0; gap: 2px }
+.views.period .tab { padding: 7px 11px; font-size: 12.5px }
+.period-box { display: grid; justify-items: end; gap: 4px; min-width: 0; max-width: 100% }
+.eyebrow .note { text-transform: none; letter-spacing: 0; font-family: var(--body); font-weight: 500 }
 .chip-clear { background: var(--pen-soft); color: var(--pen-text); border-color: transparent; font-weight: 600 }
 .chip-clear span { margin-left: 4px; font-size: 15px }
 

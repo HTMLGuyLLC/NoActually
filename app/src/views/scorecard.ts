@@ -5,7 +5,7 @@ import { filterLabel, isFiltered, shortSourceName, subjectLabel } from "../forma
 import { type Html, html, num, raw } from "../html";
 import { categoryTitle, tierName, tierOf, tierRanges } from "../meta";
 import { catchRate, modelName } from "../picker/picker";
-import { SCORE_VIEWS, type ScoreView } from "../state";
+import { PERIODS, type Period, SCORE_VIEWS, type ScoreView } from "../state";
 import { briefsSummaryView, briefsView } from "./briefs";
 
 export type ScorecardContext = {
@@ -17,7 +17,21 @@ export type ScorecardContext = {
   briefsStill?: boolean;
   /** Which section is showing (default: the overview). */
   view?: ScoreView;
+  /** How far back the counts look (default: 28 days). */
+  period?: Period;
 };
+
+const PERIOD_TITLES: Record<Period, string> = { "7d": "7 days", "28d": "28 days", "90d": "90 days", all: "All time" };
+/** "in the last 28 days", for sentences about the period's counts. */
+export const PERIOD_TEXT: Record<Period, string> = { "7d": "in the last 7 days", "28d": "in the last 28 days", "90d": "in the last 90 days", all: "in all" };
+
+/** The scorecard's time picker: how far back every count looks. */
+function periodNav(period: Period): Html {
+  return html`<nav class="views period" aria-label="Time period">${PERIODS.map(
+    (p) =>
+      html`<button class="tab${p === period ? " on" : ""}" data-action="period" data-id="${p}"${p === period ? raw(' aria-current="true"') : ""}>${PERIOD_TITLES[p]}</button>`,
+  )}</nav>`;
+}
 
 const VIEW_TITLES: Record<ScoreView, string> = { overview: "Overview", briefs: "Briefs", catches: "Catches", hall: "Hall of fame" };
 
@@ -30,8 +44,8 @@ export const subjectButton = (ctx: Pick<ScorecardContext, "filter" | "meta">): H
     ctx.meta,
   )}${CHEVRON}</button>`;
 
-/** "You caught it 17 times in the last 7 days." */
-const caughtLine = (s: Stats) => html`You caught it <b>${num(s.catches_last_7d)} ${s.catches_last_7d === 1 ? "time" : "times"}</b> in the last 7 days.`;
+/** "You caught it 37 times in the last 28 days." */
+const caughtLine = (s: Stats, period: Period) => html`You caught it <b>${num(s.catches)} ${s.catches === 1 ? "time" : "times"}</b> ${PERIOD_TEXT[period]}.`;
 
 const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
 
@@ -77,7 +91,9 @@ function heroView(s: Stats, ctx: ScorecardContext): Html {
   const o = s.overall;
   return html`<section class="card hero">
       <div>
-        <div class="eyebrow">Last ${ctx.meta.brief_window_days} days</div>
+        <div class="eyebrow">Last ${ctx.meta.brief_window_days} days${
+          (ctx.period ?? "28d") === "28d" ? "" : html` <span class="note">· the score always uses these, whatever the period below</span>`
+        }</div>
         <h1 class="q">Could ${subjectButton(ctx)} replace you?</h1>
         <div class="verdict">${answerView(o, ctx.meta, ctx.still)}<div class="because">${scoreBecause(o, ctx.meta)}</div></div>
         ${partsView(o, ctx.meta)}
@@ -108,7 +124,7 @@ function correctsSummaryView(s: Stats, ctx: ScorecardContext): Html {
   return html`<article class="card mini">
       <div class="eyebrow">Who corrects whom</div>
       <h2 class="q">Do you catch its mistakes?</h2>
-      <p class="because">${caughtLine(s)}</p>
+      <p class="because">${caughtLine(s, ctx.period ?? "28d")}</p>
       ${versusView(s)}
       ${proofNote(ctx.meta)}
       <div class="share"><button class="ghost" data-action="view" data-id="catches">See catches</button></div>
@@ -227,13 +243,13 @@ function catchesView(s: Stats, ctx: ScorecardContext): Html {
       <div>
         <div class="eyebrow">Who corrects whom</div>
         <h1 class="q">Do you catch ${subjectButton(ctx)}'s mistakes?</h1>
-        <p class="because">${caughtLine(s)}${
+        <p class="because">${caughtLine(s, ctx.period ?? "28d")}${
           s.pct_real_chats_with_catch != null ? ` It slipped up in ${Math.round(s.pct_real_chats_with_catch)}% of your real chats.` : ""
         }</p>
         ${versusView(s)}
       </div>
       <div class="meter">
-        <p class="big-stat"><span class="n">${s.overall.judgment ?? "–"}</span><span class="muted small">judgment, out of 100: you check its work, and it rarely has to correct you</span></p>
+        <p class="big-stat"><span class="n">${s.overall.judgment ?? "–"}</span><span class="muted small">judgment over the last ${meta.brief_window_days} days, out of 100: you check its work, and it rarely has to correct you</span></p>
         ${proofNote(meta)}
       </div>
     </section>
@@ -271,7 +287,9 @@ export function scorecardView(s: Stats, ctx: ScorecardContext): Html {
           ? hallSection(s, ctx)
           : overviewView(s, ctx);
   return html`
-    <section class="toolbar">${toolbar}<span class="muted small">${s.first_day ?? ""} – ${s.last_day ?? ""} · ${num(s.messages)} messages</span></section>
+    <section class="toolbar">${toolbar}<div class="period-box">${periodNav(ctx.period ?? "28d")}<span class="muted small">${
+      s.first_day ? `${s.first_day} – ${s.last_day ?? ""} · ` : ""
+    }${num(s.messages)} messages</span></div></section>
     ${viewsNav(view)}
     <div class="view-body">${body}</div>`;
 }

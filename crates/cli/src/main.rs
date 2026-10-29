@@ -19,7 +19,7 @@ USAGE
   noactually forget <source>             Stop reading and delete everything from it
   noactually import <source> <path>      Import an export file or folder (chatgpt-export, claude-ai-export)
   noactually sync                        Read anything new from allowed sources
-  noactually stats [filters] [--json]    Scorecard. Filters: --source --provider --family --version
+  noactually stats [filters] [--json]    Scorecard. Filters: --source --provider --family --version --since
   noactually check <brief>               What a draft brief carries, graded like your history (nothing is saved)
   noactually retention <full|snippet|category> [--full-days N] [--snippet-days N]
 
@@ -107,12 +107,15 @@ fn parse_args(args: &[String]) -> Result<Command> {
             Command::Import { id: a.arg(0, "source")?, path: a.arg(1, "path")?.into() }
         }
         "stats" => {
-            let a = Args::split(rest, &["--source", "--provider", "--family", "--version"], &["--json"])?;
+            let a = Args::split(rest, &["--source", "--provider", "--family", "--version", "--since"], &["--json"])?;
+            let since =
+                a.value("--since").map(|d| d.parse::<NaiveDate>()).transpose().context("--since wants YYYY-MM-DD")?;
             let filter = Filter {
                 source: a.value("--source"),
                 provider: a.value("--provider"),
                 family: a.value("--family"),
                 version: a.value("--version"),
+                since,
             };
             Command::Stats { filter, json: a.has("--json") }
         }
@@ -403,9 +406,12 @@ mod tests {
             parse("import chatgpt-export ./conversations.json").unwrap(),
             Command::Import { id: "chatgpt-export".into(), path: "./conversations.json".into() }
         );
-        let Command::Stats { filter, json } = parse("stats --family Claude --version 5.5 --json").unwrap() else {
+        let Command::Stats { filter, json } =
+            parse("stats --family Claude --version 5.5 --json --since 2026-10-01").unwrap()
+        else {
             panic!("not stats")
         };
+        assert_eq!(filter.since, Some("2026-10-01".parse().unwrap()));
         assert!(json);
         assert_eq!(
             (filter.family.as_deref(), filter.version.as_deref(), filter.source),

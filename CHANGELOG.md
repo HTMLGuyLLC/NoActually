@@ -14,6 +14,8 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ### Changed
 
+- A time picker on the scorecard (7 days, 28 days, 90 days, all time) sets how far back every count looks: catches, you vs it, tasks and briefs, the chart, models, categories and the hall of fame. The score and tiers always use the last 28 days. `noactually stats --since YYYY-MM-DD` does the same.
+- The header keeps Scorecard, Improve and Learn labeled; Sources and Settings are icon buttons.
 - The model picker shows the numbers the page is about: landed % on Briefs, catches on Catches and Hall of fame, both on the overview.
 - Scorecard sections run Overview, Briefs, Catches, Hall of fame. The Catches section asks "Do you catch its mistakes?" and shows your judgment score.
 - The top tabs show icons only on narrow windows.
