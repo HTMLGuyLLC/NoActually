@@ -381,6 +381,6 @@ describe("goal meter", () => {
     const habit = view(progress({ goal: status({ weeks: [open] }) }));
     expect(habit).toContain('<span class="big">33%</span>');
     expect(habit).toContain("aim for at least");
-    expect(habit).toContain("goal-hero");
+    expect(habit).toContain('class="card mini goal"'); // a plain card, like the rest
   });
 });

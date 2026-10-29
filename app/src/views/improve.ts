@@ -169,7 +169,7 @@ function goalView(p: Progress, meta: Meta, filtered: boolean): Html {
   const st = p.goal;
   const across = filtered ? " · all AI" : "";
   if (!st) {
-    return html`<section class="card mini goal goal-hero"><div class="eyebrow">Your goal${across}</div><h2 class="q">Pick one thing to get better at</h2>
+    return html`<section class="card mini goal"><div class="eyebrow">Your goal${across}</div><h2 class="q">Pick one thing to get better at</h2>
       <p class="muted">One goal at a time, measured each week from your own history. Hit it ${meta.goal_weeks} weeks to win a trophy.</p>
       ${goalPickerView(p, meta, null)}</section>`;
   }
@@ -179,7 +179,7 @@ function goalView(p: Progress, meta: Meta, filtered: boolean): Html {
       ? ""
       : html`<p class="goal-count"><b>${st.met}</b> of ${st.needed} weeks met${st.streak > 1 ? html` · <span class="hand">${st.streak} in a row</span>` : ""}</p>`;
   const line = st.done ? "It's on your trophy shelf. Pick the next one." : thisWeekLine(st, meta);
-  return html`<section class="card mini goal goal-hero${st.done ? " finished" : ""}">
+  return html`<section class="card mini goal${st.done ? " finished" : ""}">
     <div class="eyebrow">${st.done ? "Goal done 🏆" : `Your goal · since ${fmtDay(g.start)}`}${across}</div>
     <h2 class="goal-title">${goalTitle(g, meta)}</h2>
     ${st.done ? "" : goalMeter(st, meta)}

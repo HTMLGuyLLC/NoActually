@@ -407,9 +407,8 @@ button.link { background: none; border: 0; padding: 0; color: var(--pen-text); t
 button.link:hover { filter: none }
 
 /* Improve: the goal, last week, trends, bests and trophies. */
-/* Improve leads with the goal: the wide, red-bordered card; last week is a quiet side note. */
+/* Improve leads with the goal: the wide card; last week is a quiet side note. */
 .improve-top { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr); gap: 24px; align-items: start }
-.goal-hero { border: 2px solid var(--pen); box-shadow: 0 18px 40px -26px color-mix(in srgb, var(--pen) 70%, transparent) }
 .goal-title { font-size: clamp(24px, 3.2vw, 34px); line-height: 1.1; margin-top: 8px }
 .goal-meter { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 4px 12px; margin: 6px 0 4px }
 .goal-meter .big { font: 800 clamp(40px, 5vw, 56px)/1 var(--display); color: var(--pen); font-variant-numeric: tabular-nums }
