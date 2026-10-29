@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot-scorecard.png" alt="The No, Actually... scorecard: a verdict, your catch count versus the AI's, a tier ladder and weekly chart" width="820">
+  <img src="docs/screenshot-scorecard.png" alt="The No, Actually... scorecard overview: the catch verdict and the brief verdict side by side, each with its tier, above the headline stats" width="820">
 </p>
 
 ---
