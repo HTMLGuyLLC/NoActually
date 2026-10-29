@@ -104,15 +104,15 @@ Coming: Gemini CLI, Ollama, Open WebUI, LM Studio, VS Code Copilot, Cursor and A
 
 | Your computer | Download | Install |
 |---|---|---|
-| **Mac** (macOS 12 or newer, Apple silicon or Intel) | `No-Actually-<version>-Mac.dmg` | Open it, drag **No, Actually...** into **Applications**, then open it from there. It's signed and notarized by Apple, so it opens with no warnings. |
-| **Windows** | `No-Actually-<version>-Windows-Setup.exe` | Run it. If you see "Windows protected your PC", click **More info → Run anyway** (the Windows build isn't code-signed yet). |
-| **Linux** | `No-Actually-<version>-Linux.AppImage` | Right-click → Properties → allow it to run as a program (or `chmod +x`), then open it. |
+| **Mac** (macOS 12 or newer, Apple silicon or Intel) | `No-Actually-<version>-Mac-universal.dmg` | Open it, drag **No, Actually...** into **Applications**, then open it from there. It's signed and notarized by Apple, so it opens with no warnings. |
+| **Windows** | `No-Actually-<version>-Windows-Setup-x64.exe` | Run it. If you see "Windows protected your PC", click **More info → Run anyway** (the Windows build isn't code-signed yet). |
+| **Linux** | `No-Actually-<version>-x86_64.AppImage` | Right-click → Properties → allow it to run as a program (or `chmod +x`), then open it. |
 
 Not sure which Mac you have? It doesn't matter: the Mac download works on every Mac that runs macOS 12 or newer.
 
 The other files are for special cases:
-- `-Windows-IT-Installer.msi` is for IT teams deploying to many PCs.
-- `-Linux-Ubuntu-Debian.deb` and `-Linux-Fedora.rpm` install through your Linux package manager.
+- `-Windows-IT-Installer-x64.msi` is for IT teams deploying to many PCs.
+- `-Linux-Ubuntu-Debian-amd64.deb` and `-Linux-Fedora-x86_64.rpm` install through your Linux package manager.
 - `SHA256SUMS.txt` lets you verify a download.
 
 **On first launch,** click **Choose sources**, then **Allow** the AI tools you want counted. Nothing is read until you do. After that the app lives in your menu bar (Mac) or system tray (Windows and Linux).

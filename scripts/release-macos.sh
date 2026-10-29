@@ -100,7 +100,7 @@ rm -f "$ZIP"
 # 3. The update file: the stapled app, tarred and signed. The bundler made one in step 1, but
 #    from the app before it was stapled, so replace it. Plain name, as finish-release.sh expects.
 rm -f "$BUNDLE"/macos/*.app.tar.gz "$BUNDLE"/macos/*.app.tar.gz.sig
-UPDATE="$BUNDLE/macos/No-Actually-${VERSION}-Mac-Update.app.tar.gz"
+UPDATE="$BUNDLE/macos/No-Actually-${VERSION}-Mac-Update-universal.app.tar.gz"
 COPYFILE_DISABLE=1 tar -C "$(dirname "$APP")" -czf "$UPDATE" "$(basename "$APP")"
 pnpm -s tauri signer sign "$UPDATE" >/dev/null
 [[ -s "$UPDATE.sig" ]] || { echo "Signing the update file failed." >&2; exit 1; }
@@ -109,7 +109,7 @@ pnpm -s tauri signer sign "$UPDATE" >/dev/null
 #    hdiutil: re-running Tauri's bundler would rebuild (and un-staple) the app.
 mkdir -p "$BUNDLE/dmg"
 # Plain file name people can read on the release page (see scripts/finish-release.sh).
-DMG="$BUNDLE/dmg/No-Actually-${VERSION}-Mac.dmg"
+DMG="$BUNDLE/dmg/No-Actually-${VERSION}-Mac-universal.dmg"
 STAGE="$(mktemp -d)"
 TMP_DIRS+=("$STAGE")
 ditto "$APP" "$STAGE/$(basename "$APP")"
