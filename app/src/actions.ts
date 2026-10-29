@@ -129,19 +129,6 @@ function togglePicker(trigger: HTMLButtonElement) {
 type Handler = (el: HTMLButtonElement) => unknown;
 
 export const clickActions = {
-  // The button itself confirms the copy, so the quick glance never grows taller.
-  "copy-share": async (b) => {
-    const { s, meta } = drawn();
-    const ok = await navigator.clipboard.writeText(shareText(s, filterLabel(state.filter, meta), tierName(meta, s.overall.tier))).then(
-      () => true,
-      () => false,
-    );
-    b.textContent = ok ? "Copied ✓" : "Couldn't copy";
-    say(b.parentElement?.querySelector("#copy-status") ?? null, ok ? "Copied the share text." : "Couldn't copy the share text.");
-    setTimeout(() => {
-      b.textContent = "Copy text";
-    }, 1800);
-  },
   "open-share": (b) => {
     const { s, meta } = drawn();
     openShareDialog(scorePost(s, meta), b, scheduler.flush);
@@ -156,7 +143,10 @@ export const clickActions = {
     const e = drawn().s.hall_of_fame.find((h) => h.id === id);
     if (e) openShareDialog(catchPost(e), b, scheduler.flush);
   },
-  "open-main": () => api.openMain(),
+  "open-main": (b) => {
+    const tab = b.dataset.id;
+    return api.openMain(isTab(tab) ? tab : null);
+  },
   home: () => {
     setTab("score");
     setView("overview");

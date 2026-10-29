@@ -85,8 +85,9 @@ describe("briefs on the scorecard and the glance", () => {
     expect(m).toContain('class="no" aria-hidden="true">Rarely.');
   });
 
-  it("adds one line to the glance once ranked", () => {
-    expect(glanceView(stats(), meta).value).toContain("Briefs: Architect · 95% landed");
-    expect(glanceView(stats({ briefs: briefs({ tier: null }) }), meta).value).not.toContain("Briefs:");
+  it("names the brief tier in the glance once ranked", () => {
+    expect(glanceView(stats(), meta).value).toContain("<b>Architect</b>");
+    expect(glanceView(stats(), meta).value).toContain("95% landed");
+    expect(glanceView(stats({ briefs: briefs({ tier: null }) }), meta).value).toContain("Not ranked");
   });
 });

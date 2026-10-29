@@ -2,6 +2,7 @@
 // Outside Tauri (a plain browser) the UI runs as a read-only demo on public/demo.json.
 import { type InvokeArgs, isTauri, invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { demoCall } from "./api.demo";
+import type { Tab } from "./state";
 
 export const demo = !isTauri();
 
@@ -237,7 +238,7 @@ export type Commands = {
   set_autostart: { args: { enabled: boolean }; result: null };
   save_share_card: { args: { png: number[] }; result: string | null };
   open_share: { args: { url: string }; result: null };
-  open_main: { args: undefined; result: null };
+  open_main: { args: { tab: Tab | null }; result: null };
   update_status: { args: undefined; result: UpdateStatus };
   set_auto_update: { args: { enabled: boolean }; result: null };
   check_for_updates: { args: undefined; result: null };
@@ -279,7 +280,7 @@ export const api = {
   setAutostart: (enabled: boolean) => call("set_autostart", { enabled }),
   saveShareCard: (png: number[]) => call("save_share_card", { png }),
   openShare: (url: string) => call("open_share", { url }),
-  openMain: () => call("open_main", undefined),
+  openMain: (tab: Tab | null = null) => call("open_main", { tab }),
   updateStatus: () => call("update_status", undefined),
   setAutoUpdate: (enabled: boolean) => call("set_auto_update", { enabled }),
   checkForUpdates: () => call("check_for_updates", undefined),

@@ -15,7 +15,7 @@ const TAB_TITLES: Record<Tab, string> = { score: "Scorecard", improve: "Improve"
 
 /** Small line icons beside each tab's name (decoration: the name is the label). */
 export const svg = (d: string) => raw(`<svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`);
-const TAB_ICONS: Record<Tab, ReturnType<typeof raw>> = {
+export const TAB_ICONS: Record<Tab, ReturnType<typeof raw>> = {
   // Bar chart.
   score: svg("M4 20V10M10 20V4M16 20v-7M22 20H2"),
   // A line climbing to a target.

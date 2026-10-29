@@ -5,7 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { bindActions } from "./actions";
 import { api, demo } from "./api";
 import { paintStatus, paintUpdate, render, root, scheduler } from "./render";
-import { isGlance, setStatus, setSyncing, setUpdate, state } from "./state";
+import { isGlance, isTab, setStatus, setSyncing, setTab, setUpdate, state } from "./state";
 
 bindActions(root);
 // A field losing focus may be the moment a deferred redraw can land.
@@ -42,6 +42,13 @@ api
 if (!isGlance) void loadUpdate();
 if (!demo) {
   if (!isGlance) void listen("update-changed", loadUpdate);
+  // The glance's gear opens the scorecard window on Settings.
+  if (!isGlance)
+    void listen<string>("open-tab", (e) => {
+      if (!isTab(e.payload)) return;
+      setTab(e.payload);
+      void render();
+    });
   // A check starting changes only the status line; a finished one may change the numbers.
   void listen("sync-started", () => {
     setSyncing();

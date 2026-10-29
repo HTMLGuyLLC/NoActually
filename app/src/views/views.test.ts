@@ -185,7 +185,6 @@ describe("onboarding and glance", () => {
     const m = glanceView(stats(), meta).value;
     expect(m).toContain("<span>Score 86</span>Sharp-eyed");
     expect(m).toContain("Irreplaceable at 90");
-    expect(m).toContain('role="status"'); // copy confirmation is announced, not the button itself
     expect(glanceView(stats({ overall: overall({ tier: "irreplaceable", next_tier: null }) }), meta).value).toContain("Top tier");
   });
 

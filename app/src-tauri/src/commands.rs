@@ -11,7 +11,7 @@ use serde::Serialize;
 use sources::{Kind, Source};
 use std::sync::Arc;
 use store::{Filter, Goal, GoalKind, Meta, Progress, Retention, SourceState, Stats};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_dialog::{DialogExt, FileDialogBuilder, FilePath};
 use tauri_plugin_notification::{NotificationExt, PermissionState};
@@ -236,9 +236,13 @@ pub fn sync_status(app: State<Arc<App>>) -> SyncStatus {
     lock(&app.status).clone()
 }
 
+/// Shows the scorecard window, on `tab` when given (the main window checks it's a real tab).
 #[tauri::command]
-pub fn open_main(handle: AppHandle) {
+pub fn open_main(handle: AppHandle, tab: Option<String>) {
     crate::show_main(&handle);
+    if let Some(tab) = tab {
+        let _ = handle.emit_to("main", "open-tab", tab);
+    }
 }
 
 #[tauri::command]

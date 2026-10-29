@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
   setRetention: vi.fn(),
   setAutostart: vi.fn(),
   getMenuBar: vi.fn(),
+  openMain: vi.fn(),
 }));
 vi.mock("./api", async (importOriginal) => ({ ...(await importOriginal<typeof import("./api")>()), api, demo: false }));
 
@@ -138,6 +139,16 @@ describe("delegated actions", () => {
     await click('[data-action="go-sources"]');
     expect(state.state.tab).toBe("settings");
     expect(root.querySelector("section#sources h2")?.textContent).toBe("Sources");
+  });
+
+  it("opens the app on a named tab, and ignores a name that isn't a tab", async () => {
+    root.insertAdjacentHTML(
+      "beforeend",
+      '<button id="gear" data-action="open-main" data-id="settings"></button><button id="bad" data-action="open-main" data-id="nope"></button>',
+    );
+    await click("#gear");
+    await click("#bad");
+    expect(api.openMain.mock.calls).toEqual([["settings"], [null]]);
   });
 
   it("takes two clicks to forget a source", async () => {

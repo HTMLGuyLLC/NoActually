@@ -27,7 +27,15 @@ async function view(): Promise<Html> {
   const s = await api.stats(scorecard ? { ...state.filter, since: periodSince(state.period) } : state.filter);
   setCurrent(s);
   if (!isFiltered(state.filter)) setAllModels(s.models);
-  if (isGlance) return s.messages ? glanceView(s, meta) : emptyGlanceView(await watching());
+  if (isGlance) {
+    if (!s.messages) return emptyGlanceView(await watching());
+    // The goal is all-AI, like Improve's; the glance still draws if it can't be read.
+    const goal = await api.progress(state.filter).then(
+      (p) => p.goal,
+      () => null,
+    );
+    return glanceView(s, meta, goal);
+  }
 
   let body: Html;
   if (state.tab === "settings") {

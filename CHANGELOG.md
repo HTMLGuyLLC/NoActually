@@ -16,7 +16,8 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 - A time picker on the scorecard (7 days, 28 days, 90 days, all time) sets how far back the whole scorecard looks: the score and tiers, catches, you vs it, briefs, the chart, models, categories and the hall of fame. Popups, goals, the quick glance and the tray stay on the last 28 days. `noactually stats --since YYYY-MM-DD` does the same.
 - The header keeps Scorecard, Improve and Learn labeled; Settings is an icon button, and Sources is its first section.
-- Live tracking checks at most once a minute while an AI tool is writing (it used to check a few seconds after every write). The status under the menu is now a refresh button: click it to check now, hover it to see the dates and messages the numbers cover.
+- The quick glance shows the verdict and score with a bar to the next tier, catches beside your brief tier, and your goal with this week's number. A gear opens Settings and **Open app** opens the scorecard; the share and copy buttons are gone (share from the app).
+- Live tracking checks at most once a minute while an AI tool is writing (it used to check a few seconds after every write). Under the menu, a refresh button checks now, and hovering the status shows the dates and messages the numbers cover.
 - The Hall of fame is an awards wall: one award per kind of catch (and Touché for the times it caught you), each with its count and best snippet first, ranked the same way every time: pinned, then admitted, then with both sides kept, then the punchiest line, then the newest. Unearned awards wait, dimmed.
 - Improve leads with your goal: a bigger card with one number to watch (this week's percent, or your score against the tier). Last week's recap sits beside it.
 - The model picker shows the numbers the page is about: landed % on Briefs, catches on Catches and Hall of fame, both on the overview.
