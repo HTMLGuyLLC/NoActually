@@ -64,7 +64,8 @@ export type AppState = {
   lesson: string | null;
   /** Learn: what's typed in the prompt checker. Never saved. */
   draft: string;
-  /** Hall of fame: which entry each award shows, by award key, so a redraw keeps your place. */
+  /** Hall of fame: the entry id each award shows, by award key. An id, not a position, so you stay
+   * on the same entry when pinning moves it or a redraw re-sorts the list. */
   awardSlide: Record<string, number>;
 };
 
@@ -143,8 +144,8 @@ export function setRange(range: Range): void {
 export function setLesson(id: string | null): void {
   s.lesson = id;
 }
-export function setAwardSlide(key: string, i: number): void {
-  s.awardSlide = { ...s.awardSlide, [key]: i };
+export function setAwardSlide(key: string, entryId: number): void {
+  s.awardSlide = { ...s.awardSlide, [key]: entryId };
 }
 export function setDraft(text: string): void {
   s.draft = text;

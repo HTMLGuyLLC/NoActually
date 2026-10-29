@@ -22,7 +22,7 @@ export type ScorecardContext = {
   view?: ScoreView;
   /** How far back the counts look (default: 28 days). */
   period?: Period;
-  /** Hall of fame: which entry each award shows (default: its best). */
+  /** Hall of fame: the entry id each award shows (default: its best). */
   awardSlide?: Record<string, number>;
 };
 
@@ -321,10 +321,14 @@ const ARROW_NEXT = raw(`<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.
 
 /** An award's entries, best first, one at a time. All of them share one grid cell, so the card is as
  * tall as the tallest and flipping never moves the page; prev/next flip in place (actions.ts). */
-function slidesView(key: string, entries: HallEntry[], at: number): Html {
-  const i = Math.min(Math.max(0, at), entries.length - 1);
+function slidesView(key: string, entries: HallEntry[], showing: number | undefined): Html {
+  // The entry you were on, wherever it sits now; the best one if it's gone.
+  const i = Math.max(
+    0,
+    entries.findIndex((e) => e.id === showing),
+  );
   const slides = html`<div class="slides">${entries.map(
-    (e, n) => html`<div class="slide"${n === i ? "" : raw(' aria-hidden="true" inert')}>${hallView([e])}</div>`,
+    (e, n) => html`<div class="slide" data-entry="${e.id}"${n === i ? "" : raw(' aria-hidden="true" inert')}>${hallView([e])}</div>`,
   )}</div>`;
   if (entries.length < 2) return slides;
   const nav = html`<div class="slide-nav">
@@ -336,12 +340,12 @@ function slidesView(key: string, entries: HallEntry[], at: number): Html {
 }
 
 /** An award: its count and its snippets, best first. Unearned awards wait, dimmed. */
-function awardView(key: string, count: number, entries: HallEntry[], meta: Meta, at = 0): Html {
+function awardView(key: string, count: number, entries: HallEntry[], meta: Meta, showing?: number): Html {
   const a = AWARDS[key] ?? { emoji: "🏅", name: categoryTitle(meta, key), blurb: "" };
   const body = !count
     ? html`<p class="muted small">Not earned yet.</p>`
     : entries.length
-      ? slidesView(key, entries, at)
+      ? slidesView(key, entries, showing)
       : html`<p class="muted small">No snippets kept. Your privacy setting may be “category only”, or the text has aged out.</p>`;
   return html`<article class="award${count ? "" : " unearned"}" data-award="${key}">
     <header><span class="award-emoji" aria-hidden="true">${a.emoji}</span><div><h3>${a.name}</h3><p class="muted small">${a.blurb}</p></div><span class="award-count" aria-label="${count} times">×${num(count)}</span></header>

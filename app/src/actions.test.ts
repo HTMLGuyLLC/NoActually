@@ -174,6 +174,27 @@ describe("delegated actions", () => {
     expect(shown()).toContain("first"); // wraps around
   });
 
+  it("stays on the entry you pinned when pinning moves it to the front", async () => {
+    const { hallEntry } = await import("./test/fixtures");
+    const entries = ["a1", "a2", "a3"].map((h, i) => hallEntry({ id: i + 1, category: "just_wrong", human: h }));
+    api.stats.mockResolvedValue(stats({ categories: { just_wrong: 3 }, hall_of_fame: entries }));
+    state.setView("hall");
+    await render();
+    const shown = () =>
+      [...root.querySelectorAll('[data-award="just_wrong"] .slide')].find((el) => el.getAttribute("aria-hidden") !== "true")?.querySelector(".you-said")
+        ?.textContent ?? "";
+    await click('[data-award="just_wrong"] [data-action="award-slide"][data-step="1"]');
+    await click('[data-award="just_wrong"] [data-action="award-slide"][data-step="1"]');
+    expect(shown()).toContain("a3");
+    // Rust sends the pinned one first after the pin.
+    const third = entries[2] ?? hallEntry();
+    api.stats.mockResolvedValue(stats({ categories: { just_wrong: 3 }, hall_of_fame: [{ ...third, pinned: true }, entries[0] ?? third, entries[1] ?? third] }));
+    await click('[data-award="just_wrong"] .slide:not([aria-hidden]) [data-action="pin"]');
+    expect(api.pin).toHaveBeenCalledWith(3, true);
+    expect(shown()).toContain("a3");
+    expect(root.querySelector('[data-award="just_wrong"] .slide-at')?.textContent).toBe("1");
+  });
+
   it("loops through five entries both ways", async () => {
     const { hallEntry } = await import("./test/fixtures");
     const names = ["a1", "a2", "a3", "a4", "a5"];

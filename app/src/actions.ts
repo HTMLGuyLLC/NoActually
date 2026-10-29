@@ -220,7 +220,7 @@ export const clickActions = {
     });
     const at = award.querySelector(".slide-at");
     if (at) at.textContent = String(next + 1);
-    setAwardSlide(data(b, "id"), next);
+    setAwardSlide(data(b, "id"), Number(slides[next]?.dataset.entry));
   },
   "lesson-done": (b) =>
     thenRender(b, async () => {
@@ -268,7 +268,13 @@ export const clickActions = {
     if (!confirmed(b, "Click again to drop it")) return;
     return thenRender(b, () => api.clearGoal());
   },
-  pin: (b) => thenRender(b, () => api.pin(Number(data(b, "id")), data(b, "pinned") !== "true")),
+  pin: (b) => {
+    const id = Number(data(b, "id"));
+    // Pinning moves the entry to the front of its award; stay on it rather than on its old spot.
+    const award = b.closest<HTMLElement>("[data-award]")?.dataset.award;
+    if (award != null) setAwardSlide(award, id);
+    return thenRender(b, () => api.pin(id, data(b, "pinned") !== "true"));
+  },
   allow: (b) => {
     const id = data(b, "id");
     const choice = b.parentElement?.querySelector<HTMLSelectElement>(`select[data-since="${CSS.escape(id)}"]`)?.value ?? "all";
