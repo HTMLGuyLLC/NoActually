@@ -5,8 +5,9 @@
 <h1 align="center">No, Actually...</h1>
 
 <p align="center">
-  <b>Could AI replace you? No, actually.</b><br>
-  It counts every time you catch your AI being wrong, and grades how well you brief it.
+  <b>A scoreboard for you vs. your AI.</b><br>
+  Every time you catch it being wrong, you score. Every task that lands without a redo, your briefs level up.<br>
+  A weekly verdict, tiers to climb, and a card worth bragging about.
 </p>
 
 <p align="center">
@@ -14,7 +15,7 @@
 </p>
 
 <p align="center">
-  🔒 Private: your chats never leave your computer<br>
+  🔒 Private: everything stays on your computer unless you share it<br>
   💸 Free: no AI calls, so nothing to pay for
 </p>
 
@@ -33,7 +34,7 @@ You correct your AI all day: the function that doesn't exist, the instruction it
 | 🧠 | **Could AI replace you?** | Times you caught it being wrong | Rubber stamp → Coworker → Sharp-eyed → **Irreplaceable** |
 | 🎯 | **Do you make it guess?** | How often your tasks landed without you adding, clarifying or starting over | Vibes only → Ticket writer → Tech lead → **Architect** |
 
-> **💸 Costs nothing to run.** No AI does the judging, so there's no API key, no tokens spent and no subscription. Fixed, readable rules score your chats right on your computer: the same history always gives the same score, and nothing is uploaded, ever.
+> **💸 Costs nothing to run.** No AI does the judging, so there's no API key, no tokens spent and no subscription. Fixed, readable rules score your chats right on your computer: the same history always gives the same score, and nothing is uploaded.
 
 ## Get started in a minute
 
@@ -60,10 +61,10 @@ Your AI chats can hold code, keys, client names and half-formed ideas. This app 
 
 | | |
 |---|---|
-| 🔒 **Local only** | No accounts, no servers, no telemetry, no analytics. Fonts are bundled. The only network calls are an update check against GitHub (sends nothing about you, and can be turned off) and a share link you click yourself. |
+| 🔒 **Local only** | No accounts, no servers, no telemetry, no analytics. Fonts are bundled. The only network use is an update check against GitHub and a share link you click yourself. The update check carries no account, ID, stats or chat data (GitHub sees your IP address, as with any download), and you can turn it off. |
 | ✋ **Asks first** | Every source is off until you **Allow** it. Pause it, stop it, or **Forget** it (deletes everything it read) any time. |
-| 🔢 **Numbers, not chats** | Ordinary messages are only counted, never stored. For catches you pick **category only** (the default), **snippet** or **full text**, and kept text steps down on a timer you set. Briefs store counts only, never words. |
-| ✂️ **Redacted** | Keys, emails, links, file paths and long numbers are stripped from anything kept. |
+| 🔢 **Numbers, not chats** | Ordinary messages are only counted, never stored. For catches you pick **full text**, **snippet** (the default) or **category only**, and kept text steps down on a timer you set. Briefs store counts only, never words. |
+| ✂️ **Redacted** | Keys, emails, links, home paths and long numbers are stripped from any text kept. It's pattern-based, so it can miss things: pick **category only** if that matters. |
 | ✅ **Verifiable** | MIT open source. The Mac app is signed and notarized by Apple, updates are signed, and every release ships `SHA256SUMS.txt`. |
 
 The full details are in [PRIVACY.md](PRIVACY.md).
@@ -73,7 +74,7 @@ The full details are in [PRIVACY.md](PRIVACY.md).
 <details>
 <summary><b>Does it send my chats anywhere?</b></summary>
 
-No. Everything is read and scored on your computer, and the results live in a local SQLite file. There is no server to send them to.
+No. Everything is read and scored on your computer, and the results live in a local SQLite file. There is no server to send them to. The only time text leaves is if you share a Hall of Fame card, and you see the card before it goes anywhere.
 </details>
 
 <details>
@@ -103,19 +104,21 @@ It's a nudge, not a grade on you. "Landed" means nothing *on you* followed the t
 <details>
 <summary><b>It counted something wrong. Now what?</b></summary>
 
-Rules miss sometimes. Open a [**Wrong catch**](https://github.com/HTMLGuyLLC/NoActually/issues/new/choose) issue with the message redacted. Fixes land with a test for your example, so they stay fixed. When rules change, your score is rebuilt from history automatically.
+Rules miss sometimes. Open a [**Wrong catch**](https://github.com/HTMLGuyLLC/NoActually/issues/new/choose) issue with the message redacted. Fixes usually come with a test for your example, so they stay fixed. When rules change, your score is rebuilt from history automatically.
 </details>
 
 <details>
 <summary><b>Can my employer see my score?</b></summary>
 
-Only if you share it. There's no account, no dashboard and no sync. Your score lives on your machine.
+Not through the app: there's no account, no dashboard and no sync. Your score lives in a file on your machine (not encrypted, so anyone with access to your computer could read it, like any other file).
+
+It's also a for-fun self-check, not a measure of job performance, and it shouldn't be used to evaluate anyone.
 </details>
 
 <details>
 <summary><b>How do I delete everything?</b></summary>
 
-Click **Forget** on a source to delete everything read from it. Uninstalling the app and deleting its data folder removes the rest.
+Click **Forget** on a source to delete everything read from it. To remove it all, quit the app and delete its data folder (the paths are in [PRIVACY.md](PRIVACY.md#how-to-delete-your-data)). Uninstalling alone leaves the data behind.
 </details>
 
 <details>
@@ -160,8 +163,8 @@ The tip names the thing your briefs carry least. It only quotes "briefs that do 
 There's no public benchmark for weekly per-person scores, so every threshold was checked three ways:
 
 - **The author's history:** 8,600 messages.
-- **Public chats:** a random 3,400 English chats from [WildChat-1M](https://huggingface.co/datasets/allenai/WildChat-1M), run through these exact rules.
-- **Published figures:** Claude Code users interrupt in 5–9% of turns; in multi-turn developer chats, 14–17% of prompts refine the request.
+- **Public chats:** about 3,400 English chats from [WildChat-1M](https://huggingface.co/datasets/allenai/WildChat-1M), run through these exact rules.
+- **Published figures:** Claude Code users interrupt in 5–9% of turns ([Anthropic](https://www.anthropic.com/research/measuring-agent-autonomy)); in multi-turn developer chats in the [DevGPT](https://arxiv.org/abs/2309.03914) dataset, 14–17% of prompts refine the request.
 
 What that showed:
 
@@ -179,7 +182,7 @@ What that showed:
 | ChatGPT | Import your data export |
 | Claude.ai | Import your data export |
 
-Coming: Gemini CLI, Ollama, Open WebUI, LM Studio, VS Code Copilot, Cursor and Aider, plus a browser extension for live ChatGPT, Claude.ai and Gemini. Want one sooner? [Request it](https://github.com/HTMLGuyLLC/NoActually/issues/new/choose), or add it yourself: an adapter is about 100 lines plus a test (see [CONTRIBUTING.md](CONTRIBUTING.md#add-a-source-adapter)).
+Planned: Gemini CLI, Ollama, Open WebUI, LM Studio, VS Code Copilot, Cursor and Aider, plus a browser extension for live ChatGPT, Claude.ai and Gemini. Want one sooner? [Request it](https://github.com/HTMLGuyLLC/NoActually/issues/new/choose), or add it yourself: an adapter is about 100 lines plus a test (see [CONTRIBUTING.md](CONTRIBUTING.md#add-a-source-adapter)).
 
 ## Download and install
 
@@ -196,7 +199,7 @@ The other files are for special cases:
 - `-Linux-Ubuntu-Debian.deb` and `-Linux-Fedora.rpm` install through your package manager.
 - `SHA256SUMS.txt` lets you verify a download.
 
-The app updates itself (signed updates) unless you turn that off in Settings.
+The app checks for new versions and shows **Restart to update** when one is ready. Nothing is downloaded or installed until you click it, and an update only installs if its signature matches the project's key. Turn the check off in Settings.
 
 ## For developers
 
@@ -280,4 +283,6 @@ The first version was a Python prototype. The Rust engine replaced it, and the o
 
 ## License
 
-[MIT](LICENSE) © HTMLGuy LLC
+[MIT](LICENSE) © HTMLGuy LLC. Provided as is, without warranty.
+
+Not affiliated with or endorsed by Anthropic, OpenAI or any other AI provider. Claude, ChatGPT, Codex and other product names are trademarks of their owners, used here only to say which tools it can read.
