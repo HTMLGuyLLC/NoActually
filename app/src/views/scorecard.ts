@@ -131,7 +131,7 @@ function versusView(s: Stats): Html {
 const proofNote = (meta: Meta) =>
   html`<p class="muted small">${meta.catch_proof} catches prove you check its work. Catching fewer because it got it right never costs you.</p>`;
 
-/** "Almost always.", hand-written, with a screen-reader version. */
+/** "Reliably.", hand-written, with a screen-reader version. */
 function catchMark(o: Overall, meta: Meta, still: boolean, small = false): Html {
   const tier = catchTier(meta, o.catch_tier);
   return html`<div class="no${small ? " sm" : ""}${tier ? "" : " maybe"}${still ? " still" : ""}" aria-hidden="true">${tier?.verdict ?? "Hmm."}</div>

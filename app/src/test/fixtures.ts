@@ -30,7 +30,7 @@ export const meta: Meta = {
     { id: "autopilot", name: "Autopilot", floor: 0, verdict: "Rarely." },
     { id: "spot_checker", name: "Spot-checker", floor: 50, verdict: "Sometimes." },
     { id: "reviewer", name: "Reviewer", floor: 75, verdict: "Usually." },
-    { id: "hawk_eyed", name: "Hawk-eyed", floor: 90, verdict: "Almost always." },
+    { id: "hawk_eyed", name: "Hawk-eyed", floor: 90, verdict: "Reliably." },
   ],
   min_briefs: 10,
   brief_window_days: 28,

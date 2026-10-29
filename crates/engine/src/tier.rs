@@ -186,7 +186,7 @@ impl CatchTier {
             CatchTier::Autopilot => "Rarely.",
             CatchTier::SpotChecker => "Sometimes.",
             CatchTier::Reviewer => "Usually.",
-            CatchTier::HawkEyed => "Almost always.",
+            CatchTier::HawkEyed => "Reliably.",
         }
     }
 

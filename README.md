@@ -173,7 +173,7 @@ Each question below the score gets a one-word answer too. Do you make it guess? 
 
 | Catch tier | Judgment | Answer |
 |---|---|---|
-| Hawk-eyed | 90+ | Almost always. |
+| Hawk-eyed | 90+ | Reliably. |
 | Reviewer | 75–89 | Usually. |
 | Spot-checker | 50–74 | Sometimes. |
 | Autopilot | under 50 | Rarely. |
