@@ -94,8 +94,8 @@ function partsView(o: Overall, meta: Meta): Html {
   const part = (label: string, value: number | null, weight: number, hint: string) =>
     html`<div class="part"><span class="part-name">${label}<small class="muted">${hint} · ${weight}% of the score</small></span><span class="bar-bg"><i data-w="${value ?? 0}"></i></span><span class="n">${value ?? "–"}</span></div>`;
   return html`<div class="parts" role="group" aria-label="What the score is made of">
-    ${part("Your prompts", o.direction, meta.direction_weight, "tasks that landed")}
     ${part("Who corrects whom", o.judgment, 100 - meta.direction_weight, "how rarely it has to correct you")}
+    ${part("Your prompts", o.direction, meta.direction_weight, "tasks that landed")}
   </div>`;
 }
 
@@ -245,8 +245,8 @@ function overviewView(s: Stats, ctx: Ctx): Html {
   return html`
     ${heroView(s, ctx)}
     <section class="duo">
-      ${promptsSummaryView(s.prompts, ctx.meta, ctx.promptsStill, ctx.when)}
       ${correctsSummaryView(s, ctx)}
+      ${promptsSummaryView(s.prompts, ctx.meta, ctx.promptsStill, ctx.when)}
     </section>
     ${statsView(s)}`;
 }

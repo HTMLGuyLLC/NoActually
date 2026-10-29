@@ -7,7 +7,7 @@ export type Tab = (typeof TABS)[number];
 export const isTab = (x: unknown): x is Tab => TABS.some((t) => t === x);
 
 /** The scorecard's sections, each its own sub-tab. */
-export const SCORE_VIEWS = ["overview", "prompts", "corrections", "hall"] as const;
+export const SCORE_VIEWS = ["overview", "corrections", "prompts", "hall"] as const;
 export type ScoreView = (typeof SCORE_VIEWS)[number];
 export const isScoreView = (x: unknown): x is ScoreView => SCORE_VIEWS.some((v) => v === x);
 

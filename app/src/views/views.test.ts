@@ -21,6 +21,10 @@ describe("scorecardView", () => {
       /data-id="overview" data-tip="Overview" aria-current="page"><svg class="tab-icon"[^>]*aria-hidden="true">.*?<\/svg><span class="tab-name">Overview<\/span><\/button>/,
     );
     expect(m).toContain('data-id="prompts" data-tip="Prompting"');
+    // Corrections come before prompting: in the tabs, the overview cards and the score's parts.
+    expect(m.indexOf('data-id="corrections"')).toBeLessThan(m.indexOf('data-id="prompts"'));
+    expect(m.indexOf("Do you correct it?")).toBeLessThan(m.indexOf("Do you make it guess?"));
+    expect(m.indexOf("Who corrects whom<small")).toBeLessThan(m.indexOf("Your prompts<small"));
     expect(m).toContain("Could ");
     expect(m).toContain("Do you make it guess?");
     expect(m).toContain("Do you correct it?");
