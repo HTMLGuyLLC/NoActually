@@ -11,6 +11,7 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 - **Learn** tab: 12 one-minute lessons in three tracks (the 5 habits, steer less, correct more), each with a before/after, a template and a quick quiz, plus a prompt checker that grades a draft as you type with the same rules as your score and saves nothing. The next lesson is picked from your prompts. A test grades every lesson example with the real rules and fails if the copy names a product, model or version.
 - **Do you correct it?** now has a one-word answer and tiers from judgment: Autopilot (Rarely.), Spot-checker 50+ (Sometimes.), Reviewer 75+ (Often.), Hawk-eyed 90+ (Religiously.), with **Share your corrections** on the Corrections page. The overview shares your score; Prompts and Corrections each share their own answer.
 - `noactually check "<prompt>"` grades a draft prompt from the command line.
+- The scorecard window opens as tall as your screen allows (940 wide, centered) the first time, then where you left it. If that no longer fits on a connected screen, it goes back to the best fit.
 - Settings: **Keep running in the menu bar**. Off makes it an ordinary app with no menu bar or tray icon that quits when its window closes.
 
 ### Changed
