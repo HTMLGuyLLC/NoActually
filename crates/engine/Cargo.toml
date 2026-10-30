@@ -19,9 +19,8 @@ name = "engine"
 [dependencies]
 regex.workspace = true
 serde.workspace = true
-
-[dev-dependencies]
 serde_json.workspace = true
+sha2.workspace = true
 
 [lints]
 workspace = true

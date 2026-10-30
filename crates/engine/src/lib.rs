@@ -6,20 +6,31 @@
 //! [`Tier`] and [`Answer`] turn a 28-day score, from tasks plus corrections, into the headline.
 //! [`read_prompt`] reads the same turn for how you prompt: a new task, steering, or neither, and a
 //! prompt's [`Signals`].
+//! Report cards: [`parse_card`] reads the record block a report card ends with, [`message_key`]
+//! names a message the way the store and the digest both do, and [`price`] turns tokens into dollars.
 //!
 //! Tests: each module keeps its unit tests inline in `mod tests`; the rule book's behavior
 //! suite lives in `src/tests.rs` because it exercises the whole crate.
 
 #![warn(missing_docs)]
 
+mod card;
+mod key;
 mod model;
+mod pricing;
 mod prompt;
 mod redact;
 mod rules;
 mod tier;
 
+pub use card::{
+    find_cards, habit_bit, has_card, parse_card, seal, strip_cards, Card, CardError, CardTask, LetterGrade, Waste,
+    CARD_FENCE, CARD_VERSION, CONTEXT_BIT, SHARES,
+};
+pub use key::{hmac_sha256, key_hash, message_key, short_id, SHORT_ID};
 pub use model::{normalize_model, Model};
-pub use prompt::{check, read_prompt, Check, Grade, Prompt, Signal, Signals, Steer};
+pub use pricing::{price, Price, Usage, PRICES_AS_OF};
+pub use prompt::{check, is_signoff, read_prompt, Check, Grade, Prompt, Signal, Signals, Steer};
 pub use redact::{redact, snippet, SNIPPET_CHARS};
 pub use tier::{
     Answer, CorrectionTier, PromptTier, Score, Tier, UnknownTier, Window, CORRECTION_PROOF, DIRECTION_WEIGHT,

@@ -31,10 +31,9 @@ use chrono::{DateTime, Duration, Local, NaiveDate, Utc};
 use engine::{classify, normalize_model, read_prompt, snippet, Label, Prompt};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use sources::{Kind, Source};
 use std::ffi::OsString;
-use std::fmt::{self, Write as _};
+use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -230,17 +229,7 @@ pub struct Store {
     conn: Connection,
 }
 
-pub(crate) fn hash(parts: &[&str]) -> String {
-    let mut h = Sha256::new();
-    for p in parts {
-        h.update(p.as_bytes());
-        h.update([0]);
-    }
-    h.finalize().iter().take(12).fold(String::with_capacity(24), |mut s, b| {
-        let _ = write!(s, "{b:02x}");
-        s
-    })
-}
+pub(crate) use engine::key_hash as hash;
 
 /// `finalized`: the pass that wrote this checkpoint already counted a trailing unanswered
 /// message, so an unchanged file needs no more reads even though its checkpoint is short of its end.
@@ -497,11 +486,7 @@ impl Store {
         let tx = self.conn.transaction()?;
         let (mut messages, mut corrections) = (0, 0);
         for st in scan.turns.iter().filter(|st| state.wants(st.ts)) {
-            let human_head = engine::head_chars(&st.turn.human, 200);
-            let key = match &st.key {
-                Some(k) => hash(&[source, k]),
-                None => hash(&[source, &st.session, &st.ts.to_rfc3339(), human_head]),
-            };
+            let key = engine::message_key(source, &st.session, st.key.as_deref(), &st.ts.to_rfc3339(), &st.turn.human);
             if tx.execute("INSERT OR IGNORE INTO seen (key, source) VALUES (?1, ?2)", params![key, source])? == 0 {
                 continue; // a copy we've already counted (resumed or forked session, re-import)
             }

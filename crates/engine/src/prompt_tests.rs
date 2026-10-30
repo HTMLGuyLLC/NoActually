@@ -331,3 +331,25 @@ fn a_vetoed_match_lets_a_later_one_count() {
     assert_eq!(signals("getting TypeError in getUser"), [Spot, Proof]);
     assert_eq!(signals("I don't know why. Don't touch the router though"), [Limits]);
 }
+
+#[test]
+fn a_sign_off_is_the_whole_message() {
+    for t in
+        ["thanks", "Thank you!", "perfect, thanks 🙏", "lgtm", "Looks good to me.", "that works, thx", "great work"]
+    {
+        assert!(is_signoff(t), "{t}");
+    }
+    // Answers mid-task, more work, or thanks with a new ask aren't sign-offs.
+    for t in [
+        "yes",
+        "ok",
+        "sure",
+        "commit it",
+        "thanks, now add tests",
+        "perfect, also fix the header",
+        "great question",
+        "",
+    ] {
+        assert!(!is_signoff(t), "{t}");
+    }
+}

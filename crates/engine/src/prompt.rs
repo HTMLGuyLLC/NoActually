@@ -330,6 +330,20 @@ static CHATTER: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     )]
 });
 
+/// One sign-off word or phrase.
+const SIGNOFF_WORD: &str = r"(?:thanks?(?: you)?(?: so much| a lot)?|thx|ty|perfect|great|awesome|looks good(?: to me)?|lgtm|that works|works now|nice work|great work|great job)";
+
+/// A whole message that closes a task: "thanks", "perfect, thank you!", "lgtm". Not "yes", "ok" or
+/// "sure", which usually answer the AI mid-task, and not "commit it", which is more work. Report
+/// cards use it to spot the end of a task; scoring never does, so it needs no rules rebuild.
+static SIGNOFF: LazyLock<Vec<Rule>> =
+    LazyLock::new(|| vec![rule("signoff", &format!(r"^\W*{SIGNOFF_WORD}(?:\W+{SIGNOFF_WORD})*\W*$"))]);
+
+/// True when `text` is only a sign-off.
+pub fn is_signoff(text: &str) -> bool {
+    first(&SIGNOFF, normalize_quotes(text.trim()).as_str()).is_some()
+}
+
 static QUESTION: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![rule_unless(
         "chat.question",
