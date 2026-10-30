@@ -93,6 +93,15 @@ const EXAMPLES: &[(&str, &[Signal])] = &[
     ("check the output, it's off by one", &[Proof]),
     // Finish line.
     ("the button should redirect to the dashboard", &[Done]),
+    ("You should fix it.", &[]),
+    ("you must probably look into the crash", &[]),
+    ("it needs to be debugged, you have to investigate", &[]),
+    ("it should handle empty input", &[Done]),
+    ("the total should update when the cart changes", &[Done]),
+    (
+        "Something here is not right. You should fix it. Don't forget the monkey. Also, I think we need this because it's red. Look at the logs for reference.",
+        &[Proof, Limits, Why],
+    ),
     ("add a unit test for the parser", &[Done]),
     ("make sure the tests pass", &[Done]),
     ("return the results as a table", &[Done]),

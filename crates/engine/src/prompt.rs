@@ -490,8 +490,9 @@ static DONE: LazyLock<Vec<Rule>> = LazyLock::new(|| {
             "prompt.done.should",
             r"\b(?:should|must|needs? to|has to)\b",
             // "should I…?" asks; "should be fine" shrugs. Neither gives a finish line.
-            // "has to do with" and "needs to be fixed" say nothing about the result either.
-            r"(?:should|must|needs? to|has to)\s+(?:i|we|you)\b|(?:should|must)\s+(?:probably\s+)?be\s+(?:fine|ok|okay|good|easy|simple)\b|has to do with\b|needs? to be (?:fixed|done|changed|updated|looked at|addressed|sorted|handled)\b",
+            // "has to do with" and "needs to be fixed" say nothing about the result either, and
+            // "you should fix it" names the job, not what done looks like.
+            r"(?:should|must|needs? to|has to)\s+(?:i|we|you)\b|(?:should|must|needs? to|has to)\s+(?:(?:probably|just|also|really|maybe)\s+)?(?:fix|solve|sort|look|figure|work on|deal|address|take care|investigate|debug|try|improve|clean|make it work|get it working)\b|(?:should|must)\s+(?:probably\s+)?be\s+(?:fine|ok|okay|good|easy|simple)\b|has to do with\b|needs? to be (?:fixed|done|changed|updated|looked at|addressed|sorted|handled|solved|debugged|investigated|improved|cleaned up)\b",
         ),
         rule(
             "prompt.done.criteria",
