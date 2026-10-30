@@ -4,6 +4,8 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-29
+
 ### Added
 
 - **Could AI replace you?** is now an overall score from 0 to 100 over the last 28 days: 70% how often your prompts are clear the first time, 30% judgment (how rarely the AI has to correct you, per task, once you've corrected it 3 times). Tiers: Rubber stamp, Coworker 65+, Sharp-eyed 80+, Irreplaceable 90+. Correcting fewer mistakes because you prompted well never costs points. Overall and prompt tiers are announced once, the first time you reach each one.
@@ -145,7 +147,8 @@ First release.
 - Per-source consent: nothing is read until you allow it, and Forget deletes a source's data
 - `noactually` command-line tool (`sources`, `allow`, `sync`, `stats`)
 
-[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.1.0...v0.2.0
