@@ -56,6 +56,22 @@ esac
 exit 0
 "#;
 
+/// Writes a pretend program and gives back the file to run. A shell script can't be started on Windows,
+/// so there it's run through a `.cmd` beside it, by the `sh` that comes with Git.
+fn script(file: &Path, text: &str) -> PathBuf {
+    fs::write(file, text).unwrap();
+    #[cfg(unix)]
+    fs::set_permissions(file, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    if cfg!(windows) {
+        let cmd = file.with_extension("cmd");
+        let run =
+            "@set \"me=%~dpn0\"\r\n@\"%ProgramFiles%\\Git\\bin\\sh.exe\" \"%me:\\=/%\" %*\r\n@exit /b %errorlevel%\r\n";
+        fs::write(&cmd, run).unwrap();
+        return cmd;
+    }
+    file.to_path_buf()
+}
+
 struct Lab {
     dir: TempDir,
     env: Env,
@@ -79,11 +95,7 @@ impl Lab {
         let mut lab = Lab::new();
         let bin = lab.bin();
         fs::create_dir_all(&bin).unwrap();
-        let claude = bin.join("claude");
-        fs::write(&claude, FAKE_CLAUDE).unwrap();
-        #[cfg(unix)]
-        fs::set_permissions(&claude, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
-        lab.env.claude = Some(claude);
+        lab.env.claude = Some(script(&bin.join("claude"), FAKE_CLAUDE));
         lab.fake("plugins.json", "[]");
         lab.fake("marketplaces.json", "[]");
         lab
@@ -147,11 +159,7 @@ impl Lab {
 
     /// Gives the lab the pretend `git`.
     fn add_git(&mut self) {
-        let git = self.bin().join("git");
-        fs::write(&git, FAKE_GIT).unwrap();
-        #[cfg(unix)]
-        fs::set_permissions(&git, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
-        self.env.git = Some(git);
+        self.env.git = Some(script(&self.bin().join("git"), FAKE_GIT));
     }
 
     /// What `git` was asked, one line per call, in order.
@@ -181,7 +189,7 @@ impl Lab {
             let mut entries: Vec<_> = fs::read_dir(dir).unwrap().flatten().collect();
             entries.sort_by_key(fs::DirEntry::file_name);
             for e in entries {
-                let rel = e.path().strip_prefix(base).unwrap().to_string_lossy().into_owned();
+                let rel = e.path().strip_prefix(base).unwrap().to_string_lossy().replace('\\', "/");
                 if e.path().is_dir() {
                     out.push(format!("{rel}/"));
                     walk(&e.path(), base, out);
@@ -386,12 +394,9 @@ fn the_plugin_list_parser_skips_what_it_cant_read() {
 #[test]
 fn a_claude_that_hangs_is_stopped() {
     let dir = tempfile::tempdir().unwrap();
-    let script = dir.path().join("slow");
-    fs::write(&script, "#!/bin/sh\nexec sleep 30\n").unwrap();
-    #[cfg(unix)]
-    fs::set_permissions(&script, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let slow = script(&dir.path().join("slow"), "#!/bin/sh\nexec sleep 30\n");
     let started = Instant::now();
-    let ran = run(&script, &[], Duration::from_millis(200)).unwrap();
+    let ran = run(&slow, &[], Duration::from_millis(200)).unwrap();
     assert!(ran.timed_out && !ran.ok);
     assert!(started.elapsed() < Duration::from_secs(5));
 }

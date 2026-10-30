@@ -63,7 +63,7 @@ pub(super) fn version_manager_dirs(home: &Path) -> Vec<PathBuf> {
 /// version first. Opening the desktop app once is what puts it there.
 /// True for a folder [`desktop_app_dirs`] returns: the Claude desktop app's own Claude Code.
 pub(super) fn is_desktop_app_dir(dir: &Path) -> bool {
-    dir.to_string_lossy().contains("/Application Support/Claude/claude-code/")
+    dir.to_string_lossy().replace('\\', "/").contains("/Application Support/Claude/claude-code/")
 }
 
 pub(super) fn desktop_app_dirs(home: &Path) -> Vec<PathBuf> {
@@ -160,8 +160,10 @@ mod tests {
         for v in ["v20.0.0", "v21.5.0"] {
             fs::create_dir_all(h.join(".local/share/fnm/node-versions").join(v).join("installation/bin")).unwrap();
         }
-        let dirs: Vec<String> =
-            version_manager_dirs(h).iter().map(|d| d.strip_prefix(h).unwrap().to_string_lossy().into_owned()).collect();
+        let dirs: Vec<String> = version_manager_dirs(h)
+            .iter()
+            .map(|d| d.strip_prefix(h).unwrap().to_string_lossy().replace('\\', "/"))
+            .collect();
         assert_eq!(
             dirs,
             [

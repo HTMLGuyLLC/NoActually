@@ -122,6 +122,8 @@ mod tests {
         assert_eq!(without_verbatim_prefix("/usr/bin/app"), "/usr/bin/app");
     }
 
+    // AppImages are Linux only, and these paths aren't full paths on Windows.
+    #[cfg(unix)]
     #[test]
     fn an_appimage_records_its_own_file_not_the_mount_it_runs_from() {
         let dir = tempfile::tempdir().unwrap();
