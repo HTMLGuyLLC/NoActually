@@ -2,10 +2,12 @@
 //! bests, and what works for you. Read side, plus the goal you set and the weeks it already
 //! closed (frozen, so a later rebuild or import can't take back a week you earned).
 
+use crate::cards::{current, gradable_ids, local_day, Current};
 use crate::stats::{monday_of, steer_totals, tally, task_groups, tip_for, View, CONTINUED, CORRECTION_KINDS, LANDED};
+use crate::tips::{self, TipTrend, TipWeek, TopTip};
 use crate::{Error, Filter, Result, Store, Tip};
 use chrono::{Duration, NaiveDate};
-use engine::{Grade, Signal, Signals, Steer, Tier, MIN_PROMPTS};
+use engine::{habit_bits, Grade, LetterGrade, Signal, Signals, Steer, Tier, MIN_PROMPTS};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -13,6 +15,15 @@ use std::collections::BTreeMap;
 /// Prompts (or, for a steering goal, continued tasks) a week needs before it counts: for a chart
 /// point, a goal week or a personal best. Fewer and one task swings it to 0% or 100%.
 pub const MIN_WEEK: i64 = 5;
+/// Graded tasks a week needs to be a solid point on the report card charts (quieter weeks are
+/// hollow dots).
+pub const MIN_CARD_WEEK: i64 = 3;
+/// Graded tasks a week needs to be a personal best, or a straight-A's week.
+pub const MIN_CARD_BEST: i64 = 5;
+/// Graded tasks on each side of the improvement comparison: it needs twice this many.
+pub const MIN_CARD_HALF: i64 = 20;
+/// How many of the latest report cards a recent list shows (Improve, `stats --report-cards`).
+pub const RECENT_REPORT_CARDS: usize = 5;
 /// Weeks a habit or steering goal has to be met to be done.
 pub const GOAL_WEEKS: i64 = 4;
 /// Weeks of history a suggested goal's baseline looks at.
@@ -40,7 +51,7 @@ const LESSON_ID_MAX: usize = 48;
 const LESSONS_MAX: usize = 200;
 
 /// One week of history.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct HistoryWeek {
     /// The week's Monday.
     pub week: NaiveDate,
@@ -64,6 +75,128 @@ pub struct HistoryWeek {
     pub steering: BTreeMap<String, i64>,
     /// Tasks steered at least once, per cause id.
     pub steered: BTreeMap<String, i64>,
+    /// The week's report cards (current ones only).
+    pub report_cards: ReportCardWeek,
+    /// The week's tips.
+    pub tips: TipWeek,
+}
+
+/// One week of report cards, from the cards that still count (a newer card for the same task
+/// replaces them). Also a whole range of weeks, added up by [`Store::report_card_totals`].
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+pub struct ReportCardWeek {
+    /// Tasks with a report card that week.
+    pub graded: i64,
+    /// Graded tasks per grade, "A" to "F" (all five keys once any task is graded).
+    pub grades: BTreeMap<String, i64>,
+    /// Avoidable rounds, summed.
+    pub avoidable: i64,
+    /// Tokens redone because of avoidable rounds: new input, cache writes and output.
+    pub extra_tokens: u64,
+    /// What that work cost at list prices, in US dollars, from the fully priced tasks only (a task
+    /// that used any model with no price is left out of it). `None` when no graded task is fully priced.
+    pub extra_cost: Option<f64>,
+    /// Of `graded`, the tasks every model of which has a price: the ones `extra_cost` counts. A cost
+    /// per task divides by this, not by `graded`.
+    pub priced: i64,
+    /// Minutes of that work.
+    pub extra_minutes: i64,
+    /// Graded tasks that missed each habit, by name: target, evidence, finish, guardrails, purpose,
+    /// context (all six keys once any task is graded).
+    pub missing: BTreeMap<String, i64>,
+    /// Tasks started that week in the sources that can have a card (`Source::gradable`).
+    pub gradable_tasks: i64,
+}
+
+impl ReportCardWeek {
+    /// A week with no cards yet, with all five grades and all six habits present at zero, so the
+    /// shape is the same however few tasks were graded.
+    pub fn with_keys() -> ReportCardWeek {
+        ReportCardWeek {
+            grades: LetterGrade::ALL.iter().map(|g| (g.as_str().to_string(), 0)).collect(),
+            missing: habit_bits().iter().map(|(name, _)| ((*name).to_string(), 0)).collect(),
+            ..ReportCardWeek::default()
+        }
+    }
+
+    /// Graded tasks that got `grade`.
+    pub fn count(&self, grade: LetterGrade) -> i64 {
+        self.grades.get(grade.as_str()).copied().unwrap_or(0)
+    }
+
+    /// Percent of the graded tasks that got an A or a B, rounded down. `None` when none are graded.
+    pub fn ab_pct(&self) -> Option<i64> {
+        (self.graded > 0).then(|| {
+            let good: i64 = LetterGrade::ALL.iter().filter(|g| g.is_ab()).map(|g| self.count(*g)).sum();
+            floor_pct(good, self.graded)
+        })
+    }
+
+    /// Adds `other`'s numbers to these. The cost stays unknown only while neither has a price.
+    fn add(&mut self, other: &ReportCardWeek) {
+        self.graded += other.graded;
+        self.avoidable += other.avoidable;
+        self.extra_tokens += other.extra_tokens;
+        self.extra_cost = match (self.extra_cost, other.extra_cost) {
+            (None, None) => None,
+            (a, b) => Some(a.unwrap_or(0.0) + b.unwrap_or(0.0)),
+        };
+        self.priced += other.priced;
+        self.extra_minutes += other.extra_minutes;
+        self.gradable_tasks += other.gradable_tasks;
+        for (k, n) in &other.grades {
+            *self.grades.entry(k.clone()).or_insert(0) += n;
+        }
+        for (k, n) in &other.missing {
+            *self.missing.entry(k.clone()).or_insert(0) += n;
+        }
+    }
+}
+
+/// One of the latest report cards, a line in the recent list. Numbers only.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct RecentReportCard {
+    /// The day the task started.
+    pub day: String,
+    /// The day the card was written, in the local time zone: when it is "from". Settings shows the
+    /// last card by this day.
+    pub graded_day: NaiveDate,
+    /// Source id.
+    pub source: String,
+    /// "A" to "F".
+    pub grade: String,
+    /// The first habit this card says the task missed, in the order the card lists them (target,
+    /// evidence, finish line, guardrails, purpose, context). `None` when it missed none.
+    pub missing: Option<String>,
+    /// What the redone work cost at list prices, in US dollars; `None` for a model with no price.
+    pub extra_cost: Option<f64>,
+    /// Tokens redone: new input, cache writes and output.
+    pub extra_tokens: u64,
+    /// Minutes of work redone. Every card has this, priced or not.
+    pub extra_minutes: i64,
+}
+
+/// A habit that went from missed to met more often.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HabitDrop {
+    /// The habit's name.
+    pub habit: String,
+    /// Tasks of the first [`MIN_CARD_HALF`] that missed it.
+    pub first: i64,
+    /// Tasks of the last [`MIN_CARD_HALF`] that missed it.
+    pub last: i64,
+}
+
+/// "Am I getting better?" across all report cards under the current model filter: your first
+/// [`MIN_CARD_HALF`] graded tasks against your latest.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CardTrend {
+    /// Percent of the first tasks that got an A or B.
+    pub first_ab: i64,
+    /// Percent of the latest tasks that got an A or B.
+    pub last_ab: i64,
+    /// The habit that dropped most between them. `None` when none dropped.
+    pub habit: Option<HabitDrop>,
 }
 
 /// What a goal asks for.
@@ -210,6 +343,8 @@ pub struct Bests {
     pub sharp: Option<(i64, NaiveDate)>,
     /// Longest run of goal weeks met.
     pub goal_streak: i64,
+    /// Best share of graded tasks that got an A or B in a week with enough of them.
+    pub report_card: Option<(i64, NaiveDate)>,
 }
 
 /// One model's landed rate, for comparing.
@@ -232,6 +367,12 @@ pub struct Insights {
     pub steer: Option<(Steer, i64)>,
     /// The best and worst landing models, when they differ enough.
     pub models: Vec<ModelLanded>,
+    /// How your report cards moved, over all your history.
+    pub report_cards: Option<CardTrend>,
+    /// The tip you get most, from your latest ones.
+    pub top_tip: Option<TopTip>,
+    /// How many tasks needed a tip, last full week against the week before.
+    pub tip_trend: Option<TipTrend>,
 }
 
 /// Everything the Improve tab shows.
@@ -325,6 +466,12 @@ fn history(v: &View, today: NaiveDate) -> Result<Vec<HistoryWeek>> {
         w.corrections += corrections;
         w.humbled += humbled;
     }
+    for (week, report_cards) in card_weeks(v)? {
+        weeks.entry(week).or_insert_with(|| HistoryWeek { week, ..HistoryWeek::default() }).report_cards = report_cards;
+    }
+    for (week, tips) in tips::weeks(v)? {
+        weeks.entry(week).or_insert_with(|| HistoryWeek { week, ..HistoryWeek::default() }).tips = tips;
+    }
     let this_week = monday_of(today);
     // A clock set wrong once can write future days: they'd stretch the chart, so they're dropped.
     weeks.retain(|w, _| *w <= this_week);
@@ -336,6 +483,77 @@ fn history(v: &View, today: NaiveDate) -> Result<Vec<HistoryWeek>> {
         w += Duration::days(7);
     }
     Ok(out)
+}
+
+/// Report cards per week from the cards that still count, plus the tasks that could have one.
+pub(crate) fn card_weeks(v: &View) -> Result<BTreeMap<NaiveDate, ReportCardWeek>> {
+    let mut weeks: BTreeMap<NaiveDate, ReportCardWeek> = BTreeMap::new();
+    let habits = habit_bits();
+    // In a fixed order, so the cost adds up the same way every time.
+    for c in current(v, "ORDER BY start_ts, key")? {
+        let Ok(day) = c.day.parse::<NaiveDate>() else { continue };
+        let w = weeks.entry(monday_of(day)).or_insert_with(ReportCardWeek::with_keys);
+        w.graded += 1;
+        *w.grades.entry(c.grade.as_str().to_string()).or_insert(0) += 1;
+        w.avoidable += c.avoidable;
+        w.extra_tokens += c.shown_tokens();
+        if let Some(cost) = c.cost() {
+            *w.extra_cost.get_or_insert(0.0) += cost;
+            w.priced += 1;
+        }
+        w.extra_minutes += c.minutes;
+        for (name, bit) in habits {
+            if c.missing & bit != 0 {
+                *w.missing.entry(name.to_string()).or_insert(0) += 1;
+            }
+        }
+    }
+    let sources: Vec<String> = gradable_ids().iter().map(|s| format!("'{s}'")).collect();
+    let sql =
+        format!("SELECT day, COUNT(*) FROM tasks WHERE source IN ({}) {} GROUP BY day", sources.join(","), v.clause);
+    for (day, n) in v.rows(&sql, &[], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))? {
+        if let Ok(day) = day.parse::<NaiveDate>() {
+            weeks.entry(monday_of(day)).or_default().gradable_tasks += n; // no keys until a task is graded
+        }
+    }
+    Ok(weeks)
+}
+
+/// Graded tasks that got an A or B, as a rounded-down percent of `rows`.
+fn ab_pct(rows: &[&Current]) -> i64 {
+    let good = rows.iter().filter(|c| c.grade.is_ab()).count();
+    floor_pct(good as i64, rows.len() as i64)
+}
+
+/// Your first and latest [`MIN_CARD_HALF`] graded tasks, compared, once there are twice as many as
+/// it takes to fill both halves.
+fn card_trend(v: &View) -> Result<Option<CardTrend>> {
+    let rows = current(v, "ORDER BY start_ts, key")?;
+    let rows: Vec<&Current> = rows.iter().collect();
+    let half = MIN_CARD_HALF as usize;
+    if rows.len() < 2 * half {
+        return Ok(None);
+    }
+    let (first, last) = (&rows[..half], &rows[rows.len() - half..]);
+    let missed = |part: &[&Current], bit: u8| part.iter().filter(|c| c.missing & bit != 0).count() as i64;
+    let habit = habit_bits()
+        .into_iter()
+        .map(|(name, bit)| HabitDrop { habit: name.to_string(), first: missed(first, bit), last: missed(last, bit) })
+        .filter(|h| h.first > h.last)
+        // Reversed, because the last of equal drops wins and the habit on the card first should.
+        .rev()
+        .max_by_key(|h| h.first - h.last);
+    Ok(Some(CardTrend { first_ab: ab_pct(first), last_ab: ab_pct(last), habit }))
+}
+
+/// Best share of graded tasks with an A or B in a week with [`MIN_CARD_BEST`] of them. Ties: the
+/// most recent, like the other bests.
+fn card_best(weeks: &[HistoryWeek]) -> Best {
+    weeks
+        .iter()
+        .filter(|w| w.report_cards.graded >= MIN_CARD_BEST)
+        .filter_map(|w| Some((w.report_cards.ab_pct()?, w.week)))
+        .max_by_key(|(p, d)| (*p, *d))
 }
 
 /// How a habit or steering goal did in `w`: (count, value).
@@ -516,7 +734,9 @@ fn bests(weeks: &[HistoryWeek]) -> (Best, Best) {
     (landed, sharp)
 }
 
-fn insights(v: &View) -> Result<Insights> {
+/// `cards` is the same filter without the range: the improvement headline and the tips cover all
+/// your history.
+fn insights(v: &View, cards: &View, today: NaiveDate) -> Result<Insights> {
     let groups = task_groups(v)?;
     let signals =
         Signal::ALL.into_iter().map(|s| tip_for(&groups, s)).filter(|t| t.landed_with_without.is_some()).collect();
@@ -545,7 +765,14 @@ fn insights(v: &View) -> Result<Insights> {
         }
         _ => vec![],
     };
-    Ok(Insights { signals, steer, models })
+    Ok(Insights {
+        signals,
+        steer,
+        models,
+        report_cards: card_trend(cards)?,
+        top_tip: tips::top_tip(cards)?,
+        tip_trend: tips::trend(cards, today)?,
+    })
 }
 
 fn valid_lesson_id(id: &str) -> bool {
@@ -702,6 +929,8 @@ impl Store {
         let v = View { conn: self.conn(), clause, args };
         let weeks = history(&v, today)?;
         let all = View::all(self.conn());
+        let (clause, args) = Filter { since: None, ..f.clone() }.sql();
+        let whole = View { conn: self.conn(), clause, args };
         let all_weeks = if *f == Filter::default() { weeks.clone() } else { history(&all, today)? };
         let overall = self.overall(today)?;
         let goal = self.goal()?.map(|g| self.goal_status(g, today, overall.score)).transpose()?;
@@ -721,10 +950,57 @@ impl Store {
             options: options(&all_weeks, today, overall.tier),
             goal,
             trophies: self.trophies()?,
-            bests: Bests { landed, sharp, goal_streak },
-            insights: insights(&v)?,
+            bests: Bests { landed, sharp, goal_streak, report_card: card_best(&all_weeks) },
+            insights: insights(&v, &whole, today)?,
             weeks,
         })
+    }
+
+    /// Every report card that still counts under `f` (its models and `since`), added up.
+    pub fn report_card_totals(&self, f: &Filter) -> Result<ReportCardWeek> {
+        let (clause, args) = f.sql();
+        let mut total = ReportCardWeek::default();
+        for week in card_weeks(&View { conn: self.conn(), clause, args })?.values() {
+            total.add(week);
+        }
+        Ok(total)
+    }
+
+    /// The `n` latest report cards that still count under `f`, newest first.
+    pub fn recent_report_cards(&self, f: &Filter, n: usize) -> Result<Vec<RecentReportCard>> {
+        let (clause, args) = f.sql();
+        let v = View { conn: self.conn(), clause, args };
+        let rows = current(&v, &format!("ORDER BY graded_at DESC, start_ts DESC, key DESC LIMIT {n}"))?;
+        let habits = habit_bits();
+        Ok(rows
+            .iter()
+            .filter_map(|c| {
+                Some(RecentReportCard {
+                    day: c.day.clone(),
+                    graded_day: local_day(&c.graded_at)?,
+                    source: c.source.clone(),
+                    grade: c.grade.as_str().to_string(),
+                    missing: habits.iter().find(|(_, bit)| c.missing & bit != 0).map(|(name, _)| name.to_string()),
+                    extra_cost: c.cost(),
+                    extra_tokens: c.shown_tokens(),
+                    extra_minutes: c.minutes,
+                })
+            })
+            .collect())
+    }
+
+    /// When each source last had a report card written, as the local day, by source id. Sources with
+    /// no card aren't listed. Whatever the model filter, and counting every card kept, replaced or not.
+    pub fn last_report_card_days(&self) -> Result<Vec<(String, NaiveDate)>> {
+        let mut stmt =
+            self.conn().prepare("SELECT source, MAX(graded_at) FROM report_cards GROUP BY source ORDER BY source")?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (source, last) = row?;
+            out.extend(local_day(&last).map(|day| (source, day)));
+        }
+        Ok(out)
     }
 
     /// Lessons marked done.
@@ -756,6 +1032,34 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_keyed_card_week_has_every_grade_and_habit_at_zero() {
+        let w = ReportCardWeek::with_keys();
+        let grades: Vec<_> = w.grades.iter().map(|(g, n)| (g.as_str(), *n)).collect();
+        assert_eq!(grades, [("A", 0), ("B", 0), ("C", 0), ("D", 0), ("F", 0)]);
+        let habits: Vec<_> = w.missing.keys().map(String::as_str).collect();
+        assert_eq!(habits, ["context", "evidence", "finish", "guardrails", "purpose", "target"]);
+        assert!(w.missing.values().all(|n| *n == 0));
+        assert!(ReportCardWeek::default().grades.is_empty(), "the plain default has no keys");
+    }
+
+    #[test]
+    fn the_share_of_a_and_b_is_rounded_down_and_unknown_when_nothing_is_graded() {
+        assert_eq!(ReportCardWeek::with_keys().ab_pct(), None);
+        let week = |a, b, c| {
+            let mut w = ReportCardWeek::with_keys();
+            w.grades.extend([("A", a), ("B", b), ("C", c)].map(|(g, n)| (g.to_string(), n)));
+            w.graded = a + b + c;
+            w
+        };
+        assert_eq!(week(1, 1, 1).ab_pct(), Some(66), "two of three, rounded down");
+        assert_eq!(week(0, 0, 4).ab_pct(), Some(0));
+        assert_eq!(week(3, 2, 0).ab_pct(), Some(100));
+        assert_eq!(week(2, 1, 0).count(LetterGrade::B), 1);
+        assert_eq!(week(2, 1, 0).count(LetterGrade::F), 0);
+        assert_eq!(ReportCardWeek::default().count(LetterGrade::A), 0, "a missing key is zero");
+    }
 
     fn d(s: &str) -> NaiveDate {
         s.parse().unwrap()
@@ -1041,6 +1345,36 @@ mod tests {
             assert!(s.set_learned(bad, true).is_err(), "{bad}");
         }
         assert_eq!(s.learned().unwrap(), ["say-why"]);
+    }
+
+    #[test]
+    fn the_tip_trend_compares_the_last_two_full_weeks_when_both_have_enough_tasks() {
+        let s = Store::open_in_memory().unwrap();
+        s.conn()
+            .execute("INSERT INTO tip_chats (session, source, day) VALUES ('s','claude-code','2026-10-01')", [])
+            .unwrap();
+        let tip = |n: usize, day: &str| {
+            for i in 0..n {
+                s.conn()
+                    .execute(
+                        "INSERT INTO tips (key, source, session, day, ts, provider, family, version, habit, redid)
+                         VALUES (?1,'claude-code','s',?2,?2,'Anthropic','Claude Opus','5.5',1,50)",
+                        params![format!("{day}-{i}"), day],
+                    )
+                    .unwrap();
+            }
+        };
+        let trend = |today: &str| s.progress(&Filter::default(), d(today)).unwrap().insights.tip_trend;
+        tasks(&s, "2026-10-06", 12, 0, 1, 0);
+        tasks(&s, "2026-10-13", 9, 0, 1, 0);
+        tip(3, "2026-10-06");
+        assert_eq!(trend("2026-10-21"), None, "the last full week has too few tasks");
+        tasks(&s, "2026-10-13", 1, 0, 1, 0);
+        tip(14, "2026-10-13");
+        let shown = trend("2026-10-21").unwrap();
+        assert_eq!(shown.before, TipWeek { tips: 3, tasks: 12 });
+        assert_eq!(shown.latest, TipWeek { tips: 10, tasks: 10 }, "never more tips than tasks");
+        assert_eq!(trend("2026-10-14"), None, "this week is still under way");
     }
 
     #[test]

@@ -15,7 +15,7 @@ pub(crate) fn scan_export(
     let bytes = std::fs::read(path).map_err(Error::io(path))?;
     let convs: Vec<Value> =
         serde_json::from_slice(&bytes).map_err(|source| Error::Json { path: path.to_path_buf(), source })?;
-    let mut scan = FileScan { turns: Vec::new(), checkpoint: bytes.len() as u64, cards: Vec::new() };
+    let mut scan = FileScan { checkpoint: bytes.len() as u64, ..FileScan::default() };
     for c in &convs {
         let one = pair(source, session(c), events(c), 0, true);
         scan.turns.extend(one.turns);

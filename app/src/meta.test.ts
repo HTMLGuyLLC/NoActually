@@ -3,6 +3,7 @@ import {
   categoryTitle,
   floorPercent,
   gradeTitle,
+  habitTitle,
   hasSignal,
   landedPct,
   percent,
@@ -82,6 +83,12 @@ describe("lookups", () => {
     expect(tierOf(meta, "legend")).toBeUndefined();
     expect(signalTitle(meta, "why")).toBe("Purpose");
     expect(signalTitle(meta, "unknown")).toBe("unknown");
+  });
+
+  it("gives a habit a report card names its title, with Context among them", () => {
+    expect(habitTitle(meta, "finish")).toBe("Finish line");
+    expect(habitTitle(meta, "context")).toBe("Context");
+    expect(habitTitle(meta, "new_habit")).toBe("new_habit");
   });
 });
 

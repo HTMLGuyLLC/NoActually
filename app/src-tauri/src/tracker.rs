@@ -110,6 +110,9 @@ fn update_tray(handle: &AppHandle, app: &App) {
     }
 }
 
+/// What the window shows when a pass panics. The panic itself goes to the log.
+const PANIC_MESSAGE: &str = "Couldn't finish checking your chats. It will try again.";
+
 pub fn spawn(handle: AppHandle, app: Arc<App>, tx: mpsc::Sender<Msg>, rx: mpsc::Receiver<Msg>) {
     std::thread::Builder::new()
         .name("tracker".into())
@@ -119,7 +122,12 @@ pub fn spawn(handle: AppHandle, app: Arc<App>, tx: mpsc::Sender<Msg>, rx: mpsc::
             let guarded = |quiet: bool| {
                 if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sync_once(&handle, &app, quiet))).is_err() {
                     log::error!("sync pass panicked; will retry on the next change or timer");
-                    lock(&app.status).syncing = false;
+                    {
+                        let mut status = lock(&app.status);
+                        status.syncing = false;
+                        status.last_error = Some(PANIC_MESSAGE.to_string());
+                    }
+                    let _ = handle.emit("sync-failed", PANIC_MESSAGE);
                 }
             };
             guarded(false); // catch up on anything written while the app was closed

@@ -10,8 +10,8 @@ use chrono::{Local, NaiveDate};
 use serde::Serialize;
 use sources::{Kind, Source};
 use std::sync::Arc;
-use store::{Filter, Goal, GoalKind, Meta, Progress, Retention, SourceState, Stats};
-use tauri::{AppHandle, Emitter, State};
+use store::{Filter, Goal, GoalKind, Meta, Progress, RecentReportCard, Retention, SourceState, Stats};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_dialog::{DialogExt, FileDialogBuilder, FilePath};
 use tauri_plugin_notification::{NotificationExt, PermissionState};
@@ -60,6 +60,12 @@ pub fn stats(app: State<Arc<App>>, filter: Filter) -> Res<Stats> {
 #[tauri::command(async)]
 pub fn progress(app: State<Arc<App>>, filter: Filter) -> Res<Progress> {
     lock(&app.reader).progress(&filter, Local::now().date_naive()).map_err(err)
+}
+
+/// The latest report cards under the model filter, newest first, for Improve's recent list.
+#[tauri::command(async)]
+pub fn recent_report_cards(app: State<Arc<App>>, filter: Filter) -> Res<Vec<RecentReportCard>> {
+    lock(&app.reader).recent_report_cards(&filter, store::RECENT_REPORT_CARDS).map_err(err)
 }
 
 #[tauri::command(async)]
@@ -328,6 +334,31 @@ pub fn open_share(handle: AppHandle, url: String) -> Res<()> {
     handle.opener().open_url(url, None::<&str>).map_err(err)
 }
 
+/// Longest window error kept in the log, so one runaway message can't fill it.
+const LOG_MESSAGE_MAX_CHARS: usize = 2000;
+
+/// The first [`LOG_MESSAGE_MAX_CHARS`] characters of `message`.
+fn cap_log_message(message: &str) -> String {
+    message.chars().take(LOG_MESSAGE_MAX_CHARS).collect()
+}
+
+/// Records an error from a window in the app log, where a release build would otherwise lose it.
+#[tauri::command]
+pub fn log_error(message: String) {
+    log::error!("window: {}", cap_log_message(&message));
+}
+
+/// Opens the folder the app log lives in, so someone can attach it to a bug report.
+#[tauri::command]
+pub fn open_log_folder(window: tauri::Window, handle: AppHandle) -> Res<()> {
+    if window.label() != "main" {
+        return Err("That can only be done from the main window.".into());
+    }
+    let dir = handle.path().app_log_dir().map_err(err)?;
+    std::fs::create_dir_all(&dir).map_err(err)?;
+    handle.opener().open_path(dir.to_string_lossy(), None::<&str>).map_err(err)
+}
+
 #[tauri::command]
 pub fn update_status(app: State<Arc<App>>, updates: State<Updates>) -> UpdateStatus {
     updates.status(&app)
@@ -372,6 +403,13 @@ mod tests {
         let huge = "é".repeat(CHECK_MAX_BYTES); // two bytes each: the cut lands mid-character
         assert_eq!(check_prompt(huge).grade, engine::Grade::Thin);
         assert_eq!(check_prompt("Fix `a.ts`. Done when tests pass. Don't touch b.".into()).grade, engine::Grade::Sharp);
+    }
+
+    #[test]
+    fn window_errors_are_capped_in_the_log() {
+        assert_eq!(cap_log_message("short"), "short");
+        let long = "é".repeat(LOG_MESSAGE_MAX_CHARS + 50);
+        assert_eq!(cap_log_message(&long).chars().count(), LOG_MESSAGE_MAX_CHARS);
     }
 
     #[test]
@@ -424,8 +462,52 @@ mod tests {
         let week = serde_json::to_value(store::HistoryWeek::default()).unwrap();
         for w in demo["progress"]["weeks"].as_array().unwrap() {
             assert_eq!(keys(w), keys(&week), "a demo.json `progress.weeks` row has different keys");
+            assert_eq!(
+                keys(&w["report_cards"]),
+                keys(&week["report_cards"]),
+                "a demo.json week's `report_cards` differ"
+            );
         }
         assert!(demo["progress"]["goal"].is_object(), "the demo shows a goal under way");
+        assert_eq!(keys(&demo["progress"]["bests"]), keys(&progress["bests"]), "demo.json `bests` keys differ");
+        assert_eq!(
+            keys(&demo["progress"]["insights"]),
+            keys(&progress["insights"]),
+            "demo.json `insights` keys differ"
+        );
+        // The report card pieces show in the demo: some weeks graded (one unpriced), the best week, the trend and the recent list.
+        let cards: Vec<_> = demo["progress"]["weeks"].as_array().unwrap().iter().map(|w| &w["report_cards"]).collect();
+        assert!(cards.iter().any(|c| c["graded"].as_i64() > Some(0)), "the demo has report cards");
+        assert!(
+            cards.iter().any(|c| c["graded"].as_i64() > Some(0) && c["extra_cost"].is_null()),
+            "and an unpriced week"
+        );
+        assert!(demo["progress"]["bests"]["report_card"].is_array(), "the demo shows a best report card week");
+        let trend = serde_json::to_value(store::CardTrend {
+            first_ab: 0,
+            last_ab: 0,
+            habit: Some(store::HabitDrop { habit: String::new(), first: 0, last: 0 }),
+        })
+        .unwrap();
+        let shown = &demo["progress"]["insights"]["report_cards"];
+        assert_eq!(keys(shown), keys(&trend), "demo.json `insights.report_cards` keys differ");
+        assert_eq!(keys(&shown["habit"]), keys(&trend["habit"]), "demo.json `insights.report_cards.habit` keys differ");
+        let recent = serde_json::to_value(store::RecentReportCard {
+            day: String::new(),
+            graded_day: chrono::NaiveDate::default(),
+            source: String::new(),
+            grade: String::new(),
+            missing: Some(String::new()),
+            extra_cost: Some(0.0),
+            extra_tokens: 0,
+            extra_minutes: 0,
+        })
+        .unwrap();
+        let recents = demo["recent_report_cards"].as_array().unwrap();
+        assert!(!recents.is_empty(), "the demo lists recent report cards");
+        for r in recents {
+            assert_eq!(keys(r), keys(&recent), "a demo.json `recent_report_cards` row has different keys");
+        }
         for (field, row) in rows {
             let demo_rows = demo["stats"][field].as_array().unwrap();
             assert!(!demo_rows.is_empty(), "demo.json `{field}` is empty, so nothing is checked");

@@ -9,7 +9,7 @@ import { test } from "node:test";
 const SCRIPT = new URL("./version.sh", import.meta.url).pathname;
 
 // A throwaway repo with just the files version.sh reads.
-function repo({ cargo = "0.3.0", pkg = "0.3.0", conf = "0.3.0" } = {}) {
+function repo({ cargo = "0.3.0", pkg = "0.3.0", conf = "0.3.0", plugin = "0.3.0" } = {}) {
   const root = mkdtempSync(join(tmpdir(), "version-sh-"));
   mkdirSync(join(root, "scripts"));
   mkdirSync(join(root, "app/src-tauri"), { recursive: true });
@@ -20,6 +20,10 @@ function repo({ cargo = "0.3.0", pkg = "0.3.0", conf = "0.3.0" } = {}) {
   );
   writeFileSync(join(root, "app/package.json"), JSON.stringify({ version: pkg }));
   writeFileSync(join(root, "app/src-tauri/tauri.conf.json"), JSON.stringify(conf ? { version: conf } : {}));
+  if (plugin) {
+    mkdirSync(join(root, "plugins/grade/.claude-plugin"), { recursive: true });
+    writeFileSync(join(root, "plugins/grade/.claude-plugin/plugin.json"), JSON.stringify({ version: plugin }));
+  }
   return root;
 }
 
@@ -38,11 +42,11 @@ test("prints the [workspace.package] version, not a later `version =` line", () 
   }
 });
 
-test("check passes when the versions agree, or tauri.conf.json leaves it out", () => {
-  for (const conf of ["0.3.0", ""]) {
-    const root = repo({ conf });
+test("check passes when the versions agree, or tauri.conf.json or the plugin is absent", () => {
+  for (const opts of [{}, { conf: "" }, { plugin: "" }]) {
+    const root = repo(opts);
     try {
-      assert.equal(run(root, "check").status, 0, `conf=${conf || "<unset>"}`);
+      assert.equal(run(root, "check").status, 0, JSON.stringify(opts));
     } finally {
       rmSync(root, { recursive: true });
     }
@@ -50,7 +54,7 @@ test("check passes when the versions agree, or tauri.conf.json leaves it out", (
 });
 
 test("check fails when a version differs", () => {
-  for (const opts of [{ pkg: "0.2.9" }, { conf: "0.2.9" }]) {
+  for (const opts of [{ pkg: "0.2.9" }, { conf: "0.2.9" }, { plugin: "0.2.9" }]) {
     const root = repo(opts);
     try {
       const r = run(root, "check");

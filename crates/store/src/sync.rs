@@ -1,10 +1,10 @@
 //! One sync pass: for every allowed source, read whatever changed since last time.
 //! Called on launch, on file-change events, and on a timer as a safety net.
 
-use crate::{source_files, FileMeta, Result, SourceState, Store};
+use crate::{cards, source_files, FileMeta, Pass, Result, SourceState, Store};
 use rayon::prelude::*;
 use serde::Serialize;
-use sources::Source;
+use sources::{FileScan, Source};
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
@@ -31,8 +31,7 @@ pub struct SyncReport {
 struct Job {
     path: PathBuf,
     from: u64,
-    meta: FileMeta,
-    finalize: bool,
+    pass: Pass,
 }
 
 /// Reads every allowed, unpaused source among `all`. Per-file problems land in
@@ -48,12 +47,26 @@ pub fn sync(store: &mut Store, all: &[Box<dyn Source>]) -> Result<SyncReport> {
         let jobs = plan(store, src, &state, now, &mut report);
         // Parsing is pure and parallel; writes go through one connection, one file per transaction.
         for chunk in jobs.chunks(CHUNK) {
-            let scans: Vec<_> = chunk.par_iter().map(|j| (j, src.scan(&j.path, j.from, j.finalize))).collect();
-            for (job, scan) in scans {
+            let scans: Vec<_> = chunk
+                .par_iter()
+                .map(|j| {
+                    let scan = src.scan(&j.path, j.from, j.pass.finalized).map(|scan| tips_if_gradable(src, scan));
+                    // Report cards are rare. Only a file with one not read yet is read again, whole.
+                    let chat = scan
+                        .as_ref()
+                        .ok()
+                        .filter(|s| cards::unread(&s.cards, j.pass.cards_to))
+                        .and_then(|_| src.view(&j.path));
+                    (j, scan, chat)
+                })
+                .collect();
+            for (job, scan, chat) in scans {
                 let saved = scan.map_err(|e| e.to_string()).and_then(|scan| {
+                    // A file that can't be read again keeps its checkpoint, so its cards aren't lost.
+                    let chat = chat.transpose().map_err(|e| e.to_string())?;
                     // One file failing to save (a locked database, say) must not stop the rest.
                     store
-                        .ingest(&state, &job.path.to_string_lossy(), &scan, job.meta, job.finalize)
+                        .ingest(&state, &job.path.to_string_lossy(), &scan, chat.as_ref(), job.pass)
                         .map_err(|e| format!("{}: couldn't save: {e}", job.path.display()))
                 });
                 match saved {
@@ -71,6 +84,15 @@ pub fn sync(store: &mut Store, all: &[Box<dyn Source>]) -> Result<SyncReport> {
     Ok(report)
 }
 
+/// `scan`, without its tips when `src` can't have any: the same adapter reads chats it can't give rules to.
+fn tips_if_gradable(src: &dyn Source, mut scan: FileScan) -> FileScan {
+    if !src.gradable() {
+        scan.tips.clear();
+        scan.rules.clear();
+    }
+    scan
+}
+
 /// The files of `src` that changed since they were last read, and where to resume each.
 fn plan(store: &Store, src: &dyn Source, state: &SourceState, now: SystemTime, report: &mut SyncReport) -> Vec<Job> {
     let mut jobs = Vec::new();
@@ -84,8 +106,11 @@ fn plan(store: &Store, src: &dyn Source, state: &SourceState, now: SystemTime, r
             }
         };
         let quiet = now.duration_since(modified).unwrap_or_default() > QUIET;
-        if let Some(from) = resume_from(prev, meta, quiet, src.append_only(&path)) {
-            jobs.push(Job { path, from, meta, finalize: quiet });
+        let was = prev.map(|c| (c.at, c.meta, c.finalized));
+        if let Some(from) = resume_from(was, meta, quiet, src.append_only(&path)) {
+            // A pass that starts over reads every card again; one that resumes skips what it has read.
+            let cards_to = if from == 0 { None } else { prev.and_then(|c| c.cards_to) };
+            jobs.push(Job { path, from, pass: Pass { meta, finalized: quiet, cards_to } });
         }
     }
     jobs
@@ -109,6 +134,26 @@ fn resume_from(prev: Option<(u64, FileMeta, bool)>, now: FileMeta, quiet: bool, 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sources::{RulesSeen, TipSeen};
+
+    #[test]
+    fn only_sources_that_can_have_tips_keep_them() {
+        let seen = TipSeen {
+            session: "s".into(),
+            key: None,
+            ts: chrono::Utc::now(),
+            pos: 0,
+            model: None,
+            tip: engine::parse_tip("Tip from No, Actually...: say more. [target, redid 50%]").unwrap(),
+        };
+        let rules = RulesSeen { session: "s".into(), ts: seen.ts };
+        for src in sources::all() {
+            let scan = FileScan { tips: vec![seen.clone()], rules: vec![rules.clone()], ..FileScan::default() };
+            let kept = tips_if_gradable(&*src, scan);
+            assert_eq!(kept.tips.len() == 1, src.gradable(), "{}", src.id());
+            assert_eq!(!kept.rules.is_empty(), src.gradable(), "{}", src.id());
+        }
+    }
 
     fn m(size: u64, mtime: i64) -> FileMeta {
         FileMeta { size, mtime }

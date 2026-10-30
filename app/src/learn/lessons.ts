@@ -4,7 +4,7 @@ import type { Meta, Prompts } from "../api";
 import data from "./lessons.json";
 
 export type Example = { text: string; signals: string[] };
-export type Teaches = { signal: string } | { steer: string } | { correction: true };
+export type Teaches = { signal: string } | { steer: string } | { correction: true } | { context: true };
 export type Question =
   | { kind: "sharper"; question: string; options: string[]; answer: number; explain: string }
   | { kind: "missing"; question: string; prompt: string; options: string[]; answer: string; explain: string }

@@ -1,5 +1,5 @@
 // Shared test data, shaped like the Rust side's output.
-import type { HallEntry, Meta, ModelRow, Overall, Progress, Prompts, SourceInfo, Stats } from "../api";
+import type { HallEntry, Meta, ModelRow, Overall, Progress, Prompts, RecentReportCard, ReportCardWeek, SourceInfo, Stats } from "../api";
 
 export const meta: Meta = {
   tiers: [
@@ -17,8 +17,9 @@ export const meta: Meta = {
     { id: "just_wrong", title: "Flat-out wrong" },
   ],
   sources: [
-    { id: "claude-code", name: "Claude Code" },
-    { id: "chatgpt-export", name: "ChatGPT (export)" },
+    { id: "claude-code", name: "Claude Code", gradable: true },
+    { id: "codex", name: "Codex", gradable: true },
+    { id: "chatgpt-export", name: "ChatGPT (export)", gradable: false },
   ],
   prompt_tiers: [
     { id: "vibes_only", name: "Vibes only", floor: 0, verdict: "Constantly.", blurb: "It's mostly guessing what you want." },
@@ -41,6 +42,14 @@ export const meta: Meta = {
     { id: "limits", title: "Guardrails", hint: "don't, only, keep, without" },
     { id: "why", title: "Purpose", hint: "who it's for or what it's part of" },
   ],
+  habits: [
+    { id: "target", signal: "spot", title: "Target", hint: "a file, function, page or link", plain: "say which file, page or screen" },
+    { id: "evidence", signal: "proof", title: "Evidence", hint: "an error, the output or an example", plain: "paste the error or what you saw" },
+    { id: "finish", signal: "done", title: "Finish line", hint: "the expected result, a test or a format", plain: "say what done looks like" },
+    { id: "guardrails", signal: "limits", title: "Guardrails", hint: "don't, only, keep, without", plain: "say what not to touch" },
+    { id: "purpose", signal: "why", title: "Purpose", hint: "who it's for or what it's part of", plain: "say why, or who it's for" },
+    { id: "context", signal: null, title: "Context", hint: "what you already know or tried", plain: "say what you already know about your setup or taste" },
+  ],
   sharp_signals: 3,
   grades: [
     { id: "thin", title: "Vague" },
@@ -55,6 +64,10 @@ export const meta: Meta = {
   ],
   min_week: 5,
   goal_weeks: 4,
+  min_card_week: 3,
+  min_card_best: 5,
+  min_card_half: 20,
+  tip_rules: "The rules your AI gets.",
 };
 
 export const prompts = (over: Partial<Prompts> = {}): Prompts => ({
@@ -102,8 +115,63 @@ export const overall = (over: Partial<Overall> = {}): Overall => ({
   ...over,
 });
 
+/** A week with no report cards, as Rust sends it: empty maps until something is graded. */
+export const noCards = (): ReportCardWeek => ({
+  graded: 0,
+  grades: {},
+  avoidable: 0,
+  extra_tokens: 0,
+  extra_cost: null,
+  priced: 0,
+  extra_minutes: 0,
+  missing: {},
+  gradable_tasks: 0,
+});
+
+/** A week of `graded` report cards. `grades` and `missing` give the counts they name (the rest are 0). A cost means every task was priced, unless `priced` says fewer. */
+export const cards = (graded: number, over: Partial<ReportCardWeek> = {}): ReportCardWeek => ({
+  graded,
+  avoidable: 0,
+  extra_tokens: 0,
+  extra_cost: null,
+  priced: over.extra_cost == null ? 0 : graded,
+  extra_minutes: 0,
+  gradable_tasks: graded * 2,
+  ...over,
+  grades: { A: 0, B: 0, C: 0, D: 0, F: 0, ...over.grades },
+  missing: { target: 0, evidence: 0, finish: 0, guardrails: 0, purpose: 0, context: 0, ...over.missing },
+});
+
+export const recentCard = (over: Partial<RecentReportCard> = {}): RecentReportCard => ({
+  day: "2026-10-27",
+  graded_day: "2026-10-27",
+  source: "claude-code",
+  grade: "B",
+  missing: "finish",
+  extra_cost: 0.4,
+  extra_tokens: 120_000,
+  extra_minutes: 6,
+  ...over,
+});
+
+/** An in-memory `localStorage`: the test DOM has none. */
+export const memoryStorage = (): Storage => {
+  const m = new Map<string, string>();
+  return {
+    getItem: (k) => m.get(k) ?? null,
+    setItem: (k, v) => void m.set(k, v),
+    removeItem: (k) => void m.delete(k),
+    clear: () => m.clear(),
+    key: (i) => [...m.keys()][i] ?? null,
+    get length() {
+      return m.size;
+    },
+  };
+};
+
 export const week = (day: string, over: Partial<Progress["weeks"][number]> = {}): Progress["weeks"][number] => ({
   week: day,
+  tips: { tips: 0, tasks: 0 },
   messages: 200,
   corrections: 8,
   humbled: 0,
@@ -114,6 +182,7 @@ export const week = (day: string, over: Partial<Progress["weeks"][number]> = {})
   grades: { thin: 8, solid: 7, sharp: 5 },
   steering: { ai_wrong: 3, added: 2, clarified: 1, redo: 0 },
   steered: { ai_wrong: 2, added: 2, clarified: 1, redo: 0 },
+  report_cards: noCards(),
   ...over,
 });
 
@@ -127,8 +196,8 @@ export const progress = (over: Partial<Progress> = {}): Progress => ({
     { kind: "tier", tier: "irreplaceable", target: 0, id: 0, start: "2026-10-28" },
   ],
   trophies: [],
-  bests: { landed: [91, "2026-10-19"], sharp: [40, "2026-10-05"], goal_streak: 0 },
-  insights: { signals: [], steer: null, models: [] },
+  bests: { landed: [91, "2026-10-19"], sharp: [40, "2026-10-05"], goal_streak: 0, report_card: null },
+  insights: { signals: [], steer: null, models: [], report_cards: null, top_tip: null, tip_trend: null },
   ...over,
 });
 

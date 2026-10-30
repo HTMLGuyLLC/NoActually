@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { must } from "./dom";
-import { meta, overall, row, source, stats } from "./test/fixtures";
+import { memoryStorage, meta, overall, progress, row, source, stats } from "./test/fixtures";
 
 const allowed = { id: "claude-code", allowed: true, paused: false, backfill_since: null, granted_at: null, start_after: null, paths: [] };
 
@@ -18,6 +18,11 @@ const api = vi.hoisted(() => ({
   setAutostart: vi.fn(),
   getMenuBar: vi.fn(),
   openMain: vi.fn(),
+  progress: vi.fn(),
+  recentReportCards: vi.fn(),
+  reportCardsStatus: vi.fn(),
+  logError: vi.fn(),
+  openLogFolder: vi.fn(),
 }));
 vi.mock("./api", async (importOriginal) => ({ ...(await importOriginal<typeof import("./api")>()), api, demo: false }));
 
@@ -40,6 +45,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   state.resetState();
+  state.setSettingsPane("sources");
   api.meta.mockResolvedValue(meta);
   api.stats.mockResolvedValue(stats());
   api.sources.mockResolvedValue([source(), source({ id: "codex", name: "Codex", state: allowed })]);
@@ -51,6 +57,9 @@ beforeEach(async () => {
   api.pin.mockResolvedValue(null);
   api.setRetention.mockResolvedValue(null);
   api.setAutostart.mockResolvedValue(null);
+  api.reportCardsStatus.mockResolvedValue(null);
+  api.logError.mockResolvedValue(null);
+  api.openLogFolder.mockResolvedValue(null);
   await render();
 });
 afterEach(() => vi.clearAllMocks());
@@ -139,17 +148,45 @@ describe("delegated actions", () => {
   it("Choose sources opens the Sources sub-tab, even if another was open", async () => {
     state.setTab("settings");
     state.setSettingsPane("privacy");
-    root.insertAdjacentHTML("beforeend", '<button data-action="go-sources">Choose sources</button>');
-    await click('[data-action="go-sources"]');
+    root.insertAdjacentHTML("beforeend", '<button data-action="go-settings" data-id="sources">Choose sources</button>');
+    await click('[data-action="go-settings"]');
     expect(state.state.settingsPane).toBe("sources");
   });
 
   it("opens Settings at Sources from Choose sources, with no Sources tab of its own", async () => {
     expect(root.querySelector('[data-action="tab"][data-id="sources"]')).toBeNull();
-    root.insertAdjacentHTML("beforeend", '<button data-action="go-sources">Choose sources</button>');
-    await click('[data-action="go-sources"]');
+    root.insertAdjacentHTML("beforeend", '<button data-action="go-settings" data-id="sources">Choose sources</button>');
+    await click('[data-action="go-settings"]');
     expect(state.state.tab).toBe("settings");
     expect(root.querySelector("section#sources")).not.toBeNull();
+  });
+
+  it("scrolls to the top when it opens a Settings section, whichever one", async () => {
+    const scrollTo = vi.fn();
+    vi.stubGlobal("scrollTo", scrollTo);
+    for (const id of ["sources", "report-cards"]) {
+      root.insertAdjacentHTML("beforeend", `<button data-action="go-settings" data-id="${id}">Go</button>`);
+      scrollTo.mockClear();
+      await click(`[data-action="go-settings"][data-id="${id}"]`);
+      expect(scrollTo, id).toHaveBeenCalledWith({ top: 0 });
+    }
+    vi.unstubAllGlobals();
+  });
+
+  it("only opens a Settings section that exists", async () => {
+    state.setTab("improve");
+    root.insertAdjacentHTML("beforeend", '<button data-action="go-settings" data-id="nope">Go</button>');
+    await click('[data-action="go-settings"][data-id="nope"]');
+    expect(state.state.tab).toBe("improve");
+  });
+
+  it("opens a named Settings section from another tab", async () => {
+    state.setTab("improve");
+    root.insertAdjacentHTML("beforeend", '<button data-action="go-settings" data-id="privacy">Set up</button>');
+    await click('[data-action="go-settings"]');
+    expect(state.state.tab).toBe("settings");
+    expect(state.state.settingsPane).toBe("privacy");
+    expect(root.querySelector("section#privacy, .levels")).not.toBeNull();
   });
 
   it("opens the app on a named tab, and ignores a name that isn't a tab", async () => {
@@ -381,6 +418,82 @@ describe("delegated actions", () => {
   });
 });
 
+describe("the status text's tooltip", () => {
+  const text = () => {
+    const b = root.querySelector<HTMLElement>(".sync-text");
+    if (!b) throw new Error("no status text");
+    return b;
+  };
+
+  const open = () => text().getAttribute("aria-expanded");
+
+  it("starts closed, and a tap or a click toggles it", () => {
+    expect(open()).toBe("false");
+    text().click();
+    expect(open()).toBe("true");
+    text().click();
+    expect(open()).toBe("false");
+  });
+
+  it("opens on Enter, even though focus alone already shows it", () => {
+    text().focus();
+    text().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    text().click(); // what the browser sends for Enter on a button
+    expect(open()).toBe("true");
+  });
+
+  it("closes on Escape, on leaving it, and on a click elsewhere", () => {
+    text().click();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(open()).toBe("false");
+    text().click();
+    text().dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    expect(open()).toBe("false");
+    text().click();
+    root.querySelector<HTMLElement>("h1, .wrap")?.click();
+    expect(open()).toBe("false");
+  });
+
+  it("adds no listeners as it opens and closes", () => {
+    const add = vi.spyOn(document, "addEventListener");
+    for (let i = 0; i < 3; i++) text().click();
+    expect(add).not.toHaveBeenCalled();
+    add.mockRestore();
+  });
+
+  it("stays open through a repaint that changes the words", () => {
+    text().click();
+    state.setStatus({ syncing: false, last_sync: "2026-01-01T00:00:00Z", last_error: null, files_with_errors: 0 });
+    paintStatus();
+    expect(open()).toBe("true");
+  });
+
+  it("is left alone by a repaint that changes nothing", () => {
+    const pill = root.querySelector(".sync-pill");
+    paintStatus();
+    expect(root.querySelector(".sync-pill")).toBe(pill);
+  });
+});
+
+describe("the log", () => {
+  it("opens the log folder from General", async () => {
+    state.setSettingsPane("general");
+    state.setTab("settings");
+    await render();
+    await click('[data-action="open-log-folder"]');
+    expect(api.openLogFolder).toHaveBeenCalledTimes(1);
+  });
+
+  it("writes a failed action to the log, and ignores the log failing too", async () => {
+    const shout = vi.spyOn(console, "error").mockImplementation(() => {});
+    api.logError.mockRejectedValueOnce("disk full");
+    root.insertAdjacentHTML("beforeend", '<button id="bad" data-action="start-goal"></button>');
+    await click("#bad");
+    expect(api.logError).toHaveBeenCalledWith("Pick a goal first");
+    shout.mockRestore();
+  });
+});
+
 describe("sync pill repaint", () => {
   const active = () => document.activeElement?.className;
 
@@ -421,5 +534,47 @@ describe("verdict scrawl", () => {
     expect(still(".card.hero"), "hero").toBe(true);
     expect(still(".card.mini.prompts"), "prompts").toBe(true);
     expect(still(".card.mini.corrections"), "corrections").toBe(false);
+  });
+});
+
+describe("the report card tip", () => {
+  const TIP = "noactually.hint.report-cards";
+  beforeEach(() => {
+    vi.stubGlobal("localStorage", memoryStorage());
+    api.progress.mockResolvedValue(progress());
+    api.recentReportCards.mockResolvedValue([]);
+    state.setTab("improve");
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("shows when a source that can carry a report card is allowed, and goes away for good when dismissed", async () => {
+    await render();
+    expect(root.querySelector(".card-hint")).not.toBeNull();
+    await click('[data-action="dismiss-card-hint"]');
+    expect(root.querySelector(".card-hint")).toBeNull();
+    expect(localStorage.getItem(TIP)).toBe("1");
+    await render();
+    expect(root.querySelector(".card-hint")).toBeNull();
+  });
+
+  it("puts focus on the trends heading when the tip goes, instead of dropping it", async () => {
+    await render();
+    btn('[data-action="dismiss-card-hint"]').focus();
+    await click('[data-action="dismiss-card-hint"]');
+    const heading = root.querySelector("#trends-heading");
+    expect(heading?.tagName).toBe("H2");
+    expect(document.activeElement).toBe(heading);
+  });
+
+  it("stays away when no such source is allowed", async () => {
+    api.sources.mockResolvedValue([source()]);
+    await render();
+    expect(root.querySelector(".card-hint")).toBeNull();
+  });
+
+  it("still draws Improve when the recent list can't be read", async () => {
+    api.recentReportCards.mockRejectedValue(new Error("no such command"));
+    await render();
+    expect(root.querySelector(".improve-top")).not.toBeNull();
   });
 });

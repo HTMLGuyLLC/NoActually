@@ -4,6 +4,22 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+### Added
+
+- **Report cards** (optional): finish a task in Claude Code, type `/grade:me` (Codex: `$grade-me`), and your AI gives you a letter grade, A to F, on how you asked: why, what you could have said up front, a better first message to copy, and the extra back-and-forth it cost in minutes (plus dollars at pay-as-you-go prices, when the model has a price). It writes for your level: plain words if you're new, short and technical if you're not. Only follow-ups you could have known up front count against you, and a follow-up that only adds new work is a tip, not a lower grade.
+- **Settings → Report cards**: turn report cards on for Claude Code or Codex with one click (the app adds a small plugin, pinned to the app's version and checked against it), see when the last report card arrived, turn off the free one-line reminders, or delete your report card and tip history.
+- **Improve** shows how your report cards trend: grades by week, follow-ups that redid work per task, your latest report cards, a line in last week's recap, and "since you started" in What works for you. A popup marks your first straight-A week. A new **Context** lesson ("Say what you already know").
+- **Tips as you work** (optional, Claude Code, off by default): when a follow-up could have been in your first message, your AI ends that reply with a one-line tip. Improve shows how many tasks needed one and the tip you get most. Settings shows the exact instructions your AI gets. The app keeps the habit, never the words.
+- `noactually stats --report-cards [--json]` prints the same numbers.
+- Report cards are kept as numbers only (grade, follow-up counts, which habits were missing, tokens, minutes), never text, and never change your score. The app checks each card came from the chat it's in, so a pasted or copied card is ignored.
+
+### Changed
+
+- On macOS, the window buttons now sit inside the app instead of on a separate title bar.
+- The header is one line: the logo and sync status on the left, the menu on the right. The green dot is the check-now button, and clicking "Checked…" shows what the numbers cover.
+- Settings opens on **General**.
+- The scorecard window now opens at 1085 by 1195 when your screen has room, and as much of that as fits when it doesn't.
+
 ## [0.4.0] - 2026-10-29
 
 ### Added

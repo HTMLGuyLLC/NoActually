@@ -3,6 +3,7 @@
 
 mod commands;
 mod milestones;
+mod report_cards;
 mod tracker;
 mod updater;
 
@@ -187,7 +188,9 @@ fn build_tray(tauri_app: &tauri::App, menu: &Menu<tauri::Wry>) -> tauri::Result<
 }
 
 /// Default width of the scorecard window: the page's content plus a little room on each side.
-const MAIN_WIDTH: f64 = 940.0;
+const MAIN_WIDTH: f64 = 1085.0;
+/// Default height of the scorecard window, on a screen tall enough: the whole scorecard, no scrolling.
+const MAIN_HEIGHT: f64 = 1195.0;
 /// Settings key: the scorecard window's last position and size, "x,y,width,height" in points.
 const MAIN_WINDOW_KEY: &str = "window.main";
 
@@ -229,10 +232,10 @@ impl Rect {
     }
 }
 
-/// The best fit for a screen: as tall as its usable area, [`MAIN_WIDTH`] wide, centered.
+/// The best fit for a screen: [`MAIN_WIDTH`] by [`MAIN_HEIGHT`], or as much of that as it has, centered.
 fn best_fit(area: &Rect) -> Rect {
-    let w = MAIN_WIDTH.min(area.w);
-    Rect { x: area.x + (area.w - w) / 2.0, y: area.y, w, h: area.h }
+    let (w, h) = (MAIN_WIDTH.min(area.w), MAIN_HEIGHT.min(area.h));
+    Rect { x: area.x + (area.w - w) / 2.0, y: area.y + (area.h - h) / 2.0, w, h }
 }
 
 /// Where the scorecard opens: where you left it, if that still fits fully on a screen; otherwise
@@ -272,8 +275,32 @@ pub(crate) fn save_main_placement(handle: &AppHandle) {
     let _ = lock(&app.writer).set_setting(MAIN_WINDOW_KEY, &r);
 }
 
+/// One line for the log: the panic's message and where it happened.
+fn panic_line(info: &std::panic::PanicHookInfo<'_>) -> String {
+    let message = info
+        .payload()
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| info.payload().downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("no message");
+    match info.location() {
+        Some(at) => format!("panic: {message} at {}:{}", at.file(), at.line()),
+        None => format!("panic: {message}"),
+    }
+}
+
+/// Writes every panic to the log, then runs the default hook so a panic still prints as before.
+fn log_panics() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        log::error!("{}", panic_line(info));
+        default(info);
+    }));
+}
+
 /// Opens the database, builds the tray, and starts the tracker and update threads.
 fn setup(tauri_app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    log_panics();
     let handle = tauri_app.handle().clone();
     // The same file the CLI opens. NOACTUALLY_DB points at another one (development, demos).
     let db = store::default_db_path()?;
@@ -283,6 +310,13 @@ fn setup(tauri_app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     log::info!("database: {}", db.display());
     let writer = Store::open(&db)?;
     let reader = Store::open(&db)?;
+    match report_cards::cli_path::publish(&db) {
+        Ok(report_cards::cli_path::Published::Translocated) => {
+            log::warn!("running from a temporary copy; not recording where the report-card helper is");
+        }
+        Ok(_) => {}
+        Err(e) => log::warn!("couldn't record where the report-card helper is: {e}"),
+    }
     let menu_bar = writer.get_setting(MENU_BAR_KEY)?.as_deref() != Some("off");
     place_main(&handle, writer.get_setting(MAIN_WINDOW_KEY)?.as_deref());
     let (tx, rx) = mpsc::channel();
@@ -310,13 +344,15 @@ fn setup(tauri_app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // A launch at login stays in the menu bar; a launch by the user opens the scorecard. With no
     // menu bar icon (turned off, or no tray on this system) there'd be nothing to click, so it
     // always opens.
-    if starts_hidden(std::env::args().any(|a| a == HIDDEN_ARG), menu_bar && has_tray) {
+    if starts_hidden(std::env::args_os().any(|a| a == HIDDEN_ARG), menu_bar && has_tray) {
         #[cfg(target_os = "macos")]
         let _ = handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
     } else {
         show_main(&handle);
     }
     updater::spawn(handle.clone(), app.clone(), update_rx);
+    // After an update, moves the Claude Code plugin to the new release in the background.
+    report_cards::spawn_launch_check();
     tracker::spawn(handle, app, tx, rx);
     Ok(())
 }
@@ -398,6 +434,15 @@ pub fn run() {
             commands::set_auto_update,
             commands::check_for_updates,
             commands::install_update,
+            commands::log_error,
+            commands::open_log_folder,
+            commands::recent_report_cards,
+            report_cards::report_cards_status,
+            report_cards::report_cards_turn_on,
+            report_cards::report_cards_turn_off,
+            report_cards::report_cards_set_tips,
+            report_cards::report_cards_set_reminders,
+            report_cards::report_cards_delete_history,
         ])
         .build(tauri::generate_context!())
         .expect("error while building No, Actually...")
@@ -411,7 +456,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod placement_tests {
-    use super::{main_placement, Rect, MAIN_WIDTH};
+    use super::{main_placement, Rect, MAIN_HEIGHT, MAIN_WIDTH};
 
     const LAPTOP: Rect = Rect { x: 0.0, y: 25.0, w: 1512.0, h: 920.0 };
     const SIDE: Rect = Rect { x: 1512.0, y: 0.0, w: 1920.0, h: 1055.0 };
@@ -420,6 +465,13 @@ mod placement_tests {
     fn the_first_open_fills_the_screen_height_and_centers() {
         let r = main_placement(None, &[LAPTOP], Some(LAPTOP)).unwrap();
         assert_eq!(r, Rect { x: (1512.0 - MAIN_WIDTH) / 2.0, y: 25.0, w: MAIN_WIDTH, h: 920.0 });
+    }
+
+    #[test]
+    fn a_big_screen_gets_the_full_default_size_centered() {
+        let big = Rect { x: 0.0, y: 25.0, w: 2560.0, h: 1415.0 };
+        let r = main_placement(None, &[big], Some(big)).unwrap();
+        assert_eq!(r, Rect { x: (2560.0 - MAIN_WIDTH) / 2.0, y: 135.0, w: MAIN_WIDTH, h: MAIN_HEIGHT });
     }
 
     #[test]
@@ -464,5 +516,23 @@ mod tray_tests {
         assert!(!starts_hidden(true, false), "no tray: the window must show");
         assert!(!starts_hidden(false, true));
         assert!(!starts_hidden(false, false));
+    }
+}
+
+#[cfg(test)]
+mod panic_tests {
+    use super::panic_line;
+    use std::sync::Mutex;
+
+    #[test]
+    fn a_panic_line_has_the_message_and_the_place() {
+        static SEEN: Mutex<Vec<String>> = Mutex::new(Vec::new());
+        let before = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|info| SEEN.lock().unwrap().push(panic_line(info))));
+        let _ = std::panic::catch_unwind(|| panic!("bad file {}", 7));
+        std::panic::set_hook(before);
+        let seen = SEEN.lock().unwrap();
+        let line = seen.iter().find(|l| l.contains("bad file 7")).expect("hook saw the panic");
+        assert!(line.starts_with("panic: bad file 7 at ") && line.contains("lib.rs:"), "{line}");
     }
 }

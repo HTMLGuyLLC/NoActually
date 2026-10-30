@@ -1,16 +1,18 @@
 // What every control does. Views mark controls with data-action="…" (and data-id for the thing
 // acted on); one delegated listener per event type on the root dispatches through the maps below,
 // so nothing is re-bound on each redraw.
-import { api, type GoalKind, type HallEntry, type Meta, type PromptTier, type Stats } from "./api";
+import { api, type GoalKind, type HallEntry, type Meta, type PromptTier, REPORT_CARD_TOOLS, type ReportCardTool, type Stats } from "./api";
 import { data, say } from "./dom";
 import { errorText, filterLabel } from "./format";
+import { dismiss } from "./hints";
 import { scheduleCheck } from "./learn/checker";
 import { lessonById } from "./learn/lessons";
 import { correctionTier, promptTier, tierName } from "./meta";
 import type { PickStat } from "./picker/picker";
 import { buildPickItems, sameFilter } from "./picker/picker";
 import { closePicker, openPicker, pickerOpen } from "./picker/popover";
-import { paintUpdate, render, scheduler } from "./render";
+import { paintUpdate, readReportCards, render, scheduler } from "./render";
+import { confirmTurnOn, doneLine, offLine } from "./report-cards";
 import { drawCorrectionCard, drawCorrectionsCard, drawPromptCard, drawShareCard } from "./share/cards";
 import { openShareDialog, type Post } from "./share/dialog";
 import { correctionShareText, correctionsShareText, promptShareText, shareText } from "./share/share";
@@ -21,6 +23,8 @@ import {
   isSettingsPane,
   isTab,
   PERIOD_WHEN,
+  type ReportCardsBusy,
+  type ReportCardsState,
   setAutoUpdate,
   setAwardSlide,
   setDraft,
@@ -29,6 +33,7 @@ import {
   setLesson,
   setPeriod,
   setRange,
+  setReportCards,
   setSettingsPane,
   setTab,
   setView,
@@ -146,6 +151,34 @@ function confirmed(b: HTMLButtonElement, ask: string): boolean {
   return false;
 }
 
+/** A report cards tool named by a button, checked before it's sent to the app. */
+function reportCardTool(id: string): ReportCardTool {
+  const tool = REPORT_CARD_TOOLS.find((t) => t === id);
+  if (!tool) throw new Error(`Unknown tool: ${id}`);
+  return tool;
+}
+
+/**
+ * Runs one report cards command with its button showing it's working, then reads where things stand again
+ * (whether or not it worked) before the controls come back. A failure shows beside the control, in the app's words;
+ * so does what `said` makes of a success. Either is announced once, here, and not on every redraw.
+ */
+async function reportCardsDo<T>(control: ReportCardsBusy, work: () => Promise<T>, said: (result: T) => string): Promise<void> {
+  setReportCards({ busy: control, error: null, note: null });
+  await render();
+  let text = "";
+  let error: ReportCardsState["error"] = null;
+  try {
+    text = said(await work());
+  } catch (e) {
+    error = { control, text: errorText(e) };
+  }
+  await readReportCards();
+  setReportCards({ busy: null, error, note: text ? { control, text } : null });
+  await render();
+  say(confirmNote(), error?.text ?? text);
+}
+
 /** The data the scorecard was drawn from; its buttons only exist once both are loaded. */
 function drawn(): { s: Stats; meta: Meta } {
   const { current: s, meta } = state;
@@ -206,10 +239,23 @@ export const clickActions = {
     setView("overview");
     return render();
   },
-  "go-sources": () => {
+  // Opens a Settings section from another tab (Improve's "Set up", the scorecard's "Choose sources").
+  "go-settings": (b) => {
+    const pane = data(b, "id");
+    if (!isSettingsPane(pane)) throw new Error(`Unknown settings section: ${pane}`);
     setTab("settings");
-    setSettingsPane("sources");
-    return render();
+    setSettingsPane(pane);
+    return render().then(() => window.scrollTo({ top: 0 }));
+  },
+  // The tip is gone, so focus goes to the heading above where it was.
+  "dismiss-card-hint": async () => {
+    dismiss("report-cards");
+    await render();
+    const heading = document.querySelector<HTMLElement>("#trends-heading");
+    if (heading) {
+      heading.tabIndex = -1;
+      heading.focus();
+    }
   },
   "settings-pane": (b) => {
     const pane = data(b, "id");
@@ -337,6 +383,46 @@ export const clickActions = {
     if (!confirmed(b, "Click again to delete its data")) return;
     return thenRender(b, () => api.forget(data(b, "id")));
   },
+  // Turn on asks first; Turn off just does it (History stays until deleted).
+  "report-cards-tool": async (b) => {
+    const tool = reportCardTool(data(b, "id"));
+    if (state.reportCards.busy !== null) return;
+    if (data(b, "on") === "true") {
+      // Read before the turn-off: what the status says afterwards no longer has the tips on.
+      const tipsWereOn = !!state.reportCards.status?.tips;
+      return reportCardsDo(
+        tool,
+        () => api.reportCardsTurnOff(tool),
+        () => offLine(tool, tipsWereOn),
+      );
+    }
+    if (!(await confirmTurnOn(tool, b, scheduler.flush))) return;
+    return reportCardsDo(
+      tool,
+      () => api.reportCardsTurnOn(tool),
+      () => doneLine(tool),
+    );
+  },
+  // After a failed check, or "Look again" for a tool that wasn't found (which may take a few seconds).
+  "report-cards-retry": async (b) => {
+    if (b.dataset.id === "look") {
+      await run(b, () => readReportCards(true), "Looking…");
+    } else {
+      setReportCards({ statusError: "" });
+      await render(); // "Checking…"
+      await readReportCards();
+    }
+    await render();
+  },
+  // Deleting takes a second click, like Forget.
+  "report-cards-delete": (b) => {
+    if (state.reportCards.busy !== null || !confirmed(b, "Click again to delete the history")) return;
+    return reportCardsDo(
+      "delete",
+      () => api.reportCardsDeleteHistory(),
+      (n) => (n ? "Deleted your report card and tip history." : "There was no history to delete."),
+    );
+  },
   "save-privacy": async (b) => {
     const form = b.closest("section") ?? document;
     const out = form.querySelector("#privacy-status");
@@ -355,6 +441,9 @@ export const clickActions = {
   },
   "check-update": () => api.checkForUpdates(),
   "sync-now": () => api.syncNow(),
+  // Opens or closes the tooltip for touch and keyboard. Closing happens in `bindActions` (blur, Escape, a click elsewhere).
+  "sync-tip": (b) => b.setAttribute("aria-expanded", String(b.getAttribute("aria-expanded") !== "true")),
+  "open-log-folder": (b) => run(b, () => api.openLogFolder()),
   "install-update": (b) => run(b, () => api.installUpdate()),
   "later-update": () => {
     setLaterFor(state.update?.available ?? null);
@@ -394,6 +483,24 @@ const toggle = (save: (on: boolean) => Promise<unknown>, saved?: (on: boolean) =
   }
 };
 
+/** Saves one of the report cards checkboxes. The box is ticked already; if the app refuses, the redraw puts it back and the reason is announced. */
+async function saveCardsSetting(box: HTMLInputElement | HTMLSelectElement, key: "tips" | "reminders", save: (on: boolean) => Promise<unknown>): Promise<void> {
+  if (!(box instanceof HTMLInputElement)) return;
+  let error: ReportCardsState["error"] = null;
+  try {
+    await save(box.checked);
+  } catch (e) {
+    error = { control: key, text: errorText(e) };
+  }
+  // Read the status after the save: a Turn on or off can finish meanwhile, and its newer status wins.
+  const { status } = state.reportCards;
+  setReportCards({ error, status: status && !error ? { ...status, [key]: box.checked } : status });
+  // Whether tips are reaching your chats depends on when they went on.
+  if (key === "tips" && !error) await readReportCards();
+  await render();
+  if (error) say(confirmNote(), error.text);
+}
+
 export const changeActions = {
   level: (r) => {
     for (const l of r.closest(".levels")?.querySelectorAll(".level") ?? []) l.classList.toggle("on", l.contains(r));
@@ -405,6 +512,20 @@ export const changeActions = {
     (on) => api.setMenuBar(on),
     () => void render(),
   ),
+  // The box is ticked already; if the app refuses, the redraw puts it back and says why.
+  "report-cards-tips": async (box) => {
+    // aria-disabled, not disabled: the box stays reachable, and this says why it won't tick.
+    if (box instanceof HTMLInputElement && box.getAttribute("aria-disabled") === "true") {
+      box.checked = false;
+      say(
+        confirmNote(),
+        state.reportCards.status?.claude_code.on ? "Wait for the change in progress to finish." : "Turn on report cards in Claude Code first.",
+      );
+      return;
+    }
+    await saveCardsSetting(box, "tips", (on) => api.reportCardsSetTips(on));
+  },
+  "report-cards-reminders": (box) => saveCardsSetting(box, "reminders", (on) => api.reportCardsSetReminders(on)),
   quiz: (r) => r instanceof HTMLInputElement && judgeQuiz(r),
   "period-pick": (sel) => {
     if (!isPeriod(sel.value)) return;
@@ -417,12 +538,24 @@ const has = <T extends object>(map: T, key: string): key is Extract<keyof T, str
 
 const actionTarget = (e: Event) => (e.target instanceof Element ? e.target.closest<HTMLElement>("[data-action]") : null);
 
-const report = (e: unknown) => console.error("Action failed:", e);
+/** Logs a failed action, in the console and in the app's log file (where a failure to write it is ignored). */
+const report = (e: unknown) => {
+  console.error("Action failed:", e);
+  void api.logError(errorText(e)).catch(() => {});
+};
+
+const SYNC_TIP = '.sync-text[aria-expanded="true"]';
+
+/** Closes the status tooltip, except the one the click is on. */
+function closeSyncTip(except: Element | null = null) {
+  for (const b of document.querySelectorAll(SYNC_TIP)) if (b !== except) b.setAttribute("aria-expanded", "false");
+}
 
 /** Wires every control under `root`, once. */
 export function bindActions(root: HTMLElement): void {
   root.addEventListener("click", (e) => {
     const el = actionTarget(e);
+    closeSyncTip(el);
     const name = el?.dataset.action;
     if (!(el instanceof HTMLButtonElement) || !name || !has(clickActions, name)) return;
     try {
@@ -430,6 +563,12 @@ export function bindActions(root: HTMLElement): void {
     } catch (err) {
       report(err);
     }
+  });
+  root.addEventListener("focusout", (e) => {
+    if (e.target instanceof Element && e.target.matches(SYNC_TIP)) e.target.setAttribute("aria-expanded", "false");
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeSyncTip();
   });
   // Typing in the prompt checker: kept in memory and re-graded when typing pauses.
   root.addEventListener("input", (e) => {

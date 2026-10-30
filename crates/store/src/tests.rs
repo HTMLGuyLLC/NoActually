@@ -24,7 +24,7 @@ fn turn(human: &str, next: &str, model: &str, ts: &str, key: &str) -> SourceTurn
 }
 
 fn scan(turns: Vec<SourceTurn>) -> FileScan {
-    FileScan { turns, checkpoint: 100, cards: Vec::new() }
+    FileScan { turns, checkpoint: 100, ..FileScan::default() }
 }
 
 fn test_source() -> SourceState {
@@ -33,7 +33,7 @@ fn test_source() -> SourceState {
 
 /// Ingests `turns` as file `path` of the "test" source with no consent limits.
 fn ingest(s: &mut Store, path: &str, turns: Vec<SourceTurn>) {
-    s.ingest(&test_source(), path, &scan(turns), FileMeta { size: 100, mtime: 1 }, false).unwrap();
+    s.ingest(&test_source(), path, &scan(turns), None, Pass::new(FileMeta { size: 100, mtime: 1 }, false)).unwrap();
 }
 
 fn today() -> NaiveDate {
@@ -127,7 +127,7 @@ fn hall_names_known_sources() {
     let mut s = Store::open_in_memory().unwrap();
     let state = SourceState { allowed: true, ..SourceState::new("claude-code") };
     let t = turn("no, that's wrong", "You're right.", "m", &now_ts(0), "k");
-    s.ingest(&state, "f", &scan(vec![t]), FileMeta::default(), false).unwrap();
+    s.ingest(&state, "f", &scan(vec![t]), None, Pass::new(FileMeta::default(), false)).unwrap();
     assert_eq!(stats(&s).hall_of_fame[0].source_name, "Claude Code");
 }
 
@@ -179,11 +179,11 @@ fn backfill_window_is_respected() {
     let mut s = Store::open_in_memory().unwrap();
     let state = SourceState { backfill_since: Some(today() - Duration::days(7)), ..test_source() };
     let old = turn("no, that's wrong", "You're right.", "m", &now_ts(40), "x");
-    s.ingest(&state, "f", &scan(vec![old.clone()]), FileMeta::default(), false).unwrap();
+    s.ingest(&state, "f", &scan(vec![old.clone()]), None, Pass::new(FileMeta::default(), false)).unwrap();
     assert_eq!(stats(&s).messages, 0);
 
     // Skipped messages aren't marked as seen, so allowing all history later still counts them.
-    s.ingest(&test_source(), "f", &scan(vec![old]), FileMeta::default(), false).unwrap();
+    s.ingest(&test_source(), "f", &scan(vec![old]), None, Pass::new(FileMeta::default(), false)).unwrap();
     assert_eq!(stats(&s).messages, 1);
 }
 
@@ -857,4 +857,65 @@ fn the_hall_of_fame_keeps_the_best_few_per_award() {
     assert_eq!(ids("made_it_up"), [4, 2, 3, 1]);
     assert_eq!(ids("still_broken").len(), 5, "the best few per award, not all of them");
     assert_eq!(ids(""), [30], "being humbled is an award too");
+}
+
+#[test]
+fn an_empty_key_file_is_unusable_and_replaced_only_when_asked() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("noactually.db");
+    let key = db.with_file_name(CARD_KEY_FILE);
+    std::fs::write(&key, "").unwrap();
+    assert_eq!(card_secret(&db, false).unwrap(), None, "nothing to seal with");
+    assert_eq!(std::fs::read(&key).unwrap(), b"", "and asking doesn't write");
+    let made = card_secret(&db, true).unwrap().unwrap();
+    assert_eq!(made.len(), 32);
+    assert_eq!(std::fs::read(&key).unwrap(), made, "replaced in one step");
+    assert_eq!(card_secret(&db, true).unwrap().unwrap(), made, "and then kept");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(std::fs::metadata(&key).unwrap().permissions().mode() & 0o777, 0o600, "owner-only");
+    }
+}
+
+#[test]
+fn many_first_runs_at_once_end_with_the_same_secret() {
+    for _ in 0..20 {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("app").join("noactually.db");
+        let start = std::sync::Barrier::new(16);
+        let secrets: Vec<Vec<u8>> = std::thread::scope(|s| {
+            let runs: Vec<_> = (0..16)
+                .map(|_| {
+                    s.spawn(|| {
+                        start.wait();
+                        card_secret(&db, true).unwrap().unwrap()
+                    })
+                })
+                .collect();
+            runs.into_iter().map(|r| r.join().unwrap()).collect()
+        });
+        assert_eq!(secrets[0].len(), 32);
+        assert!(secrets.iter().all(|s| *s == secrets[0]), "every run got the winner's secret");
+        assert_eq!(std::fs::read(db.with_file_name(CARD_KEY_FILE)).unwrap(), secrets[0]);
+        let files: Vec<_> = std::fs::read_dir(db.parent().unwrap()).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert_eq!(files, [CARD_KEY_FILE], "no temporary files are left behind");
+    }
+}
+
+#[test]
+fn card_secret_is_made_once_and_kept() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("app").join("noactually.db");
+    assert_eq!(card_secret(&db, false).unwrap(), None, "only the helper makes it");
+    let made = card_secret(&db, true).unwrap().unwrap();
+    assert_eq!(made.len(), 32);
+    assert_eq!(card_secret(&db, true).unwrap().unwrap(), made, "never overwritten");
+    assert_eq!(card_secret(&db, false).unwrap().unwrap(), made);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::metadata(db.with_file_name(CARD_KEY_FILE)).unwrap().permissions().mode();
+        assert_eq!(perms & 0o777, 0o600, "owner-only");
+    }
 }

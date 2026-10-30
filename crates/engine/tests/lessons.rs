@@ -244,7 +244,11 @@ fn the_file_is_well_formed() {
         let teaches = lesson["teaches"].as_object().expect("teaches");
         let ok = teaches.len() == 1
             && match (track, teaches.iter().next()) {
-                ("habits", Some((k, v))) => k == "signal" && v.as_str().is_some_and(|s| signals.contains(&s)),
+                // A habit is a signal the engine can see, or Context, which only a report card can tell.
+                ("habits", Some((k, v))) => {
+                    (k == "signal" && v.as_str().is_some_and(|s| signals.contains(&s)))
+                        || (k == "context" && v.as_bool() == Some(true))
+                }
                 ("steer", Some((k, v))) => k == "steer" && v.as_str().is_some_and(|s| STEERS.contains(&s)),
                 ("correction", Some((k, v))) => k == "correction" && v.as_bool() == Some(true),
                 _ => false,
@@ -258,6 +262,10 @@ fn the_file_is_well_formed() {
         all_lessons(&root).iter().filter_map(|(_, l)| l["teaches"]["signal"].as_str()).collect();
     if taught.len() != signals.len() {
         wrong.push(format!("the habits track teaches {taught:?}, not all five signals"));
+    }
+    let context = all_lessons(&root).iter().filter(|(_, l)| l["teaches"]["context"].as_bool() == Some(true)).count();
+    if context != 1 {
+        wrong.push(format!("the habits track teaches Context {context} times, not once"));
     }
     assert!(wrong.is_empty(), "{} problems:\n{}", wrong.len(), wrong.join("\n"));
 }

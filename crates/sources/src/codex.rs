@@ -3,8 +3,8 @@
 use crate::jsonl::{for_each_line, open_at};
 use crate::view::{build, Cut, Sample};
 use crate::{
-    contains, file_name, home, is_grade_request, pair, parse_ts, walk, ChatView, Error, Event, FileScan, Kind, Result,
-    Source,
+    contains, file_name, home, pair, parse_ts, walk, ChatView, Error, Event, FileScan, Kind, Result, Source,
+    GRADE_SKILL_CODEX,
 };
 use engine::Usage;
 use serde_json::Value;
@@ -24,9 +24,6 @@ const NOISE: &[&str] = &[
     "<permissions",
     "<turn_aborted",
 ];
-
-/// How the Codex skill that writes a report card is invoked.
-const GRADE_SKILL: &str = "$grade-me";
 
 fn is_zst(p: &Path) -> bool {
     p.extension().is_some_and(|e| e == "zst")
@@ -108,23 +105,34 @@ impl Source for Codex {
     fn append_only(&self, path: &Path) -> bool {
         !is_zst(path)
     }
+    fn gradable(&self) -> bool {
+        true
+    }
 
-    fn view(&self, path: &Path) -> Option<Result<ChatView>> {
-        Some(Self::read(path, 0, true).map(|(rollout, session, end)| {
-            build(self.id(), &session, rollout.events, rollout.samples, rollout.cuts, end)
+    fn view_from(&self, path: &Path, from: u64, usage: bool) -> Option<Result<ChatView>> {
+        // Token counts are running totals, so they need every line from the top; without them
+        // only the first line (whose thread it is) is read besides the end.
+        let read = if usage || from == 0 || is_zst(path) {
+            Self::read(path, from, usage)
+        } else {
+            Self::read_tail(path, from)
+        };
+        Some(read.map(|(rollout, end)| {
+            let mid_chat = from > 0 && !is_zst(path);
+            build(self.id(), &rollout.session, rollout.events, rollout.samples, rollout.cuts, end, mid_chat)
         }))
     }
 
     fn scan(&self, path: &Path, from: u64, finalize: bool) -> Result<FileScan> {
-        let (rollout, session, end) = Self::read(path, from, false)?;
+        let (rollout, end) = Self::read(path, from, false)?;
         // Compressed files are finished sessions: read whole, always final.
-        Ok(pair(self.id(), &session, rollout.events, end, finalize || is_zst(path)))
+        Ok(pair(self.id(), &rollout.session, rollout.events, end, finalize || is_zst(path)))
     }
 }
 
 impl Codex {
     /// Reads a rollout from the top. `usage` also collects the token counts (for the chat view).
-    fn read(path: &Path, from: u64, usage: bool) -> Result<(Rollout, String, u64)> {
+    fn read(path: &Path, from: u64, usage: bool) -> Result<(Rollout, u64)> {
         // Rollouts are always read from the top: the lines before `from` were already emitted,
         // but they carry the session's metadata and current model.
         let reader: Box<dyn BufRead> = if is_zst(path) {
@@ -139,26 +147,27 @@ impl Codex {
             Box::new(open_at(path, 0)?)
         };
         let from = if is_zst(path) { 0 } else { from };
-        // The filename's uuid is the session id; it's stable no matter where a pass resumes.
-        let session = file_name(path).trim_end_matches(".zst").trim_end_matches(".jsonl").to_string();
-        let mut rollout = Rollout {
-            session: session.clone(),
-            from,
-            model: None,
-            human: true,
-            usage,
-            last_total: Usage::default(),
-            events: Vec::new(),
-            samples: Vec::new(),
-            cuts: Vec::new(),
-        };
+        let mut rollout = Rollout::new(path, from, usage);
         let end = for_each_line(reader, 0, |pos, buf| rollout.line(pos, buf)).map_err(Error::io(path))?;
-        Ok((rollout, session, end))
+        Ok((rollout, end))
+    }
+
+    /// Reads the end of a rollout, from `from`, and its first line, which says whose thread it is.
+    /// The model is only known if the end names it.
+    fn read_tail(path: &Path, from: u64) -> Result<(Rollout, u64)> {
+        let mut rollout = Rollout::new(path, from, false);
+        let mut first = Vec::new();
+        open_at(path, 0)?.read_until(b'\n', &mut first).map_err(Error::io(path))?;
+        rollout.line(0, &first);
+        let end =
+            for_each_line(open_at(path, from)?, from, |pos, buf| rollout.line(pos, buf)).map_err(Error::io(path))?;
+        Ok((rollout, end))
     }
 }
 
 /// State carried down one rollout as it's read.
 struct Rollout {
+    /// The filename's uuid, stable no matter where a pass resumes.
     session: String,
     /// Lines before this were already emitted; they're read only for metadata and the model.
     from: u64,
@@ -188,21 +197,23 @@ fn total_usage(t: &Value) -> Usage {
     }
 }
 
-/// Tokens used since `b`. Totals that went down (a reset, or a forked thread) start over.
-fn minus(a: &Usage, b: &Usage) -> Usage {
-    let all = |u: &Usage| u.input + u.cache_write + u.cache_read + u.output;
-    if all(a) < all(b) {
-        return *a;
-    }
-    Usage {
-        input: a.input.saturating_sub(b.input),
-        cache_write: a.cache_write.saturating_sub(b.cache_write),
-        cache_read: a.cache_read.saturating_sub(b.cache_read),
-        output: a.output.saturating_sub(b.output),
-    }
-}
-
 impl Rollout {
+    /// A rollout at its start.
+    fn new(path: &Path, from: u64, usage: bool) -> Rollout {
+        let session = file_name(path).trim_end_matches(".zst").trim_end_matches(".jsonl").to_string();
+        Rollout {
+            session,
+            from,
+            model: None,
+            human: true,
+            usage,
+            last_total: Usage::default(),
+            events: Vec::new(),
+            samples: Vec::new(),
+            cuts: Vec::new(),
+        }
+    }
+
     fn line(&mut self, pos: u64, buf: &[u8]) {
         let fresh = pos >= self.from;
         let meta = contains(buf, b"session_meta") || contains(buf, b"turn_context");
@@ -220,7 +231,7 @@ impl Rollout {
                 if total.is_object() {
                     let now = total_usage(total);
                     let ts = v["timestamp"].as_str().and_then(parse_ts);
-                    let usage = minus(&now, &self.last_total);
+                    let usage = now.minus(&self.last_total);
                     self.last_total = now;
                     self.samples.push(Sample { pos, ts, model: None, usage });
                 }
@@ -238,7 +249,7 @@ impl Rollout {
                     if text.is_empty() || NOISE.iter().any(|n| text.starts_with(n)) {
                         return;
                     }
-                    if text.trim_start().starts_with(GRADE_SKILL) || is_grade_request(&text) {
+                    if text.trim_start().starts_with(GRADE_SKILL_CODEX) {
                         if self.usage {
                             let ts = v["timestamp"].as_str().and_then(parse_ts);
                             self.cuts.push(Cut { pos, ts });
@@ -268,7 +279,6 @@ impl Rollout {
 mod tests {
     use super::*;
     use crate::testing::{line, zstd};
-    use crate::AUTO_GRADE_PROMPT;
     use serde_json::json;
 
     #[test]
@@ -384,7 +394,6 @@ mod tests {
         let body = opening()
             + &msg("assistant", "output_text", "You're right.", "a2")
             + &msg("user", "input_text", "$grade-me", "g1")
-            + &msg("user", "input_text", &format!("{AUTO_GRADE_PROMPT}7"), "g2")
             + &msg("assistant", "output_text", "Card.", "a3");
         let (_d, p) = rollout(&body);
         let scan = Codex.scan(&p, 0, true).unwrap();
@@ -394,7 +403,8 @@ mod tests {
 
     #[test]
     fn cards_are_pulled_from_replies() {
-        let body = opening() + &msg("assistant", "output_text", "Report.\n```noactually\n{}\n```", "a2");
+        let card = "Report.\n```noactually\n{\"v\":1,\"k\":\"9c41e0aa\",\"tasks\":[{\"at\":\"7f3a9c21\",\"to\":\"e44a1b90\"}]}\n```";
+        let body = opening() + &msg("assistant", "output_text", card, "a2");
         let (_d, p) = rollout(&body);
         let scan = Codex.scan(&p, 0, true).unwrap();
         assert_eq!(scan.cards.len(), 1);
@@ -422,15 +432,43 @@ mod tests {
         // Input counts cached tokens and output counts reasoning, so input is split.
         assert_eq!(v.prompts[0].usage, Usage { input: 600, cache_write: 0, cache_read: 900, output: 80 });
         assert_eq!(v.prompts[0].model.as_deref(), Some("gpt-6-astra"));
-        assert_eq!(v.prompts[0].minutes, 30);
+        assert_eq!(v.prompts[0].seconds, 1800, "39 minutes to the next prompt, capped at 30");
         assert_eq!(v.prompts[1].usage, Usage { input: 300, cache_write: 0, cache_read: 0, output: 20 });
-        assert_eq!(v.prompts[1].minutes, 2);
+        assert_eq!(v.prompts[1].seconds, 120);
         let scan = Codex.scan(&p, 0, true).unwrap();
         for (pv, st) in v.prompts.iter().zip(&scan.turns) {
             let want =
                 engine::message_key("codex", &st.session, st.key.as_deref(), &st.ts.to_rfc3339(), &st.turn.human);
             assert_eq!(pv.key, want);
         }
+    }
+
+    #[test]
+    fn a_view_from_an_offset_holds_only_the_end_of_the_rollout() {
+        let t = |m: u32| format!("2026-10-20T10:{m:02}:00Z");
+        let meta = line(&json!({"type":"session_meta","payload":{"id":"abc","thread_source":"user"}}))
+            + &line(&json!({"type":"turn_context","payload":{"model":"gpt-6-astra"}}));
+        let early = msg_at(&t(1), "user", "input_text", "build a settings page with tabs", "u1")
+            + &counts(&t(2), 1000, 0, 100, 10);
+        let late = msg_at(&t(5), "user", "input_text", "now add dark mode", "u2") + &counts(&t(6), 1500, 0, 150, 15);
+        let (_d, p) = rollout(&(meta.clone() + &early + &late));
+        let from = (meta.len() + early.len()) as u64;
+        let whole = Codex.view(&p).unwrap().unwrap();
+
+        // With token counts the running totals come from the top, so the round's cost is right.
+        let counted = Codex.view_from(&p, from, true).unwrap().unwrap();
+        assert_eq!(counted.prompts.len(), 1);
+        assert_eq!(counted.prompts[0].usage, whole.prompts[1].usage);
+
+        // Without them, only the first line and the end are read: the thread is still known to be a person's.
+        let light = Codex.view_from(&p, from, false).unwrap().unwrap();
+        assert_eq!((light.session.as_str(), light.prompts.len()), ("rollout-2026-10-20-abc", 1));
+        assert_eq!(light.prompts[0].key, whole.prompts[1].key);
+        assert_eq!(light.prompts[0].usage, Usage::default());
+        let guardian = line(&json!({"type":"session_meta","payload":{"id":"abc","thread_source":"agent"}}));
+        let (_d2, p2) = rollout(&(guardian.clone() + &early + &late));
+        let skipped = Codex.view_from(&p2, (guardian.len() + early.len()) as u64, false).unwrap().unwrap();
+        assert!(skipped.prompts.is_empty(), "a model-to-model thread has no person's prompts");
     }
 
     #[test]
@@ -451,7 +489,7 @@ mod tests {
     #[test]
     fn view_cuts_at_grade_requests() {
         let t = |m: u32| format!("2026-10-20T10:{m:02}:00Z");
-        for cut in ["  $grade-me please", &format!("{AUTO_GRADE_PROMPT}7")] {
+        for cut in ["  $grade-me please", "$grade-me"] {
             let body = msg_at(&t(1), "user", "input_text", "build a settings page with tabs", "u1")
                 + &counts(&t(3), 100, 0, 10, 0)
                 + &msg_at(&t(5), "user", "input_text", cut, "g")
@@ -462,7 +500,7 @@ mod tests {
             let v = Codex.view(&p).unwrap().unwrap();
             assert_eq!(v.prompts.len(), 2, "{cut}");
             assert_eq!(v.prompts[0].usage.input, 100, "{cut}");
-            assert_eq!(v.prompts[0].minutes, 4, "{cut}");
+            assert_eq!(v.prompts[0].seconds, 240, "{cut}");
             // The grading round's tokens are skipped, but the totals still move on.
             assert_eq!(v.prompts[1].usage.input, 100, "{cut}");
         }

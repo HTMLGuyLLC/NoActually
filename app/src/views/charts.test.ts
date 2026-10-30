@@ -30,6 +30,16 @@ describe("lineChart", () => {
     expect(m).toContain("Oct 12: 20 (too few tasks to count)");
   });
 
+  it("says a point's own tooltip when it has one, with the hollow-dot note after it", () => {
+    const m = line([
+      { label: "Oct 5", value: 0.84, tip: "Oct 5: 0.8 per task" },
+      { label: "Oct 12", value: 1.25, weak: true, tip: "Oct 12: 1.3 per task" },
+    ]);
+    expect(m).toContain('data-tip="Oct 5: 0.8 per task" tabindex="0" role="img" aria-label="Oct 5: 0.8 per task"');
+    expect(m).toContain('data-tip="Oct 12: 1.3 per task (too few tasks to count)"');
+    expect(m).not.toContain("Oct 5: 1<"); // not the rounded value
+  });
+
   it("names why a dot is hollow in the chart's own words", () => {
     expect(line(points, { weakNote: "fewer than 50 messages" })).toContain("Oct 12: 20 (fewer than 50 messages)");
   });

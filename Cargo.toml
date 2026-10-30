@@ -29,6 +29,7 @@ chrono = { version = "0.4", default-features = false, features = ["std", "clock"
 rayon = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
 sha2 = "0.10"
+getrandom = "0.4"
 anyhow = "1"
 thiserror = "2"
 memchr = "2"

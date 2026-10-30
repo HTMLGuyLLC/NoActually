@@ -7,13 +7,14 @@ describe("api outside Tauri", () => {
     expect(demo).toBe(true);
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({ json: async () => ({ meta, stats: stats(), progress: progress() }) })),
+      vi.fn(async () => ({ json: async () => ({ meta, stats: stats(), progress: progress(), recent_report_cards: [] }) })),
     );
     const open = vi.fn();
     vi.stubGlobal("window", { open });
     expect(await api.meta()).toEqual(meta);
     expect((await api.stats({})).overall.tier).toBe("sharp_eyed");
     expect(await api.sources()).not.toHaveLength(0);
+    expect(await api.recentReportCards({})).toEqual([]);
     expect(await api.retention()).toEqual({ level: "snippet", full_days: 30, snippet_days: 365 });
     expect(await api.getAutostart()).toBe(false);
     expect((await api.updateStatus()).current).toBe("0.1.0");

@@ -102,6 +102,68 @@ UPDATE settings SET key = 'milestone.prompt_tier' WHERE key = 'milestone.brief_t
     r"
 ALTER TABLE files ADD COLUMN finalized INTEGER NOT NULL DEFAULT 0;
 ",
+    // 8: Report cards. One row per (card, graded task): numbers only, never chat text. Not a score
+    // table: a rules rebuild re-reads files and writes the same rows again, and Claude Code deletes
+    // old transcripts, so these rows are the history. `first` is the task's first prompt key: a
+    // resumed chat is a new file but keeps its prompts, so a re-grade there finds the same task. The
+    // view is the rows that still count: not replaced by a newer card (graded_at, then rounds, then
+    // key) that grades the same first prompt, or, in the same chat, a task sharing more than an
+    // endpoint with it. `engine::tasks_overlap` is the same rule in Rust. A file also remembers the
+    // last card position it read (`cards_to`, NULL until one), so the chat isn't read whole again to
+    // see the same card. `tokens` is JSON: the tokens the task redid by the raw id of the model that
+    // answered each round ({"claude-opus-5-5":{"input":..,"cache_write":..,"cache_read":..,"output":..}}),
+    // priced when read.
+    r"
+ALTER TABLE files ADD COLUMN cards_to INTEGER;
+CREATE TABLE report_cards (
+    key TEXT PRIMARY KEY,
+    card TEXT NOT NULL,
+    source TEXT NOT NULL, session TEXT NOT NULL,
+    first TEXT NOT NULL,
+    day TEXT NOT NULL,
+    start_ts TEXT NOT NULL, end_ts TEXT NOT NULL,
+    provider TEXT NOT NULL, family TEXT NOT NULL, version TEXT NOT NULL,
+    grade TEXT NOT NULL, rounds INTEGER NOT NULL, avoidable INTEGER NOT NULL,
+    missing INTEGER NOT NULL,
+    auto INTEGER NOT NULL,
+    tokens TEXT NOT NULL,
+    minutes INTEGER NOT NULL,
+    graded_at TEXT NOT NULL
+) WITHOUT ROWID;
+CREATE INDEX report_cards_session ON report_cards (session);
+CREATE INDEX report_cards_first ON report_cards (source, first);
+CREATE INDEX report_cards_day ON report_cards (day);
+CREATE VIEW current_report_cards AS
+SELECT * FROM report_cards a WHERE NOT EXISTS (
+    SELECT 1 FROM report_cards b
+    WHERE b.card <> a.card
+      AND (b.graded_at, b.rounds, b.key) > (a.graded_at, a.rounds, a.key)
+      AND ((b.source = a.source AND b.first = a.first)
+        OR (b.session = a.session AND b.start_ts < a.end_ts AND a.start_ts < b.end_ts))
+);
+",
+    // 9: Tips an AI gave, and the chats that had the rules. Numbers only: the words stay in the chat.
+    // Score tables, so a rebuild reads them again and they stay in step with `tasks`.
+    r"
+CREATE TABLE tips (
+    key TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    session TEXT NOT NULL,
+    day TEXT NOT NULL,
+    ts TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    family TEXT NOT NULL,
+    version TEXT NOT NULL,
+    habit INTEGER NOT NULL,
+    redid INTEGER NOT NULL
+) WITHOUT ROWID;
+CREATE INDEX tips_day ON tips (day);
+CREATE TABLE tip_chats (
+    session TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    day TEXT NOT NULL
+) WITHOUT ROWID;
+",
 ];
 
 /// Sets connection pragmas and applies any migrations the database hasn't had. Each migration
@@ -114,7 +176,12 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     let version: usize = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
     for (i, sql) in MIGRATIONS.iter().enumerate().skip(version) {
-        let tx = conn.transaction()?;
+        // Immediate, and checked again inside: the app and a command can open an old file together.
+        let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let now: usize = tx.pragma_query_value(None, "user_version", |r| r.get(0))?;
+        if now > i {
+            continue;
+        }
         tx.execute_batch(sql)?;
         tx.pragma_update(None, "user_version", i + 1)?;
         tx.commit()?;
@@ -164,6 +231,22 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM settings WHERE key = 'milestone.brief_tier'", [], |r| r.get(0))
             .unwrap();
         assert_eq!(old, 0);
+    }
+
+    #[test]
+    fn version_7_gains_the_report_card_table_and_the_view_of_what_counts() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        for sql in &MIGRATIONS[..7] {
+            conn.execute_batch(sql).unwrap();
+        }
+        conn.pragma_update(None, "user_version", 7).unwrap();
+        conn.execute("INSERT INTO settings VALUES ('keep', 'me')", []).unwrap();
+        migrate(&mut conn).unwrap();
+        assert_eq!(user_version(&conn), MIGRATIONS.len());
+        let count = |table: &str| -> i64 {
+            conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap()
+        };
+        assert_eq!((count("report_cards"), count("current_report_cards"), count("settings")), (0, 0, 1));
     }
 
     #[test]

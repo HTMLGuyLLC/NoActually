@@ -1,0 +1,5 @@
+# The report card plugin ships byte-for-byte: the app compares the installed files with the copies
+# built into it, and the shim must keep its Unix line endings to run. Shell scripts likewise.
+plugins/** text=auto eol=lf
+*.sh text eol=lf
+*.png binary

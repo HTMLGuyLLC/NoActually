@@ -3,6 +3,7 @@ import { api, demo } from "../api";
 import { data, must, say } from "../dom";
 import { errorText } from "../format";
 import { type Html, html } from "../html";
+import { openModal } from "../modal";
 import type { CardShape } from "./cards";
 import { shareGuide, shareTargets } from "./share";
 
@@ -83,14 +84,16 @@ async function share(id: string, post: Post, text: string, out: HTMLElement) {
  * waited for the dialog).
  */
 export function openShareDialog(post: Post, opener: HTMLElement | null, onClose: () => void): HTMLDialogElement {
-  document.querySelector("dialog.share-dialog")?.remove();
-  const dlg = document.createElement("dialog");
-  dlg.className = "share-dialog";
-  dlg.setAttribute("aria-labelledby", "share-title");
   const note = post.quotesChat
     ? "This quotes your chat (already redacted). Edit it above before sharing if you like."
     : "Only these numbers and the project link are shared. Never your chats.";
-  dlg.innerHTML = html`
+  const { dlg } = openModal({
+    className: "share-dialog",
+    labelledBy: "share-title",
+    opener,
+    onClose,
+    focus: '[data-sd="share"]',
+    markup: html`
     <div class="sd-head"><h2 id="share-title">${post.title}</h2><button class="sd-close" data-sd="close" aria-label="Close">×</button></div>
     <label class="eyebrow" for="share-text">What you'll post${post.quotesChat ? " · you can edit it" : ""}</label>
     <textarea id="share-text" rows="${post.quotesChat ? 4 : 3}" ${post.quotesChat ? "" : "readonly"}>${post.text}</textarea>
@@ -105,36 +108,18 @@ export function openShareDialog(post: Post, opener: HTMLElement | null, onClose:
         }</button>`,
     )}</div>
     <div id="share-guide" class="share-guide" role="status" aria-live="polite">${note}</div>
-    <div class="sd-foot"><button class="ghost" data-sd="image">Save image</button><button class="ghost" data-sd="copy">Copy text</button></div>`.value;
-  document.body.appendChild(dlg);
+    <div class="sd-foot"><button class="ghost" data-sd="image">Save image</button><button class="ghost" data-sd="copy">Copy text</button></div>`,
+    onClick: (target, close) => {
+      const b = target.closest<HTMLButtonElement>("button[data-sd]");
+      if (!b) return;
+      const what = b.dataset.sd;
+      if (what === "close") close();
+      else if (what === "share") void share(data(b, "id"), post, box.value, out);
+      else if (what === "copy") void copyText(box.value, out);
+      else if (what === "image") void saveImage(post, out);
+    },
+  });
   const out = must("#share-guide", dlg);
   const box = must<HTMLTextAreaElement>("#share-text", dlg);
-  const close = () => {
-    dlg.close();
-    dlg.remove();
-    if (opener?.isConnected) opener.focus();
-    onClose();
-  };
-  dlg.addEventListener("cancel", (e) => {
-    e.preventDefault(); // Esc: close our way, so focus and redraws are handled
-    close();
-  });
-  dlg.addEventListener("click", (e) => {
-    if (e.target === dlg) {
-      // A click on the dialog itself is the backdrop only when it lands outside the box, not on its padding or gaps.
-      const r = dlg.getBoundingClientRect();
-      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) close();
-      return;
-    }
-    const b = e.target instanceof Element ? e.target.closest<HTMLButtonElement>("button[data-sd]") : null;
-    if (!b) return;
-    const what = b.dataset.sd;
-    if (what === "close") close();
-    else if (what === "share") void share(data(b, "id"), post, box.value, out);
-    else if (what === "copy") void copyText(box.value, out);
-    else if (what === "image") void saveImage(post, out);
-  });
-  dlg.showModal();
-  dlg.querySelector<HTMLButtonElement>('[data-sd="share"]')?.focus();
   return dlg;
 }

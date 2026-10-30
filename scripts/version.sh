@@ -4,7 +4,8 @@
 #
 # Usage:
 #   scripts/version.sh          print the version
-#   scripts/version.sh check    fail unless app/package.json and tauri.conf.json agree with it
+#   scripts/version.sh check    fail unless app/package.json, tauri.conf.json and the report card
+#                               plugin's plugin.json agree with it
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -20,6 +21,13 @@ case "${1:-}" in
     echo "Cargo workspace: $v, app/package.json: $pkg, tauri.conf.json: ${conf:-<unset>}"
     [[ "$pkg" == "$v" ]] || { echo "app/package.json version differs." >&2; exit 1; }
     [[ -z "$conf" || "$conf" == "$v" ]] || { echo "tauri.conf.json version differs." >&2; exit 1; }
+    # The report card plugin ships from the same tag, so it carries the same version.
+    plugin="$ROOT/plugins/grade/.claude-plugin/plugin.json"
+    if [[ -f "$plugin" ]]; then
+      pv="$(node -p "require('$plugin').version")"
+      echo "plugins/grade plugin.json: $pv"
+      [[ "$pv" == "$v" ]] || { echo "plugins/grade/.claude-plugin/plugin.json version differs." >&2; exit 1; }
+    fi
     ;;
   *) echo "usage: scripts/version.sh [check]" >&2; exit 2 ;;
 esac

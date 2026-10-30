@@ -6,7 +6,7 @@ import { bindActions } from "./actions";
 import { api, demo } from "./api";
 import { bindChartTips } from "./charttip";
 import { paintStatus, paintUpdate, render, root, scheduler } from "./render";
-import { isGlance, isTab, setStatus, setSyncing, setTab, setUpdate, state } from "./state";
+import { checkingLeft, hasOverlayTitleBar, isGlance, isTab, setStatus, setSyncing, setTab, setUpdate, state } from "./state";
 
 bindActions(root);
 bindChartTips(root);
@@ -19,6 +19,18 @@ function refresh() {
   if (isGlance || state.tab === "score") scheduler.refresh();
 }
 
+/** A check ended: once "Checking…" has been up long enough, reads where things stand now. */
+const checkDone = (after: () => void) =>
+  setTimeout(
+    () =>
+      void api
+        .syncStatus()
+        .then(setStatus)
+        .catch(() => setStatus({ ...state.status, syncing: false }))
+        .then(after),
+    checkingLeft(),
+  );
+
 const loadUpdate = () =>
   api
     .updateStatus()
@@ -28,6 +40,7 @@ const loadUpdate = () =>
     })
     .catch(() => {});
 
+if (hasOverlayTitleBar(!demo, isGlance, navigator.userAgent)) document.documentElement.classList.add("mac-bar");
 if (isGlance) {
   document.documentElement.classList.add("is-glance");
   if (!demo)
@@ -56,8 +69,8 @@ if (!demo) {
     setSyncing();
     paintStatus();
   });
-  void listen("stats-changed", () => api.syncStatus().then(setStatus).then(refresh));
-  void listen("sync-failed", () => api.syncStatus().then(setStatus).then(paintStatus));
+  void listen("stats-changed", () => checkDone(refresh));
+  void listen("sync-failed", () => checkDone(paintStatus));
 }
 // Keep "Checked 3 min ago" honest without re-querying stats.
 setInterval(() => state.current && paintStatus(), 30_000);

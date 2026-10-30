@@ -126,7 +126,7 @@ jobs:
         run: node --test scripts/*.test.mjs
 
       - name: ShellCheck
-        run: shellcheck scripts/*.sh
+        run: shellcheck scripts/*.sh plugins/grade/bin/na
 
       - name: actionlint
         uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2

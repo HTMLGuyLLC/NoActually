@@ -45,7 +45,7 @@ test-frontend:
 
 test-scripts:
     node --test scripts/*.test.mjs
-    @if command -v shellcheck >/dev/null; then shellcheck scripts/*.sh; else echo "shellcheck not installed; skipped (brew install shellcheck)"; fi
+    @if command -v shellcheck >/dev/null; then shellcheck scripts/*.sh plugins/grade/bin/na; else echo "shellcheck not installed; skipped (brew install shellcheck)"; fi
 
 # The engine has no I/O, so it builds for the web too.
 wasm:

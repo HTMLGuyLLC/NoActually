@@ -59,7 +59,7 @@ function sourceRow(s: SourceInfo): Html {
 export function sourcesView(list: SourceInfo[], status: SyncStatus): Html {
   return html`
     <section id="sources"><div class="head sources-head">
-      <p class="muted">Nothing is read until you allow it. No, Actually... reads your messages and the AI's replies on this computer to score your prompts and count corrections. No chat content or stats leave your computer.</p>
+      <p class="muted">Nothing is read until you allow it. No, Actually... reads your messages and the AI's replies on this computer to score your prompts and count corrections. The app itself sends no chat content or stats. If you turn on report cards, your AI reads a short summary of that chat.</p>
       <div class="sync-check">
         <button class="ghost" data-action="sync-now">Check for new chats</button>
         <span class="muted small" id="sync-line">New chats last checked ${ago(status.last_sync)}.</span>

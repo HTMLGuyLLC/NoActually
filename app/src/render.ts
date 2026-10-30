@@ -1,16 +1,28 @@
 // Draws the current view into #app, keeping keyboard focus where it was.
-import { api, demo } from "./api";
+import { api, demo, REPORT_CARD_TOOLS } from "./api";
 import { captureFocus, must, restoreFocus } from "./dom";
 import { ago, errorText, isFiltered, listNames, subjectText } from "./format";
+import { isDismissed } from "./hints";
 import { type Html, html } from "./html";
 import { refreshCheck } from "./learn/checker";
 import { closePicker } from "./picker/popover";
 import { createScheduler, isUserBusy } from "./scheduler";
-import { isGlance, periodSince, setAllModels, setCurrent, setLastCorrectionTier, setLastPromptTier, setLastVerdict, setMeta, state } from "./state";
+import {
+  isGlance,
+  periodSince,
+  setAllModels,
+  setCurrent,
+  setLastCorrectionTier,
+  setLastPromptTier,
+  setLastVerdict,
+  setMeta,
+  setReportCards,
+  state,
+} from "./state";
 import { updateBanner, updateLine } from "./update";
 import { coverage, headerView, statusPillView } from "./views/chrome";
 import { emptyGlanceView, glanceView } from "./views/glance";
-import { improveView } from "./views/improve";
+import { canGrade, improveView } from "./views/improve";
 import { learnView } from "./views/learn";
 import { modelPicker, onboardingView, scorecardView } from "./views/scorecard";
 import { settingsView } from "./views/settings";
@@ -19,6 +31,24 @@ import { watchingNames } from "./views/sources";
 export const root: HTMLElement = must("#app");
 
 const watching = async () => listNames(watchingNames(await api.sources()));
+
+/**
+ * Asks the app where report cards stand and keeps the answer. A failure is shown in the section, not thrown.
+ * `look` also searches for a tool the quick search didn't find (the "Look again" button).
+ */
+export async function readReportCards(look = false): Promise<void> {
+  try {
+    setReportCards({ status: await api.reportCardsStatus(look), statusError: "" });
+  } catch (e) {
+    setReportCards({ statusError: errorText(e) });
+  }
+}
+
+/** Whether Improve has already asked for the report card status once. */
+let cardsAsked = false;
+
+/** Whether the last draw showed Settings → Report cards, so opening it is told from redrawing it. */
+let reportCardsShown = false;
 
 async function view(): Promise<Html> {
   const meta = state.meta ?? setMeta(await api.meta());
@@ -42,6 +72,12 @@ async function view(): Promise<Html> {
     return glanceView(s, meta, goal);
   }
 
+  // Opening Settings → Report cards reads its status. That can take a moment (it asks Claude Code), so
+  // the section draws first, with what it has, and again once the answer is in.
+  const onCards = state.tab === "settings" && state.settingsPane === "report-cards";
+  if (onCards && !reportCardsShown) void readReportCards().then(scheduler.refresh);
+  reportCardsShown = onCards;
+
   let body: Html;
   if (state.tab === "settings") {
     // Sources lead Settings: you set them up once, beside the other privacy controls.
@@ -51,11 +87,33 @@ async function view(): Promise<Html> {
       api.getAutostart().catch(() => false),
       api.getMenuBar(),
     ]);
-    body = settingsView({ pane: state.settingsPane, sources, status: state.status, retention, autostart, menuBar, update: state.update, demo });
+    body = settingsView({
+      pane: state.settingsPane,
+      sources,
+      status: state.status,
+      retention,
+      autostart,
+      menuBar,
+      reportCards: state.reportCards,
+      tipRules: meta.tip_rules,
+      update: state.update,
+      demo,
+    });
   } else if (state.tab === "learn") {
     body = learnView({ meta, prompts: s.messages ? s.prompts : null, done: await api.learned(), lesson: state.lesson, draft: state.draft, demo });
   } else if (state.tab === "improve") {
-    const progress = await api.progress(state.filter);
+    // The recent list and the setup tip are extras: Improve still draws without them.
+    const [progress, recent, sources] = await Promise.all([
+      api.progress(state.filter),
+      api.recentReportCards(state.filter).catch(() => []),
+      api.sources().catch(() => []),
+    ]);
+    // Reading it asks the AI tools, which can take seconds, so it never holds up a draw.
+    const cards = state.reportCards.status;
+    if (!cards && !cardsAsked) {
+      cardsAsked = true;
+      void readReportCards().then(render);
+    }
     body = improveView({
       meta,
       stats: s,
@@ -64,6 +122,10 @@ async function view(): Promise<Html> {
       subject: subjectText(state.filter, meta),
       picker: modelPicker({ filter: state.filter, meta }),
       filtered: isFiltered(state.filter),
+      recent,
+      canGrade: canGrade(meta, sources),
+      hintDismissed: isDismissed("report-cards"),
+      cardsOn: REPORT_CARD_TOOLS.find((t) => cards?.[t].on) ?? null,
     });
   } else if (s.messages) {
     body = scorecardView(s, {
@@ -118,7 +180,16 @@ export function paintStatus(): void {
     const active = document.activeElement;
     const hadFocus = pill.contains(active);
     const kind = PILL_CONTROLS.find((c) => active?.matches(c));
-    pill.outerHTML = statusPillView(state.status, demo, coverage(state.current)).value;
+    const markup = statusPillView(state.status, demo, coverage(state.current)).value;
+    // Compared as the browser would write it, since it doesn't give back the markup it was given.
+    const next = document.createElement("template");
+    next.innerHTML = markup;
+    // Nothing changed: leave it, so an open tooltip and the focus aren't disturbed.
+    if (next.content.firstElementChild?.outerHTML !== pill.outerHTML) {
+      const open = pill.querySelector(".sync-text")?.getAttribute("aria-expanded") === "true";
+      pill.outerHTML = markup;
+      if (open) root.querySelector(".sync-text")?.setAttribute("aria-expanded", "true");
+    }
     if (hadFocus) {
       const next = root.querySelector(".sync-pill");
       const same = kind ? next?.querySelector<HTMLElement>(kind) : null;

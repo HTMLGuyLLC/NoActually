@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { emptyReportCards } from "../state";
 import { HOSTILE, hallEntry, meta, overall, row, source, stats } from "../test/fixtures";
 import { headerView, statusPillView } from "./chrome";
 import { emptyGlanceView, glanceView } from "./glance";
@@ -311,6 +312,8 @@ describe("sourcesView", () => {
       retention: { level: "snippet", full_days: 30, snippet_days: 365 },
       autostart: false,
       menuBar: { enabled: true, available: true },
+      reportCards: emptyReportCards(),
+      tipRules: "",
       update: null,
       demo: false,
     }).value;
@@ -393,12 +396,14 @@ describe("settingsView", () => {
     retention: { level: "snippet" as const, full_days: 30, snippet_days: 365 },
     autostart: true,
     menuBar: { enabled: true, available: true },
+    reportCards: emptyReportCards(),
+    tipRules: "",
     update: null,
     demo: false,
   };
 
-  it("shows one sub-tab at a time: Sources, General or Privacy", () => {
-    const tabs = (pane: "sources" | "general" | "privacy") => settingsView({ ...base, pane }).value;
+  it("shows one sub-tab at a time: Sources, General, Report cards or Privacy", () => {
+    const tabs = (pane: "sources" | "general" | "report-cards" | "privacy") => settingsView({ ...base, pane }).value;
     expect(tabs("general")).toContain('data-action="settings-pane" data-id="general" data-tip="General" aria-current="page"');
     expect(tabs("general")).not.toContain('name="level"');
     expect(tabs("sources")).toContain('<section id="sources">');
@@ -483,6 +488,10 @@ describe("status and refresh", () => {
     const m = statusPillView({ syncing: false, last_sync: null, last_error: null, files_with_errors: 0 }, false, covers).value;
     expect(m).toContain('data-action="sync-now"');
     expect(m).toContain('data-tip="Check now"');
+    expect(m).toContain('<i class="dot"></i><svg class="refresh"');
+    expect(statusPillView({ syncing: true, last_sync: null, last_error: null, files_with_errors: 0 }, false, covers).value).not.toContain(
+      'data-action="sync-now"',
+    );
     expect(m).not.toContain("title=");
     expect(m).toContain(`data-tip="${covers}"`);
     // aria-label on a generic span is ignored, so the extra detail is hidden text.

@@ -51,6 +51,9 @@ export const hasSignal = (bits: number, i: number): boolean => (bits & (1 << i))
 
 export const signalTitle = (meta: Meta, id: string): string => meta.signals.find((s) => s.id === id)?.title ?? id;
 
+/** A habit by the name a report card gives it (`finish`) as its title ("Finish line"); the name itself when unknown. */
+export const habitTitle = (meta: Meta, id: string): string => meta.habits.find((h) => h.id === id)?.title ?? id;
+
 /** A signal as an object: "a target", "evidence", "a purpose", for "Include a purpose" and "prompts with a purpose". */
 const SIGNAL_NOUN: Record<string, string> = { spot: "a target", proof: "evidence", done: "a finish line", limits: "guardrails", why: "a purpose" };
 export const signalNoun = (meta: Meta, id: string): string => SIGNAL_NOUN[id] ?? signalTitle(meta, id).toLowerCase();

@@ -10,28 +10,62 @@
 
 #![warn(missing_docs)]
 
+mod cards;
 mod error;
+mod files;
 mod meta;
 pub mod milestones;
 mod progress;
 mod schema;
 mod stats;
 mod sync;
+mod tips;
 
 pub use error::{Error, Result};
-pub use meta::{meta, CategoryInfo, Meta, SignalInfo, SourceInfo, TierInfo, Titled, VerdictTierInfo};
+pub use files::{write_atomic, write_new};
+pub use meta::{meta, CategoryInfo, HabitInfo, Meta, SignalInfo, SourceInfo, TierInfo, Titled, VerdictTierInfo};
 pub use progress::{
-    floor_pct, Bests, Goal, GoalKind, GoalNews, GoalStatus, GoalWeek, HistoryWeek, Insights, ModelLanded, Progress,
-    Trophy, WeekState, GOAL_WEEKS, MIN_WEEK,
+    floor_pct, Bests, CardTrend, Goal, GoalKind, GoalNews, GoalStatus, GoalWeek, HabitDrop, HistoryWeek, Insights,
+    ModelLanded, Progress, RecentReportCard, ReportCardWeek, Trophy, WeekState, GOAL_WEEKS, MIN_CARD_BEST,
+    MIN_CARD_HALF, MIN_CARD_WEEK, MIN_WEEK, RECENT_REPORT_CARDS,
 };
 pub use stats::{Filter, HallEntry, ModelRow, Overall, Prompts, Stats, Tip, WeekRow};
 pub use sync::{sync, SyncReport};
+pub use tips::{TipActivity, TipTrend, TipWeek, TopTip};
+
+/// The file beside the database that says a source is off limits.
+fn stopped_file(db: &Path, source: &str) -> PathBuf {
+    db.with_file_name(format!("source-stopped-{source}"))
+}
+
+/// True when the person stopped, paused or forgot `source`, so nothing may read its chats. `db` is
+/// the database's path.
+pub fn source_stopped(db: &Path, source: &str) -> bool {
+    stopped_file(db, source).exists()
+}
+
+/// Adds `n` to the report cards left out for `source`.
+fn add_left_out(conn: &Connection, source: &str, n: i64) -> Result<()> {
+    if n > 0 {
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + excluded.value",
+            params![left_out_key(source), n.to_string()],
+        )?;
+    }
+    Ok(())
+}
+
+/// The settings key that counts the report cards left out for `source`.
+fn left_out_key(source: &str) -> String {
+    format!("report_cards.left_out.{source}")
+}
 
 use chrono::{DateTime, Duration, Local, NaiveDate, Utc};
 use engine::{classify, normalize_model, read_prompt, snippet, Label, Prompt};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use sources::{Kind, Source};
+use sources::{ChatView, Kind, Source};
 use std::ffi::OsString;
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -46,11 +80,81 @@ pub const DB_FILE: &str = "noactually.db";
 pub const DB_ENV: &str = "NOACTUALLY_DB";
 /// The variable's old name. Still read, after [`DB_ENV`]; deprecated.
 pub const LEGACY_DB_ENV: &str = "WA_DB";
+/// The secret that seals report cards, kept next to the database.
+pub const CARD_KEY_FILE: &str = "report-cards.key";
 
 /// The database the CLI and the app share: `$NOACTUALLY_DB`, else `$WA_DB` (deprecated), else
 /// `<app data>/app.noactually/noactually.db`.
 pub fn default_db_path() -> Result<PathBuf> {
     resolve_db_path(|k| std::env::var_os(k), dirs::data_dir())
+}
+
+/// What [`CARD_KEY_FILE`] holds right now.
+enum KeyFile {
+    Missing,
+    /// A file with nothing in it seals nothing, so it counts as unusable.
+    Empty,
+    Secret(Vec<u8>),
+}
+
+fn read_key(path: &Path) -> std::io::Result<KeyFile> {
+    match std::fs::read(path) {
+        Ok(secret) if secret.is_empty() => Ok(KeyFile::Empty),
+        Ok(secret) => Ok(KeyFile::Secret(secret)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(KeyFile::Missing),
+        Err(e) => Err(e),
+    }
+}
+
+/// The secret that seals report cards for the database at `db`: [`CARD_KEY_FILE`] beside it. With
+/// `create`, a missing file is made (32 random bytes, owner-only) and an existing one is never
+/// overwritten; without it, a missing file is `None`. An empty file seals nothing: `None` without
+/// `create`, and replaced with `create`. Only the helper creates it: the app just checks seals, and
+/// a card can't be sealed before the helper has run.
+///
+/// Two first runs can't end with different secrets. The new secret is written whole to a temporary
+/// file in the same folder and then hard-linked into place, which fails if the key is already there;
+/// whoever loses reads the winner's. A file is never seen half written.
+pub fn card_secret(db: &Path, create: bool) -> Result<Option<Vec<u8>>> {
+    let path = db.with_file_name(CARD_KEY_FILE);
+    let io = |source| Error::Io { path: path.clone(), source };
+    let mut replace = match read_key(&path).map_err(io)? {
+        KeyFile::Secret(secret) => return Ok(Some(secret)),
+        _ if !create => return Ok(None),
+        state => matches!(state, KeyFile::Empty),
+    };
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(io)?;
+    }
+    let mut secret = vec![0u8; 32];
+    getrandom::fill(&mut secret).map_err(|e| io(std::io::Error::other(e.to_string())))?;
+    let tmp = files::temp_sibling(&path).map_err(io)?;
+    write_new(&tmp, &secret, 0o600).map_err(io)?;
+    let placed = (|| {
+        // Twice at most: the second try is for an empty file that turned up between the read and the link.
+        let mut tries = 0;
+        loop {
+            if let KeyFile::Secret(winner) = read_key(&path)? {
+                return Ok(winner); // someone made it in the meantime: never replace a real key
+            }
+            let put = if replace { std::fs::rename(&tmp, &path) } else { std::fs::hard_link(&tmp, &path) };
+            match put {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && !replace => {}
+                Err(e) => return Err(e),
+            }
+            match read_key(&path)? {
+                KeyFile::Secret(winner) => return Ok(winner),
+                _ => replace = true,
+            }
+            tries += 1;
+            if tries == 2 {
+                return Err(std::io::Error::other("the report card key stayed empty"));
+            }
+        }
+    })();
+    let _ = std::fs::remove_file(&tmp); // gone already when it was renamed into place
+    placed.map(Some).map_err(io)
 }
 
 /// True when only the deprecated [`LEGACY_DB_ENV`] is set, so callers can say so.
@@ -219,7 +323,9 @@ const CHECKPOINT_TRIES: u32 = 5;
 const CHECKPOINT_WAIT: std::time::Duration = std::time::Duration::from_millis(100);
 
 /// Tables that hold scores (everything but consent and settings). Each has a `source` column.
-const SCORE_TABLES: [&str; 6] = ["events", "daily", "sessions", "tasks", "files", "seen"];
+/// `report_cards` is not one: a rebuild keeps it (Claude Code deletes old transcripts, so those rows
+/// are the history), and reading a card again writes the same row.
+const SCORE_TABLES: [&str; 8] = ["events", "daily", "sessions", "tasks", "files", "seen", "tips", "tip_chats"];
 
 /// Shown when a message's chat never recorded a model (a session with no real reply).
 pub const NO_MODEL: &str = "No model recorded";
@@ -231,21 +337,52 @@ pub struct Store {
 
 pub(crate) use engine::key_hash as hash;
 
-/// `finalized`: the pass that wrote this checkpoint already counted a trailing unanswered
-/// message, so an unchanged file needs no more reads even though its checkpoint is short of its end.
-fn upsert_file(
-    conn: &Connection,
-    path: &str,
-    source: &str,
-    checkpoint: u64,
-    meta: FileMeta,
-    finalized: bool,
-) -> Result<()> {
+/// One read of a file: what it looked like, and what an earlier read already did with it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Pass {
+    pub meta: FileMeta,
+    /// The pass that wrote this checkpoint already counted a trailing unanswered message, so an
+    /// unchanged file needs no more reads even though its checkpoint is short of its end.
+    pub finalized: bool,
+    /// The last report card position in this file that was read and checked, or `None` if none was
+    /// (also after a rewrite, which starts over). A card at or before it is already stored, so the
+    /// whole chat isn't read again for it.
+    pub cards_to: Option<u64>,
+}
+
+impl Pass {
+    pub fn new(meta: FileMeta, finalized: bool) -> Self {
+        Self { meta, finalized, cards_to: None }
+    }
+}
+
+/// Where a file was read up to, and what it looked like then.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Checkpoint {
+    /// Where the next pass resumes.
+    pub at: u64,
+    /// The file's size and mtime when it was read.
+    pub meta: FileMeta,
+    /// That pass was final (see [`Pass::finalized`]).
+    pub finalized: bool,
+    /// The last report card position read (see [`Pass::cards_to`]).
+    pub cards_to: Option<u64>,
+}
+
+fn upsert_file(conn: &Connection, path: &str, source: &str, checkpoint: u64, pass: Pass) -> Result<()> {
     conn.execute(
-        "INSERT INTO files (path, source, checkpoint, size, mtime, finalized) VALUES (?1,?2,?3,?4,?5,?6)
+        "INSERT INTO files (path, source, checkpoint, size, mtime, finalized, cards_to) VALUES (?1,?2,?3,?4,?5,?6,?7)
          ON CONFLICT(path) DO UPDATE SET checkpoint = excluded.checkpoint, size = excluded.size,
-           mtime = excluded.mtime, finalized = excluded.finalized",
-        params![path, source, checkpoint as i64, meta.size as i64, meta.mtime, finalized],
+           mtime = excluded.mtime, finalized = excluded.finalized, cards_to = excluded.cards_to",
+        params![
+            path,
+            source,
+            checkpoint as i64,
+            pass.meta.size as i64,
+            pass.meta.mtime,
+            pass.finalized,
+            pass.cards_to.map(|p| p as i64)
+        ],
     )?;
     Ok(())
 }
@@ -359,7 +496,30 @@ impl Store {
                granted_at = excluded.granted_at, start_after = NULL",
             params![id, backfill_since.map(|d| d.to_string()), Utc::now().to_rfc3339()],
         )?;
+        self.mark_stopped(id, false);
         Ok(())
+    }
+
+    /// Says beside the database whether `id` is off limits, for the hooks: they run outside the app,
+    /// on every reply, and have to know without opening it. A failure is logged, not fatal, so it
+    /// can't block turning a source off.
+    fn mark_stopped(&self, id: &str, stopped: bool) {
+        let Some(db) = self.conn.path().filter(|p| !p.is_empty()) else { return };
+        let file = stopped_file(Path::new(db), id);
+        let done = if stopped {
+            match files::write_new(&file, b"", 0o644) {
+                Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => Err(e),
+                _ => Ok(()),
+            }
+        } else {
+            match std::fs::remove_file(&file) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+                _ => Ok(()),
+            }
+        };
+        if let Err(e) = done {
+            log::warn!("couldn't update the stopped marker for {id}: {e}");
+        }
     }
 
     /// "From now on": marks every file this source has today as already read, so only messages
@@ -373,7 +533,7 @@ impl Store {
         let mut marked = 0;
         for path in source_files(src, &extra) {
             let Ok((meta, _)) = FileMeta::read(&path) else { continue };
-            upsert_file(&tx, &path.to_string_lossy(), src.id(), meta.size, meta, false)?;
+            upsert_file(&tx, &path.to_string_lossy(), src.id(), meta.size, Pass::new(meta, false))?;
             marked += 1;
         }
         tx.commit()?;
@@ -403,12 +563,14 @@ impl Store {
     /// Pauses or resumes an allowed source.
     pub fn set_paused(&self, id: &str, paused: bool) -> Result<()> {
         self.conn.execute("UPDATE sources SET paused = ?2 WHERE id = ?1", params![id, paused])?;
+        self.mark_stopped(id, paused || !self.source_state(id)?.is_some_and(|s| s.allowed));
         Ok(())
     }
 
     /// Stop reading. Keeps the scores already counted.
     pub fn revoke(&self, id: &str) -> Result<()> {
         self.conn.execute("UPDATE sources SET allowed = 0 WHERE id = ?1", [id])?;
+        self.mark_stopped(id, true);
         Ok(())
     }
 
@@ -448,23 +610,47 @@ impl Store {
         for table in SCORE_TABLES {
             tx.execute(&format!("DELETE FROM {table} WHERE source = ?1"), [id])?;
         }
+        tx.execute("DELETE FROM report_cards WHERE source = ?1", [id])?;
         tx.execute("DELETE FROM sources WHERE id = ?1", [id])?;
+        tx.execute("DELETE FROM settings WHERE key = ?1", [left_out_key(id)])?;
         tx.commit()?;
+        self.mark_stopped(id, true);
         self.flush_deleted()
+    }
+
+    /// Report cards the app couldn't count, for one source: the person got a grade in chat, so they
+    /// should hear why it isn't here.
+    pub fn report_cards_left_out(&self, source: &str) -> Result<i64> {
+        Ok(self.get_setting(&left_out_key(source))?.and_then(|n| n.parse().ok()).unwrap_or(0))
+    }
+
+    /// Deletes every report card and tip. They stay deleted: a rebuild that reads the same transcripts
+    /// again won't bring back anything from before now. Returns how many report cards and tips went.
+    pub fn delete_report_cards(&self) -> Result<usize> {
+        let tx = self.conn.unchecked_transaction()?;
+        let n = tx.execute("DELETE FROM report_cards", [])?;
+        let tips = tx.execute("DELETE FROM tips", [])?;
+        tx.execute("DELETE FROM tip_chats", [])?;
+        tx.execute("DELETE FROM settings WHERE key LIKE ?1", [left_out_key("%")])?;
+        put_setting(&tx, cards::CLEARED_KEY, &cards::ts_str(Utc::now()))?;
+        tx.commit()?;
+        self.flush_deleted()?;
+        Ok(n + tips)
     }
 
     // ---- ingestion ---------------------------------------------------------------------
 
-    /// Where `path` was last read up to, its size and mtime then, and whether that pass was final.
-    pub(crate) fn file_checkpoint(&self, path: &str) -> Result<Option<(u64, FileMeta, bool)>> {
+    /// Where `path` was last read: see [`Checkpoint`].
+    pub(crate) fn file_checkpoint(&self, path: &str) -> Result<Option<Checkpoint>> {
         Ok(self
             .conn
-            .query_row("SELECT checkpoint, size, mtime, finalized FROM files WHERE path = ?1", [path], |r| {
-                Ok((
-                    r.get::<_, i64>(0)? as u64,
-                    FileMeta { size: r.get::<_, i64>(1)? as u64, mtime: r.get(2)? },
-                    r.get(3)?,
-                ))
+            .query_row("SELECT checkpoint, size, mtime, finalized, cards_to FROM files WHERE path = ?1", [path], |r| {
+                Ok(Checkpoint {
+                    at: r.get::<_, i64>(0)? as u64,
+                    meta: FileMeta { size: r.get::<_, i64>(1)? as u64, mtime: r.get(2)? },
+                    finalized: r.get(3)?,
+                    cards_to: r.get::<_, Option<i64>>(4)?.map(|p| p as u64),
+                })
             })
             .optional()?)
     }
@@ -473,16 +659,34 @@ impl Store {
     /// can never count a turn without moving the checkpoint (or the reverse). Turns the
     /// source's consent skips are left out entirely, so allowing more history later still
     /// counts them. Returns (messages, corrections) counted.
+    ///
+    /// `chat` is the whole file read again; it's only needed (and only given) when the scan found
+    /// report cards past `pass.cards_to`, which are checked against it and saved in the same
+    /// transaction.
     pub(crate) fn ingest(
         &mut self,
         state: &SourceState,
         path: &str,
         scan: &sources::FileScan,
-        meta: FileMeta,
-        finalized: bool,
+        chat: Option<&ChatView>,
+        mut pass: Pass,
     ) -> Result<(usize, usize)> {
         let source = state.id.as_str();
         let retention = self.retention()?;
+        let graded = self.read_cards(state, scan, chat, pass.cards_to)?;
+        let has_tips = !scan.tips.is_empty() || !scan.rules.is_empty();
+        let cleared = if has_tips { self.get_setting(cards::CLEARED_KEY)? } else { None };
+        let mut checkpoint = scan.checkpoint;
+        if graded.unchecked {
+            // Cards that couldn't be checked (no secret yet) are not remembered as read, and the file
+            // resumes at the first of them, not past it: a following whole turn would otherwise move
+            // the checkpoint beyond the card and no later pass would see it. Turns read twice are `seen`.
+            if let Some(first) = cards::first_unread(&scan.cards, pass.cards_to) {
+                checkpoint = checkpoint.min(first);
+            }
+        } else {
+            pass.cards_to = pass.cards_to.max(scan.cards.iter().map(|c| c.pos).max());
+        }
         let tx = self.conn.transaction()?;
         let (mut messages, mut corrections) = (0, 0);
         for st in scan.turns.iter().filter(|st| state.wants(st.ts)) {
@@ -561,9 +765,51 @@ impl Store {
                 ],
             )?;
         }
-        upsert_file(&tx, path, source, scan.checkpoint, meta, finalized)?;
+        cards::save(&tx, &graded.rows)?;
+        tips::save(&tx, state, scan, cleared.as_deref())?;
+        add_left_out(&tx, source, graded.left_out())?;
+        upsert_file(&tx, path, source, checkpoint, pass)?;
         tx.commit()?;
+        graded.log(source, path);
         Ok((messages, corrections))
+    }
+
+    /// The report cards in `scan` that check out against `chat`. The secret that seals them is read
+    /// from its file each time (this is rare): the helper may have made it after the app started,
+    /// and a missing, unreadable or empty one means no card can be trusted, never a failed sync.
+    fn read_cards(
+        &self,
+        state: &SourceState,
+        scan: &sources::FileScan,
+        chat: Option<&ChatView>,
+        cards_to: Option<u64>,
+    ) -> Result<cards::Cards> {
+        let mut out = cards::Cards::default();
+        if !cards::unread(&scan.cards, cards_to) {
+            return Ok(out);
+        }
+        let secret = match self.conn.path().filter(|p| !p.is_empty()) {
+            Some(db) => card_secret(Path::new(db), false).unwrap_or_else(|e| {
+                log::warn!("couldn't read the report card key: {e}");
+                None
+            }),
+            None => None, // an in-memory database has no folder to keep one in
+        };
+        match (chat, secret) {
+            (Some(chat), Some(secret)) => {
+                let cleared = self.get_setting(cards::CLEARED_KEY)?;
+                out = cards::read(state, chat, &secret, cleared.as_deref());
+            }
+            (None, _) => {
+                out.skip("chat unreadable", scan.cards.len());
+                out.unchecked = true;
+            }
+            (_, None) => {
+                out.skip("no secret", scan.cards.len());
+                out.unchecked = true;
+            }
+        }
+        Ok(out)
     }
 
     // ---- retention ---------------------------------------------------------------------
@@ -660,5 +906,7 @@ impl EventText {
     }
 }
 
+#[cfg(test)]
+mod card_tests;
 #[cfg(test)]
 mod tests;

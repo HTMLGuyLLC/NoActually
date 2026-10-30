@@ -6,4 +6,6 @@
 - **Support for another AI tool:** use the feature form and pick "New AI tool support"
 - **Security problems:** report privately, as described in [SECURITY.md](SECURITY.md)
 
-Logs help with most bugs. They're in the app's log folder (macOS: `~/Library/Logs/app.noactually/`) and never contain chat text.
+Logs help with most bugs, and never contain chat text. Find them with **Settings → General → Show log folder**, or at `~/Library/Logs/app.noactually/` (macOS), `%LOCALAPPDATA%\app.noactually\logs\` (Windows) or `~/.local/share/app.noactually/logs/` (Linux).
+
+**Going back to an older version?** Turn report cards off first, in Settings → Report cards.

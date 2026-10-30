@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Check } from "../api";
+import { last } from "../format";
 import { LESSONS, TRACKS } from "../learn/lessons";
 import { HOSTILE, meta, prompts } from "../test/fixtures";
 import { checkResultView, judgeQuiz, type LearnContext, learnView } from "./learn";
@@ -43,7 +44,7 @@ describe("learnView home", () => {
   it("marks lessons done, counts them per track, and ignores ids it doesn't know", () => {
     const m = home({ done: ["point-at-it", "show-it", "gone"] });
     expect(m).toContain(`2 of ${LESSONS.length} lessons`);
-    expect(m).toContain("2 of 5 done");
+    expect(m).toContain("2 of 6 done");
     expect(m).toContain('lesson-row done" data-action="lesson" data-id="point-at-it"');
     expect(m).toContain('<span class="sr-only"> (done)</span>');
   });
@@ -104,6 +105,17 @@ describe("learnView lesson", () => {
     expect(m).toContain("<blockquote");
     expect(m).toContain("<span>Target</span></label>");
     expect(m).toContain("<span>Guardrails</span></label>");
+  });
+
+  it("lists the Context lesson last in the habits track, and opens it like any other", () => {
+    expect(home()).toContain('data-action="lesson" data-id="say-what-you-know"><span aria-hidden="true">○</span>Context');
+    expect(last(TRACKS[0]?.lessons ?? [])?.id).toBe("say-what-you-know");
+    const m = lesson("say-what-you-know");
+    expect(m).toContain('<h1 class="q">Context</h1>');
+    expect(m).toContain("I already tried");
+    expect(m).toContain("Say facts about your setup and taste: “it&#39;s a Squarespace site”, “we use Tailwind”.");
+    expect(m).toContain('<span class="chip sig-on">Target</span>'); // only the signals the checker can see are chipped
+    expect(m.split("<fieldset").length - 1).toBe(2);
   });
 
   it("numbers the questions by lesson position, so two lessons never share a radio group", () => {

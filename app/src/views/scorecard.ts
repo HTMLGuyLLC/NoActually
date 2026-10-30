@@ -397,9 +397,9 @@ export function onboardingView(watching: string): Html {
     return html`<section class="empty"><span class="eyebrow"><i class="dot live"></i> Watching ${watching}</span>
       <h1 class="q">You're all set.</h1>
       <p>Your next chats will be counted as they happen. Once there's a chat to count, your scorecard shows up here.</p>
-      <button class="ghost" data-action="go-sources">Manage sources</button></section>`;
+      <button class="ghost" data-action="go-settings" data-id="sources">Manage sources</button></section>`;
   }
   return html`<section class="empty"><h1 class="q">Let's see if AI could replace you.</h1>
     <p>No, Actually... grades your prompts and counts the times you corrected your AI, privately, on this computer. Pick which tools it may read.</p>
-    <button data-action="go-sources">Choose sources</button></section>`;
+    <button data-action="go-settings" data-id="sources">Choose sources</button></section>`;
 }

@@ -54,7 +54,7 @@ Better prompts mean fewer mistakes to correct, and that never costs you: once yo
 - **A verdict and a score.** "Could Claude replace you? **No.** Score 86, Sharp-eyed." Updated as you work, over the last 28 days.
 - **A prompt score.** "Do you make it guess? **Sometimes.** 85% of your prompts were clear the first time." Plus what your prompts include, why you followed up, and one tip backed by your own history.
 - **Improve.** One weekly goal picked from your own numbers ("Include guardrails in 25% of your prompts"), streaks, trophies, personal bests, last week's recap, and charts of how you're trending.
-- **Learn.** 12 one-minute lessons in three tracks (the 5 habits, follow up less, correct more), quick quizzes, and a prompt checker that grades a draft as you type, with the same rules as your score.
+- **Learn.** 13 one-minute lessons in three tracks (the 6 habits, follow up less, correct more), quick quizzes, and a prompt checker that grades a draft as you type, with the same rules as your score.
 - **Any time window.** 7 days, 28 days, 90 days or all time: the whole scorecard follows the picker, score included. Every part of the score is a rate, so tiers mean the same thing in any window.
 - **Every model, side by side.** All AI, one provider, one family, or one exact version (say, Claude Opus 5.5). The picker shows the numbers that page is about.
 - **A Hall of Fame** of awards, one per kind of correction: The Fabulist (made it up), Selective Hearing, The Blind Spot, “Fixed” It, Big Brain Energy, and Touché for the times it corrected you. Each shows its best snippet, picked the same way every time. Pin the ones you want to keep forever.
@@ -67,18 +67,18 @@ Finish a task in Claude Code or Codex, type `/grade:me` (Codex: `$grade-me`), an
 
 - A letter grade, A to F, and why
 - What you could have said up front, with a better first message to copy
-- What the extra back-and-forth cost you, in minutes and dollars
+- What the extra back-and-forth cost you, in minutes (and dollars, at pay-as-you-go prices, when the model has a price)
 
 It talks at your level: plain words if you're new, short and technical if you're not.
 No, Actually... saves each report card's numbers (never your words) and shows how you're doing over time.
 
-**Turn it on:** Settings → Report cards → Turn on. That's it.
+**Turn it on:** Settings → Report cards → Turn on. Then start a new chat, finish a task, and type `/grade:me`.
 
 **Without the app:** in Claude Code run `/plugin marketplace add HTMLGuyLLC/NoActually` then
 `/plugin install grade@noactually`. You get report cards, but no history.
 
 **Cost:** report cards are written by your own AI, so each one uses some of your tokens.
-They only run when you ask, unless you turn on "Grade automatically when I say thanks".
+They only run when you ask. Tips as you work are optional and use a little in each chat.
 Your score never uses AI and stays free.
 
 ## Private and secure by design
@@ -87,7 +87,7 @@ Your AI chats can hold code, keys, client names and half-formed ideas. This app 
 
 | | |
 |---|---|
-| 🔒 **Local only** | No accounts, no servers, no telemetry, no analytics. Fonts are bundled. The only network use is an update check against GitHub and a share link you click yourself. The update check carries no account, ID, stats or chat data (GitHub sees your IP address, as with any download), and you can turn it off. |
+| 🔒 **Local only** | No accounts, no servers, no telemetry, no analytics. Fonts are bundled. The app's only network use is an update check against GitHub and a share link you click yourself. The update check carries no account, ID, stats or chat data (GitHub sees your IP address, as with any download), and you can turn it off. With optional report cards on, Claude Code downloads a small plugin from GitHub (and the matching one after an app update), a small check runs after each AI reply and reads the end of that chat on your computer, and when you ask for a report card your AI reads a short summary of the chat that the app makes on your computer. See [PRIVACY.md](PRIVACY.md#report-cards-optional). |
 | ✋ **Asks first** | Every source is off until you **Allow** it. Pause it, stop it, or **Forget** it (deletes everything it read) any time. |
 | 🔢 **Numbers, not chats** | Ordinary messages are only counted, never stored. For corrections you pick **full text**, **snippet** (the default) or **category only**, and kept text steps down on a timer you set. Prompts, goals and lessons store numbers only, never words, and the prompt checker saves nothing you type. |
 | ✂️ **Redacted** | Keys, emails, links, home paths and long numbers are stripped from any text kept. It's pattern-based, so it can miss things: pick **category only** if that matters. |
@@ -100,7 +100,7 @@ The full details are in [PRIVACY.md](PRIVACY.md).
 <details>
 <summary><b>Does it send my chats anywhere?</b></summary>
 
-No. Everything is read and scored on your computer, and the results live in a local SQLite file. There is no server to send them to. The only time text leaves is if you share a Hall of Fame card, and you see the card before it goes anywhere.
+No. Everything is read and scored on your computer, and the results live in a local SQLite file. There is no server to send them to. The only time the app sends text anywhere is if you share a Hall of Fame card, and you see the card before it goes anywhere. If you turn on report cards, your AI reads a short summary of that chat, including the first few words of each of your messages, and that goes to your AI provider like the rest of the chat.
 </details>
 
 <details>
@@ -118,7 +118,7 @@ Claude Code, Claude Cowork and Codex live, plus ChatGPT and Claude.ai through th
 <details>
 <summary><b>Will the lessons go out of date?</b></summary>
 
-They're written not to. They teach habits that work with any collaborator, human or AI (name a target, give evidence, set a finish line, add guardrails, share the purpose), never tool tricks or magic phrases. A test fails the build if a lesson names a product, a model or a version, and the real scoring rules grade every example, so a lesson can never disagree with your score.
+They're written not to. They teach habits that work with any collaborator, human or AI (name a target, give evidence, set a finish line, add guardrails, share the purpose, say what you already know), never tool tricks or magic phrases. A test fails the build if a lesson names a product, a model or a version, and the real scoring rules grade every example, so a lesson can never disagree with your score.
 </details>
 
 <details>
@@ -162,7 +162,15 @@ No. Your score comes from fixed rules and never looks at report cards.
 <details>
 <summary><b>Why does a report card cost tokens when the rest of the app doesn't?</b></summary>
 
-Your own AI writes it, inside Claude Code or Codex, so it uses some of your tokens. The app itself never calls an AI. Report cards are off until you turn them on, and automatic grading is a separate setting that is off by default.
+Your own AI writes it, inside Claude Code or Codex, so it uses some of your tokens. The app itself never calls an AI. Report cards are off until you turn them on, and tips are a separate setting that is off by default.
+</details>
+
+<details>
+<summary><b>What are tips?</b></summary>
+
+An optional setting for Claude Code: **Settings → Report cards → Give me tips as I work**. When a follow-up could have been in your first message, your AI ends that reply with one line, like "Tip from No, Actually...: next time, say it only breaks on Safari when you first ask." Most replies get nothing. The part in brackets at the end, like `[evidence, redid 50%]`, is for the app: the habit, and how much work was redone. Letter grades still come only from `/grade:me`.
+
+It adds about 480 tokens to each chat, plus a few for each tip, and it applies to new or reopened chats. To stop sooner, tell your AI "no more tips." Settings shows the exact instructions your AI gets. The app counts tips and keeps which habit each was about, never the words. Your AI decides when to give a tip, so it can miss some, and Claude Haiku misses more and is less accurate.
 </details>
 
 <details>
@@ -174,13 +182,13 @@ The app keeps each report card's numbers, so you can see how you're trending. Th
 <details>
 <summary><b>How do I delete everything?</b></summary>
 
-Click **Forget** on a source to delete everything read from it, including its report cards. **Delete report card history** in Settings clears them all. To remove it all, quit the app and delete its data folder (the paths are in [PRIVACY.md](PRIVACY.md#how-to-delete-your-data)). Uninstalling alone leaves the data behind.
+Click **Forget** on a source to delete everything read from it, including its report cards and tips. **Delete report card and tip history** in Settings clears them all. To remove it all, first turn report cards off in Settings (that removes what they added to Claude Code and Codex), then quit the app and delete its data folder (the paths are in [PRIVACY.md](PRIVACY.md#how-to-delete-your-data)). Uninstalling alone leaves the data behind.
 </details>
 
 <details>
 <summary><b>Is it really free? What does it cost to run?</b></summary>
 
-Free, and it costs nothing to run. The score never calls an AI, so there's no API key to add and no tokens on your bill, however much history you have. Optional report cards are written by your own AI, so they use some of your tokens, only when you ask. MIT licensed, no paid tier, no ads.
+Free, and it costs nothing to run. The score never calls an AI, so there's no API key to add and no tokens on your bill, however much history you have. Optional report cards are written by your own AI, so they use some of your tokens, only when you ask, plus a little in each chat if you turn on tips. MIT licensed, no paid tier, no ads.
 </details>
 
 ---
@@ -340,6 +348,7 @@ crates/engine    correction rules, prompt grading, the overall score, model name
 crates/sources   one adapter per AI tool (Claude Code, Codex, exports…)
 crates/store     SQLite: consent, checkpoints, daily counts, tasks, goals, retention, rules versioning
 crates/cli       the `noactually` command
+plugins/grade    the report card plugin: the /grade:me skill and its hooks
 app/             Tauri 2 desktop app: menu bar, scorecard, Improve and Learn, notifications
 ```
 

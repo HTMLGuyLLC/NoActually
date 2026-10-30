@@ -10,21 +10,53 @@
 
 use crate::{key::hmac_sha256, Signal, SHORT_ID};
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
 
 /// The block version this engine reads.
-pub const CARD_VERSION: u64 = 1;
+const CARD_VERSION: u64 = 1;
 /// Opens a record block. Also the cheap check before any parsing.
-pub const CARD_FENCE: &str = "```noactually";
+const CARD_FENCE: &str = "```noactually";
 /// How much of the earlier work a follow-up made someone redo, in percent. Only these steps, so
 /// the same chat gets the same answer every run.
-pub const SHARES: [u8; 5] = [0, 25, 50, 75, 100];
+pub(crate) const SHARES: [u8; 5] = [0, 25, 50, 75, 100];
 
 const MAX_BYTES: usize = 4096;
 const MAX_TASKS: usize = 20;
 const MAX_WASTE: usize = 50;
-/// The `missing` bit for Context: a fact about their setup or a preference.
-pub const CONTEXT_BIT: u8 = 1 << 5;
+/// The `missing` bit for Context: a fact about their setup or a preference. The signals take the
+/// bits below it, in [`Signal::ALL`] order.
+const CONTEXT_BIT: u8 = 1 << 5;
+
+/// What a report card can say was left out, as a card writes it, with the prompt signal that measures
+/// it (`None` for Context, which only a report card can tell). The order is the order of the `missing`
+/// bits and of every list of habits: the store, the digest and the app all read this one table.
+pub const HABITS: [(&str, Option<Signal>); 6] = [
+    ("target", Some(Signal::Spot)),
+    ("evidence", Some(Signal::Proof)),
+    ("finish", Some(Signal::Done)),
+    ("guardrails", Some(Signal::Limits)),
+    ("purpose", Some(Signal::Why)),
+    ("context", None),
+];
+
+/// The `missing` bit of one row of [`HABITS`].
+fn bit_of(signal: Option<Signal>) -> u8 {
+    signal.map_or(CONTEXT_BIT, Signal::bit)
+}
+
+/// Each habit's name and its `missing` bit, in [`HABITS`] order.
+pub fn habit_bits() -> [(&'static str, u8); 6] {
+    HABITS.map(|(name, signal)| (name, bit_of(signal)))
+}
+
+/// The `missing` bit for a habit name as a report card writes it.
+pub fn habit_bit(name: &str) -> Option<u8> {
+    HABITS.iter().find(|(n, _)| *n == name).map(|(_, signal)| bit_of(*signal))
+}
+
+/// The name a report card gives the habit that `signal` measures.
+pub fn habit_name(signal: Signal) -> &'static str {
+    HABITS.iter().find(|(_, s)| *s == Some(signal)).map_or("", |(name, _)| name)
+}
 
 /// A letter grade, from how many follow-ups made someone redo work.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -35,9 +67,9 @@ pub enum LetterGrade {
     B,
     /// Two.
     C,
-    /// Three.
+    /// Three, or the goal itself was never said.
     D,
-    /// Four or more, or the goal was never said.
+    /// Four or more.
     F,
 }
 
@@ -45,18 +77,32 @@ impl LetterGrade {
     /// Every grade, best first.
     pub const ALL: [LetterGrade; 5] = [LetterGrade::A, LetterGrade::B, LetterGrade::C, LetterGrade::D, LetterGrade::F];
 
-    /// The grade for `avoidable` rounds; `wrong` (the goal was never said) is always an F.
+    /// The grade for `avoidable` rounds. `wrong` (the goal itself was never said, so the first
+    /// round went to the wrong thing) makes it a D at best: worse than a missing detail, but one
+    /// vague message isn't an F on its own.
     pub fn of(avoidable: usize, wrong: bool) -> LetterGrade {
-        if wrong {
-            return LetterGrade::F;
-        }
-        match avoidable {
+        let by_count = match avoidable {
             0 => LetterGrade::A,
             1 => LetterGrade::B,
             2 => LetterGrade::C,
             3 => LetterGrade::D,
             _ => LetterGrade::F,
+        };
+        if wrong {
+            by_count.max(LetterGrade::D)
+        } else {
+            by_count
         }
+    }
+
+    /// The grade stored as `id` ("A".."F"), if it is one.
+    pub fn from_id(id: &str) -> Option<LetterGrade> {
+        LetterGrade::ALL.into_iter().find(|g| g.as_str() == id)
+    }
+
+    /// True for an A or a B: a task that took at most one follow-up.
+    pub fn is_ab(self) -> bool {
+        self <= LetterGrade::B
     }
 
     /// "A".."F", as stored.
@@ -71,12 +117,24 @@ impl LetterGrade {
     }
 }
 
+/// The habit in plain words, for someone new to this. The same words as the report card skill's table.
+pub fn habit_plain(habit: &str) -> &'static str {
+    match habit {
+        "target" => "say which file, page or screen",
+        "evidence" => "paste the error or what you saw",
+        "finish" => "say what done looks like",
+        "guardrails" => "say what not to touch",
+        "purpose" => "say why, or who it's for",
+        _ => "say what you already know about your setup or taste",
+    }
+}
+
 /// A follow-up the person could have put in their first message, and how much work it redid.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Waste {
     /// The follow-up's short id.
     pub id: String,
-    /// Percent of the task's work up to it that had to be redone: one of [`SHARES`].
+    /// Percent of the task's work up to it that had to be redone: 0, 25, 50, 75 or 100.
     pub share: u8,
 }
 
@@ -107,13 +165,21 @@ impl CardTask {
     }
 }
 
+/// True when two graded tasks cover the same work: they start at the same prompt, or their spans
+/// share more than an endpoint. A model that ends one task and starts the next on the same prompt
+/// doesn't make them overlap, so a later card for the second can't replace the first. Spans are
+/// (first, last) prompt positions or times; `same_first` is whether the two start at the same
+/// prompt. The store keeps the same rule in SQL (`current_report_cards`) and the helper uses this
+/// one for "graded already", and a test holds the two together.
+pub fn tasks_overlap<T: Ord>(a: (T, T), b: (T, T), same_first: bool) -> bool {
+    same_first || (a.0 < b.1 && b.0 < a.1)
+}
+
 /// A parsed record block.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Card {
     /// The chat's seal, as written. Check it with [`seal`] before trusting anything else.
     pub seal: String,
-    /// Written by automatic grading, not asked for.
-    pub auto: bool,
     /// The graded tasks.
     pub tasks: Vec<CardTask>,
 }
@@ -146,31 +212,9 @@ pub fn has_card(text: &str) -> bool {
     text.contains(CARD_FENCE)
 }
 
-/// The bodies of every record block in `text`, in order.
+/// The bodies of every record block in `text`, in order. A fence opens at the start of a line (a
+/// mid-line one is a quote, not a block); an unclosed block runs to the end of the text.
 pub fn find_cards(text: &str) -> Vec<&str> {
-    blocks(text).into_iter().map(|(_, body)| body).collect()
-}
-
-/// `text` with every record block removed, valid or not, so a report card can never trip the
-/// correction rules.
-pub fn strip_cards(text: &str) -> Cow<'_, str> {
-    let found = blocks(text);
-    if found.is_empty() {
-        return Cow::Borrowed(text);
-    }
-    let mut out = String::with_capacity(text.len());
-    let mut from = 0;
-    for ((start, end), _) in found {
-        out.push_str(&text[from..start]);
-        from = end;
-    }
-    out.push_str(&text[from..]);
-    Cow::Owned(out)
-}
-
-/// Each block's byte range (fences included) and its body. A fence opens at the start of a line;
-/// an unclosed block runs to the end of the text.
-fn blocks(text: &str) -> Vec<((usize, usize), &str)> {
     let mut found = Vec::new();
     let mut search = 0;
     while let Some(i) = text[search..].find(CARD_FENCE).map(|i| i + search) {
@@ -185,7 +229,7 @@ fn blocks(text: &str) -> Vec<((usize, usize), &str)> {
             Some(c) => (c, text[c..].find('\n').map_or(text.len(), |n| c + n + 1)),
             None => (text.len(), text.len()),
         };
-        found.push(((line_start, end), text[body_start..body_end].trim()));
+        found.push(text[body_start..body_end].trim());
         search = end.max(i + CARD_FENCE.len());
     }
     found
@@ -199,8 +243,6 @@ struct Head {
 #[derive(Deserialize)]
 struct RawCard {
     k: String,
-    #[serde(default)]
-    auto: bool,
     tasks: Vec<RawTask>,
 }
 
@@ -234,7 +276,7 @@ pub fn parse_card(body: &str) -> Result<Card, CardError> {
         return Err(CardError::BadId);
     }
     let tasks = raw.tasks.into_iter().map(task).collect::<Result<_, _>>()?;
-    Ok(Card { seal: raw.k, auto: raw.auto, tasks })
+    Ok(Card { seal: raw.k, tasks })
 }
 
 fn task(raw: RawTask) -> Result<CardTask, CardError> {
@@ -253,20 +295,6 @@ fn task(raw: RawTask) -> Result<CardTask, CardError> {
     }
     let missing = raw.miss.iter().filter_map(|m| habit_bit(m)).fold(0, |acc, b| acc | b);
     Ok(CardTask { at: raw.at, to: raw.to, waste, missing, wrong: raw.wrong })
-}
-
-/// The `missing` bit for a habit name as a report card writes it.
-pub fn habit_bit(name: &str) -> Option<u8> {
-    let signal = match name {
-        "target" => Signal::Spot,
-        "evidence" => Signal::Proof,
-        "finish" => Signal::Done,
-        "guardrails" => Signal::Limits,
-        "purpose" => Signal::Why,
-        "context" => return Some(CONTEXT_BIT),
-        _ => return None,
-    };
-    Signal::ALL.iter().position(|s| *s == signal).map(|i| 1 << i)
 }
 
 fn is_short_id(s: &str) -> bool {
@@ -291,7 +319,6 @@ mod tests {
         assert_eq!(bodies, vec![BODY]);
         let card = parse_card(bodies[0]).unwrap();
         assert_eq!(card.seal, "9c41e0aa");
-        assert!(!card.auto);
         let t = &card.tasks[0];
         assert_eq!(t.waste.len(), 2);
         assert_eq!(t.avoidable(), 1, "a 0% follow-up is a late addition, not lost work");
@@ -300,32 +327,69 @@ mod tests {
     }
 
     #[test]
-    fn strips_every_block_and_keeps_the_rest() {
+    fn finds_every_block_valid_or_not() {
         let text = format!("{}And more.\n{CARD_FENCE}\nnot json\n```\nEnd", card_text());
-        assert_eq!(strip_cards(&text), "Report card: C\n\nAnd more.\nEnd");
-        assert_eq!(strip_cards("no card"), "no card");
-        assert!(matches!(strip_cards("no card"), Cow::Borrowed(_)));
+        assert_eq!(find_cards(&text), vec![BODY, "not json"]);
+        assert_eq!(find_cards("no card"), Vec::<&str>::new());
     }
 
     #[test]
     fn a_fence_mid_line_is_a_quote_not_a_block() {
         let text = format!("the docs show `{CARD_FENCE}` blocks");
         assert_eq!(find_cards(&text), Vec::<&str>::new());
-        assert_eq!(strip_cards(&text), text);
     }
 
     #[test]
     fn an_unclosed_block_runs_to_the_end() {
         let text = format!("hi\n{CARD_FENCE}\n{BODY}");
         assert_eq!(find_cards(&text), vec![BODY]);
-        assert_eq!(strip_cards(&text), "hi\n");
+    }
+
+    #[test]
+    fn one_table_names_the_habits_and_their_bits() {
+        let bits = habit_bits();
+        assert_eq!(bits.map(|(n, _)| n), ["target", "evidence", "finish", "guardrails", "purpose", "context"]);
+        assert_eq!(bits.map(|(_, b)| b), [1, 2, 4, 8, 16, 32], "one bit each, in table order");
+        for (i, (_, signal)) in HABITS.iter().enumerate() {
+            if let Some(s) = signal {
+                assert_eq!(Signal::ALL[i], *s, "the signals come first, in their own order");
+            }
+        }
+        assert_eq!(habit_bit("finish"), Some(Signal::Done.bit()));
+        assert_eq!(habit_bit("context"), Some(CONTEXT_BIT));
+        assert_eq!(habit_bit("shoes"), None);
+        assert_eq!(habit_name(Signal::Limits), "guardrails");
+        assert!(Signal::ALL.iter().all(|s| habit_bit(habit_name(*s)) == Some(s.bit())));
+    }
+
+    #[test]
+    fn letter_grades_round_trip_and_a_b_is_good() {
+        assert!(LetterGrade::ALL.iter().all(|g| LetterGrade::from_id(g.as_str()) == Some(*g)));
+        assert_eq!(LetterGrade::from_id("E"), None);
+        assert_eq!(LetterGrade::from_id("a"), None);
+        let good: Vec<_> = LetterGrade::ALL.iter().map(|g| g.is_ab()).collect();
+        assert_eq!(good, [true, true, false, false, false]);
+    }
+
+    #[test]
+    fn tasks_overlap_when_they_share_more_than_an_endpoint_or_a_first_prompt() {
+        assert!(tasks_overlap((0, 10), (5, 15), false), "a stretch in common");
+        assert!(tasks_overlap((0, 10), (2, 4), false), "one inside the other");
+        assert!(!tasks_overlap((0, 10), (10, 20), false), "A's last prompt is B's first");
+        assert!(!tasks_overlap((10, 20), (0, 10), false), "and the other way round");
+        assert!(!tasks_overlap((0, 10), (11, 20), false), "apart");
+        assert!(tasks_overlap((0, 0), (0, 9), true), "the same first prompt, even for a one-prompt task");
+        assert!(!tasks_overlap((5, 5), (0, 5), false), "a one-prompt task at the end of another");
+        assert!(tasks_overlap((5, 5), (0, 9), false), "a one-prompt task inside another");
     }
 
     #[test]
     fn grades_follow_the_count() {
         let g: Vec<_> = (0..6).map(|n| LetterGrade::of(n, false).as_str()).collect();
         assert_eq!(g, ["A", "B", "C", "D", "F", "F"]);
-        assert_eq!(LetterGrade::of(0, true), LetterGrade::F, "goal never said");
+        assert_eq!(LetterGrade::of(1, true), LetterGrade::D, "goal never said: a D at best");
+        assert_eq!(LetterGrade::of(0, true), LetterGrade::D);
+        assert_eq!(LetterGrade::of(5, true), LetterGrade::F, "still an F when it's that bad anyway");
     }
 
     #[test]
@@ -346,11 +410,16 @@ mod tests {
     #[test]
     fn a_follow_up_counts_once_and_never_as_its_own_start() {
         let card = parse_card(
-            r#"{"v":1,"k":"9c41e0aa","auto":true,"tasks":[{"at":"7f3a9c21","to":"e44a1b90","waste":[["7f3a9c21",100],["b81e04d2",25],["b81e04d2",75]]}]}"#,
+            r#"{"v":1,"k":"9c41e0aa","tasks":[{"at":"7f3a9c21","to":"e44a1b90","waste":[["7f3a9c21",100],["b81e04d2",25],["b81e04d2",75]]}]}"#,
         )
         .unwrap();
-        assert!(card.auto);
         assert_eq!(card.tasks[0].waste, vec![Waste { id: "b81e04d2".into(), share: 25 }]);
+    }
+
+    #[test]
+    fn a_field_this_version_doesnt_use_is_ignored() {
+        let body = r#"{"v":1,"k":"9c41e0aa","auto":true,"tasks":[{"at":"7f3a9c21","to":"e44a1b90"}]}"#;
+        assert_eq!(parse_card(body).unwrap().tasks.len(), 1);
     }
 
     #[test]

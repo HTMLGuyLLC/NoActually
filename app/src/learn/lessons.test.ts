@@ -28,6 +28,16 @@ describe("lessons data", () => {
     }
   });
 
+  it("teaches Context, the habit only a report card can see, in exactly one habit lesson", () => {
+    const taught = LESSONS.filter((l) => "context" in l.teaches);
+    expect(taught.map((l) => l.id)).toEqual(["say-what-you-know"]);
+    expect(taught[0]?.title).toBe("Context");
+    expect(trackOf("say-what-you-know")?.id).toBe("habits");
+    expect(TRACKS[0]?.title).toBe("The 6 habits");
+    expect(meta.habits.map((h) => h.title)).toContain(taught[0]?.title);
+    expect(lessonFor("signal", "context")).toBeUndefined(); // not a signal the checker can see
+  });
+
   it("only teaches signals and steers that exist", () => {
     const steers = meta.steers.map((s) => s.id);
     for (const l of LESSONS) {

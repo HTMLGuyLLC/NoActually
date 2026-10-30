@@ -3,7 +3,14 @@
 // keyboard-focusable and carries its tooltip text as its label.
 import { type Html, html } from "../html";
 
-export type Point = { label: string; value: number | null /** Too few tasks to trust: drawn hollow, left off the line. */; weak?: boolean };
+export type Point = {
+  label: string;
+  value: number | null;
+  /** Too few tasks to trust: drawn hollow, left off the line. */
+  weak?: boolean;
+  /** What the dot's tooltip says, in place of the label and rounded value. */
+  tip?: string;
+};
 export type Band = { from: number; name: string };
 
 /** Full-width charts; half-width ones pass a smaller `width` so their text stays readable. */
@@ -66,7 +73,7 @@ export function lineChart(o: {
   const dots = o.points.map((p, i) => {
     const label = i % step === 0 || i === n - 1 ? xLabel(x(i), H - 10, p.label, i === n - 1 && n > 1) : "";
     if (p.value == null) return label;
-    const tip = `${p.label}: ${Math.round(p.value)}${unit}${p.weak ? ` (${weakNote})` : ""}`;
+    const tip = `${p.tip ?? `${p.label}: ${Math.round(p.value)}${unit}`}${p.weak ? ` (${weakNote})` : ""}`;
     return html`<circle cx="${x(i)}" cy="${y(p.value)}" r="${p.weak ? 4 : 4.5}" class="${p.weak ? "dot-weak" : "dot-strong"}" data-tip="${tip}" tabindex="0" role="img" aria-label="${tip}"></circle>${label}`;
   });
   return html`<svg viewBox="0 0 ${W} ${H}" role="group" aria-label="${o.label}" aria-describedby="${o.id}-summary">${grid}${bands}${path ? html`<path d="${path}" class="trend"/>` : ""}${dots}</svg>
@@ -79,7 +86,7 @@ export function stackChart(o: {
   label: string;
   summary: string;
   labels: string[];
-  /** `seg` picks a series' color class (s0 red, s1 ink, s2 blue, s3 muted); by default, its position. */
+  /** `seg` picks a series' color class (s0 red, s1 ink, s2 blue, s3 muted, or ga to gf for report card letter grades); by default, its position. */
   series: { title: string; values: number[]; seg?: string | undefined }[];
   /** One tip per bucket for the whole bar (its breakdown); without, each segment names itself. */
   tips?: string[];

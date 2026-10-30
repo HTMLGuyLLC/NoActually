@@ -201,6 +201,14 @@ fn a_chats_first_message_is_its_prompt() {
 }
 
 #[test]
+fn only_a_chats_first_request_says_so() {
+    assert!(first_message("add a CSV export").is_first_request());
+    let p = read(Some("Done."), "now add a JSON export too", "On it.");
+    assert!(matches!(p, Prompt::Task { .. }) && !p.is_first_request(), "a new task is not the first request");
+    assert!(!Prompt::Other.is_first_request());
+}
+
+#[test]
 fn hellos_questions_and_payloads_are_not_prompts() {
     for p in [
         "hi",
@@ -351,5 +359,19 @@ fn a_sign_off_is_the_whole_message() {
         "",
     ] {
         assert!(!is_signoff(t), "{t}");
+    }
+    // Past the cap it never is one, even if every word would be.
+    assert!(is_signoff(&["thanks"; 20].join(" ")));
+    assert!(!is_signoff(&["thanks"; 40].join(" ")), "over 200 bytes: not a sign-off");
+}
+
+#[test]
+fn a_finish_line_isnt_ticked_by_a_sentence_still_being_typed() {
+    let done = |text: &str| check(text).signals.has(Signal::Done);
+    for text in ["We need to", "we need to f", "we need to fi", "we need to fix", "we need to fix it.", "it must"] {
+        assert!(!done(text), "{text}");
+    }
+    for text in ["the page should load in a second", "it should be blue", "tests must pass", "it has to go live"] {
+        assert!(done(text), "{text}");
     }
 }
