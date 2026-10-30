@@ -1396,6 +1396,10 @@ fn a_link_named_like_a_file_managers_leftover_is_not_one() {
 #[test]
 fn folders_and_files_are_matched_by_their_exact_names() {
     // `Monitors/` is not a folder of ours, and `HOOKS/` is not `hooks/`, whatever the disk does with case.
+    // Where case matters the shipped file is simply gone, so that's named instead of the new name.
+    let refused = |dir: &Path, new: &str, shipped: &str| {
+        difference(dir).is_some_and(|why| why.contains(new) || why.contains(shipped))
+    };
     let plugin = fresh_plugin();
     fs::create_dir(plugin.path().join("Monitors")).unwrap();
     fs::write(plugin.path().join("Monitors/monitors.json"), "{}").unwrap();
@@ -1403,15 +1407,15 @@ fn folders_and_files_are_matched_by_their_exact_names() {
 
     let plugin = fresh_plugin();
     fs::rename(plugin.path().join("hooks"), plugin.path().join("HOOKS")).unwrap();
-    assert!(difference(plugin.path()).is_some_and(|why| why.contains("HOOKS")), "{:?}", difference(plugin.path()));
+    assert!(refused(plugin.path(), "HOOKS", "hooks/hooks.json"), "{:?}", difference(plugin.path()));
 
     let plugin = fresh_plugin();
     fs::rename(plugin.path().join("bin/na"), plugin.path().join("bin/NA")).unwrap();
-    assert!(difference(plugin.path()).is_some_and(|why| why.contains("bin/NA")));
+    assert!(refused(plugin.path(), "bin/NA", "bin/na"), "{:?}", difference(plugin.path()));
 
     let plugin = fresh_plugin();
     fs::rename(plugin.path().join("skills"), plugin.path().join("Skills")).unwrap();
-    assert!(difference(plugin.path()).is_some_and(|why| why.contains("Skills")));
+    assert!(refused(plugin.path(), "Skills", "skills/me/SKILL.md"), "{:?}", difference(plugin.path()));
 }
 
 /// Puts a folder's permissions back when it goes out of scope, so a failing test can still clean up.

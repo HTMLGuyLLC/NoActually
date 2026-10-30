@@ -20,7 +20,7 @@ pub fn write_atomic(path: &Path, bytes: &[u8], mode: Option<u32>) -> std::io::Re
             Err(e) if e.kind() == ErrorKind::AlreadyExists && tries + 1 < NAME_TRIES => tries += 1,
             Err(e) => return Err(e),
             Ok(()) => {
-                let placed = set_mode(&tmp, want).and_then(|()| std::fs::rename(&tmp, path));
+                let placed = put_in_place(&tmp, path, want);
                 if placed.is_err() {
                     let _ = std::fs::remove_file(&tmp);
                 }
@@ -67,14 +67,13 @@ fn mode_of(_path: &Path) -> u32 {
     0o644
 }
 
-#[cfg(unix)]
-fn set_mode(file: &Path, mode: u32) -> std::io::Result<()> {
-    std::fs::set_permissions(file, std::os::unix::fs::PermissionsExt::from_mode(mode))
-}
-
-#[cfg(not(unix))]
-fn set_mode(_file: &Path, _mode: u32) -> std::io::Result<()> {
-    Ok(())
+/// Renames `tmp` to `path`, first giving it exactly `mode` on Unix (the mode it was created with was cut by the umask).
+fn put_in_place(tmp: &Path, path: &Path, mode: u32) -> std::io::Result<()> {
+    #[cfg(unix)]
+    std::fs::set_permissions(tmp, std::os::unix::fs::PermissionsExt::from_mode(mode))?;
+    #[cfg(not(unix))]
+    let _ = mode;
+    std::fs::rename(tmp, path)
 }
 
 #[cfg(test)]
