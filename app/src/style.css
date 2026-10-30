@@ -303,7 +303,7 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .empty .eyebrow, .empty-glance .eyebrow { display: inline-flex; align-items: center; gap: 8px }
 
 /* Quick glance: the small window under the menu bar icon. */
-.glance { padding: 20px 20px 22px; display: grid; gap: 12px; background: var(--surface); min-height: 100vh; align-content: start }
+.glance { padding: 18px 20px; display: grid; gap: 10px; background: var(--surface); min-height: 100vh; align-content: start }
 .empty-glance { align-content: center; justify-items: start }
 .g-top { display: flex; justify-content: space-between; align-items: center }
 .g-q { font: 800 20px/1.1 var(--display); margin-top: 12px }
@@ -313,7 +313,7 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .g-line { display: flex; align-items: baseline; gap: 10px; min-width: 0 }
 .g-word { font: 400 30px/1 var(--hand); color: var(--pen); flex: none }
 .g-word.maybe { color: var(--muted) }
-.g-line .small { min-width: 0 }
+.g-line .small { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 .g-gear { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 50%;
   background: transparent; color: var(--muted); border: 1px solid var(--rule) }
 .g-gear:hover { filter: none; color: var(--ink); border-color: var(--muted) }

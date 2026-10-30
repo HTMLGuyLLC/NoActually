@@ -2,7 +2,7 @@
 // for (could it replace you, do you make it guess, do you correct it) and your goal, nothing more.
 import type { GoalStatus, Meta, Stats } from "../api";
 import { last, plural } from "../format";
-import { type Html, html, num } from "../html";
+import { type Html, html } from "../html";
 import { correctionTier, landedPct, promptTier, tierName, tierOf } from "../meta";
 import { TAB_ICONS, wordmarkView } from "./chrome";
 import { goalTitle } from "./improve";
@@ -23,7 +23,7 @@ function answersView(s: Stats, meta: Meta): Html {
   const prompt = promptTier(meta, s.prompts.tier);
   const guess = prompt ? `${landedPct(s.prompts)}% clear · ${prompt.name}` : `${plural(s.prompts.to_rank, "more task")} to get ranked`;
   const corrected = correctionTier(meta, o.correction_tier);
-  const check = corrected ? `You ${num(o.corrections)} vs it ${num(o.humbled)} · ${corrected.name}` : `${plural(o.to_rank, "more task")} to get ranked`;
+  const check = corrected ? `${plural(o.corrections, "correction")} · ${corrected.name}` : `${plural(o.to_rank, "more task")} to get ranked`;
   return html`<div class="g-answers">
     ${answerView("Could AI replace you?", o.score == null ? null : o.verdict === "no" ? "No." : "Hmm.", replace)}
     ${answerView("Do you make it guess?", prompt?.verdict ?? null, guess)}
