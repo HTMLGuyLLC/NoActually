@@ -11,13 +11,22 @@ const REPO = "HTMLGuyLLC/NoActually";
 const dl = (file) => `https://github.com/${REPO}/releases/download/v0.2.0/${file}`;
 
 test("plainName matches the release page names", () => {
-  assert.equal(plainName("No.Actually..._0.2.0_x64-setup.exe", "0.2.0"), "No-Actually-0.2.0-Windows-Setup.exe");
-  assert.equal(plainName("No.Actually..._0.2.0_x64_en-US.msi", "0.2.0"), "No-Actually-0.2.0-Windows-IT-Installer.msi");
-  assert.equal(plainName("No.Actually..._0.2.0_amd64.AppImage", "0.2.0"), "No-Actually-0.2.0-Linux.AppImage");
-  assert.equal(plainName("No.Actually..._universal.app.tar.gz", "0.2.0"), "No-Actually-0.2.0-Mac-Update.app.tar.gz");
-  assert.equal(plainName("No-Actually-0.2.0-Mac.dmg", "0.2.0"), "No-Actually-0.2.0-Mac.dmg", "already plain");
+  assert.equal(plainName("No.Actually..._0.2.0_x64-setup.exe", "0.2.0"), "No-Actually-0.2.0-Windows-Setup-x64.exe");
+  assert.equal(plainName("No.Actually..._0.2.0_x64_en-US.msi", "0.2.0"), "No-Actually-0.2.0-Windows-IT-Installer-x64.msi");
+  assert.equal(plainName("No.Actually..._0.2.0_amd64.AppImage", "0.2.0"), "No-Actually-0.2.0-x86_64.AppImage");
+  assert.equal(plainName("No.Actually..._universal.app.tar.gz", "0.2.0"), "No-Actually-0.2.0-Mac-Update-universal.app.tar.gz");
+  assert.equal(plainName("No-Actually-0.2.0-Mac-universal.dmg", "0.2.0"), "No-Actually-0.2.0-Mac-universal.dmg", "already plain");
   assert.equal(plainName("SHA256SUMS.txt", "0.2.0"), "SHA256SUMS.txt", "unknown files keep their name");
   assert.equal(plainName("No.Actually..._0.2.0_x64-setup.exe.sig", "0.2.0"), "No.Actually..._0.2.0_x64-setup.exe.sig");
+});
+
+test("every download names its arch, and the AppImage doesn't say Linux (AppImage catalog rule)", () => {
+  const built = ["x64-setup.exe", "x64_en-US.msi", "amd64.AppImage", "amd64.deb", "x86_64.rpm", "universal.dmg", "universal.app.tar.gz"];
+  for (const b of built) {
+    const name = plainName(`No.Actually..._0.2.0_${b}`, "0.2.0");
+    assert.match(name, /-(x64|x86_64|amd64|universal)\./, name);
+  }
+  assert.doesNotMatch(plainName("No.Actually..._0.2.0_amd64.AppImage", "0.2.0"), /linux/i);
 });
 
 const ci = {
@@ -31,24 +40,24 @@ const ci = {
   },
 };
 const assets = [
-  "No-Actually-0.2.0-Windows-Setup.exe",
-  "No-Actually-0.2.0-Windows-IT-Installer.msi",
-  "No-Actually-0.2.0-Linux.AppImage",
-  "No-Actually-0.2.0-Mac.dmg",
-  "No-Actually-0.2.0-Mac-Update.app.tar.gz",
+  "No-Actually-0.2.0-Windows-Setup-x64.exe",
+  "No-Actually-0.2.0-Windows-IT-Installer-x64.msi",
+  "No-Actually-0.2.0-x86_64.AppImage",
+  "No-Actually-0.2.0-Mac-universal.dmg",
+  "No-Actually-0.2.0-Mac-Update-universal.app.tar.gz",
 ];
-const mac = { file: "No-Actually-0.2.0-Mac-Update.app.tar.gz", signature: "S\n" };
+const mac = { file: "No-Actually-0.2.0-Mac-Update-universal.app.tar.gz", signature: "S\n" };
 
 test("re-points CI entries at the renamed files and adds the Mac update", () => {
   const out = finishLatest({ latest: ci, version: "0.2.0", tag: "v0.2.0", repo: REPO, assets, mac });
   assert.equal(out.version, "0.2.0");
   assert.equal(out.notes, "See the changelog.");
   assert.equal(out.pub_date, "2026-11-01T10:00:00Z");
-  assert.deepEqual(out.platforms["windows-x86_64"], { signature: "W", url: dl("No-Actually-0.2.0-Windows-Setup.exe") });
-  assert.equal(out.platforms["windows-x86_64-msi"].url, dl("No-Actually-0.2.0-Windows-IT-Installer.msi"));
-  assert.equal(out.platforms["linux-x86_64"].url, dl("No-Actually-0.2.0-Linux.AppImage"));
+  assert.deepEqual(out.platforms["windows-x86_64"], { signature: "W", url: dl("No-Actually-0.2.0-Windows-Setup-x64.exe") });
+  assert.equal(out.platforms["windows-x86_64-msi"].url, dl("No-Actually-0.2.0-Windows-IT-Installer-x64.msi"));
+  assert.equal(out.platforms["linux-x86_64"].url, dl("No-Actually-0.2.0-x86_64.AppImage"));
   for (const t of ["darwin-universal", "darwin-aarch64", "darwin-x86_64", "darwin-aarch64-app", "darwin-x86_64-app"]) {
-    assert.deepEqual(out.platforms[t], { signature: "S", url: dl("No-Actually-0.2.0-Mac-Update.app.tar.gz") });
+    assert.deepEqual(out.platforms[t], { signature: "S", url: dl("No-Actually-0.2.0-Mac-Update-universal.app.tar.gz") });
   }
 });
 
@@ -87,10 +96,10 @@ test("follows tauri-action's asset-id links on a draft release", () => {
     },
   };
   // finish-release.sh renames the files first, so the ids already point at the plain names.
-  const assetIds = { 683870400: "No-Actually-0.2.0-Windows-Setup.exe", 683868082: "No-Actually-0.2.0-Linux.AppImage" };
+  const assetIds = { 683870400: "No-Actually-0.2.0-Windows-Setup-x64.exe", 683868082: "No-Actually-0.2.0-x86_64.AppImage" };
   const out = finishLatest({ latest: byId, version: "0.2.0", tag: "v0.2.0", repo: REPO, assets, assetIds, mac });
-  assert.equal(out.platforms["windows-x86_64"].url, dl("No-Actually-0.2.0-Windows-Setup.exe"));
-  assert.equal(out.platforms["linux-x86_64"].url, dl("No-Actually-0.2.0-Linux.AppImage"));
+  assert.equal(out.platforms["windows-x86_64"].url, dl("No-Actually-0.2.0-Windows-Setup-x64.exe"));
+  assert.equal(out.platforms["linux-x86_64"].url, dl("No-Actually-0.2.0-x86_64.AppImage"));
   assert.throws(
     () => finishLatest({ latest: byId, version: "0.2.0", tag: "v0.2.0", repo: REPO, assets, mac }),
     /files not on the release/,
@@ -103,12 +112,12 @@ test("the command line reads `<id>\\t<name>` asset lists", () => {
   try {
     const latest = { ...ci, platforms: { "linux-x86_64": { signature: "L", url: dl("42") } } };
     writeFileSync(join(dir, "in.json"), JSON.stringify(latest));
-    writeFileSync(join(dir, "assets.txt"), "42\tNo-Actually-0.2.0-Linux.AppImage\nNo-Actually-0.2.0-Mac.dmg\n");
+    writeFileSync(join(dir, "assets.txt"), "42\tNo-Actually-0.2.0-x86_64.AppImage\nNo-Actually-0.2.0-Mac-universal.dmg\n");
     const script = new URL("./latest-json.mjs", import.meta.url).pathname;
     const args = ["finish", "--version", "0.2.0", "--tag", "v0.2.0", "--repo", REPO, "--assets", join(dir, "assets.txt"), "--in", join(dir, "in.json")];
     const r = spawnSync(process.execPath, [script, ...args], { encoding: "utf8" });
     assert.equal(r.status, 0, r.stderr);
-    assert.equal(JSON.parse(r.stdout).platforms["linux-x86_64"].url, dl("No-Actually-0.2.0-Linux.AppImage"));
+    assert.equal(JSON.parse(r.stdout).platforms["linux-x86_64"].url, dl("No-Actually-0.2.0-x86_64.AppImage"));
   } finally {
     rmSync(dir, { recursive: true });
   }

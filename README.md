@@ -250,13 +250,13 @@ Open the **[latest release](https://github.com/HTMLGuyLLC/NoActually/releases/la
 
 | Your computer | Download | Install |
 |---|---|---|
-| **Mac** (macOS 12+, Apple silicon or Intel) | `No-Actually-<version>-Mac.dmg` | Open it, drag **No, Actually...** into **Applications**, and open it from there. It's signed and notarized, so there are no warnings. |
-| **Windows** | `No-Actually-<version>-Windows-Setup.exe` | Run it. If you see "Windows protected your PC", click **More info → Run anyway** (the Windows build isn't code-signed yet). |
-| **Linux** | `No-Actually-<version>-Linux.AppImage` | Right-click → Properties → allow it to run as a program (or `chmod +x`), then open it. |
+| **Mac** (macOS 12+, Apple silicon or Intel) | `No-Actually-<version>-Mac-universal.dmg` | Open it, drag **No, Actually...** into **Applications**, and open it from there. It's signed and notarized, so there are no warnings. |
+| **Windows** | `No-Actually-<version>-Windows-Setup-x64.exe` | Run it. If you see "Windows protected your PC", click **More info → Run anyway** (the Windows build isn't code-signed yet). |
+| **Linux** | `No-Actually-<version>-x86_64.AppImage` | Right-click → Properties → allow it to run as a program (or `chmod +x`), then open it. |
 
 The other files are for special cases:
-- `-Windows-IT-Installer.msi` is for IT teams deploying to many PCs.
-- `-Linux-Ubuntu-Debian.deb` and `-Linux-Fedora.rpm` install through your package manager.
+- `-Windows-IT-Installer-x64.msi` is for IT teams deploying to many PCs.
+- `-Linux-Ubuntu-Debian-amd64.deb` and `-Linux-Fedora-x86_64.rpm` install through your package manager.
 - `SHA256SUMS.txt` lets you verify a download.
 
 The app checks for new versions and shows **Restart to update** when one is ready. Nothing is downloaded or installed until you click it, and an update only installs if its signature matches the project's key. Turn the check off in Settings.

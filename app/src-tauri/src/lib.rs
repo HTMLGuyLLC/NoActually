@@ -109,6 +109,30 @@ fn tray_icon() -> tauri::image::Image<'static> {
     }
 }
 
+/// Whether the menu bar icon was built. Without one, the scorecard is the only way into the app.
+pub struct HasTray(pub bool);
+
+/// Runs `build`, turning an error or a panic into `false`. On Linux the tray library is loaded
+/// at runtime and panics when it's missing (it isn't bundled, and not every distro has it).
+fn tray_built(build: impl FnOnce() -> tauri::Result<()>) -> bool {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(build)) {
+        Ok(Ok(())) => true,
+        Ok(Err(e)) => {
+            log::warn!("no menu bar icon: {e}");
+            false
+        }
+        Err(_) => {
+            log::warn!("no menu bar icon: the system tray library is missing");
+            false
+        }
+    }
+}
+
+/// A launch at login starts quietly in the menu bar, but only when there is a menu bar icon.
+fn starts_hidden(hidden_arg: bool, has_tray: bool) -> bool {
+    hidden_arg && has_tray
+}
+
 /// The menu bar icon: left click toggles the quick glance, the menu does the rest.
 fn build_tray(tauri_app: &tauri::App, menu: &Menu<tauri::Wry>) -> tauri::Result<()> {
     TrayIconBuilder::with_id("tray")
@@ -256,12 +280,14 @@ fn setup(tauri_app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let menu = Menu::with_items(tauri_app, &[&open, &sync, &update, &quit])?;
     let (update_tx, update_rx) = mpsc::channel();
     tauri_app.manage(updater::Updates::new(&handle, update_tx, update));
-    build_tray(tauri_app, &menu)?;
+    let has_tray = tray_built(|| build_tray(tauri_app, &menu));
+    tauri_app.manage(HasTray(has_tray));
     apply_menu_bar(&handle, &app, menu_bar);
 
     // A launch at login stays in the menu bar; a launch by the user opens the scorecard. With no
-    // menu bar icon there'd be nothing to click, so it always opens.
-    if menu_bar && std::env::args().any(|a| a == HIDDEN_ARG) {
+    // menu bar icon (turned off, or no tray on this system) there'd be nothing to click, so it
+    // always opens.
+    if starts_hidden(std::env::args().any(|a| a == HIDDEN_ARG), menu_bar && has_tray) {
         #[cfg(target_os = "macos")]
         let _ = handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
     } else {
@@ -300,10 +326,13 @@ pub fn run() {
         .setup(setup)
         .on_window_event(|window, event| match event {
             // Closing the scorecard hides it and tracking keeps running from the menu bar, unless
-            // it's set to be an ordinary app: then closing quits.
+            // it's set to be an ordinary app or there's no tray on this system: then closing quits.
             WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
                 save_main_placement(window.app_handle());
-                if window.app_handle().state::<std::sync::Arc<App>>().menu_bar() {
+                let handle = window.app_handle();
+                if handle.state::<std::sync::Arc<App>>().menu_bar()
+                    && handle.try_state::<HasTray>().is_some_and(|t| t.0)
+                {
                     api.prevent_close();
                     hide_main(window);
                 } else {
@@ -385,5 +414,26 @@ mod placement_tests {
     fn a_narrow_screen_caps_the_width() {
         let small = Rect { x: 0.0, y: 0.0, w: 800.0, h: 600.0 };
         assert_eq!(main_placement(None, &[small], None).map(|r| r.w), Some(800.0));
+    }
+}
+
+#[cfg(test)]
+mod tray_tests {
+    use super::*;
+
+    #[test]
+    fn a_missing_tray_library_is_survived() {
+        assert!(tray_built(|| Ok(())));
+        assert!(!tray_built(|| Err(tauri::Error::FailedToReceiveMessage)));
+        // What libappindicator-sys does when neither appindicator library loads.
+        assert!(!tray_built(|| panic!("Failed to load ayatana-appindicator3 or appindicator3 dynamic library")));
+    }
+
+    #[test]
+    fn hidden_launch_needs_a_tray() {
+        assert!(starts_hidden(true, true));
+        assert!(!starts_hidden(true, false), "no tray: the window must show");
+        assert!(!starts_hidden(false, true));
+        assert!(!starts_hidden(false, false));
     }
 }

@@ -2,7 +2,7 @@
 // Release file names and the updater's latest.json, for scripts/finish-release.sh.
 //
 //   node scripts/latest-json.mjs plain-name <file> <version>
-//     Prints the plain name a release file gets ("No-Actually-0.2.0-Windows-Setup.exe").
+//     Prints the plain name a release file gets ("No-Actually-0.2.0-Windows-Setup-x64.exe").
 //
 //   node scripts/latest-json.mjs finish --version 0.2.0 --tag v0.2.0 --repo owner/name \
 //     --assets assets.txt (one "<id>\t<name>" or "<name>" per line) [--in latest.json] [--mac-file NAME --mac-sig FILE.sig]
@@ -14,13 +14,13 @@ import { parseArgs } from "node:util";
 
 /** Most specific first. Plain names map to themselves, so renaming twice is harmless. */
 const PLAIN = [
-  ["x64-setup.exe", "Windows-Setup.exe"],
-  ["x64_en-US.msi", "Windows-IT-Installer.msi"],
-  ["amd64.AppImage", "Linux.AppImage"],
-  ["amd64.deb", "Linux-Ubuntu-Debian.deb"],
-  ["x86_64.rpm", "Linux-Fedora.rpm"],
-  ["universal.dmg", "Mac.dmg"],
-  [".app.tar.gz", "Mac-Update.app.tar.gz"],
+  ["x64-setup.exe", "Windows-Setup-x64.exe"],
+  ["x64_en-US.msi", "Windows-IT-Installer-x64.msi"],
+  ["amd64.AppImage", "x86_64.AppImage"],
+  ["amd64.deb", "Linux-Ubuntu-Debian-amd64.deb"],
+  ["x86_64.rpm", "Linux-Fedora-x86_64.rpm"],
+  ["universal.dmg", "Mac-universal.dmg"],
+  [".app.tar.gz", "Mac-Update-universal.app.tar.gz"],
 ];
 
 export function plainName(name, version) {
