@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import shipped from "../public/demo.json";
 import { demoCall, demoStats, isDemoData, judge } from "./api.demo";
+import { periodSince } from "./state";
 import { hallEntry, meta, progress, prompts, row, stats } from "./test/fixtures";
 
 const base = stats({
@@ -171,6 +172,17 @@ describe("demoCall", () => {
     );
     const s = await demoCall("stats", { filter: { since: "2026-10-19" } });
     expect(s.overall).toMatchObject({ corrections: s.corrections, humbled: s.humbled });
+    vi.unstubAllGlobals();
+  });
+
+  it("scores an undated call over 28 days, so the quick glance and the scorecard agree", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ json: async () => data })),
+    );
+    const undated = await demoCall("stats", { filter: {} });
+    const dated = await demoCall("stats", { filter: { since: periodSince("28d") } });
+    expect(undated.overall).toEqual(dated.overall);
     vi.unstubAllGlobals();
   });
 

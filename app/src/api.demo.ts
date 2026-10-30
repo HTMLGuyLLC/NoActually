@@ -2,6 +2,7 @@
 import type { ArgsOf, Command, Filter, Goal, GoalStatus, Meta, Overall, Progress, Prompts, ResultOf, SourceInfo, Stats } from "./api";
 import { isFiltered } from "./format";
 import { modelName } from "./picker/picker";
+import { periodSince } from "./state";
 
 export type DemoData = { meta: Meta; stats: Stats; progress: Progress };
 
@@ -190,7 +191,10 @@ const handlers: Handlers = {
     const data = await demoData();
     // demo.json's counts cover all its history (its `overall` is the default 28 days, as with no date in Rust).
     // A period scales them down by weeks, the same for the 28-day default, so a page's counts agree.
-    return withSince(data.meta, demoStats(data, filter), since ?? null);
+    const all = demoStats(data, filter);
+    if (since) return withSince(data.meta, all, since);
+    // No date: counts cover everything, and the score covers the last 28 days, as in Rust.
+    return { ...all, overall: withSince(data.meta, all, periodSince("28d")).overall };
   },
   list_sources: () => demoSources,
   allow_source: () => null,
