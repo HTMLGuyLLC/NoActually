@@ -98,6 +98,10 @@ CREATE TABLE trophies (id INTEGER PRIMARY KEY, goal TEXT NOT NULL, done TEXT NOT
 ALTER TABLE sessions RENAME COLUMN catches TO corrections;
 UPDATE settings SET key = 'milestone.prompt_tier' WHERE key = 'milestone.brief_tier';
 ",
+    // 7: Remember which checkpoints came from a final pass, so a finished chat isn't re-read.
+    r"
+ALTER TABLE files ADD COLUMN finalized INTEGER NOT NULL DEFAULT 0;
+",
 ];
 
 /// Sets connection pragmas and applies any migrations the database hasn't had. Each migration

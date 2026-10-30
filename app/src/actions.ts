@@ -98,9 +98,49 @@ const correctionPost = (e: HallEntry): Post => ({
 /** The period the drawn numbers cover: the scorecard's picker, or the default 28 days elsewhere. */
 const when = () => PERIOD_WHEN[state.tab === "score" ? state.period : "28d"];
 
-/** True on the second click. The first relabels the button and holds off redraws until then. */
+/** How long a first click stays armed before the button goes back to normal. */
+const CONFIRM_MS = 5000;
+const armed = new WeakMap<HTMLButtonElement, (flush: boolean) => void>();
+
+/** A hidden status line that reads the "Click again…" prompt aloud; the button's own text change isn't announced. */
+function confirmNote(): HTMLElement {
+  let el = document.getElementById("confirm-note");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "confirm-note";
+    el.className = "sr-only";
+    el.setAttribute("role", "status");
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+/** True on the second click. The first relabels the button and holds off redraws until then; it disarms
+ * itself after a few seconds or when focus leaves, restoring the label. */
 function confirmed(b: HTMLButtonElement, ask: string): boolean {
-  if (b.dataset.confirm === "yes") return true;
+  const disarm = armed.get(b);
+  if (disarm) {
+    disarm(false);
+    return true;
+  }
+  const label = b.textContent;
+  const note = confirmNote();
+  const off = (flush: boolean) => {
+    clearTimeout(timer);
+    clearTimeout(announce);
+    b.removeEventListener("blur", onBlur);
+    armed.delete(b);
+    delete b.dataset.confirm;
+    b.textContent = label;
+    say(note, "");
+    if (flush) scheduler.flush(); // apply any redraw that waited on the armed button
+  };
+  const onBlur = () => off(true);
+  const timer = setTimeout(() => off(true), CONFIRM_MS);
+  // Set after the region exists for a tick, so a screen reader notices the change.
+  const announce = setTimeout(() => say(note, ask), 0);
+  b.addEventListener("blur", onBlur);
+  armed.set(b, off);
   b.dataset.confirm = "yes";
   b.textContent = ask;
   return false;

@@ -2,7 +2,6 @@
 import type { ArgsOf, Command, Filter, Goal, GoalStatus, Meta, Overall, Progress, Prompts, ResultOf, SourceInfo, Stats } from "./api";
 import { isFiltered } from "./format";
 import { modelName } from "./picker/picker";
-import { periodSince } from "./state";
 
 export type DemoData = { meta: Meta; stats: Stats; progress: Progress };
 
@@ -189,8 +188,9 @@ const handlers: Handlers = {
   meta: async () => (await demoData()).meta,
   stats: async ({ filter: { since, ...filter } }) => {
     const data = await demoData();
-    // demo.json holds the default 28 days; other periods are scaled from it.
-    return withSince(data.meta, demoStats(data, filter), since && since !== periodSince("28d") ? since : null);
+    // demo.json's counts cover all its history (its `overall` is the default 28 days, as with no date in Rust).
+    // A period scales them down by weeks, the same for the 28-day default, so a page's counts agree.
+    return withSince(data.meta, demoStats(data, filter), since ?? null);
   },
   list_sources: () => demoSources,
   allow_source: () => null,
@@ -239,7 +239,7 @@ const handlers: Handlers = {
     visit.learned = [...visit.learned.filter((x) => x !== id), ...(done ? [id] : [])];
     return visit.learned;
   },
-  get_menu_bar: () => visit.menuBar,
+  get_menu_bar: () => ({ enabled: visit.menuBar, available: true }),
   set_menu_bar: ({ enabled }) => {
     visit.menuBar = enabled;
     return null;

@@ -49,5 +49,8 @@ describe("glanceView", () => {
       expect(m).toContain('data-action="open-main"');
     }
     expect(emptyGlanceView(HOSTILE).value).not.toContain("<img");
+    for (const m of [emptyGlanceView("").value, emptyGlanceView("Codex").value, glanceView(stats(), meta).value])
+      expect(m).toContain('<h1 class="sr-only">Quick glance</h1>');
+    expect(emptyGlanceView("Codex").value).toContain("Your score shows up after a few prompts.");
   });
 });

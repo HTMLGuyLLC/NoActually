@@ -1,7 +1,7 @@
 // Display names and ranges from the Rust side's `meta` command. Nothing here hard-codes Rust's tables.
 import type { Meta, Prompts, PromptTier, Tier } from "./api";
 
-/** A tier with the range shown on the ladder: "0–2", "7–14", "15+ corrections/wk". */
+/** A tier with the range shown on the ladder: "0–49", "50–74", "90+". */
 export type TierRange = Tier & { range: string };
 
 /** Tiers top-down (as a ladder shows them), each with a range up to the next floor; `top` labels the last. */
@@ -19,7 +19,7 @@ function withRanges<T extends Tier>(tiers: T[], top: (floor: number) => string, 
 /** Overall tiers top-down: "90+", "80–89", … */
 export const tierRanges = (meta: Meta): TierRange[] => withRanges(meta.tiers, (f) => `${f}+`);
 
-/** Prompt tiers top-down: "95%+ clear", "90–94%", … */
+/** Prompt tiers top-down: "90%+ clear", "80–89%", … */
 export const promptTierRanges = (meta: Meta): (PromptTier & { range: string })[] => withRanges(meta.prompt_tiers, (f) => `${f}%+ clear`, "%");
 
 export const promptTier = (meta: Meta, id: string | null): PromptTier | undefined => meta.prompt_tiers.find((t) => t.id === id);

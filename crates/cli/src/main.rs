@@ -291,7 +291,7 @@ fn window_label(since: Option<NaiveDate>) -> String {
 fn overall_lines(o: &store::Overall, window: &str) -> Vec<String> {
     let verdict = match o.verdict {
         Answer::No => "No.",
-        Answer::Hmm => "Maybe…",
+        Answer::Hmm => "Hmm.",
     };
     match (o.score, o.tier, o.direction, o.judgment) {
         (Some(score), Some(tier), Some(direction), Some(judgment)) => vec![

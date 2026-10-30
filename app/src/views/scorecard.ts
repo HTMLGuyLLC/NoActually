@@ -6,6 +6,7 @@ import { type Html, html, num, raw } from "../html";
 import { categoryTitle, correctionTier, correctionTierRanges, tierName, tierOf, tierRanges } from "../meta";
 import { correctionRate, modelName } from "../picker/picker";
 import { PERIOD_WHEN, PERIODS, type Period, SCORE_VIEWS, type ScoreView } from "../state";
+import { chartBox } from "./charts";
 import { answerWord, byAnswer, ladderView, sectionNav, shareButton, svg, tierBlurb, verdictMark } from "./chrome";
 import { promptsSummaryView, promptsView } from "./prompts";
 
@@ -94,7 +95,7 @@ function partsView(o: Overall, meta: Meta): Html {
   const part = (label: string, value: number | null, weight: number, hint: string) =>
     html`<div class="part"><span class="part-name">${label}<small class="muted">${hint} · ${weight}% of the score</small></span><span class="bar-bg"><i data-w="${value ?? 0}"></i></span><span class="n">${value ?? "–"}</span></div>`;
   return html`<div class="parts" role="group" aria-label="What the score is made of">
-    ${part("Who corrects whom", o.judgment, 100 - meta.direction_weight, "how rarely it has to correct you")}
+    ${part("Who corrects whom", o.judgment, 100 - meta.direction_weight, "you check its work, and it rarely corrects you")}
     ${part("Your prompts", o.direction, meta.direction_weight, "prompts clear the first time")}
   </div>`;
 }
@@ -125,11 +126,12 @@ function correctionMark(o: Overall, meta: Meta, still: boolean): Html {
   return verdictMark(tier?.verdict ?? null, tier ? `${tier.verdict} Your correction tier is ${tier.name}.` : "Not ranked yet.", still);
 }
 
-/** Why: who corrected whom, in one line, with the same counts as "you vs it" beside it. */
+/** Why: who corrected whom, in one line. Counts come from `overall`, the window `when` names. */
 function correctionBecause(s: Stats, when: string): Html {
   if (s.overall.judgment == null) return html`Give it <b>${plural(s.overall.to_rank, "more task")}</b> with a follow-up to get ranked.`;
-  if (!s.corrections) return html`You haven't corrected it ${when}, so there's no proof yet that you check its work.`;
-  return html`You corrected it <b>${plural(s.corrections, "time")}</b> ${when}. It corrected you ${s.humbled ? plural(s.humbled, "time") : "never"}.`;
+  const { corrections, humbled } = s.overall;
+  if (!corrections) return html`You haven't corrected it ${when}, so there's no proof yet that you check its work.`;
+  return html`You corrected it <b>${plural(corrections, "time")}</b> ${when}. ${humbled ? html`It corrected you ${plural(humbled, "time")}.` : "It never corrected you."}`;
 }
 
 /** The next correction tier's target ("Hawk-eyed at 90. You're at 88."). */
@@ -156,7 +158,7 @@ function correctsSummaryView(s: Stats, ctx: Ctx): Html {
   return html`<article class="card mini corrections">
       <h2 class="q">Do you correct it?</h2>
       <div class="verdict">${correctionMark(o, ctx.meta, ctx.correctionsStill)}<div class="because">${correctionBecause(s, ctx.when)}</div></div>
-      ${tierBlurb(tier)}<p class="hand-note">${correctionNote(o, ctx.meta)}</p>
+      ${tierBlurb(tier)}${o.judgment == null ? "" : html`<p class="hand-note">${correctionNote(o, ctx.meta)}</p>`}
       <div class="share">${tier ? shareButton("share-corrections") : ""}<button class="ghost" data-action="view" data-id="corrections">See corrections</button></div>
     </article>`;
 }
@@ -214,9 +216,6 @@ export function chartSummary(weeks: Stats["weekly"]): string {
 }
 
 export function hallView(entries: HallEntry[]): Html {
-  if (!entries.length) {
-    return html`<p class="muted">No saved corrections to show. Your privacy setting may be "category only", or the text has aged out. Counts are unaffected.</p>`;
-  }
   return html`<div class="fame">${entries.map(
     (e) => html`
       <article class="correction${e.pinned ? " pinned" : ""}">
@@ -253,7 +252,7 @@ function statsView(s: Stats): Html {
   return html`<section class="stats">
       <div class="stat"><span class="v">${num(s.corrections)}</span><span class="l">corrections</span></div>
       <div class="stat"><span class="v">${s.pct_real_chats_with_correction != null ? `${Math.round(s.pct_real_chats_with_correction)}%` : "–"}</span><span class="l">of real chats had a correction</span></div>
-      <div class="stat"><span class="v">${s.best_streak_days} days</span><span class="l">best streak · now ${s.current_streak_days}</span></div>
+      <div class="stat"><span class="v">${plural(s.best_streak_days, "day")}</span><span class="l">best streak · now ${s.current_streak_days}</span></div>
       <div class="stat"><span class="v">${s.messages_per_correction ? `1 in ${s.messages_per_correction}` : "–"}</span><span class="l">messages is a correction · peak ${peak}</span></div>
     </section>`;
 }
@@ -286,7 +285,7 @@ function correctionsView(s: Stats, ctx: Ctx): Html {
         ${correctionTier(meta, s.overall.correction_tier) ? html`<div class="share">${shareButton("share-corrections", "Share your score")}</div>` : ""}
       </div>
     </section>
-    <section><div class="head"><h2>Corrections per week</h2></div><div class="chart">${chartView(s, meta)}</div></section>
+    <section><div class="head"><h2>Corrections per week</h2></div>${chartBox("Corrections per week chart, scrolls sideways", chartView(s, meta))}</section>
     <section class="split">
       <div>
         <div class="head"><h2>By model</h2></div>
@@ -318,7 +317,7 @@ const ARROW_NEXT = raw(`<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.
 
 /** An award's entries, best first, one at a time. All of them share one grid cell, so the card is as
  * tall as the tallest and flipping never moves the page; prev/next flip in place (actions.ts). */
-function slidesView(key: string, entries: HallEntry[], showing: number | undefined): Html {
+function slidesView(key: string, name: string, entries: HallEntry[], showing: number | undefined): Html {
   // The entry you were on, wherever it sits now; the best one if it's gone.
   const i = Math.max(
     0,
@@ -329,9 +328,9 @@ function slidesView(key: string, entries: HallEntry[], showing: number | undefin
   )}</div>`;
   if (entries.length < 2) return slides;
   const nav = html`<div class="slide-nav">
-      <button class="ghost small" data-action="award-slide" data-id="${key}" data-step="-1" aria-label="Previous">${ARROW_PREV}</button>
+      <button class="ghost small" data-action="award-slide" data-id="${key}" data-step="-1" aria-label="Previous ${name} entry">${ARROW_PREV}</button>
       <span class="muted small" aria-live="polite"><span class="slide-at">${i + 1}</span> of top ${entries.length}</span>
-      <button class="ghost small" data-action="award-slide" data-id="${key}" data-step="1" aria-label="Next">${ARROW_NEXT}</button>
+      <button class="ghost small" data-action="award-slide" data-id="${key}" data-step="1" aria-label="Next ${name} entry">${ARROW_NEXT}</button>
     </div>`;
   return html`${slides}${nav}`;
 }
@@ -342,10 +341,10 @@ function awardView(key: string, count: number, entries: HallEntry[], meta: Meta,
   const body = !count
     ? html`<p class="muted small">Not earned yet.</p>`
     : entries.length
-      ? slidesView(key, entries, showing)
+      ? slidesView(key, a.name, entries, showing)
       : html`<p class="muted small">No snippets kept. Your privacy setting may be “category only”, or the text has aged out.</p>`;
   return html`<article class="award${count ? "" : " unearned"}" data-award="${key}">
-    <header><span class="award-emoji" aria-hidden="true">${a.emoji}</span><div><h3>${a.name}</h3><p class="muted small">${a.blurb}</p></div><span class="award-count" aria-label="${count} times">×${num(count)}</span></header>
+    <header><span class="award-emoji" aria-hidden="true">${a.emoji}</span><div><h3>${a.name}</h3><p class="muted small">${a.blurb}</p></div><span class="award-count"><span aria-hidden="true">×${num(count)}</span><span class="sr-only">${count === 1 ? "once" : plural(count, "time")}</span></span></header>
     ${body}
   </article>`;
 }
@@ -397,10 +396,10 @@ export function onboardingView(watching: string): Html {
     // Allowed, but nothing counted yet (picked "From now on", or the tool has no history yet).
     return html`<section class="empty"><span class="eyebrow"><i class="dot live"></i> Watching ${watching}</span>
       <h1 class="q">You're all set.</h1>
-      <p>Your next chats will be counted as they happen. The first time you correct your AI, your scorecard shows up here.</p>
+      <p>Your next chats will be counted as they happen. Once there's a chat to count, your scorecard shows up here.</p>
       <button class="ghost" data-action="go-sources">Manage sources</button></section>`;
   }
   return html`<section class="empty"><h1 class="q">Let's see if AI could replace you.</h1>
-    <p>No, Actually... counts the times you corrected your AI, privately, on this computer. Pick which tools it may read.</p>
+    <p>No, Actually... grades your prompts and counts the times you corrected your AI, privately, on this computer. Pick which tools it may read.</p>
     <button data-action="go-sources">Choose sources</button></section>`;
 }

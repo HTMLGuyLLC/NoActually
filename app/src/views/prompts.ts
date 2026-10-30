@@ -4,7 +4,7 @@ import { fmtDay, plural } from "../format";
 import { type Html, html, num } from "../html";
 import { landedPct, percent, promptTier, promptTierRanges, signalNoun, steerTitle } from "../meta";
 import { PERIOD_WHEN, type Period } from "../state";
-import { stackChart } from "./charts";
+import { chartBox, stackChart } from "./charts";
 import { answerWord, byAnswer, ladderView, shareButton, tierBlurb, verdictMark } from "./chrome";
 
 /** "86% of your prompts in the last 28 days were clear the first time…", or how many more it takes to get ranked. */
@@ -25,7 +25,7 @@ export function promptsSummaryView(b: Prompts, meta: Meta, still: boolean, when 
   const tier = promptTier(meta, b.tier);
   const body = b.tasks
     ? html`<div class="verdict">${markView(b, meta, still)}<div class="because">${becauseLine(b, meta, when)}</div></div>
-        ${tierBlurb(tier)}<p class="hand-note">${ladderNote(b, meta)}</p>`
+        ${tierBlurb(tier)}${tier ? html`<p class="hand-note">${ladderNote(b, meta)}</p>` : ""}`
     : html`<p class="muted">No tasks yet. The first message of each chat is its prompt.</p>`;
   return html`<article class="card mini prompts">
       <h2 class="q">Do you make it guess?</h2>
@@ -94,15 +94,14 @@ function steeringView(b: Prompts, meta: Meta): Html {
   if (!total) return html`<p class="muted">No follow-ups yet. Every prompt was clear the first time.</p>`;
   const top = Math.max(...counts.map((c) => c.n));
   const yours = counts.filter((c) => c.id !== "ai_wrong").reduce((t, c) => t + c.n, 0);
+  const theirs = total - yours;
   return html`<div class="cats">${counts.map(
     (c) =>
       html`<div class="cat${c.id === "ai_wrong" ? " ai" : ""}"><span>${steerTitle(meta, c.id)}</span><span class="bar-bg"><i data-w="${c.n ? Math.max(2, (c.n / top) * 100) : 0}"></i></span><span class="n">${num(c.n)}</span></div>`,
   )}</div>
-  <p class="muted small">${plural(total, "follow-up")}. ${num(total - yours)} were its mistakes (blue), which don't count against you; ${num(yours)} could have been in the prompt (red).</p>`;
+  <p class="muted small">${plural(total, "follow-up")}. ${theirs === 1 ? html`1 was its mistake (blue), which doesn't count against you` : html`${num(theirs)} were its mistakes (blue), which don't count against you`}; ${num(yours)} could have been in the prompt (red).</p>`;
 }
 
-/** The Prompts section: verdict card, then what prompts carry and where steering went. `subject` is who
- * the question asks about ("it" by default). */
 /** Prompts per week, split into the ones that were clear the first time and the ones that needed more from you: the
  * same tasks the prompt tier counts, so the bars add up to the number at the top. */
 /** A week's tip: its tasks, how many were clear the first time, and what the rest needed. */
@@ -121,7 +120,7 @@ function weeksView(weekly: WeekRow[], meta: Meta): Html {
   const recent = weeks.filter((w) => w.continued);
   const last = recent[recent.length - 1];
   const summary = last
-    ? `${plural(weeks.length, "week")} from ${fmtDay(weeks[0]?.week ?? last.week)}. The latest, the week of ${fmtDay(last.week)}: ${last.landed} of ${plural(last.continued, "prompt")} were clear the first time.`
+    ? `${plural(weeks.length, "week")} from ${fmtDay(weeks[0]?.week ?? last.week)}. The latest, the week of ${fmtDay(last.week)}: ${last.landed} of ${plural(last.continued, "prompt")} ${last.continued === 1 ? "was" : "were"} clear the first time.`
     : "";
   return stackChart({
     id: "prompt-weeks",
@@ -136,6 +135,8 @@ function weeksView(weekly: WeekRow[], meta: Meta): Html {
   });
 }
 
+/** The Prompts section: verdict card, then what prompts carry and where steering went. `subject` is who
+ * the question asks about ("it" by default). */
 export function promptsView(b: Prompts, meta: Meta, still: boolean, subject = "it", period: Period = "28d", weekly: WeekRow[] = []): Html {
   if (!b.tasks) {
     return html`<section class="card prompts"><div><h1 class="q">Do you make ${subject} guess?</h1>
@@ -146,7 +147,7 @@ export function promptsView(b: Prompts, meta: Meta, still: boolean, subject = "i
       <div>${verdictView(b, meta, still, subject, period)}</div>
       <div class="meter">${promptLadderView(b, meta)}</div>
     </section>
-    <section><div class="head"><h2>Prompts per week</h2><p class="muted">Prompts with a follow-up. A one-shot prompt can't need more from you, so it doesn't count.</p></div><div class="chart">${weeksView(weekly, meta)}</div></section>
+    <section><div class="head"><h2>Prompts per week</h2><p class="muted">Prompts with a follow-up. A one-shot prompt can't need more from you, so it doesn't count.</p></div>${chartBox("Prompts per week chart, scrolls sideways", weeksView(weekly, meta))}</section>
     <section class="split">
       <div><div class="head"><h2>What your prompts include</h2></div>${gradesView(b, meta)}${signalsView(b, meta)}</div>
       <div><div class="head"><h2>Why you followed up</h2></div>${steeringView(b, meta)}</div>

@@ -26,19 +26,21 @@ export const watchingNames = (list: SourceInfo[]): string[] => list.filter((x) =
 
 function sourceRow(s: SourceInfo): Html {
   const st = s.state;
+  // Every source repeats the same buttons, so each says whose it is.
+  const who = (verb: string) => `${verb} ${s.name}`;
   const found = s.roots.filter(([, ok]) => ok).map(([p]) => p);
   const where =
     s.kind === "import" ? (st?.paths.length ? st.paths.join(", ") : "Pick your export file") : found.length ? found.join(", ") : "Not found on this computer";
   const label = st?.allowed ? (st.paused ? "Paused" : "Allowed") : "Not allowed";
   const actions =
     s.kind === "import"
-      ? html`<button data-action="import" data-id="${s.id}">${st?.paths.length ? "Add another export" : "Import export…"}</button>`
+      ? html`<button data-action="import" data-id="${s.id}" aria-label="${st?.paths.length ? who("Add another export for") : who("Import export for")}">${st?.paths.length ? "Add another export" : "Import export…"}</button>`
       : st?.allowed
-        ? html`<button class="ghost" data-action="pause" data-id="${s.id}" data-paused="${String(st.paused)}">${st.paused ? "Resume" : "Pause"}</button><button class="ghost" data-action="revoke" data-id="${s.id}">Stop reading</button>`
+        ? html`<button class="ghost" data-action="pause" data-id="${s.id}" data-paused="${String(st.paused)}" aria-label="${who(st.paused ? "Resume" : "Pause")}">${st.paused ? "Resume" : "Pause"}</button><button class="ghost" data-action="revoke" data-id="${s.id}" aria-label="${who("Stop reading")}">Stop reading</button>`
         : found.length
           ? html`<select data-since="${s.id}" aria-label="How far back to read ${s.name}">${SINCE_CHOICES.map(
               ([v, text]) => html`<option value="${v}">${text}</option>`,
-            )}</select><button data-action="allow" data-id="${s.id}">Allow</button>`
+            )}</select><button data-action="allow" data-id="${s.id}" aria-label="${who("Allow")}">Allow</button>`
           : "";
   const hint =
     s.kind === "import"
@@ -49,17 +51,17 @@ function sourceRow(s: SourceInfo): Html {
   return html`<div class="source${st?.allowed ? " on" : ""}">
       <div class="src-main"><b>${s.name}</b><span class="status">${label}</span>
         <p class="muted small mono">${where}</p>${hint ? html`<p class="muted small">${hint}</p>` : ""}</div>
-      <div class="src-actions">${actions}${st ? html`<button class="danger" data-action="forget" data-id="${s.id}">Forget</button>` : ""}</div>
+      <div class="src-actions">${actions}${st ? html`<button class="danger" data-action="forget" data-id="${s.id}" aria-label="${who("Forget")}">Forget</button>` : ""}</div>
     </div>`;
 }
 
-/** `status` dates the last check for new chats; Check for updates runs one now. */
+/** `status` dates the last check for new chats; Check for new chats runs one now. */
 export function sourcesView(list: SourceInfo[], status: SyncStatus): Html {
   return html`
     <section id="sources"><div class="head sources-head">
-      <p class="muted">Nothing is read until you allow it. No, Actually... reads your messages and the AI's replies on this computer to count corrections. Nothing leaves this machine.</p>
+      <p class="muted">Nothing is read until you allow it. No, Actually... reads your messages and the AI's replies on this computer to score your prompts and count corrections. No chat content or stats leave your computer.</p>
       <div class="sync-check">
-        <button class="ghost" data-action="sync-now">Check for updates</button>
+        <button class="ghost" data-action="sync-now">Check for new chats</button>
         <span class="muted small" id="sync-line">New chats last checked ${ago(status.last_sync)}.</span>
       </div></div>
       <div class="sources">${list.map(sourceRow)}</div>

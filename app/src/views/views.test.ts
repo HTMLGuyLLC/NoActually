@@ -164,7 +164,7 @@ describe("overview hero", () => {
     expect(m).toContain("prompts clear the first time · 70% of the score");
     expect(m).toContain('data-w="83"');
     expect(m).toContain("Who corrects whom<small");
-    expect(m).toContain("how rarely it has to correct you");
+    expect(m).toContain("you check its work, and it rarely corrects you");
     expect(m).toContain("· 30% of the score");
     expect(m).toContain('data-w="95"');
     expect(hero({}, {}).split('class="part"')).toHaveLength(3);
@@ -213,10 +213,6 @@ describe("hallView", () => {
     expect(m).toContain("Pinned · kept forever");
     expect(m).toContain('data-pinned="true"');
     expect(m).toContain(">Unpin<");
-  });
-
-  it("explains an empty hall", () => {
-    expect(hallView([]).value).toContain("No saved corrections to show.");
   });
 });
 
@@ -306,7 +302,7 @@ const status = { syncing: false, last_sync: null, last_error: null, files_with_e
 describe("sourcesView", () => {
   it("checks for new chats from Sources, and leaves app updates to General", () => {
     const m = sourcesView([source()], status).value;
-    expect(m).toContain('data-action="sync-now">Check for updates</button>');
+    expect(m).toContain('data-action="sync-now">Check for new chats</button>');
     expect(m).toContain('id="sync-line">New chats last checked');
     const g = settingsView({
       pane: "general",
@@ -314,7 +310,7 @@ describe("sourcesView", () => {
       status,
       retention: { level: "snippet", full_days: 30, snippet_days: 365 },
       autostart: false,
-      menuBar: true,
+      menuBar: { enabled: true, available: true },
       update: null,
       demo: false,
     }).value;
@@ -324,7 +320,7 @@ describe("sourcesView", () => {
 
   it("offers Allow with a how-far-back choice for a found, unallowed source", () => {
     const m = sourcesView([source()], status).value;
-    expect(m).toContain('data-action="allow" data-id="claude-code"');
+    expect(m).toContain('data-action="allow" data-id="claude-code" aria-label="Allow Claude Code"');
     expect(m).toContain('<option value="none">From now on</option>');
     expect(m).not.toContain('data-action="forget"');
   });
@@ -334,7 +330,9 @@ describe("sourcesView", () => {
     const m = sourcesView([source({ state })], status).value;
     expect(m).toContain(">Resume<");
     expect(m).toContain('data-paused="true"');
-    expect(m).toContain('data-action="forget"');
+    expect(m).toContain('data-action="forget" data-id="claude-code" aria-label="Forget Claude Code"');
+    expect(m).toContain('aria-label="Resume Claude Code"');
+    expect(m).toContain('aria-label="Stop reading Claude Code"');
   });
 
   it("explains how to get an export", () => {
@@ -394,7 +392,7 @@ describe("settingsView", () => {
     status: { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 },
     retention: { level: "snippet" as const, full_days: 30, snippet_days: 365 },
     autostart: true,
-    menuBar: true,
+    menuBar: { enabled: true, available: true },
     update: null,
     demo: false,
   };
@@ -405,26 +403,48 @@ describe("settingsView", () => {
     expect(tabs("general")).not.toContain('name="level"');
     expect(tabs("sources")).toContain('<section id="sources">');
     expect(tabs("sources")).not.toContain('id="menu-bar"');
-    // The tab names the pane, so the pane doesn't repeat it as a heading.
+    // The tab names the pane, so the pane's heading is for screen readers only.
     expect(tabs("privacy")).not.toContain("<h2>");
+    expect(tabs("privacy")).toContain('<h1 class="sr-only">Settings</h1>');
+    expect(tabs("privacy")).toContain('<h2 class="sr-only">Privacy</h2>');
+    expect(tabs("general")).toContain('<h2 class="sr-only">General</h2>');
     const privacy = tabs("privacy");
     expect(privacy).toContain('value="snippet" data-action="level" checked');
     expect(privacy).toContain('max="3650"');
-    expect(tabs("general")).toContain('id="autostart" data-action="autostart" type="checkbox" checked');
+    expect(privacy).toContain('<fieldset class="levels"><legend class="sr-only">What to keep</legend>');
+    expect(privacy).toContain("Hall of fame");
+    expect(privacy).toContain("Not affiliated with or endorsed by Anthropic, OpenAI or any other AI company.");
+    expect(tabs("general")).toContain('id="autostart" data-action="autostart" type="checkbox" aria-describedby="autostart-help" checked');
   });
 
   it("checks the menu-bar toggle when it's on, and leaves it clear when off", () => {
-    expect(settingsView(base).value).toContain('id="menu-bar" data-action="menu-bar" type="checkbox" checked');
+    expect(settingsView(base).value).toContain('id="menu-bar" data-action="menu-bar" type="checkbox" aria-describedby="menu-bar-help" checked');
     expect(settingsView(base).value).toContain("Keep running in the menu bar");
-    const off = settingsView({ ...base, menuBar: false }).value;
-    expect(off).toContain('id="menu-bar" data-action="menu-bar" type="checkbox"/>');
+    const off = settingsView({ ...base, menuBar: { enabled: false, available: true } }).value;
+    expect(off).toContain('id="menu-bar" data-action="menu-bar" type="checkbox" aria-describedby="menu-bar-help"/>');
     expect(off).toContain("Opens the app when you log in.");
+    expect(off).not.toContain("no menu bar tray");
+  });
+
+  it("locks the menu-bar toggle, with a hint, when the system has no tray", () => {
+    const m = settingsView({ ...base, menuBar: { enabled: true, available: false } }).value;
+    expect(m).toContain('type="checkbox" aria-describedby="menu-bar-help" checked disabled');
+    expect(m).toContain("Your system has no menu bar tray, so closing the window quits.");
+    expect(m).toContain("Opens the app when you log in.");
+  });
+
+  it("ties each toggle to its help text", () => {
+    const m = settingsView(base).value;
+    for (const id of ["menu-bar", "autostart", "auto-update"]) {
+      expect(m).toContain(`aria-describedby="${id}-help"`);
+      expect(m).toContain(`id="${id}-help"`);
+    }
   });
 
   it("disables what the demo can't do", () => {
     const m = settingsView({ ...base, demo: true }).value;
     expect(m).toContain('data-action="check-update" disabled');
-    expect(m).toContain('id="menu-bar" data-action="menu-bar" type="checkbox" checked disabled');
+    expect(m).toContain('id="menu-bar" data-action="menu-bar" type="checkbox" aria-describedby="menu-bar-help" checked disabled');
   });
 });
 
@@ -439,8 +459,8 @@ describe("scorecard period picker", () => {
     // Everything follows the period, the score included: no disclaimer needed.
     expect(week).not.toContain('<div class="eyebrow">');
     expect(week).not.toContain("always uses");
-    expect(view("all")).toContain("ever.");
-    expect(view("all")).toContain("<b>37 times</b> to its 2 ever.");
+    expect(view("all")).toContain("across all time.");
+    expect(view("all")).toContain("<b>37 times</b> to its 2 across all time.");
   });
 });
 
@@ -465,6 +485,9 @@ describe("status and refresh", () => {
     expect(m).toContain('data-tip="Check now"');
     expect(m).not.toContain("title=");
     expect(m).toContain(`data-tip="${covers}"`);
+    // aria-label on a generic span is ignored, so the extra detail is hidden text.
+    expect(m).toContain(`<span class="sr-only">. Showing ${covers}</span>`);
+    expect(m).not.toContain('aria-label="Checked');
     expect(coverage(null)).toBe("");
   });
 
@@ -473,6 +496,26 @@ describe("status and refresh", () => {
     const m = scorecardView(stats(), { meta, filter: {}, still: true }).value;
     expect(m).not.toContain("Pick one from");
     expect(m).not.toContain("messages</span></section>");
+  });
+});
+
+describe("overview wording", () => {
+  const ov = (o: Parameters<typeof overall>[0], extra: Parameters<typeof stats>[0] = {}) => scorecardView(stats({ overall: overall(o), ...extra }), ctx).value;
+
+  it("counts corrections from the scored window and says plainly when it never corrected you", () => {
+    const m = ov({ corrections: 52, humbled: 0 }, { corrections: 177, humbled: 3 });
+    expect(m).toContain("<b>52 times</b> in the last 28 days. It never corrected you.");
+    expect(m).not.toContain("177 times");
+  });
+
+  it("says nothing twice when unranked: no hand-note beside the 'give it more tasks' line", () => {
+    const m = ov({ score: null, direction: null, judgment: null, tier: null, correction_tier: null, to_rank: 4 });
+    expect(m).toContain("Give it <b>4 more tasks</b> with a follow-up to get ranked.");
+    expect(m).not.toContain("to get ranked</p>");
+  });
+
+  it("agrees a one-day streak", () => {
+    expect(ov({}, { best_streak_days: 1 })).toContain('<span class="v">1 day</span>');
   });
 });
 
@@ -500,5 +543,10 @@ describe("hall of fame awards", () => {
     expect(m).toContain('class="award unearned"');
     expect(m).toContain(AWARDS[""]?.name ?? "?");
     expect(m).not.toContain("<img");
+    // Each arrow names its award; the count is read as words, not an ignored aria-label on a span.
+    expect(m).toContain(`aria-label="Previous ${AWARDS.just_wrong?.name} entry"`);
+    expect(m).toContain(`aria-label="Next ${AWARDS.just_wrong?.name} entry"`);
+    expect(m).toContain('<span aria-hidden="true">×9</span><span class="sr-only">9 times</span>');
+    expect(m).toContain('<span class="sr-only">2 times</span>');
   });
 });

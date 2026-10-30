@@ -163,7 +163,6 @@ fn build_tray(tauri_app: &tauri::App, menu: &Menu<tauri::Wry>) -> tauri::Result<
     Ok(())
 }
 
-/// Opens the database, builds the tray, and starts the tracker and update threads.
 /// Default width of the scorecard window: the page's content plus a little room on each side.
 const MAIN_WIDTH: f64 = 940.0;
 /// Settings key: the scorecard window's last position and size, "x,y,width,height" in points.
@@ -233,7 +232,7 @@ fn place_main(handle: &AppHandle, saved: Option<&str>) {
 }
 
 /// Remembers the scorecard's position and size (outer frame, in points) for next launch.
-fn save_main_placement(handle: &AppHandle) {
+pub(crate) fn save_main_placement(handle: &AppHandle) {
     let Some(w) = handle.get_webview_window("main") else { return };
     if w.is_minimized().unwrap_or(false) || w.is_fullscreen().unwrap_or(false) {
         return;
@@ -250,6 +249,7 @@ fn save_main_placement(handle: &AppHandle) {
     let _ = lock(&app.writer).set_setting(MAIN_WINDOW_KEY, &r);
 }
 
+/// Opens the database, builds the tray, and starts the tracker and update threads.
 fn setup(tauri_app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let handle = tauri_app.handle().clone();
     // The same file the CLI opens. NOACTUALLY_DB points at another one (development, demos).
@@ -376,8 +376,14 @@ pub fn run() {
             commands::check_for_updates,
             commands::install_update,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running No, Actually...");
+        .build(tauri::generate_context!())
+        .expect("error while building No, Actually...")
+        .run(|handle, event| {
+            // Cmd+Q and logout quit without closing the window first.
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                save_main_placement(handle);
+            }
+        });
 }
 
 #[cfg(test)]

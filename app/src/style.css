@@ -7,6 +7,8 @@
   /* Text on a --pen fill (the pinned tag). */
   --on-pen: #ffffff;
   --ok: #2f9e44;
+  /* Small green text (--ok is 3.4:1 on white); the dark theme's --ok is already light enough. */
+  --ok-text: #237a34;
   /* Shadows and the dialog backdrop: the ink's hue, never pure black. */
   --shade: 10, 14, 30;
   /* The select's chevron, stroked in --muted (data URIs can't read custom properties). */
@@ -21,7 +23,7 @@
   :root {
     --paper: #0f1320; --surface: #171c2c; --ink: #eef1f8; --muted: #9aa3bd; --rule: #2a3147;
     --pen: #ff5a4f; --pen-soft: #3a1c1e; --hl: #6b5f12; --ai: #8ea6ff; --ai-soft: #1d2747;
-    --pen-text: #ff5a4f; --on-pen: #0f1320; --ok: #51cf66;
+    --pen-text: #ff5a4f; --on-pen: #0f1320; --ok: #51cf66; --ok-text: #51cf66;
     --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%239aa3bd' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     color-scheme: dark;
   }
@@ -84,10 +86,10 @@ nav { display: flex; gap: 6px }
 .sync-pill { display: inline-flex; align-items: center; gap: 7px; font: 500 12px var(--body); color: var(--muted); background: transparent; border: 0; padding: 0 }
 .sync-text { border-radius: 6px; cursor: default }
 .sync-text[data-tip]:hover, .sync-text[data-tip]:focus-visible { color: var(--ink) }
-.sync-now { display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border-radius: 50%; background: transparent; color: var(--muted); border: 1px solid var(--rule) }
+.sync-now { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; background: transparent; color: var(--muted); border: 1px solid var(--rule) }
 .sync-now:hover { filter: none; color: var(--ink); border-color: var(--muted) }
-.sync-now .refresh { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
-.sync-bad { background: none; border: 0; padding: 0; color: var(--pen); text-decoration: underline; font: inherit }
+.sync-now .refresh { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
+.sync-bad { background: none; border: 0; padding: 0; color: var(--pen-text); text-decoration: underline; font: inherit }
 
 /* The app's own tooltips: a small card under the control, on hover or keyboard focus. */
 [data-tip] { position: relative }
@@ -107,6 +109,9 @@ svg .tip-pinned, svg [data-tip]:hover { opacity: 1; filter: brightness(1.12) }
 .chart-tip[hidden] { display: none }
 /* Chart marks show their tip through charttip.ts, not a pseudo-element. */
 svg [data-tip]::after { content: none }
+svg [data-tip]:focus-visible { outline: 3px solid var(--ai); outline-offset: 2px }
+/* Escape hides the CSS tooltips until the pointer moves (charttip.ts). */
+.tips-off [data-tip]:hover::after, .tips-off [data-tip]:focus-visible::after { display: none }
 /* Labeled tabs don't need one until their names are hidden on narrow windows. */
 .top .tab:not(.icon-only)[data-tip]::after { display: none }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok) }
@@ -152,9 +157,6 @@ svg [data-tip]::after { content: none }
 .because { font-size: 17px; max-width: 30ch; padding-bottom: 4px }
 .because b { background: linear-gradient(transparent 30%, var(--hl) 30%, var(--hl) 94%, transparent 94%); font-weight: 600; padding: 0 .08em }
 .meter { display: grid; gap: 12px; align-content: start }
-/* A status, not a control: plain label text, no fill or border that would read as a button. */
-.tier-label { font: 600 10.5px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--pen); white-space: nowrap }
-.tier-label span { color: var(--muted); margin-right: 6px }
 .ladder { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px }
 .ladder li { display: grid; grid-template-columns: 1fr auto; padding: 9px 12px; border-radius: 10px; border: 1px dashed var(--rule); color: var(--muted); font-size: 14px }
 .ladder li span:last-child { font: 400 12px/1.6 var(--mono) }
@@ -170,6 +172,7 @@ svg [data-tip]::after { content: none }
 .stat .l { color: var(--muted); font-size: 13px }
 
 .chart { overflow-x: auto; padding-bottom: 4px }
+.chart:focus-visible { outline: 3px solid var(--ai); outline-offset: 2px }
 .chart svg { display: block; width: 100%; min-width: 540px; height: auto }
 .chart text { font: 11px var(--mono); fill: var(--muted) }
 .chart .grid { stroke: var(--rule) }
@@ -181,9 +184,10 @@ svg [data-tip]::after { content: none }
 .chart .dot-weak { fill: var(--surface); stroke: var(--muted); stroke-width: 1.5 }
 .chart .band-line { stroke: var(--muted); stroke-dasharray: 3 5; opacity: .7 }
 .chart .band-name { font: 400 14px var(--hand); fill: var(--muted); paint-order: stroke; stroke: var(--paper); stroke-width: 5px; stroke-linejoin: round }
-/* Stacked series differ by fill and pattern-like opacity, so they read without color too. */
+/* Stacked series differ by lightness as well as hue, and a thin gap of the surface color sets each segment apart. */
+.chart .seg { stroke: var(--surface); stroke-width: 1.5 }
 .seg.s0 { fill: var(--pen); background: var(--pen) } .seg.s1 { fill: var(--ink); background: var(--ink); opacity: .75 }
-.seg.s2 { fill: var(--ai); background: var(--ai) } .seg.s3 { fill: var(--muted); background: var(--muted); opacity: .6 }
+.seg.s2 { fill: var(--ai); background: var(--ai) } .seg.s3 { fill: var(--muted); background: var(--muted); opacity: .75 }
 .chart-key { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted) }
 .chart-key li { display: inline-flex; align-items: center; gap: 6px }
 .chart-key i { width: 10px; height: 10px; border-radius: 2px; display: inline-block }
@@ -231,7 +235,7 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .grades { display: grid; gap: 8px; margin-top: 18px; border-top: 2px solid var(--ink); padding-top: 14px }
 .grade-bar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; background: var(--rule) }
 .grade-bar i { width: var(--w, 0) }
-.g-sharp { background: var(--pen) } .g-solid { background: var(--ink); opacity: .7 } .g-thin { background: var(--rule) }
+.g-sharp { background: var(--pen) } .g-solid { background: var(--ink); opacity: .7 } .g-thin { background: var(--muted); opacity: .75 }
 .grade-key { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px }
 .grade-key li { display: inline-flex; align-items: center; gap: 6px }
 .grade-key i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; border: 1px solid var(--rule) }
@@ -252,7 +256,6 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .pinned-tag { position: absolute; top: -11px; right: 14px; background: var(--pen); color: var(--on-pen); font: 600 10.5px/1 var(--mono);
   letter-spacing: .08em; text-transform: uppercase; padding: 6px 9px; border-radius: 999px; transform: rotate(2deg) }
 .chip { font: 600 10.5px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 6px 8px; border-radius: 6px; background: var(--pen-soft); color: var(--pen-text) }
-.chip.conf { background: var(--ai-soft); color: var(--ai) }
 /* One accent per award: the count. The quote is in your hand, in ink; the reply sits back. */
 .you-said { font: 400 21px/1.2 var(--hand); color: var(--ink); overflow-wrap: anywhere }
 .ai-said { font-size: 14px; color: var(--muted); border-left: 2px solid var(--rule); padding: 2px 0 2px 12px; overflow-wrap: anywhere }
@@ -266,8 +269,8 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .award-emoji { font-size: 30px; line-height: 1 }
 .award-count { font: 800 22px/1 var(--display); color: var(--pen); font-variant-numeric: tabular-nums }
 .award .fame { grid-template-columns: 1fr }
-.award.unearned { opacity: .55; border-style: dashed; background: transparent }
-.award.unearned .award-emoji { filter: grayscale(1) }
+.award.unearned { border-style: dashed; background: transparent }
+.award.unearned .award-emoji { filter: grayscale(1); opacity: .55 }
 /* An award's entries share one cell, so the card keeps the tallest one's height while you flip. */
 .slides { display: grid }
 .slide { grid-area: 1 / 1; display: grid }
@@ -285,13 +288,14 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .src-main { display: grid; gap: 4px; min-width: 0 }
 .src-main .mono { overflow-wrap: anywhere }
 .status { font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
-.source.on .status { color: var(--pen) }
+.source.on .status { color: var(--pen-text) }
 .src-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap }
 
 .settings-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 0; border-bottom: 1px solid var(--rule) }
 .toggle { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer }
 .toggle input { width: 18px; height: 18px; accent-color: var(--pen) }
-.levels { display: grid; gap: 10px; margin-bottom: 18px }
+.levels { display: grid; gap: 10px; margin: 0 0 18px; padding: 0; border: 0; min-width: 0 }
+.fine-print { margin-top: 18px }
 .level { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); cursor: pointer }
 .level.on { border: 2px solid var(--pen) }
 .level input { margin-top: 4px; accent-color: var(--pen) }
@@ -350,7 +354,7 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .share-dialog[open] { display: grid; gap: 12px }
 .share-dialog::backdrop { background: rgba(var(--shade), .55) }
 .sd-head { display: flex; justify-content: space-between; align-items: center }
-.sd-close { background: none; border: 0; color: var(--muted); font-size: 26px; line-height: 1; padding: 2px 6px }
+.sd-close { background: none; border: 0; color: var(--muted); font-size: 26px; line-height: 1; padding: 2px 6px; min-width: 32px; min-height: 32px }
 .sd-close:hover { filter: none; color: var(--ink) }
 #share-text { width: 100%; resize: none; font: 400 14px/1.45 var(--body); color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px }
 .share-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px }
@@ -431,7 +435,7 @@ button.link:hover { filter: none }
 .goal.finished { border: 2px solid var(--pen) }
 .recap-row { display: grid; grid-template-columns: 1fr auto 4em; align-items: baseline; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--rule) }
 .recap-row b { font: 800 24px/1 var(--display); font-variant-numeric: tabular-nums }
-.delta { font: 600 12px var(--mono); color: var(--muted); text-align: right } .delta.up { color: var(--ok) } .delta.down { color: var(--pen) }
+.delta { font: 600 12px var(--mono); color: var(--muted); text-align: right } .delta.up { color: var(--ok-text) } .delta.down { color: var(--pen-text) }
 .trends-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 10px; margin-bottom: -20px }
 .trends-head .views { border: 0; padding: 0 }
 .trophies { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px }

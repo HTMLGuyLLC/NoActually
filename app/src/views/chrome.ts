@@ -47,7 +47,7 @@ export function statusPillView(status: SyncStatus, demo: boolean, covers = ""): 
     return html`<span class="sync-pill"><button class="sync-bad" data-action="sync-now" data-id="top" data-tip="${status.last_error}">Couldn't check. Retry</button></span>`;
   const checked = status.syncing ? "Checking…" : demo ? "Demo data" : `Checked ${ago(status.last_sync)}`;
   const text = covers
-    ? html`<span class="sync-text" tabindex="0" data-tip="${covers}" aria-label="${checked}. Showing ${covers}">${checked}</span>`
+    ? html`<span class="sync-text" tabindex="0" data-tip="${covers}">${checked}<span class="sr-only">. Showing ${covers}</span></span>`
     : html`<span class="sync-text">${checked}</span>`;
   const refresh = status.syncing
     ? ""

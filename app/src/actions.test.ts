@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { meta, overall, source, stats } from "./test/fixtures";
+import { must } from "./dom";
+import { meta, overall, row, source, stats } from "./test/fixtures";
 
 const allowed = { id: "claude-code", allowed: true, paused: false, backfill_since: null, granted_at: null, start_after: null, paths: [] };
 
@@ -44,7 +45,7 @@ beforeEach(async () => {
   api.sources.mockResolvedValue([source(), source({ id: "codex", name: "Codex", state: allowed })]);
   api.retention.mockResolvedValue({ level: "snippet", full_days: 30, snippet_days: 365 });
   api.getAutostart.mockResolvedValue(false);
-  api.getMenuBar.mockResolvedValue(true);
+  api.getMenuBar.mockResolvedValue({ enabled: true, available: true });
   api.allow.mockResolvedValue(null);
   api.forget.mockResolvedValue(null);
   api.pin.mockResolvedValue(null);
@@ -237,6 +238,50 @@ describe("delegated actions", () => {
     expect(btn('[data-action="forget"]').textContent).toBe("Click again to delete its data");
     await click('[data-action="forget"][data-id="codex"]');
     expect(api.forget).toHaveBeenCalledWith("codex");
+  });
+
+  it("announces the confirm prompt and disarms it after a few seconds", async () => {
+    await toTab("settings");
+    vi.useFakeTimers();
+    try {
+      const b = btn('[data-action="forget"][data-id="codex"]');
+      const label = b.textContent;
+      b.click();
+      vi.advanceTimersByTime(1);
+      const note = must("#confirm-note");
+      expect(note.getAttribute("role")).toBe("status");
+      expect(note.textContent).toBe("Click again to delete its data");
+      vi.advanceTimersByTime(5000);
+      expect(b.textContent).toBe(label);
+      expect(b.dataset.confirm).toBeUndefined();
+      expect(note.textContent).toBe("");
+      b.click(); // armed again, not confirmed
+      expect(api.forget).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("disarms a confirm when focus leaves the button", async () => {
+    await toTab("settings");
+    const b = btn('[data-action="forget"][data-id="codex"]');
+    const label = b.textContent;
+    b.click();
+    expect(b.textContent).toBe("Click again to delete its data");
+    b.dispatchEvent(new FocusEvent("blur"));
+    expect(b.textContent).toBe(label);
+    expect(root.querySelector('[data-confirm="yes"]')).toBeNull();
+  });
+
+  it("keeps the picker's counts to the scorecard's period", async () => {
+    const model = (n: number) => row("Anthropic", "Claude Opus", "5", n);
+    api.stats.mockImplementation(async (f: { provider?: string; since?: string }) => stats({ models: [model(f.since === state.periodSince("7d") ? 3 : 30)] }));
+    await render();
+    expect(state.state.allModels[0]?.corrections).toBe(30);
+    state.setFilter({ provider: "Anthropic" });
+    state.setPeriod("7d");
+    await render();
+    expect(state.state.allModels[0]?.corrections).toBe(3);
   });
 
   it("allows a source with the chosen start, then redraws", async () => {

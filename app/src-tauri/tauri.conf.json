@@ -56,7 +56,7 @@
       "minimumSystemVersion": "12.0"
     },
     "copyright": "© 2026 HTMLGuy LLC. MIT License.",
-    "longDescription": "No, Actually... reads your AI chat history on your computer, finds the moments you corrected the AI, and turns them into a private, deterministic scorecard. Nothing leaves your machine."
+    "longDescription": "No, Actually... reads your AI chat history on your computer, finds the moments you corrected the AI, and turns them into a private, deterministic scorecard. No chat content or stats ever leave your machine. The app only checks GitHub for updates, which you can turn off."
   },
   "plugins": {
     "updater": {

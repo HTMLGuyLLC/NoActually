@@ -164,6 +164,16 @@ describe("demoCall", () => {
     vi.unstubAllGlobals();
   });
 
+  it("gives a dated stats call counts that match its score, even for the 28-day default", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ json: async () => data })),
+    );
+    const s = await demoCall("stats", { filter: { since: "2026-10-19" } });
+    expect(s.overall).toMatchObject({ corrections: s.corrections, humbled: s.humbled });
+    vi.unstubAllGlobals();
+  });
+
   describe("learn and improve", () => {
     beforeEach(() => {
       vi.stubGlobal(
@@ -197,9 +207,9 @@ describe("demoCall", () => {
     });
 
     it("remembers the menu bar setting", async () => {
-      expect(await demoCall("get_menu_bar", undefined)).toBe(true);
+      expect(await demoCall("get_menu_bar", undefined)).toEqual({ enabled: true, available: true });
       await demoCall("set_menu_bar", { enabled: false });
-      expect(await demoCall("get_menu_bar", undefined)).toBe(false);
+      expect(await demoCall("get_menu_bar", undefined)).toEqual({ enabled: false, available: true });
     });
   });
 });

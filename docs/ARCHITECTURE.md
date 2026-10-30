@@ -3,9 +3,9 @@
 Goals, in order: **private by default, reliable, fast, deterministic.**
 
 ```
-crates/engine    noactually-engine:  pure rules: classify a turn, normalize model ids, redact, build snippets. No I/O. Compiles to WASM.
+crates/engine    noactually-engine:  pure rules: classify a turn, grade a prompt, score and tier, normalize model ids, redact, build snippets. No I/O. Compiles to WASM.
 crates/sources   noactually-sources: one adapter per AI tool: detect, backfill, tail. Turns files into `Turn`s.
-crates/store     noactually-store:   SQLite: consent + settings, file checkpoints, daily aggregates, correction events, retention sweeps.
+crates/store     noactually-store:   SQLite: consent + settings, file checkpoints, daily aggregates, correction events, tasks (prompts), goals and goal weeks, trophies, lessons done, retention sweeps, rules versioning.
 crates/cli       noactually-cli:     the `noactually` binary. Same code path as the app.
 app/             noactually-app:     Tauri 2: tray quick-glance, full window, notifications, update checks. Thin shell over the crates.
 ```
@@ -41,7 +41,7 @@ Nothing is read until the user allows it.
 
 ## Updates
 
-`app/src-tauri/src/updater.rs` uses `tauri-plugin-updater`. One thread fetches `https://github.com/HTMLGuyLLC/NoActually/releases/latest/download/latest.json` a minute after launch and every 6 hours, while **Check for updates automatically** is on (setting `updates.auto`, default on). Development builds never check on their own.
+`app/src-tauri/src/updater.rs` uses `tauri-plugin-updater`. One thread fetches `https://github.com/HTMLGuyLLC/NoActually/releases/latest/download/latest.json` a minute after launch and every 6 hours, while **Check for app updates automatically** (Settings → General) is on (setting `updates.auto`, default on). Development builds never check on their own.
 
 - The request is a plain GET with the plugin's user agent. No identifiers, stats or chat data are sent.
 - `latest.json` (written by `scripts/finish-release.sh`) holds the version, release date, and per platform a download URL on the same release plus a minisign signature.
@@ -60,7 +60,8 @@ The `noactually` binary shares the engine and database with the app:
 | `forget <source>` | Stop reading and delete everything from that source |
 | `import <source> <path>` | Add an export file or folder (`chatgpt-export`, `claude-ai-export`) |
 | `sync` | Read anything new from allowed sources |
-| `stats [--source S] [--provider P] [--family F] [--version V] [--json]` | Print the scorecard |
+| `stats [--source S] [--provider P] [--family F] [--version V] [--since YYYY-MM-DD] [--json]` | Print the scorecard, optionally from a start date instead of the last 28 days |
+| `check "<prompt>"` | Grade a draft prompt with the same rules as your history. Nothing is saved |
 | `retention <full\|snippet\|category> [--full-days N] [--snippet-days N]` | Set how correction text is kept |
 
 **Database location.** One function, `store::default_db_path()`, picks the file for both the CLI and the app: `app.noactually/noactually.db` in your OS app-data folder. Set `NOACTUALLY_DB=/path/to/file.db` to use another database (development, demos, tests). `WA_DB` is still read as a deprecated fallback.
@@ -71,8 +72,11 @@ The `noactually` binary shares the engine and database with the app:
 |---|---|---|---|
 | Ordinary messages (not corrections) | Counts only, per day × source × model | Never | Forever (just numbers) |
 | Sessions | Hashed id, source, day range, message and correction counts | Never | Forever |
-| Tasks (prompts) | Day, source, hashed chat id, model, a 5-bit mask of the signals the prompt carried, message and steering counts | Never | Forever |
+| Tasks (prompts) | Day, source, hashed chat id, model, a 5-bit mask of the signals the prompt carried, message and follow-up counts | Never | Forever |
+| Your goal | What it asks for (a signal, a kind of follow-up or a tier), its target percent and start day. Stored as a setting | Never | Until you drop it |
 | Goal weeks, trophies | A goal's finished weeks (count, percent, met/missed/paused), frozen; finished goals. Not score tables: rebuilds and Forget leave them | Never | Forever |
+| Lessons done | The ids of lessons marked done | Never | Forever |
+| Settings and milestones | Retention, update and menu bar choices, and the tiers already announced | Never | Forever |
 | Correction / humbled events | Time, source, model, label, category, matched rule ids | Per retention level | Per TTL |
 | File checkpoints | Path, byte offset, size, modified time | Never | Until the source is forgotten |
 | Message fingerprints | Short hashes of message ids (dedupe) | Never | Until the source is forgotten |

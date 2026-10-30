@@ -11,15 +11,12 @@ export const SHARE_URL = "https://github.com/HTMLGuyLLC/NoActually";
 /** The link as printed on the cards: "github.com/HTMLGuyLLC/NoActually". */
 export const SHARE_URL_SHORT = SHARE_URL.replace(/^https:\/\//, "");
 
-type ScoreLike = Pick<Stats, "overall" | "corrections_last_7d" | "corrections" | "humbled">;
+type ScoreLike = Pick<Stats, "overall">;
 
-/** The score, ready to post: the answer, the score and its two halves. Numbers only. */
+/** The score, ready to post: the answer, the score and its two halves. Numbers only. Only offered once there is a tier. */
 export function shareText(s: ScoreLike, who: string, tier: string, when = PERIOD_WHEN["28d"]) {
   const o = s.overall;
-  const answer = o.verdict === "no" ? "No." : "Maybe…";
-  if (o.score == null) {
-    return `Could ${who} replace me? ${answer} I corrected it ${plural(s.corrections_last_7d, "time")} this week. Me ${s.corrections}, ${who} ${s.humbled}. What's your score? ${SHARE_URL}`;
-  }
+  const answer = o.verdict === "no" ? "No." : "Hmm.";
   return `Could ${who} replace me? ${answer} My score is ${o.score} (${tier}): ${o.direction}% of my prompts were clear the first time, and I corrected it ${plural(o.corrections, "time")} to its ${o.humbled} ${when}. What's yours? ${SHARE_URL}`;
 }
 

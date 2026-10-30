@@ -64,7 +64,7 @@ function homeView(ctx: LearnContext): Html {
   const next = recommended(ctx.prompts, ctx.meta, done);
   const graduated = done.length === LESSONS.length;
   return html`
-    <section class="toolbar"><span class="eyebrow">Learn to prompt it · ${done.length} of ${LESSONS.length} lessons</span></section>
+    <section class="toolbar"><h1 class="eyebrow">Learn to prompt it · ${done.length} of ${LESSONS.length} lessons</h1></section>
     ${checkerView(ctx)}
     ${
       graduated

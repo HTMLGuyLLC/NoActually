@@ -1,5 +1,6 @@
 // Small SVG charts for the Improve tab. Every chart gets a text summary for screen readers, and
-// series differ by shape or dash as well as color.
+// series differ by lightness and a gap between segments as well as color. Each bar and dot is
+// keyboard-focusable and carries its tooltip text as its label.
 import { type Html, html } from "../html";
 
 export type Point = { label: string; value: number | null /** Too few tasks to trust: drawn hollow, left off the line. */; weak?: boolean };
@@ -14,6 +15,12 @@ const B = 30;
 
 /** Every `n`th label, so the x axis never crowds. */
 const every = (count: number, width: number) => Math.max(1, Math.ceil(count / (width >= FULL ? 10 : 6)));
+
+/** A gridline label: whole numbers as they are, others with one decimal (2.5, not 3). */
+const gridNum = (g: number) => String(Math.round(g * 10) / 10);
+
+/** Wraps a chart so the box that scrolls sideways can be reached and scrolled with the keyboard. */
+export const chartBox = (label: string, body: Html): Html => html`<div class="chart" tabindex="0" role="region" aria-label="${label}">${body}</div>`;
 
 /** An x-axis label; the last one hangs left so it isn't cut off at the edge. */
 const xLabel = (x: number, y: number, text: string, last: boolean) => html`<text x="${x}" y="${y}" text-anchor="${last ? "end" : "middle"}">${text}</text>`;
@@ -30,6 +37,8 @@ export function lineChart(o: {
   bands?: Band[];
   unit?: string;
   height?: number;
+  /** Why a dot is hollow, in its tooltip. */
+  weakNote?: string;
 }): Html {
   const H = o.height ?? 220;
   const W = o.width ?? FULL;
@@ -47,18 +56,20 @@ export function lineChart(o: {
   );
   const grid = [min, (min + max) / 2, max].map(
     (g) =>
-      html`<line x1="${L}" x2="${W - R}" y1="${y(g)}" y2="${y(g)}" class="grid"/><text x="${L - 8}" y="${y(g) + 4}" text-anchor="end">${Math.round(g)}${unit}</text>`,
+      html`<line x1="${L}" x2="${W - R}" y1="${y(g)}" y2="${y(g)}" class="grid"/><text x="${L - 8}" y="${y(g) + 4}" text-anchor="end">${gridNum(g)}${unit}</text>`,
   );
   // The line skips weak and empty points, so a quiet week never drags it to zero.
   const strong = o.points.map((p, i) => ({ p, i })).filter(({ p }) => p.value != null && !p.weak);
   const path = strong.map(({ p, i }, k) => `${k ? "L" : "M"}${x(i).toFixed(1)},${y(p.value ?? 0).toFixed(1)}`).join(" ");
   const step = every(n, W);
+  const weakNote = o.weakNote ?? "too few tasks to count";
   const dots = o.points.map((p, i) => {
     const label = i % step === 0 || i === n - 1 ? xLabel(x(i), H - 10, p.label, i === n - 1 && n > 1) : "";
     if (p.value == null) return label;
-    return html`<circle cx="${x(i)}" cy="${y(p.value)}" r="${p.weak ? 4 : 4.5}" class="${p.weak ? "dot-weak" : "dot-strong"}" data-tip="${p.label}: ${Math.round(p.value)}${unit}${p.weak ? " (too few tasks to count)" : ""}"></circle>${label}`;
+    const tip = `${p.label}: ${Math.round(p.value)}${unit}${p.weak ? ` (${weakNote})` : ""}`;
+    return html`<circle cx="${x(i)}" cy="${y(p.value)}" r="${p.weak ? 4 : 4.5}" class="${p.weak ? "dot-weak" : "dot-strong"}" data-tip="${tip}" tabindex="0" role="img" aria-label="${tip}"></circle>${label}`;
   });
-  return html`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${o.label}" aria-describedby="${o.id}-summary">${grid}${bands}${path ? html`<path d="${path}" class="trend"/>` : ""}${dots}</svg>
+  return html`<svg viewBox="0 0 ${W} ${H}" role="group" aria-label="${o.label}" aria-describedby="${o.id}-summary">${grid}${bands}${path ? html`<path d="${path}" class="trend"/>` : ""}${dots}</svg>
     <p class="sr-only" id="${o.id}-summary">${o.summary}</p>`;
 }
 
@@ -90,20 +101,21 @@ export function stackChart(o: {
       const v = s.values[i] ?? 0;
       if (!v) return "";
       const top = y(acc + v);
-      const own = o.tips ? "" : html` data-tip="${label}: ${s.title} ${v}"`;
+      const tip = `${label}: ${s.title} ${v}`;
+      const own = o.tips ? "" : html` data-tip="${tip}" tabindex="0" role="img" aria-label="${tip}"`;
       const seg = html`<rect x="${L + i * bw + bw * 0.18}" y="${top}" width="${bw * 0.64}" height="${y(acc) - top}" class="seg ${s.seg ?? `s${si}`}"${own}></rect>`;
       acc += v;
       return seg;
     });
     const tip = o.tips?.[i];
-    const bar = tip ? html`<g class="bar-group" data-tip="${tip}">${segs}</g>` : segs;
+    const bar = tip ? html`<g class="bar-group" data-tip="${tip}" tabindex="0" role="img" aria-label="${tip}">${segs}</g>` : segs;
     return html`${bar}${i % step === 0 || i === n - 1 ? xLabel(L + i * bw + bw / 2, H - 10, label, false) : ""}`;
   });
   const grid = [0, max].map(
     (g) => html`<line x1="${L}" x2="${W - R}" y1="${y(g)}" y2="${y(g)}" class="grid"/><text x="${L - 8}" y="${y(g) + 4}" text-anchor="end">${g}</text>`,
   );
   const key = html`<ul class="chart-key">${o.series.map((s, si) => html`<li><i class="seg ${s.seg ?? `s${si}`}" aria-hidden="true"></i>${s.title}</li>`)}</ul>`;
-  return html`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${o.label}" aria-describedby="${o.id}-summary">${grid}${bars}</svg>${key}
+  return html`<svg viewBox="0 0 ${W} ${H}" role="group" aria-label="${o.label}" aria-describedby="${o.id}-summary">${grid}${bars}</svg>${key}
     <p class="sr-only" id="${o.id}-summary">${o.summary}</p>`;
 }
 

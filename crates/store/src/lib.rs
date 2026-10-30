@@ -111,6 +111,9 @@ impl FromStr for Level {
     }
 }
 
+/// The longest a retention period can be (100 years). Keeps the cutoff dates in range.
+const MAX_RETENTION_DAYS: u32 = 36_500;
+
 /// How long correction text is kept, and at what level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Retention {
@@ -129,10 +132,13 @@ impl Default for Retention {
 }
 
 impl Retention {
-    /// Both periods must be at least a day.
+    /// Both periods must be between a day and 100 years.
     pub fn validate(&self) -> Result<()> {
         if self.full_days == 0 || self.snippet_days == 0 {
             return Err(Error::Invalid("Keep text for at least 1 day."));
+        }
+        if self.full_days > MAX_RETENTION_DAYS || self.snippet_days > MAX_RETENTION_DAYS {
+            return Err(Error::Invalid("Keep text for at most 36500 days."));
         }
         Ok(())
     }
@@ -236,11 +242,21 @@ pub(crate) fn hash(parts: &[&str]) -> String {
     })
 }
 
-fn upsert_file(conn: &Connection, path: &str, source: &str, checkpoint: u64, meta: FileMeta) -> Result<()> {
+/// `finalized`: the pass that wrote this checkpoint already counted a trailing unanswered
+/// message, so an unchanged file needs no more reads even though its checkpoint is short of its end.
+fn upsert_file(
+    conn: &Connection,
+    path: &str,
+    source: &str,
+    checkpoint: u64,
+    meta: FileMeta,
+    finalized: bool,
+) -> Result<()> {
     conn.execute(
-        "INSERT INTO files (path, source, checkpoint, size, mtime) VALUES (?1,?2,?3,?4,?5)
-         ON CONFLICT(path) DO UPDATE SET checkpoint = excluded.checkpoint, size = excluded.size, mtime = excluded.mtime",
-        params![path, source, checkpoint as i64, meta.size as i64, meta.mtime],
+        "INSERT INTO files (path, source, checkpoint, size, mtime, finalized) VALUES (?1,?2,?3,?4,?5,?6)
+         ON CONFLICT(path) DO UPDATE SET checkpoint = excluded.checkpoint, size = excluded.size,
+           mtime = excluded.mtime, finalized = excluded.finalized",
+        params![path, source, checkpoint as i64, meta.size as i64, meta.mtime, finalized],
     )?;
     Ok(())
 }
@@ -334,6 +350,20 @@ impl Store {
 
     /// The user allowed reading this source. Nothing is read before this.
     pub fn allow(&self, id: &str, backfill_since: Option<NaiveDate>) -> Result<()> {
+        // Reaching further back than before (say "All history" after "From now on") can't use
+        // the old checkpoints: they sit at the end of files whose older messages were skipped.
+        // The `seen` keys keep re-read messages from counting twice.
+        if let Some(prev) = self.source_state(id)? {
+            let before = prev.start_after.map(|t| t.date_naive()).or(prev.backfill_since);
+            let reaches_back = match (backfill_since, before) {
+                (None, Some(_)) => true,
+                (Some(new), Some(old)) => new < old,
+                _ => false,
+            };
+            if reaches_back {
+                self.conn.execute("DELETE FROM files WHERE source = ?1", [id])?;
+            }
+        }
         self.conn.execute(
             "INSERT INTO sources (id, allowed, paused, backfill_since, granted_at, paths) VALUES (?1, 1, 0, ?2, ?3, '[]')
              ON CONFLICT(id) DO UPDATE SET allowed = 1, paused = 0, backfill_since = excluded.backfill_since,
@@ -354,7 +384,7 @@ impl Store {
         let mut marked = 0;
         for path in source_files(src, &extra) {
             let Ok((meta, _)) = FileMeta::read(&path) else { continue };
-            upsert_file(&tx, &path.to_string_lossy(), src.id(), meta.size, meta)?;
+            upsert_file(&tx, &path.to_string_lossy(), src.id(), meta.size, meta, false)?;
             marked += 1;
         }
         tx.commit()?;
@@ -436,12 +466,16 @@ impl Store {
 
     // ---- ingestion ---------------------------------------------------------------------
 
-    /// Where `path` was last read up to, and its size and mtime then.
-    pub(crate) fn file_checkpoint(&self, path: &str) -> Result<Option<(u64, FileMeta)>> {
+    /// Where `path` was last read up to, its size and mtime then, and whether that pass was final.
+    pub(crate) fn file_checkpoint(&self, path: &str) -> Result<Option<(u64, FileMeta, bool)>> {
         Ok(self
             .conn
-            .query_row("SELECT checkpoint, size, mtime FROM files WHERE path = ?1", [path], |r| {
-                Ok((r.get::<_, i64>(0)? as u64, FileMeta { size: r.get::<_, i64>(1)? as u64, mtime: r.get(2)? }))
+            .query_row("SELECT checkpoint, size, mtime, finalized FROM files WHERE path = ?1", [path], |r| {
+                Ok((
+                    r.get::<_, i64>(0)? as u64,
+                    FileMeta { size: r.get::<_, i64>(1)? as u64, mtime: r.get(2)? },
+                    r.get(3)?,
+                ))
             })
             .optional()?)
     }
@@ -456,6 +490,7 @@ impl Store {
         path: &str,
         scan: &sources::FileScan,
         meta: FileMeta,
+        finalized: bool,
     ) -> Result<(usize, usize)> {
         let source = state.id.as_str();
         let retention = self.retention()?;
@@ -541,7 +576,7 @@ impl Store {
                 ],
             )?;
         }
-        upsert_file(&tx, path, source, scan.checkpoint, meta)?;
+        upsert_file(&tx, path, source, scan.checkpoint, meta, finalized)?;
         tx.commit()?;
         Ok((messages, corrections))
     }
@@ -553,8 +588,11 @@ impl Store {
     /// waits until the user's choice is known again.
     pub fn sweep(&self, now: DateTime<Utc>) -> Result<usize> {
         let Some(r) = self.saved_retention()? else { return Ok(0) };
-        let full_cut = (now - Duration::days(i64::from(r.full_days))).to_rfc3339();
-        let snip_cut = (now - Duration::days(i64::from(r.snippet_days))).to_rfc3339();
+        // A stored value out of range (an older build allowed any number) means nothing is that old.
+        let cutoff = |days: u32| {
+            now.checked_sub_signed(Duration::days(i64::from(days))).unwrap_or(DateTime::<Utc>::MIN_UTC).to_rfc3339()
+        };
+        let (full_cut, snip_cut) = (cutoff(r.full_days), cutoff(r.snippet_days));
         let mut changed = self.conn.execute(
             "UPDATE events SET human_full = NULL, ai_full = NULL, level = 'snippet'
              WHERE pinned = 0 AND level = 'full' AND (ts < ?1 OR ?2 != 'full')",

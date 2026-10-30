@@ -50,6 +50,7 @@ function goalView(st: GoalStatus | null, meta: Meta): Html | "" {
 
 export function glanceView(s: Stats, meta: Meta, goal: GoalStatus | null = null): Html {
   return html`<div class="glance">
+    <h1 class="sr-only">Quick glance</h1>
     ${topView()}
     ${answersView(s, meta)}
     ${goalView(goal, meta)}
@@ -57,9 +58,9 @@ export function glanceView(s: Stats, meta: Meta, goal: GoalStatus | null = null)
   </div>`;
 }
 
-/** Before the first correction. `watching` names the sources being read right now (empty: none allowed yet). */
+/** Before there is a score. `watching` names the sources being read right now (empty: none allowed yet). */
 export function emptyGlanceView(watching: string): Html {
   return watching
-    ? html`<div class="glance empty-glance">${topView()}<span class="eyebrow"><i class="dot live"></i> Watching ${watching}</span><div class="g-q">No corrections yet.</div><p class="muted small">Your score shows up after your first correction.</p>${openView()}</div>`
-    : html`<div class="glance empty-glance">${topView()}<div class="g-q">Could AI replace you?</div><p class="muted small">Pick which AI tools to count, then find out.</p>${openView("Set up")}</div>`;
+    ? html`<div class="glance empty-glance"><h1 class="sr-only">Quick glance</h1>${topView()}<span class="eyebrow"><i class="dot live"></i> Watching ${watching}</span><div class="g-q">No corrections yet.</div><p class="muted small">Your score shows up after a few prompts.</p>${openView()}</div>`
+    : html`<div class="glance empty-glance"><h1 class="sr-only">Quick glance</h1>${topView()}<div class="g-q">Could AI replace you?</div><p class="muted small">Pick which AI tools to count, then find out.</p>${openView("Set up")}</div>`;
 }

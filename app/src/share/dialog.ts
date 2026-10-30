@@ -120,7 +120,12 @@ export function openShareDialog(post: Post, opener: HTMLElement | null, onClose:
     close();
   });
   dlg.addEventListener("click", (e) => {
-    if (e.target === dlg) return close(); // backdrop
+    if (e.target === dlg) {
+      // A click on the dialog itself is the backdrop only when it lands outside the box, not on its padding or gaps.
+      const r = dlg.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) close();
+      return;
+    }
     const b = e.target instanceof Element ? e.target.closest<HTMLButtonElement>("button[data-sd]") : null;
     if (!b) return;
     const what = b.dataset.sd;

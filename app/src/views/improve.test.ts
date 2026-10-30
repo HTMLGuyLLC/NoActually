@@ -76,8 +76,19 @@ describe("buckets", () => {
 describe("goalTitle", () => {
   it("says what each kind of goal asks", () => {
     expect(goalTitle({ kind: "habit", signal: "why", target: 40 }, meta)).toBe("Include a purpose in 40% of your prompts each week");
-    expect(goalTitle({ kind: "steer", steer: "redo", target: 10 }, meta)).toBe("Keep “you started over” to 10% of your tasks or fewer each week");
+    expect(goalTitle({ kind: "steer", steer: "redo", target: 10 }, meta)).toBe("Start over in 10% of tasks or fewer each week");
     expect(goalTitle({ kind: "tier", tier: "coworker", target: 0 }, meta)).toBe("Reach Coworker");
+  });
+
+  it("words each follow-up kind naturally, with and without a target", () => {
+    const t = (steer: string, target: number) => goalTitle({ kind: "steer", steer, target }, meta);
+    expect(t("added", 15)).toBe("Add more after sending in 15% of tasks or fewer each week");
+    expect(t("added", 0)).toBe("Go a whole week without adding more after sending");
+    expect(t("clarified", 20)).toBe("Clarify after sending in 20% of tasks or fewer each week");
+    expect(t("redo", 0)).toBe("Go a whole week without starting over");
+    expect(t("ai_wrong", 10)).toBe("Have the AI get it wrong in 10% of tasks or fewer each week");
+    expect(t("ai_wrong", 0)).toBe("Go a whole week without the AI getting it wrong");
+    expect(t("mystery", 10)).toBe("Have “mystery” in 10% of tasks or fewer each week");
   });
 
   it("falls back to the id for anything unknown", () => {
@@ -190,7 +201,7 @@ describe("improveView goal", () => {
   it("measures a steering goal in tasks, and is on track under its ceiling", () => {
     const st = status({ goal: goal({ kind: "steer", steer: "redo", target: 10 } as Partial<Goal>), weeks: [gw("2026-10-26", "open", 5, 20)], need: null });
     const m = view(progress({ goal: st }));
-    expect(m).toContain("Keep “you started over” to 10% of your tasks or fewer each week");
+    expect(m).toContain("Start over in 10% of tasks or fewer each week");
     expect(m).toContain("20 tasks so far. On track.");
     const over = view(progress({ goal: status({ goal: st.goal, weeks: [gw("2026-10-26", "open", 25, 20)], need: null }) }));
     expect(over).toContain("20 tasks so far.");
@@ -240,6 +251,22 @@ describe("improveView history", () => {
     expect(m).toContain("How AI and you are trending");
   });
 
+  it("makes the charts reachable by keyboard, and states their latest values", () => {
+    const m = view(progress({ weeks: weeks(10) }));
+    expect(count(m, 'class="chart" tabindex="0" role="region"')).toBe(4);
+    expect(m).toMatch(/Prompts by grade over 10 weeks\. Latest week \(.+\): .*Specific \d+/);
+    expect(m).toMatch(/Corrections per 100 messages: [\d.]+ in the latest week \(.+\), [\d.]+ on average\./);
+    expect(m).toContain("Hollow dots had fewer than 50 messages");
+  });
+
+  it("has an h1 for the page", () => {
+    expect(view(progress())).toContain('<h1 class="eyebrow">Are you getting better?</h1>');
+  });
+
+  it("makes each goal week focusable", () => {
+    expect(view(progress({ goal: status() }))).toMatch(/<li class="gw [a-z]+" tabindex="0" data-tip=/);
+  });
+
   it("switches to months when weeks are thin", () => {
     const m = view(progress({ weeks: weeks(12, 2) }));
     expect(m).toContain("Per month.");
@@ -268,14 +295,14 @@ describe("improveView recap, bests and trophies", () => {
     const m = view(progress());
     expect(m).toContain("Last week · ");
     expect(m).toContain("<span>Clear the first time</span><b>75%</b>");
-    expect(m).toContain("▼ 16");
+    expect(m).toContain('<span aria-hidden="true">▼</span><span class="sr-only">down </span> 16');
     expect(m).toContain("<span>Specific prompts</span><b>25%</b>");
     expect(m).toContain("<span>Corrections</span><b>8</b>");
   });
 
   it("marks a rise with an up arrow", () => {
     const p = progress({ weeks: [week("2026-10-05", { landed: 6 }), week("2026-10-12", { landed: 9 }), week("2026-10-19")] });
-    expect(view(p)).toContain("▲ 25");
+    expect(view(p)).toContain('<span aria-hidden="true">▲</span><span class="sr-only">up </span> 25');
   });
 
   it("waits for a full week of tasks before comparing", () => {
@@ -326,7 +353,7 @@ describe("improveView insights", () => {
 
   it("reports the steering that was on you, with its lesson", () => {
     const m = view(progress({ insights: { signals: [], steer: ["added", 60], models: [] } }));
-    expect(m).toContain("Most of the follow-ups that were on you are <b>“You added more”</b> (60%).");
+    expect(m).toContain("Your most common follow-up is <b>“You added more”</b> (60%).");
     expect(m).toContain('data-action="open-lesson" data-id="say-it-all-up-front"');
   });
 

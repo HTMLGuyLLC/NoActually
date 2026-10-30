@@ -15,8 +15,6 @@ import {
 } from "./share";
 
 describe("shareText", () => {
-  const unranked = { score: null, direction: null, judgment: null, tier: null, next_tier: null, verdict: "hmm" as const };
-
   it("brags with the score and its tier, numbers only, and links to the project", () => {
     const t = shareText(stats(), "Claude Opus 5.5", "Sharp-eyed");
     expect(t).toBe(
@@ -24,16 +22,13 @@ describe("shareText", () => {
     );
   });
 
-  it("falls back to this week's corrections before there is a score, and handles the singular", () => {
-    const s = stats({ overall: overall(unranked), corrections_last_7d: 1 });
-    expect(shareText(s, "AI", "Not scored yet")).toBe(
-      `Could AI replace me? Maybe… I corrected it 1 time this week. Me 177, AI 3. What's your score? ${SHARE_URL}`,
-    );
-    expect(shareText(stats({ overall: overall(unranked), corrections_last_7d: 17 }), "AI", "")).toContain("I corrected it 17 times this week.");
+  it("handles the singular", () => {
+    const s = stats({ overall: overall({ corrections: 1, humbled: 1 }) });
+    expect(shareText(s, "AI", "Sharp-eyed")).toContain("I corrected it 1 time to its 1 in the last 28 days.");
   });
 
   it("follows the verdict, never re-deriving it from the score", () => {
-    expect(shareText(stats({ overall: overall({ verdict: "hmm" }) }), "AI", "Sharp-eyed")).toContain("Maybe…");
+    expect(shareText(stats({ overall: overall({ verdict: "hmm" }) }), "AI", "Sharp-eyed")).toContain("Hmm.");
     expect(shareText(stats({ overall: overall({ verdict: "no", score: 10 }) }), "AI", "Rubber stamp")).toContain("No.");
   });
 });
@@ -49,7 +44,7 @@ describe("promptShareText", () => {
 
   it("matches the card's lines", () => {
     expect(promptLines(prompts())).toEqual(["95% of my prompts in the last 28 days were clear the first time.", "20% of all my prompts were specific."]);
-    expect(promptLines(prompts(), "ever")[0]).toBe("95% of my prompts ever were clear the first time.");
+    expect(promptLines(prompts(), "across all time")[0]).toBe("95% of my prompts across all time were clear the first time.");
     expect(gradeKey(prompts())).toBe("SPECIFIC 20%  ·  DECENT 30%  ·  VAGUE 50%");
   });
 });
@@ -159,9 +154,11 @@ describe("corrections share", () => {
     expect(correctionsShareText({ corrections: 37, humbled: 1 }, tier)).toBe(
       "Do I correct my AI? Religiously. I corrected it 37 times in the last 28 days, and it corrected me 1 time. Correction tier: Hawk-eyed. Do you correct yours? https://github.com/HTMLGuyLLC/NoActually",
     );
-    expect(correctionLines({ corrections: 1, humbled: 0, judgment: 96 }, "ever")).toEqual([
-      "I corrected it 1 time ever. It corrected me 0.",
-      "Judgment 96 of 100: I check its work, and it rarely has to correct me.",
+    expect(correctionLines({ corrections: 1, humbled: 0, judgment: 96 }, tier, "across all time")).toEqual([
+      "I corrected it 1 time across all time. It corrected me 0.",
+      "Judgment 96 of 100. You catch AI slipping nearly every time.",
     ]);
+    const low = { ...tier, blurb: "Most of its slips get past you." };
+    expect(correctionLines({ corrections: 1, humbled: 4, judgment: 20 }, low)[1]).toBe("Judgment 20 of 100. Most of its slips get past you.");
   });
 });

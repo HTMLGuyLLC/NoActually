@@ -65,6 +65,25 @@ describe("createScheduler", () => {
     expect(draw).toHaveBeenCalledTimes(2);
   });
 
+  it("resolves an overlapping render only after the queued pass has drawn", async () => {
+    let finish = () => {};
+    let drawn = 0;
+    draw.mockImplementationOnce(
+      () =>
+        new Promise<void>((r) => {
+          finish = r;
+        }),
+    );
+    draw.mockImplementation(async () => {
+      drawn++;
+    });
+    const s = make();
+    void s.render();
+    const second = s.render().then(() => drawn);
+    finish();
+    expect(await second).toBe(1);
+  });
+
   it("keeps working after a draw throws", async () => {
     draw.mockRejectedValueOnce(new Error("boom"));
     const s = make();

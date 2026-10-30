@@ -14,8 +14,8 @@ macOS may show its own "access data from other apps" prompt for some sources. Sa
 |---|---|---|---|
 | Ordinary messages (not corrections) | Counts only, per day, source and model | Never | Forever (just numbers) |
 | Sessions | Hashed id, source, day range, message and correction counts | Never | Forever |
-| Tasks (prompts) | Day, source, hashed chat id, model, which of 5 signals the prompt carried, message and steering counts | Never | Forever |
-| Your goal | What it asks for (a signal, a kind of steering or a tier), its target percent and start day | Never | Until you drop it |
+| Tasks (prompts) | Day, source, hashed chat id, model, which of 5 signals the prompt carried, message and follow-up counts | Never | Forever |
+| Your goal | What it asks for (a signal, a kind of follow-up or a tier), its target percent and start day | Never | Until you drop it |
 | Goal weeks and trophies | Each finished week's count, percent and result; finished goals and the day | Never | Forever (kept even after Forget, since they're totals across sources) |
 | Lessons done | The ids of lessons you marked done | Never | Forever |
 | Correction / humbled events | Time, source, model, label, category, matched rule ids | Per retention level | Per TTL |
@@ -54,7 +54,7 @@ To offer new versions, the app downloads one small public file, `latest.json`, f
 - The request carries no identifiers: no account, install id, stats or chat data. It's a plain HTTPS GET with the updater's standard user agent (`tauri-plugin-updater/<version>`). Like any download, GitHub sees your IP address.
 - `latest.json` only lists the newest version number and where to download it. If it's newer than yours, you see "Restart to update" in the scorecard and the menu bar menu.
 - Nothing is downloaded or installed until you click it. The update file comes from the same GitHub release, and the app installs it only if its signature matches the project's key built into the app.
-- Turn it off in **Settings → Check for updates automatically**. With it off, the app only checks when you click **Check for updates**.
+- Turn it off in **Settings → General → Check for app updates automatically**. With it off, the app only checks when you click **Check for app updates** (same page).
 
 ## How to delete your data
 

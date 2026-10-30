@@ -63,6 +63,20 @@ describe("focus across a redraw", () => {
     expect(must("h1").tabIndex).toBe(-1);
   });
 
+  it("falls back to the current sub-tab when there's no heading", () => {
+    root.innerHTML = `<button class="tab on" data-action="settings-pane" data-id="sources">Sources</button><button data-action="allow" data-id="codex">Allow</button>`;
+    must<HTMLButtonElement>('[data-action="allow"]').focus();
+    redraw(`<button class="tab on" data-action="settings-pane" data-id="sources">Sources</button><p>Allowed</p>`);
+    expect(document.activeElement?.getAttribute("data-action")).toBe("settings-pane");
+  });
+
+  it("falls back to the first control when there's neither a tab nor a heading", () => {
+    root.innerHTML = `<button data-action="allow" data-id="codex">Allow</button>`;
+    must<HTMLButtonElement>("button").focus();
+    redraw(`<p>Allowed</p><button data-action="other">Other</button>`);
+    expect(document.activeElement?.getAttribute("data-action")).toBe("other");
+  });
+
   it("never steals focus that was outside the app", () => {
     root.innerHTML = page("");
     must<HTMLButtonElement>("#outside").focus();

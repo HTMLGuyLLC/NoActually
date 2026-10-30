@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HOSTILE } from "../test/fixtures";
-import { lineChart, type Point, sparkline, stackChart } from "./charts";
+import { chartBox, lineChart, type Point, sparkline, stackChart } from "./charts";
 
 const safe = (markup: string) => {
   expect(markup).not.toContain("<img");
@@ -30,6 +30,28 @@ describe("lineChart", () => {
     expect(m).toContain("Oct 12: 20 (too few tasks to count)");
   });
 
+  it("names why a dot is hollow in the chart's own words", () => {
+    expect(line(points, { weakNote: "fewer than 50 messages" })).toContain("Oct 12: 20 (fewer than 50 messages)");
+  });
+
+  it("makes every dot focusable, labeled with its tooltip text", () => {
+    const m = line(points);
+    expect(count(m, 'tabindex="0" role="img" aria-label="')).toBe(3);
+    expect(m).toContain('data-tip="Oct 5: 50" tabindex="0" role="img" aria-label="Oct 5: 50"');
+  });
+
+  it("shows a non-whole midline value with one decimal", () => {
+    const m = line([{ label: "a", value: 1 }], { max: 5 });
+    expect(m).toContain(">2.5</text>");
+    expect(line([{ label: "a", value: 1 }], { max: 4 })).toContain(">2</text>");
+  });
+
+  it("wraps the scrolling box so the keyboard can reach it", () => {
+    expect(chartBox("Trend chart", lineChart({ id: "x", label: "x", summary: "s", points: [] })).value).toBe(
+      '<div class="chart" tabindex="0" role="region" aria-label="Trend chart"><p class="muted">No weeks yet.</p></div>',
+    );
+  });
+
   it("draws no line, but still the hollow dots, when every point is weak", () => {
     const m = line([
       { label: "a", value: 10, weak: true },
@@ -53,7 +75,8 @@ describe("lineChart", () => {
 
   it("labels the picture and links its summary for screen readers", () => {
     const m = line(points);
-    expect(m).toContain('role="img" aria-label="Percent landed" aria-describedby="landed-summary"');
+    // A group, not an image: the dots inside are focusable and have labels of their own.
+    expect(m).toContain('role="group" aria-label="Percent landed" aria-describedby="landed-summary"');
     expect(m).toContain('<p class="sr-only" id="landed-summary">Went up.</p>');
   });
 
@@ -107,10 +130,17 @@ describe("stackChart", () => {
     expect(m).not.toContain("Nov: Added");
   });
 
+  it("makes each segment, or each whole bar when it has a tip, focusable with a label", () => {
+    expect(chart()).toContain('data-tip="Oct: Added 3" tabindex="0" role="img" aria-label="Oct: Added 3"');
+    const m = chart({ tips: ["Oct\n4 total", "Nov\n2 total"] });
+    expect(m).toContain('<g class="bar-group" data-tip="Oct\n4 total" tabindex="0" role="img" aria-label="Oct\n4 total">');
+    expect(count(m, 'tabindex="0"')).toBe(2);
+  });
+
   it("keys the series by name, and labels the picture with a summary id", () => {
     const m = chart();
     expect(m).toContain('<li><i class="seg s0" aria-hidden="true"></i>Added</li>');
-    expect(m).toContain('role="img" aria-label="Steering by cause" aria-describedby="steer-summary"');
+    expect(m).toContain('role="group" aria-label="Steering by cause" aria-describedby="steer-summary"');
     expect(m).toContain('<p class="sr-only" id="steer-summary">Mostly added.</p>');
   });
 

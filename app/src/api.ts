@@ -7,16 +7,17 @@ import type { Tab } from "./state";
 export const demo = !isTauri();
 
 export type Filter = { source?: string | null; provider?: string | null; family?: string | null; version?: string | null };
-/** A filter plus a window: only days from `since` (local YYYY-MM-DD) on. Counts follow it; the score doesn't. */
+/** A filter plus a window: only days from `since` (local YYYY-MM-DD) on. Counts and the score both follow it. */
 export type StatsFilter = Filter & { since?: string | null };
 export type Level = "full" | "snippet" | "category";
 export const LEVELS: readonly Level[] = ["full", "snippet", "category"];
 export const isLevel = (x: unknown): x is Level => LEVELS.some((l) => l === x);
+/** `available` is false on a system with no tray to keep the app running in. */
+export type MenuBar = { enabled: boolean; available: boolean };
 export type Retention = { level: Level; full_days: number; snippet_days: number };
 
 /** Static app data from Rust: the one place tiers, category titles and source names are defined. */
 export type Tier = { id: string; name: string; floor: number };
-/** A prompt tier: `floor` is the percent of the week's tasks that must land. */
 /** A tier answered in a word (prompt and correction tiers): its answer, and a line on what it means. */
 export type PromptTier = Tier & { verdict: string; blurb: string };
 export type Titled = { id: string; title: string };
@@ -267,7 +268,7 @@ export type Commands = {
   check_prompt: { args: { text: string }; result: Check };
   learned: { args: undefined; result: string[] };
   set_learned: { args: { id: string; done: boolean }; result: string[] };
-  get_menu_bar: { args: undefined; result: boolean };
+  get_menu_bar: { args: undefined; result: MenuBar };
   set_menu_bar: { args: { enabled: boolean }; result: null };
 };
 export type Command = keyof Commands;

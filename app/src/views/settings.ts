@@ -1,5 +1,5 @@
-// Settings: sources, launch and updates, and what's kept for the Hall of Fame, as sub-tabs.
-import { isLevel, type Level, type Retention, type SourceInfo, type SyncStatus, type UpdateStatus } from "../api";
+// Settings: sources, launch and updates, and what's kept for the Hall of fame, as sub-tabs.
+import { isLevel, type Level, type MenuBar, type Retention, type SourceInfo, type SyncStatus, type UpdateStatus } from "../api";
 import { type Html, html, raw } from "../html";
 import { SETTINGS_PANES, type SettingsPane } from "../state";
 import { updateLine } from "../update";
@@ -33,7 +33,7 @@ export type SettingsContext = {
   status: SyncStatus;
   retention: Retention;
   autostart: boolean;
-  menuBar: boolean;
+  menuBar: MenuBar;
   update: UpdateStatus | null;
   demo: boolean;
 };
@@ -61,24 +61,27 @@ export function settingsView(ctx: SettingsContext): Html {
     icons: PANE_ICONS,
   });
   const body = ctx.pane === "sources" ? sourcesView(ctx.sources, ctx.status) : ctx.pane === "general" ? generalView(ctx) : privacyView(ctx);
-  return html`<div class="views-row">${nav}</div><div class="view-body">${body}</div>`;
+  return html`<h1 class="sr-only">Settings</h1><div class="views-row">${nav}</div><div class="view-body"><h2 class="sr-only">${PANE_TITLES[ctx.pane]}</h2>${body}</div>`;
 }
 
 function generalView({ autostart, menuBar, update, demo }: SettingsContext): Html {
   const off = attr(demo, "disabled");
+  // Without a tray there's nothing to keep running in, so the toggle is locked.
+  const trayOff = attr(demo || !menuBar.available, "disabled");
+  const inTray = menuBar.enabled && menuBar.available;
   return html`
     <section>
       <div class="settings-row">
-        <label class="toggle"><input id="menu-bar" data-action="menu-bar" type="checkbox"${attr(menuBar, "checked")}${off}/><span>Keep running in the menu bar</span></label>
-        <span class="muted small">On: closing the window keeps it counting from the menu bar (the system tray on Windows and Linux). Off: it's an ordinary app that only counts while it's open, and quits when you close it.</span>
+        <label class="toggle"><input id="menu-bar" data-action="menu-bar" type="checkbox" aria-describedby="menu-bar-help"${attr(menuBar.enabled, "checked")}${trayOff}/><span>Keep running in the menu bar</span></label>
+        <span class="muted small" id="menu-bar-help">${menuBar.available ? "" : "Your system has no menu bar tray, so closing the window quits. "}On: closing the window keeps it counting from the menu bar (the system tray on Windows and Linux). Off: it's an ordinary app that only counts while it's open, and quits when you close it.</span>
       </div>
       <div class="settings-row">
-        <label class="toggle"><input id="autostart" data-action="autostart" type="checkbox"${attr(autostart, "checked")}${off}/><span>Launch at login</span></label>
-        <span class="muted small">${menuBar ? "Starts quietly in the menu bar so new corrections are counted." : "Opens the app when you log in."}</span>
+        <label class="toggle"><input id="autostart" data-action="autostart" type="checkbox" aria-describedby="autostart-help"${attr(autostart, "checked")}${off}/><span>Launch at login</span></label>
+        <span class="muted small" id="autostart-help">${inTray ? "Starts quietly in the menu bar so new corrections are counted." : "Opens the app when you log in."}</span>
       </div>
       <div class="settings-row">
-        <label class="toggle"><input id="auto-update" data-action="auto-update" type="checkbox"${attr(!!update?.auto, "checked")}${off}/><span>Check for app updates automatically</span></label>
-        <span class="muted small">Asks GitHub for the latest version number at launch and every 6 hours. Sends nothing about you.</span>
+        <label class="toggle"><input id="auto-update" data-action="auto-update" type="checkbox" aria-describedby="auto-update-help"${attr(!!update?.auto, "checked")}${off}/><span>Check for app updates automatically</span></label>
+        <span class="muted small" id="auto-update-help">Asks GitHub for the latest version number at launch and every 6 hours. Sends nothing about you.</span>
       </div>
       <div class="settings-row">
         <button class="ghost" data-action="check-update"${off}>Check for app updates</button>
@@ -95,17 +98,18 @@ function privacyView({ retention: r }: SettingsContext): Html {
     )}/><span><b>${title}</b><br/><span class="muted small">${body}</span></span></label>`;
   return html`
     <section><div class="head">
-      <p class="muted">Ordinary messages are never stored, only counted. This controls what's kept for corrections you'll see in the Hall of Fame. Text always steps down as it ages, never up.</p></div>
-      <div class="levels">
+      <p class="muted">Ordinary messages are never stored, only counted. This controls what's kept for corrections you'll see in the Hall of fame. Text always steps down as it ages, never up.</p></div>
+      <fieldset class="levels"><legend class="sr-only">What to keep</legend>
         ${opt("full", "Full message", "Your whole message and the start of the AI's reply. Secrets, emails and links are still redacted.")}
         ${opt("snippet", "Snippet (recommended)", "Only the sentence that matched, up to 140 characters, redacted.")}
         ${opt("category", "Category only", "No text at all. Just “Made it up”, “Still broken”, and so on.")}
-      </div>
+      </fieldset>
       <div class="ttl">
         <label>Keep full text for <input id="full-days" type="number" min="${RETENTION_MIN_DAYS}" max="${RETENTION_MAX_DAYS}" value="${r.full_days}"/> days, then snippet</label>
         <label>Keep snippets for <input id="snippet-days" type="number" min="${RETENTION_MIN_DAYS}" max="${RETENTION_MAX_DAYS}" value="${r.snippet_days}"/> days, then category only</label>
         <button data-action="save-privacy">Save</button><span id="privacy-status" class="muted small" role="status" aria-live="polite"></span>
       </div>
       <p class="muted small">Pinned corrections keep their text until you unpin them.</p>
+      <p class="muted small fine-print">For fun, not a measure of job performance. Not affiliated with or endorsed by Anthropic, OpenAI or any other AI company. Product names are their owners' trademarks.</p>
     </section>`;
 }

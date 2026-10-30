@@ -20,8 +20,13 @@ export type Period = (typeof PERIODS)[number];
 export const isPeriod = (x: unknown): x is Period => PERIODS.some((p) => p === x);
 const PERIOD_DAYS: Record<Period, number | null> = { "7d": 7, "28d": 28, "90d": 90, all: null };
 
-/** "in the last 7 days", "ever": a period, for the end of a sentence. */
-export const PERIOD_WHEN: Record<Period, string> = { "7d": "in the last 7 days", "28d": "in the last 28 days", "90d": "in the last 90 days", all: "ever" };
+/** "in the last 7 days", "across all time": a period, for the end of a sentence. */
+export const PERIOD_WHEN: Record<Period, string> = {
+  "7d": "in the last 7 days",
+  "28d": "in the last 28 days",
+  "90d": "in the last 90 days",
+  all: "across all time",
+};
 
 /** Before any history: "all time" as a start date, so the score covers it too (no date means 28 days). */
 const ALL_TIME = "1970-01-01";
@@ -48,6 +53,8 @@ export type AppState = {
   filter: Filter;
   /** Every model, from the last unfiltered stats; the picker lists these even while narrowed. */
   allModels: ModelRow[];
+  /** The window `allModels` counts cover: a start date on the scorecard, "" (all history) elsewhere. */
+  allModelsScope: string;
   status: SyncStatus;
   /** The stats last drawn. */
   current: Stats | null;
@@ -80,6 +87,7 @@ const initial = (): AppState => ({
   settingsPane: "sources",
   filter: {},
   allModels: [],
+  allModelsScope: "",
   status: { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 },
   current: null,
   update: null,
@@ -113,8 +121,9 @@ export function setView(view: ScoreView): void {
 export function setFilter(filter: Filter): void {
   s.filter = filter;
 }
-export function setAllModels(models: ModelRow[]): void {
+export function setAllModels(models: ModelRow[], scope = ""): void {
   s.allModels = models;
+  s.allModelsScope = scope;
 }
 export function setStatus(status: SyncStatus): void {
   s.status = status;

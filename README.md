@@ -54,7 +54,7 @@ Better prompts mean fewer mistakes to correct, and that never costs you: once yo
 - **A verdict and a score.** "Could Claude replace you? **No.** Score 86, Sharp-eyed." Updated as you work, over the last 28 days.
 - **A prompt score.** "Do you make it guess? **Sometimes.** 85% of your prompts were clear the first time." Plus what your prompts include, why you followed up, and one tip backed by your own history.
 - **Improve.** One weekly goal picked from your own numbers ("Include guardrails in 25% of your prompts"), streaks, trophies, personal bests, last week's recap, and charts of how you're trending.
-- **Learn.** 12 one-minute lessons in three tracks (the 5 habits, steer less, correct more), quick quizzes, and a prompt checker that grades a draft as you type, with the same rules as your score.
+- **Learn.** 12 one-minute lessons in three tracks (the 5 habits, follow up less, correct more), quick quizzes, and a prompt checker that grades a draft as you type, with the same rules as your score.
 - **Any time window.** 7 days, 28 days, 90 days or all time: the whole scorecard follows the picker, score included. Every part of the score is a rate, so tiers mean the same thing in any window.
 - **Every model, side by side.** All AI, one provider, one family, or one exact version (say, Claude Opus 5.5). The picker shows the numbers that page is about.
 - **A Hall of Fame** of awards, one per kind of correction: The Fabulist (made it up), Selective Hearing, The Blind Spot, “Fixed” It, Big Brain Energy, and Touché for the times it corrected you. Each shows its best snippet, picked the same way every time. Pin the ones you want to keep forever.
@@ -110,7 +110,7 @@ The engine is native Rust, and the window uses your system's built-in web view i
 <details>
 <summary><b>If I prompt it better, it makes fewer mistakes. Doesn't that lower my score?</b></summary>
 
-No. Corrections only have to show you check its work: 3 in 28 days is full credit, and more add nothing. After that, what counts is how rarely the AI has to correct *you*, per task. Most of the score (70%) is how often your tasks land, so prompting better is the fastest way up.
+No. Corrections only have to show you check its work: 3 in 28 days is full credit, and more add nothing. After that, what counts is how rarely the AI has to correct *you*, per task. Most of the score (70%) is how often your prompts are clear the first time, so prompting better is the fastest way up.
 </details>
 
 <details>
@@ -180,7 +180,7 @@ Each question below the score gets a one-word answer too. Do you make it guess? 
 
 A few things this gets right on purpose:
 - **Prompting better never costs you.** Past 3 corrections, more corrections add nothing, so an AI that makes fewer mistakes because you prompted it well doesn't lower your score.
-- **No corrections at all caps you.** Landing everything but never correcting anything is a Coworker (70) at best: there's no sign you check its work.
+- **No corrections at all caps you.** Getting everything clear the first time but never correcting anything is a Coworker (70) at best: there's no sign you check its work.
 - **Being corrected counts, per task.** If the AI keeps correcting *you*, judgment drops. It's measured per task, never against your corrections, so it doesn't depend on how often the AI is wrong.
 
 ### How a correction is counted
@@ -228,8 +228,8 @@ There's no public benchmark for weekly per-person scores, so every threshold was
 What that showed:
 
 - The correction rate agrees across sources: 1 in 47 messages for the author, 1 in 41 in WildChat.
-- Public chats are short and almost never steer, so the prompt floors come from one heavy user, whose typical month had 86% of prompts clear the first time (Tech lead). Expect them to move as more people's numbers exist.
-- Longer prompts didn't steer less. Bigger tasks get both longer prompts and more back-and-forth, which is why the tier scores outcomes, not length.
+- Public chats are short and almost never need follow-ups, so the prompt floors come from one heavy user, whose typical month had 86% of prompts clear the first time (Tech lead). Expect them to move as more people's numbers exist.
+- Longer prompts didn't mean fewer follow-ups. Bigger tasks get both longer prompts and more back-and-forth, which is why the tier scores outcomes, not length.
 - The overall score puts the author's typical month at 86 (Sharp-eyed): 83% of 150 prompts clear the first time, 41 corrections, and the AI corrected them twice.
 
 ## Supported tools
@@ -344,6 +344,6 @@ The first version was a Python prototype. The Rust engine replaced it, and the o
 
 ## License
 
-[MIT](LICENSE) © HTMLGuy LLC. Provided as is, without warranty.
+[MIT](LICENSE) © HTMLGuy LLC. Provided as is, without warranty. Bundled fonts (SIL OFL 1.1) and dependency licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Not affiliated with or endorsed by Anthropic, OpenAI or any other AI provider. Claude, ChatGPT, Codex and other product names are trademarks of their owners, used here only to say which tools it can read.

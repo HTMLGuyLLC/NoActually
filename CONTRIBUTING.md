@@ -52,6 +52,8 @@ Only add a source you have real files for. Format notes alone are not enough.
 - Every rule change needs a test in `crates/engine/src/tests.rs`. Cover the case you add and one near-miss that must not match.
 - Rule ids are stable. Don't rename or reuse one. Stored events refer to them.
 - Keep rules deterministic: no network, no model calls.
+- Prompt grading rules (what counts as a Target, Evidence, Finish line, Guardrails or Purpose) live in `crates/engine/src/prompt.rs`, with tests in `crates/engine/src/prompt_tests.rs`.
+- Every lesson example in `app/src/learn/lessons.json` is graded by the engine's lessons test (`crates/engine/tests/lessons.rs`), so a rule change can fail a lesson. If it does, fix the rule or the example.
 
 ## Checks and code style
 
@@ -84,7 +86,7 @@ CI also runs cargo-deny, an MSRV check, a wasm32 build of the engine and a pnpm 
 ## Tests
 
 - New or changed behavior comes with tests, following the existing style in the crate or folder you touch.
-- Rules: a test for the new case and one near-miss that must not match (`crates/engine/src/tests.rs`).
+- Rules: a test for the new case and one near-miss that must not match (`crates/engine/src/tests.rs`, or `prompt_tests.rs` for prompt grading). Run `cargo test -p noactually-engine --test lessons` too, since lesson examples are graded by the same rules.
 - Source adapters: a fixture test with a small, made-up file.
 - Frontend logic: `vitest` tests next to the code in `app/src`.
 - While working, run just the tests for what you changed (for example `cargo test -p noactually-engine`); `just ci` runs everything.

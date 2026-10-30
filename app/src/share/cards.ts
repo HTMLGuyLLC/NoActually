@@ -125,10 +125,10 @@ function drawScoreLine(g: CanvasRenderingContext2D, s: ScoreCard, who: string, x
   g.fillText(`${who} CORRECTED ME`.toUpperCase(), x + w, y + 40 * scale, w / 2 - 8 * scale);
   g.font = `800 ${64 * scale}px 'Bricolage Grotesque Variable'`;
   g.fillStyle = ai;
-  g.fillText(String(s.humbled), x + w, y + 110 * scale);
+  g.fillText(String(s.overall.humbled), x + w, y + 110 * scale);
   g.textAlign = "left";
   g.fillStyle = pen;
-  g.fillText(String(s.corrections), x, y + 110 * scale);
+  g.fillText(String(s.overall.corrections), x, y + 110 * scale);
   g.textAlign = "center";
   g.fillStyle = muted;
   g.font = `400 ${34 * scale}px 'Gochi Hand'`;
@@ -363,9 +363,9 @@ function drawGradeBar(g: CanvasRenderingContext2D, b: PromptsCard, x: number, y:
 type CorrectionsCard = Pick<Overall, "corrections" | "humbled" | "judgment">;
 
 const CORRECTION_QUESTION = "Do I correct my AI?";
-export const correctionLines = (o: CorrectionsCard, when = PERIOD_WHEN["28d"]): [string, string] => [
+export const correctionLines = (o: CorrectionsCard, tier: Pick<PromptTier, "blurb">, when = PERIOD_WHEN["28d"]): [string, string] => [
   `I corrected it ${plural(o.corrections, "time")} ${when}. It corrected me ${o.humbled}.`,
-  `Judgment ${o.judgment ?? 0} of 100: I check its work, and it rarely has to correct me.`,
+  `Judgment ${o.judgment ?? 0} of 100. ${tier.blurb}`,
 ];
 
 /** The corrections card: "Do I correct my AI?", the tier's answer, and who corrected whom. */
@@ -373,7 +373,7 @@ export async function drawCorrectionsCard(o: CorrectionsCard, tier: PromptTier, 
   const { c, g } = await canvas(shape, SCORE_FONTS);
   const { w } = CARD_SIZES[shape];
   const { ink, muted, pen } = CARD_THEME;
-  const [corrected, judged] = correctionLines(o, when);
+  const [corrected, judged] = correctionLines(o, tier, when);
   g.textBaseline = "alphabetic";
 
   if (shape === "portrait") {

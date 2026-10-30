@@ -24,9 +24,14 @@ async function view(): Promise<Html> {
   const meta = state.meta ?? setMeta(await api.meta());
   // Only the scorecard's counts follow its period; everything else reads all of history.
   const scorecard = !isGlance && state.tab === "score";
-  const s = await api.stats(scorecard ? { ...state.filter, since: periodSince(state.period) } : state.filter);
+  const since = scorecard ? periodSince(state.period) : null;
+  const s = await api.stats(since ? { ...state.filter, since } : state.filter);
   setCurrent(s);
-  if (!isFiltered(state.filter)) setAllModels(s.models);
+  // The picker's counts cover the same window as the page. A filtered page can't supply them, so a
+  // changed window asks for the unfiltered counts.
+  const scope = since ?? "";
+  if (!isFiltered(state.filter)) setAllModels(s.models, scope);
+  else if (state.allModelsScope !== scope) setAllModels((await api.stats(since ? { since } : {})).models, scope);
   if (isGlance) {
     if (!s.messages) return emptyGlanceView(await watching());
     // The goal is all-AI, like Improve's; the glance still draws if it can't be read.

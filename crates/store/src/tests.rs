@@ -33,7 +33,7 @@ fn test_source() -> SourceState {
 
 /// Ingests `turns` as file `path` of the "test" source with no consent limits.
 fn ingest(s: &mut Store, path: &str, turns: Vec<SourceTurn>) {
-    s.ingest(&test_source(), path, &scan(turns), FileMeta { size: 100, mtime: 1 }).unwrap();
+    s.ingest(&test_source(), path, &scan(turns), FileMeta { size: 100, mtime: 1 }, false).unwrap();
 }
 
 fn today() -> NaiveDate {
@@ -127,7 +127,7 @@ fn hall_names_known_sources() {
     let mut s = Store::open_in_memory().unwrap();
     let state = SourceState { allowed: true, ..SourceState::new("claude-code") };
     let t = turn("no, that's wrong", "You're right.", "m", &now_ts(0), "k");
-    s.ingest(&state, "f", &scan(vec![t]), FileMeta::default()).unwrap();
+    s.ingest(&state, "f", &scan(vec![t]), FileMeta::default(), false).unwrap();
     assert_eq!(stats(&s).hall_of_fame[0].source_name, "Claude Code");
 }
 
@@ -179,11 +179,11 @@ fn backfill_window_is_respected() {
     let mut s = Store::open_in_memory().unwrap();
     let state = SourceState { backfill_since: Some(today() - Duration::days(7)), ..test_source() };
     let old = turn("no, that's wrong", "You're right.", "m", &now_ts(40), "x");
-    s.ingest(&state, "f", &scan(vec![old.clone()]), FileMeta::default()).unwrap();
+    s.ingest(&state, "f", &scan(vec![old.clone()]), FileMeta::default(), false).unwrap();
     assert_eq!(stats(&s).messages, 0);
 
     // Skipped messages aren't marked as seen, so allowing all history later still counts them.
-    s.ingest(&test_source(), "f", &scan(vec![old]), FileMeta::default()).unwrap();
+    s.ingest(&test_source(), "f", &scan(vec![old]), FileMeta::default(), false).unwrap();
     assert_eq!(stats(&s).messages, 1);
 }
 
@@ -250,6 +250,12 @@ fn retention_is_validated() {
     assert_eq!(bad.validate().unwrap_err().to_string(), "Keep text for at least 1 day.");
     assert!(s.set_retention(bad).is_err());
     assert_eq!(s.retention().unwrap(), Retention::default(), "nothing saved");
+    let huge = Retention { snippet_days: u32::MAX, ..Retention::default() };
+    assert!(huge.validate().is_err() && s.set_retention(huge).is_err(), "absurd periods are refused");
+    assert!(Retention { full_days: 36_500, snippet_days: 36_500, ..Retention::default() }.validate().is_ok());
+    // A bad value already on disk skips the sweep instead of panicking.
+    s.set_setting("retention", r#"{"level":"snippet","full_days":30,"snippet_days":4000000000}"#).unwrap();
+    assert_eq!(s.sweep(Utc::now()).unwrap(), 0);
     assert_eq!("snippet".parse::<Level>().unwrap(), Level::Snippet);
     assert!("everything".parse::<Level>().is_err());
 }
@@ -449,6 +455,26 @@ fn from_now_on_skips_existing_history_but_counts_new_messages() {
     append(&path, &cc_correction("new", &Utc::now().to_rfc3339()));
     let r = sync(&mut s, &all).unwrap();
     assert_eq!((r.messages, r.corrections), (1, 1), "only the new message counts");
+}
+
+#[test]
+fn allowing_more_history_re_reads_old_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("a.jsonl");
+    std::fs::write(&path, cc_correction("old", &(Utc::now() - Duration::hours(3)).to_rfc3339())).unwrap();
+    let all = claude_code(&dir);
+    let mut s = Store::open_in_memory().unwrap();
+    s.allow("claude-code", None).unwrap();
+    s.start_from_now(all[0].as_ref()).unwrap();
+    assert_eq!(sync(&mut s, &all).unwrap().messages, 0);
+
+    // "All history" reaches back past the EOF checkpoint, so the old message is found.
+    s.allow("claude-code", None).unwrap();
+    assert_eq!(sync(&mut s, &all).unwrap().messages, 1);
+
+    // Allowing the same window again keeps checkpoints: nothing is re-read.
+    s.allow("claude-code", None).unwrap();
+    assert_eq!(sync(&mut s, &all).unwrap().files_read, 0);
 }
 
 #[test]

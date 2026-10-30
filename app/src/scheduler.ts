@@ -10,7 +10,8 @@ export function isUserBusy(root: HTMLElement, doc: Document = document): boolean
 }
 
 export type Scheduler = {
-  /** Redraw now (a person asked for it). Includes anything that was deferred. */
+  /** Redraw now (a person asked for it). Includes anything that was deferred. Resolves once the view is drawn,
+   * even if a draw was already running (the call then waits for the pass queued behind it). */
   render(): Promise<void>;
   /** Redraw because data changed in the background: now, or once the person is done. */
   refresh(): void;
@@ -21,25 +22,30 @@ export type Scheduler = {
 
 export function createScheduler(opts: { isBusy: () => boolean; draw: () => Promise<void> }): Scheduler {
   let deferred = false;
-  let rendering = false;
+  /** The draws in flight (the running one and the one pass queued behind it), or null when idle. */
+  let running: Promise<void> | null = null;
   let again = false;
 
-  async function render(): Promise<void> {
-    deferred = false;
-    if (rendering) {
-      again = true;
-      return;
-    }
-    rendering = true;
+  async function passes(): Promise<void> {
     try {
-      await opts.draw();
-    } finally {
-      rendering = false;
-      if (again) {
+      do {
         again = false;
-        await render();
-      }
+        await opts.draw();
+      } while (again);
+    } finally {
+      running = null;
     }
+  }
+
+  // A call during a draw asks for one more pass and waits for it, so what the caller does next sees the new view.
+  function render(): Promise<void> {
+    deferred = false;
+    if (running) {
+      again = true;
+      return running;
+    }
+    running = passes();
+    return running;
   }
 
   return {

@@ -50,7 +50,7 @@ pub fn meta(app: State<Arc<App>>) -> Meta {
     store::meta(&app.sources)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stats(app: State<Arc<App>>, filter: Filter) -> Res<Stats> {
     lock(&app.reader).stats(&filter, Local::now().date_naive()).map_err(err)
 }
@@ -97,21 +97,32 @@ pub fn set_learned(app: State<Arc<App>>, id: String, done: bool) -> Res<Vec<Stri
     lock(&app.writer).set_learned(&id, done).map_err(err)
 }
 
-/// True when the app keeps running in the menu bar (macOS) or system tray after its window
-/// closes; false when it's an ordinary app that quits.
+/// The menu bar setting, and whether this system could build the icon at all.
+#[derive(Serialize)]
+pub struct MenuBar {
+    /// The saved choice: keep running in the menu bar (macOS) or system tray after the window
+    /// closes. False means an ordinary app that quits.
+    enabled: bool,
+    /// False when the tray failed to build, so the choice has no effect here.
+    available: bool,
+}
+
 #[tauri::command]
-pub fn get_menu_bar(app: State<Arc<App>>) -> bool {
-    app.menu_bar()
+pub fn get_menu_bar(app: State<Arc<App>>, tray: State<crate::HasTray>) -> MenuBar {
+    MenuBar { enabled: app.menu_bar(), available: tray.0 }
 }
 
 #[tauri::command(async)]
-pub fn set_menu_bar(handle: AppHandle, app: State<Arc<App>>, enabled: bool) -> Res<()> {
+pub fn set_menu_bar(handle: AppHandle, app: State<Arc<App>>, tray: State<crate::HasTray>, enabled: bool) -> Res<()> {
+    if !tray.0 {
+        return Ok(()); // no icon to show or hide; closing the window quits either way
+    }
     lock(&app.writer).set_setting(crate::MENU_BAR_KEY, if enabled { "on" } else { "off" }).map_err(err)?;
     crate::apply_menu_bar(&handle, &app, enabled);
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_sources(app: State<Arc<App>>) -> Res<Vec<SourceListing>> {
     let states = lock(&app.reader).source_states().map_err(err)?;
     Ok(app
@@ -264,11 +275,17 @@ pub fn is_png(bytes: &[u8]) -> bool {
     bytes.starts_with(&PNG_SIGNATURE)
 }
 
+/// Biggest share card accepted. A real one is a few hundred KB.
+const SHARE_CARD_MAX_BYTES: usize = 10 * 1024 * 1024;
+
 /// Saves the share card the window drew. The user picks where; nothing is uploaded.
 #[tauri::command]
 pub async fn save_share_card(handle: AppHandle, png: Vec<u8>) -> Res<Option<String>> {
     if !is_png(&png) {
         return Err("That isn't a PNG image.".into());
+    }
+    if png.len() > SHARE_CARD_MAX_BYTES {
+        return Err("That image is too big to be a scorecard.".into());
     }
     let dialog = handle
         .dialog()

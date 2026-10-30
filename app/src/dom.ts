@@ -42,14 +42,19 @@ export function captureFocus(root: HTMLElement): FocusMemo {
 }
 
 /**
- * Puts focus back on the same control, or on the page's heading when that control is gone. Does
- * nothing when focus wasn't in `root` (a background redraw never steals focus).
+ * Puts focus back on the same control. When it's gone: the current sub-tab, else the page's
+ * heading, else the first control in `root`. Does nothing when focus wasn't in `root` (a
+ * background redraw never steals focus).
  */
 export function restoreFocus(root: HTMLElement, memo: FocusMemo): void {
   if (!memo.inside) return;
   const now = document.activeElement;
   if (now && now !== document.body && root.contains(now)) return; // the new view already placed focus
-  const target = (memo.key && root.querySelector<HTMLElement>(memo.key)) || root.querySelector<HTMLElement>("h1, h2");
+  const target =
+    (memo.key && root.querySelector<HTMLElement>(memo.key)) ||
+    root.querySelector<HTMLElement>('[data-action="settings-pane"].on') ||
+    root.querySelector<HTMLElement>("h1, h2") ||
+    root.querySelector<HTMLElement>("a[href], button, input, select, textarea, [tabindex]");
   if (!target) return;
   if (!target.matches("a[href], button, input, select, textarea, [tabindex]")) target.tabIndex = -1;
   target.focus({ preventScroll: true });
