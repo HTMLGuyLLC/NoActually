@@ -476,8 +476,9 @@ static PROOF: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         rule("prompt.proof.quote", r#""[^"\n]{6,200}""#),
         rule(
             "prompt.proof.attached",
-            // "No error in the logs" says where to look when it's done, not what went wrong.
-            r"\[(?:image|pasted text) #\d+|\b(?:see|attached) (?:the )?(?:screenshot|image|screen ?shot|logs?|output|trace)\b|\bin (?:the )?(?:screenshot|image|screen ?shot)\b",
+            // "Look at the logs" points it at the proof; "no error in the logs" says where to look
+            // when it's done, not what went wrong.
+            r"\[(?:image|pasted text) #\d+|\b(?:see|attached|look at|check|read|review) (?:the )?(?:screenshot|image|screen ?shot|logs?|output|trace)\b|\bin (?:the )?(?:screenshot|image|screen ?shot)\b",
         ),
     ]
 });

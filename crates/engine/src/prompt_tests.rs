@@ -89,6 +89,8 @@ const EXAMPLES: &[(&str, &[Signal])] = &[
     ("expected the total to update but it stays at zero", &[Proof]),
     ("make the dates look like this: Oct 28, 2026", &[Proof]),
     ("see the screenshot, the header overlaps", &[Proof]),
+    ("look at the logs for reference", &[Proof]),
+    ("check the output, it's off by one", &[Proof]),
     // Finish line.
     ("the button should redirect to the dashboard", &[Done]),
     ("add a unit test for the parser", &[Done]),
