@@ -1,7 +1,9 @@
 // The share card images, drawn on a canvas on this machine. Always the light theme.
-import type { Briefs, BriefTier, Stats } from "../api";
+import type { Overall, Prompts, PromptTier, Stats } from "../api";
+import { plural } from "../format";
 import { landedPct, percent } from "../meta";
-import { clip, SHARE_URL_SHORT } from "./share";
+import { PERIOD_WHEN } from "../state";
+import { type CorrectionLike, clip, SHARE_URL_SHORT } from "./share";
 
 /** The light theme's colors (style.css :root), which the cards always use whatever the app's theme. */
 export const CARD_THEME = {
@@ -12,6 +14,8 @@ export const CARD_THEME = {
   onPen: "#ffffff",
   ai: "#3b5bdb",
   aiSoft: "#e7ecfd",
+  /** The empty part of a bar. */
+  track: "#dfe3ee",
 } as const;
 
 /**
@@ -41,6 +45,17 @@ async function canvas(shape: CardShape, fonts: string[]): Promise<{ c: HTMLCanva
 
 const png = (c: HTMLCanvasElement) =>
   new Promise<Blob>((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error("Couldn't draw the card."))), "image/png"));
+
+/** A rounded-rectangle path (CanvasRenderingContext2D.roundRect needs Safari 16). */
+function roundedRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const k = Math.min(r, w / 2, h / 2);
+  g.moveTo(x + k, y);
+  g.arcTo(x + w, y, x + w, y + h, k);
+  g.arcTo(x + w, y + h, x, y + h, k);
+  g.arcTo(x, y + h, x, y, k);
+  g.arcTo(x, y, x + w, y, k);
+  g.closePath();
+}
 
 /** The logo: the icon's mark, then "No, Actually..." in ink, with the text baseline at `y`. */
 function drawWordmark(g: CanvasRenderingContext2D, x: number, y: number, scale = 1) {
@@ -92,28 +107,28 @@ function drawPill(g: CanvasRenderingContext2D, label: string, x: number, y: numb
   const h = 40 * scale;
   g.fillStyle = CARD_THEME.pen;
   g.beginPath();
-  g.roundRect(x, y, g.measureText(text).width + 36 * scale, h, h / 2);
+  roundedRect(g, x, y, g.measureText(text).width + 36 * scale, h, h / 2);
   g.fill();
   g.fillStyle = CARD_THEME.onPen;
   g.fillText(text, x + 18 * scale, y + 26 * scale);
 }
 
-/** "I CAUGHT IT 177  vs  3 IT CAUGHT ME" between x and x + w, with the rule on top at `y`. */
-function drawScoreLine(g: CanvasRenderingContext2D, s: ScoreCard, x: number, y: number, w: number, scale = 1) {
+/** "I CORRECTED AI 177  vs  3 AI CORRECTED ME" between x and x + w, with the rule on top at `y`. */
+function drawScoreLine(g: CanvasRenderingContext2D, s: ScoreCard, who: string, x: number, y: number, w: number, scale = 1) {
   const { ink, muted, pen, ai } = CARD_THEME;
   g.fillStyle = ink;
   g.fillRect(x, y, w, 3 * scale);
   g.font = `600 ${16 * scale}px 'JetBrains Mono'`;
   g.fillStyle = muted;
-  g.fillText("I CAUGHT IT", x, y + 40 * scale);
+  g.fillText(`I CORRECTED ${who}`.toUpperCase(), x, y + 40 * scale, w / 2 - 8 * scale);
   g.textAlign = "right";
-  g.fillText("IT CAUGHT ME", x + w, y + 40 * scale);
+  g.fillText(`${who} CORRECTED ME`.toUpperCase(), x + w, y + 40 * scale, w / 2 - 8 * scale);
   g.font = `800 ${64 * scale}px 'Bricolage Grotesque Variable'`;
   g.fillStyle = ai;
-  g.fillText(String(s.humbled), x + w, y + 110 * scale);
+  g.fillText(String(s.overall.humbled), x + w, y + 110 * scale);
   g.textAlign = "left";
   g.fillStyle = pen;
-  g.fillText(String(s.catches), x, y + 110 * scale);
+  g.fillText(String(s.overall.corrections), x, y + 110 * scale);
   g.textAlign = "center";
   g.fillStyle = muted;
   g.font = `400 ${34 * scale}px 'Gochi Hand'`;
@@ -130,12 +145,18 @@ function drawFooter(g: CanvasRenderingContext2D, text: string, w: number, y: num
   g.textAlign = "left";
 }
 
-type ScoreCard = Pick<Stats, "verdict" | "catches_last_7d" | "pct_real_chats_with_catch" | "catches" | "humbled">;
+type ScoreCard = Pick<Stats, "overall" | "corrections_last_7d" | "corrections" | "humbled">;
 
 const SCORE_FONTS = ["800 64px 'Bricolage Grotesque Variable'", "400 200px 'Gochi Hand'", "500 24px 'Instrument Sans'", "600 18px 'JetBrains Mono'"];
 const heading = (size: number) => `800 ${size}px 'Bricolage Grotesque Variable'`;
-const timesLine = (s: ScoreCard) => `I caught it ${s.catches_last_7d} ${s.catches_last_7d === 1 ? "time" : "times"} this week.`;
-const pctLine = (s: ScoreCard) => (s.pct_real_chats_with_catch == null ? null : `It slipped up in ${Math.round(s.pct_real_chats_with_catch)}% of my chats.`);
+const hand = (size: number) => `400 ${size}px 'Gochi Hand'`;
+/** "Score 86. 83% of my prompts were clear the first time." or, before a score, this week's corrections. */
+const timesLine = (s: ScoreCard) =>
+  s.overall.score == null
+    ? `I corrected it ${plural(s.corrections_last_7d, "time")} this week.`
+    : `Score ${s.overall.score}. ${s.overall.direction}% of my prompts were clear the first time.`;
+const pctLine = (s: ScoreCard, when: string) =>
+  s.overall.score == null ? null : `I corrected it ${plural(s.overall.corrections, "time")} to its ${s.overall.humbled} ${when}.`;
 
 /** Hand-written `text`, rotated like a red-pen mark, baseline at (x, y). */
 function drawMark(g: CanvasRenderingContext2D, text: string, color: string, x: number, y: number, size: number) {
@@ -143,24 +164,24 @@ function drawMark(g: CanvasRenderingContext2D, text: string, color: string, x: n
   g.translate(x, y);
   g.rotate((-6 * Math.PI) / 180);
   g.fillStyle = color;
-  g.font = `400 ${size}px 'Gochi Hand'`;
+  g.font = hand(size);
   g.fillText(text, 0, 0);
   g.restore();
 }
 
 /** The big hand-written verdict. */
 function drawVerdict(g: CanvasRenderingContext2D, s: ScoreCard, x: number, y: number, size: number) {
-  const no = s.verdict === "no";
+  const no = s.overall.verdict === "no";
   drawMark(g, no ? "No." : "Hmm.", no ? CARD_THEME.pen : CARD_THEME.muted, x, y, size);
 }
 
 /** The score card. `tier` is the tier's display name. */
-export async function drawShareCard(s: ScoreCard, who: string, tier: string, shape: CardShape = "wide"): Promise<Blob> {
+export async function drawShareCard(s: ScoreCard, who: string, tier: string, shape: CardShape = "wide", when = PERIOD_WHEN["28d"]): Promise<Blob> {
   const { c, g } = await canvas(shape, SCORE_FONTS);
   const { w } = CARD_SIZES[shape];
   const { ink, muted } = CARD_THEME;
   const q = `Could ${who} replace me?`;
-  const pct = pctLine(s);
+  const pct = pctLine(s, when);
   g.textBaseline = "alphabetic";
 
   if (shape === "portrait") {
@@ -188,7 +209,7 @@ export async function drawShareCard(s: ScoreCard, who: string, tier: string, sha
       g.fillText(pct, x, 900);
     }
     drawPill(g, tier, x, 950, 1.5);
-    drawScoreLine(g, s, x, 1080, inner, 1.5);
+    drawScoreLine(g, s, who, x, 1080, inner, 1.5);
     drawFooter(g, `What's your score?  ${SHARE_URL_SHORT}`, w, 1290, 1.4);
     return png(c);
   }
@@ -206,12 +227,10 @@ export async function drawShareCard(s: ScoreCard, who: string, tier: string, sha
     g.fillText(pct, 520, 354);
   }
   drawPill(g, tier, 520, 384);
-  drawScoreLine(g, s, 140, 470, w - 280);
+  drawScoreLine(g, s, who, 140, 470, w - 280);
   drawFooter(g, `What's your score?  ${SHARE_URL_SHORT}`, w, 612);
   return png(c);
 }
-
-type CatchLike = { model: string; human: string | null; ai: string | null };
 
 /** Wraps text to lines no wider than `max` px in the current font, ending in "…" if it was cut. */
 export function wrap(g: Pick<CanvasRenderingContext2D, "measureText">, text: string, max: number, maxLines: number): string[] {
@@ -232,22 +251,22 @@ export function wrap(g: Pick<CanvasRenderingContext2D, "measureText">, text: str
   return lines;
 }
 
-const CATCH_FONTS = ["800 54px 'Bricolage Grotesque Variable'", "400 52px 'Gochi Hand'", "500 26px 'Instrument Sans'", "600 16px 'JetBrains Mono'"];
+const CORRECTION_FONTS = ["800 54px 'Bricolage Grotesque Variable'", "400 52px 'Gochi Hand'", "500 26px 'Instrument Sans'", "600 16px 'JetBrains Mono'"];
 
 /**
- * Where the catch card's parts go. `k` scales the type; the portrait card fits more lines and
+ * Where the correction card's parts go. `k` scales the type; the portrait card fits more lines and
  * centers the quote in the space under the title (`center`) instead of starting at `quoteY`.
  */
-const CATCH_LAYOUT = {
+const CORRECTION_LAYOUT = {
   wide: { x: 140, k: 1, markY: 78, titleY: 170, titleLines: 1, quoteY: 250, center: false, quoteLines: 3, aiLines: 2, footerY: 606 },
   portrait: { x: 96, k: 1.4, markY: 150, titleY: 300, titleLines: 2, quoteY: 0, center: true, quoteLines: 5, aiLines: 5, footerY: 1290 },
 } as const;
 
-/** A card for one catch: your words in red pen, the AI's admission underneath. */
-export async function drawCatchCard(e: CatchLike, shape: CardShape = "wide"): Promise<Blob> {
-  const { c, g } = await canvas(shape, CATCH_FONTS);
+/** A card for one correction: your words in red pen, the AI's admission underneath. */
+export async function drawCorrectionCard(e: CorrectionLike, shape: CardShape = "wide"): Promise<Blob> {
+  const { c, g } = await canvas(shape, CORRECTION_FONTS);
   const { w } = CARD_SIZES[shape];
-  const { x, k, ...L } = CATCH_LAYOUT[shape];
+  const { x, k, ...L } = CORRECTION_LAYOUT[shape];
   const { ink, pen, ai, aiSoft } = CARD_THEME;
   const inner = w - 2 * x;
 
@@ -255,7 +274,7 @@ export async function drawCatchCard(e: CatchLike, shape: CardShape = "wide"): Pr
 
   g.fillStyle = ink;
   g.font = heading(54 * k);
-  const title = `I caught ${e.model || "my AI"} being wrong.`;
+  const title = `I corrected ${e.model || "my AI"}.`;
   // One line squeezes a long model name to fit (fillText's max width); more lines wrap it.
   const titleLines = L.titleLines > 1 ? wrap(g, title, inner, L.titleLines) : [title];
   let y: number = L.titleY;
@@ -290,7 +309,7 @@ export async function drawCatchCard(e: CatchLike, shape: CardShape = "wide"): Pr
   if (reply.length) {
     g.fillStyle = aiSoft;
     g.beginPath();
-    g.roundRect(x, y, inner, boxH, 14 * k);
+    roundedRect(g, x, y, inner, boxH, 14 * k);
     g.fill();
     g.fillStyle = ai;
     g.font = `600 ${16 * k}px 'JetBrains Mono'`;
@@ -305,29 +324,31 @@ export async function drawCatchCard(e: CatchLike, shape: CardShape = "wide"): Pr
   return png(c);
 }
 
-type BriefsCard = Pick<Briefs, "landed_last_28d" | "tasks_last_28d" | "grades" | "tasks">;
+type PromptsCard = Pick<Prompts, "window_landed" | "window_tasks" | "grades" | "tasks">;
 
-const BRIEF_QUESTION = "Do I make my AI guess?";
-export const briefLines = (b: BriefsCard): [string, string] => [
-  `${landedPct(b)}% of my tasks landed without steering (last 28 days).`,
-  `${percent(b.grades.sharp ?? 0, b.tasks)}% of all my briefs were sharp.`,
+const PROMPT_QUESTION = "Do I make my AI guess?";
+export const promptLines = (b: PromptsCard, when = PERIOD_WHEN["28d"]): [string, string] => [
+  `${landedPct(b)}% of my prompts ${when} were clear the first time.`,
+  `${percent(b.grades.sharp ?? 0, b.tasks)}% of all my prompts were specific.`,
 ];
 
-/** "SHARP 20% · SOLID 24% · THIN 56%": the bar's key. */
-export const gradeKey = (b: BriefsCard) => ["sharp", "solid", "thin"].map((id) => `${id.toUpperCase()} ${percent(b.grades[id] ?? 0, b.tasks)}%`).join("  ·  ");
+/** "SPECIFIC 20% · DECENT 24% · VAGUE 56%": the bar's key. */
+const GRADE_WORD = { sharp: "SPECIFIC", solid: "DECENT", thin: "VAGUE" };
+export const gradeKey = (b: PromptsCard) =>
+  (["sharp", "solid", "thin"] as const).map((id) => `${GRADE_WORD[id]} ${percent(b.grades[id] ?? 0, b.tasks)}%`).join("  ·  ");
 
-/** Sharp / solid / thin as one bar, sharp first, `w` wide with its top-left at (x, y). */
-function drawGradeBar(g: CanvasRenderingContext2D, b: BriefsCard, x: number, y: number, w: number, h: number) {
+/** Specific / decent / vague as one bar, specific first, `w` wide with its top-left at (x, y). */
+function drawGradeBar(g: CanvasRenderingContext2D, b: PromptsCard, x: number, y: number, w: number, h: number) {
   const parts: [string, string][] = [
     ["sharp", CARD_THEME.pen],
     ["solid", CARD_THEME.ink],
-    ["thin", "#dfe3ee"],
+    ["thin", CARD_THEME.track],
   ];
   g.save();
   g.beginPath();
-  g.roundRect(x, y, w, h, h / 3);
+  roundedRect(g, x, y, w, h, h / 3);
   g.clip();
-  g.fillStyle = "#dfe3ee";
+  g.fillStyle = CARD_THEME.track;
   g.fillRect(x, y, w, h);
   let at = x;
   for (const [id, color] of parts) {
@@ -339,13 +360,20 @@ function drawGradeBar(g: CanvasRenderingContext2D, b: BriefsCard, x: number, y: 
   g.restore();
 }
 
-/** The briefs card: "Do I make my AI guess?", the tier's answer, and what landed. */
-export async function drawBriefCard(b: BriefsCard, tier: BriefTier, shape: CardShape = "wide"): Promise<Blob> {
+type CorrectionsCard = Pick<Overall, "corrections" | "humbled" | "judgment">;
+
+const CORRECTION_QUESTION = "Do I correct my AI?";
+export const correctionLines = (o: CorrectionsCard, tier: Pick<PromptTier, "blurb">, when = PERIOD_WHEN["28d"]): [string, string] => [
+  `I corrected it ${plural(o.corrections, "time")} ${when}. It corrected me ${o.humbled}.`,
+  `Judgment ${o.judgment ?? 0} of 100. ${tier.blurb}`,
+];
+
+/** The corrections card: "Do I correct my AI?", the tier's answer, and who corrected whom. */
+export async function drawCorrectionsCard(o: CorrectionsCard, tier: PromptTier, shape: CardShape = "wide", when = PERIOD_WHEN["28d"]): Promise<Blob> {
   const { c, g } = await canvas(shape, SCORE_FONTS);
   const { w } = CARD_SIZES[shape];
   const { ink, muted, pen } = CARD_THEME;
-  const [landed, sharp] = briefLines(b);
-  const hand = (size: number) => `400 ${size}px 'Gochi Hand'`;
+  const [corrected, judged] = correctionLines(o, tier, when);
   g.textBaseline = "alphabetic";
 
   if (shape === "portrait") {
@@ -353,8 +381,49 @@ export async function drawBriefCard(b: BriefsCard, tier: BriefTier, shape: CardS
     const inner = w - 2 * x;
     drawWordmark(g, x, 150, 1.4);
     g.fillStyle = ink;
-    fitFont(g, BRIEF_QUESTION, heading, 84, inner, 48);
-    g.fillText(BRIEF_QUESTION, x, 300);
+    fitFont(g, CORRECTION_QUESTION, heading, 84, inner, 48);
+    g.fillText(CORRECTION_QUESTION, x, 300);
+    drawMark(g, tier.verdict, pen, x - 8, 620, fitFont(g, tier.verdict, hand, 240, inner - 40, 120));
+    g.fillStyle = ink;
+    g.font = "500 40px 'Instrument Sans'";
+    for (const [i, l] of wrap(g, corrected, inner, 2).entries()) g.fillText(l, x, 760 + i * 52);
+    g.fillStyle = muted;
+    for (const [i, l] of wrap(g, judged, inner, 2).entries()) g.fillText(l, x, 890 + i * 52);
+    drawPill(g, tier.name, x, 1010, 1.5);
+    drawFooter(g, `Do you correct yours?  ${SHARE_URL_SHORT}`, w, 1290, 1.4);
+    return png(c);
+  }
+
+  drawWordmark(g, 140, 78);
+  g.fillStyle = ink;
+  fitFont(g, CORRECTION_QUESTION, heading, 64, w - 280, 36);
+  g.fillText(CORRECTION_QUESTION, 140, 190);
+  drawMark(g, tier.verdict, pen, 140, 350, fitFont(g, tier.verdict, hand, 170, w - 320, 90));
+  g.fillStyle = ink;
+  g.font = "500 30px 'Instrument Sans'";
+  g.fillText(corrected, 140, 440, w - 280);
+  g.fillStyle = muted;
+  g.fillText(judged, 140, 484, w - 280);
+  drawPill(g, tier.name, 140, 512);
+  drawFooter(g, `Do you correct yours?  ${SHARE_URL_SHORT}`, w, 612);
+  return png(c);
+}
+
+/** The prompts card: "Do I make my AI guess?", the tier's answer, and how many were clear the first time. */
+export async function drawPromptCard(b: PromptsCard, tier: PromptTier, shape: CardShape = "wide", when = PERIOD_WHEN["28d"]): Promise<Blob> {
+  const { c, g } = await canvas(shape, SCORE_FONTS);
+  const { w } = CARD_SIZES[shape];
+  const { ink, muted, pen } = CARD_THEME;
+  const [landed, sharp] = promptLines(b, when);
+  g.textBaseline = "alphabetic";
+
+  if (shape === "portrait") {
+    const x = 96;
+    const inner = w - 2 * x;
+    drawWordmark(g, x, 150, 1.4);
+    g.fillStyle = ink;
+    fitFont(g, PROMPT_QUESTION, heading, 84, inner, 48);
+    g.fillText(PROMPT_QUESTION, x, 300);
     drawMark(g, tier.verdict, pen, x - 8, 620, fitFont(g, tier.verdict, hand, 240, inner - 40, 120));
     g.fillStyle = ink;
     g.font = "500 40px 'Instrument Sans'";
@@ -372,8 +441,8 @@ export async function drawBriefCard(b: BriefsCard, tier: BriefTier, shape: CardS
 
   drawWordmark(g, 140, 78);
   g.fillStyle = ink;
-  fitFont(g, BRIEF_QUESTION, heading, 64, w - 280, 36);
-  g.fillText(BRIEF_QUESTION, 140, 190);
+  fitFont(g, PROMPT_QUESTION, heading, 64, w - 280, 36);
+  g.fillText(PROMPT_QUESTION, 140, 190);
   drawMark(g, tier.verdict, pen, 140, 350, fitFont(g, tier.verdict, hand, 170, w - 320, 90));
   g.fillStyle = ink;
   g.font = "500 30px 'Instrument Sans'";

@@ -1,8 +1,8 @@
 //! The local database. Everything the app knows lives here, and only here.
 //!
 //! [`Store`] owns one SQLite connection: consent and settings, per-file checkpoints, daily
-//! counts, and catch events whose text obeys the [`Retention`] level. [`sync`] reads whatever
-//! changed in the allowed sources; [`Store::stats`] answers every view; [`milestones`] decides
+//! counts, and correction events whose text obeys the [`Retention`] level. [`sync`] reads whatever
+//! changed in the allowed sources; [`Store::stats`] and [`Store::progress`] answer every view; [`milestones`] decides
 //! which moments deserve a popup.
 //!
 //! Tests: small pure helpers keep their tests inline in `mod tests`; the store's behavior suite
@@ -13,13 +13,18 @@
 mod error;
 mod meta;
 pub mod milestones;
+mod progress;
 mod schema;
 mod stats;
 mod sync;
 
 pub use error::{Error, Result};
-pub use meta::{meta, BriefTierInfo, CategoryInfo, Meta, SignalInfo, SourceInfo, TierInfo, Titled};
-pub use stats::{Briefs, Filter, HallEntry, ModelRow, Stats, Tip, WeekRow};
+pub use meta::{meta, CategoryInfo, Meta, SignalInfo, SourceInfo, TierInfo, Titled, VerdictTierInfo};
+pub use progress::{
+    floor_pct, Bests, Goal, GoalKind, GoalNews, GoalStatus, GoalWeek, HistoryWeek, Insights, ModelLanded, Progress,
+    Trophy, WeekState, GOAL_WEEKS, MIN_WEEK,
+};
+pub use stats::{Filter, HallEntry, ModelRow, Overall, Prompts, Stats, Tip, WeekRow};
 pub use sync::{sync, SyncReport};
 
 use chrono::{DateTime, Duration, Local, NaiveDate, Utc};
@@ -66,7 +71,7 @@ fn resolve_db_path(env: impl Fn(&str) -> Option<OsString>, data_dir: Option<Path
     Ok(dir.join(APP_ID).join(DB_FILE))
 }
 
-/// How much catch text to keep. Levels only ever step down as events age.
+/// How much correction text to keep. Levels only ever step down as events age.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Level {
@@ -106,10 +111,13 @@ impl FromStr for Level {
     }
 }
 
-/// How long catch text is kept, and at what level.
+/// The longest a retention period can be (100 years). Keeps the cutoff dates in range.
+const MAX_RETENTION_DAYS: u32 = 36_500;
+
+/// How long correction text is kept, and at what level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Retention {
-    /// The level new catches start at.
+    /// The level new corrections start at.
     pub level: Level,
     /// Days full text is kept before it drops to a snippet.
     pub full_days: u32,
@@ -124,10 +132,13 @@ impl Default for Retention {
 }
 
 impl Retention {
-    /// Both periods must be at least a day.
+    /// Both periods must be between a day and 100 years.
     pub fn validate(&self) -> Result<()> {
         if self.full_days == 0 || self.snippet_days == 0 {
             return Err(Error::Invalid("Keep text for at least 1 day."));
+        }
+        if self.full_days > MAX_RETENTION_DAYS || self.snippet_days > MAX_RETENTION_DAYS {
+            return Err(Error::Invalid("Keep text for at most 36500 days."));
         }
         Ok(())
     }
@@ -231,11 +242,21 @@ pub(crate) fn hash(parts: &[&str]) -> String {
     })
 }
 
-fn upsert_file(conn: &Connection, path: &str, source: &str, checkpoint: u64, meta: FileMeta) -> Result<()> {
+/// `finalized`: the pass that wrote this checkpoint already counted a trailing unanswered
+/// message, so an unchanged file needs no more reads even though its checkpoint is short of its end.
+fn upsert_file(
+    conn: &Connection,
+    path: &str,
+    source: &str,
+    checkpoint: u64,
+    meta: FileMeta,
+    finalized: bool,
+) -> Result<()> {
     conn.execute(
-        "INSERT INTO files (path, source, checkpoint, size, mtime) VALUES (?1,?2,?3,?4,?5)
-         ON CONFLICT(path) DO UPDATE SET checkpoint = excluded.checkpoint, size = excluded.size, mtime = excluded.mtime",
-        params![path, source, checkpoint as i64, meta.size as i64, meta.mtime],
+        "INSERT INTO files (path, source, checkpoint, size, mtime, finalized) VALUES (?1,?2,?3,?4,?5,?6)
+         ON CONFLICT(path) DO UPDATE SET checkpoint = excluded.checkpoint, size = excluded.size,
+           mtime = excluded.mtime, finalized = excluded.finalized",
+        params![path, source, checkpoint as i64, meta.size as i64, meta.mtime, finalized],
     )?;
     Ok(())
 }
@@ -263,7 +284,7 @@ impl Store {
     // ---- settings ----------------------------------------------------------------------
 
     /// The retention settings, or the defaults if never set. A saved value that can't be read
-    /// (say, written by a newer version) means new catches keep no text, never the defaults,
+    /// (say, written by a newer version) means new corrections keep no text, never the defaults,
     /// which might keep more than the user chose.
     pub fn retention(&self) -> Result<Retention> {
         Ok(self.saved_retention()?.unwrap_or(Retention { level: Level::Category, ..Retention::default() }))
@@ -276,7 +297,7 @@ impl Store {
             Ok(r) => Ok(Some(r)),
             Err(e) => {
                 log::error!(
-                    "the saved retention setting is unreadable ({e}); new catches keep no text until it is set again"
+                    "the saved retention setting is unreadable ({e}); new corrections keep no text until it is set again"
                 );
                 Ok(None)
             }
@@ -298,11 +319,7 @@ impl Store {
 
     /// Sets an app-owned value.
     pub fn set_setting(&self, key: &str, value: &str) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            params![key, value],
-        )?;
-        Ok(())
+        put_setting(&self.conn, key, value)
     }
 
     // ---- consent -----------------------------------------------------------------------
@@ -333,6 +350,20 @@ impl Store {
 
     /// The user allowed reading this source. Nothing is read before this.
     pub fn allow(&self, id: &str, backfill_since: Option<NaiveDate>) -> Result<()> {
+        // Reaching further back than before (say "All history" after "From now on") can't use
+        // the old checkpoints: they sit at the end of files whose older messages were skipped.
+        // The `seen` keys keep re-read messages from counting twice.
+        if let Some(prev) = self.source_state(id)? {
+            let before = prev.start_after.map(|t| t.date_naive()).or(prev.backfill_since);
+            let reaches_back = match (backfill_since, before) {
+                (None, Some(_)) => true,
+                (Some(new), Some(old)) => new < old,
+                _ => false,
+            };
+            if reaches_back {
+                self.conn.execute("DELETE FROM files WHERE source = ?1", [id])?;
+            }
+        }
         self.conn.execute(
             "INSERT INTO sources (id, allowed, paused, backfill_since, granted_at, paths) VALUES (?1, 1, 0, ?2, ?3, '[]')
              ON CONFLICT(id) DO UPDATE SET allowed = 1, paused = 0, backfill_since = excluded.backfill_since,
@@ -353,7 +384,7 @@ impl Store {
         let mut marked = 0;
         for path in source_files(src, &extra) {
             let Ok((meta, _)) = FileMeta::read(&path) else { continue };
-            upsert_file(&tx, &path.to_string_lossy(), src.id(), meta.size, meta)?;
+            upsert_file(&tx, &path.to_string_lossy(), src.id(), meta.size, meta, false)?;
             marked += 1;
         }
         tx.commit()?;
@@ -393,7 +424,7 @@ impl Store {
     }
 
     /// Clears every score and checkpoint so history is re-read under new rules. Consent,
-    /// settings and pinned catches stay: a pin is often the only copy left once its history file
+    /// settings and pinned corrections stay: a pin is often the only copy left once its history file
     /// is gone. Other scores only come back for history files that still exist.
     pub fn reset_scores(&mut self) -> Result<()> {
         let tx = self.conn.transaction()?;
@@ -435,12 +466,16 @@ impl Store {
 
     // ---- ingestion ---------------------------------------------------------------------
 
-    /// Where `path` was last read up to, and its size and mtime then.
-    pub(crate) fn file_checkpoint(&self, path: &str) -> Result<Option<(u64, FileMeta)>> {
+    /// Where `path` was last read up to, its size and mtime then, and whether that pass was final.
+    pub(crate) fn file_checkpoint(&self, path: &str) -> Result<Option<(u64, FileMeta, bool)>> {
         Ok(self
             .conn
-            .query_row("SELECT checkpoint, size, mtime FROM files WHERE path = ?1", [path], |r| {
-                Ok((r.get::<_, i64>(0)? as u64, FileMeta { size: r.get::<_, i64>(1)? as u64, mtime: r.get(2)? }))
+            .query_row("SELECT checkpoint, size, mtime, finalized FROM files WHERE path = ?1", [path], |r| {
+                Ok((
+                    r.get::<_, i64>(0)? as u64,
+                    FileMeta { size: r.get::<_, i64>(1)? as u64, mtime: r.get(2)? },
+                    r.get(3)?,
+                ))
             })
             .optional()?)
     }
@@ -448,18 +483,19 @@ impl Store {
     /// Writes one file's turns and its new checkpoint in a single transaction, so a crash
     /// can never count a turn without moving the checkpoint (or the reverse). Turns the
     /// source's consent skips are left out entirely, so allowing more history later still
-    /// counts them. Returns (messages, catches) counted.
+    /// counts them. Returns (messages, corrections) counted.
     pub(crate) fn ingest(
         &mut self,
         state: &SourceState,
         path: &str,
         scan: &sources::FileScan,
         meta: FileMeta,
+        finalized: bool,
     ) -> Result<(usize, usize)> {
         let source = state.id.as_str();
         let retention = self.retention()?;
         let tx = self.conn.transaction()?;
-        let (mut messages, mut catches) = (0, 0);
+        let (mut messages, mut corrections) = (0, 0);
         for st in scan.turns.iter().filter(|st| state.wants(st.ts)) {
             let human_head = engine::head_chars(&st.turn.human, 200);
             let key = match &st.key {
@@ -485,19 +521,19 @@ impl Store {
             bump("message", "")?;
             messages += 1;
             let session = hash(&[source, &st.session]);
-            let is_catch = v.label.is_some_and(Label::is_catch);
+            let is_correction = v.label.is_some_and(Label::is_correction);
             tx.execute(
-                "INSERT INTO sessions (id, source, first_day, last_day, messages, catches) VALUES (?1,?2,?3,?3,1,?4)
-                 ON CONFLICT(id) DO UPDATE SET messages = messages + 1, catches = catches + excluded.catches,
+                "INSERT INTO sessions (id, source, first_day, last_day, messages, corrections) VALUES (?1,?2,?3,?3,1,?4)
+                 ON CONFLICT(id) DO UPDATE SET messages = messages + 1, corrections = corrections + excluded.corrections,
                    first_day = min(first_day, excluded.first_day), last_day = max(last_day, excluded.last_day)",
-                params![session, source, day, i64::from(is_catch)],
+                params![session, source, day, i64::from(is_correction)],
             )?;
-            // Briefs: a new task gets a row; steering and other replies count toward the chat's latest.
+            // Prompts: a new task gets a row; steering and other replies count toward the chat's latest.
             let latest = "id = (SELECT MAX(id) FROM tasks WHERE session = ?1)";
             let has_task: bool =
                 tx.query_row("SELECT EXISTS(SELECT 1 FROM tasks WHERE session = ?1)", [&session], |r| r.get(0))?;
             match read_prompt(&st.turn, &v, has_task) {
-                Prompt::Brief { signals, .. } => tx.execute(
+                Prompt::Task { signals, .. } => tx.execute(
                     "INSERT INTO tasks (day, source, session, provider, family, version, signals) VALUES (?1,?2,?3,?4,?5,?6,?7)",
                     params![day, source, session, provider, family, version, signals.0],
                 )?,
@@ -510,10 +546,10 @@ impl Store {
             let Some(label) = v.label else { continue };
             let category = v.category.map_or("", engine::Category::as_str);
             bump(label.as_str(), category)?;
-            catches += usize::from(is_catch);
+            corrections += usize::from(is_correction);
 
             let text = EventText::new(&st.turn, &v, retention.level);
-            // A pinned catch kept through a rules rebuild is already here; keep it as pinned.
+            // A pinned correction kept through a rules rebuild is already here; keep it as pinned.
             tx.execute(
                 "INSERT INTO events (ts, day, source, session, provider, family, version, model_raw, label, category, rules,
                     level, human_full, ai_full, human_snip, ai_snip, seen_key)
@@ -540,9 +576,9 @@ impl Store {
                 ],
             )?;
         }
-        upsert_file(&tx, path, source, scan.checkpoint, meta)?;
+        upsert_file(&tx, path, source, scan.checkpoint, meta, finalized)?;
         tx.commit()?;
-        Ok((messages, catches))
+        Ok((messages, corrections))
     }
 
     // ---- retention ---------------------------------------------------------------------
@@ -552,8 +588,11 @@ impl Store {
     /// waits until the user's choice is known again.
     pub fn sweep(&self, now: DateTime<Utc>) -> Result<usize> {
         let Some(r) = self.saved_retention()? else { return Ok(0) };
-        let full_cut = (now - Duration::days(i64::from(r.full_days))).to_rfc3339();
-        let snip_cut = (now - Duration::days(i64::from(r.snippet_days))).to_rfc3339();
+        // A stored value out of range (an older build allowed any number) means nothing is that old.
+        let cutoff = |days: u32| {
+            now.checked_sub_signed(Duration::days(i64::from(days))).unwrap_or(DateTime::<Utc>::MIN_UTC).to_rfc3339()
+        };
+        let (full_cut, snip_cut) = (cutoff(r.full_days), cutoff(r.snippet_days));
         let mut changed = self.conn.execute(
             "UPDATE events SET human_full = NULL, ai_full = NULL, level = 'snippet'
              WHERE pinned = 0 AND level = 'full' AND (ts < ?1 OR ?2 != 'full')",
@@ -589,7 +628,7 @@ impl Store {
         Ok(())
     }
 
-    /// Pins (or unpins) a catch, keeping its text past the retention period.
+    /// Pins (or unpins) a correction, keeping its text past the retention period.
     pub fn pin(&self, event_id: i64, pinned: bool) -> Result<()> {
         self.conn.execute("UPDATE events SET pinned = ?2 WHERE id = ?1", params![event_id, pinned])?;
         Ok(())
@@ -600,8 +639,17 @@ impl Store {
     }
 }
 
+/// Saves one setting on `conn`, which may be a transaction.
+fn put_setting(conn: &Connection, key: &str, value: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![key, value],
+    )?;
+    Ok(())
+}
+
 /// The text kept for one event at a retention level. Always redacted. The next reply holds the
-/// admission (catch) or the correction (humbled).
+/// AI's admission (for a correction) or its pushback (humbled).
 struct EventText {
     human_full: Option<String>,
     ai_full: Option<String>,

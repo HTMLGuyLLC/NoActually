@@ -1,0 +1,341 @@
+// Improve: are you getting better? Last week at a glance, the one goal you're working on, how your
+// numbers trend, your personal bests and trophies, and what your own history says works.
+import type { Goal, GoalKind, GoalStatus, GoalWeek, HistoryWeek, Meta, Progress, Stats } from "../api";
+import { fmtDay, last, plural } from "../format";
+import { type Html, html, raw } from "../html";
+import { lessonFor } from "../learn/lessons";
+import { floorPercent, signalNoun, steerTitle, tierName, tierOf } from "../meta";
+import { RANGES, type Range } from "../state";
+import { chartBox, lineChart, type Point, sparkline, stackChart } from "./charts";
+
+/** `filtered`: a model is picked, so charts follow it while the goal and bests stay across all AI. */
+export type ImproveContext = {
+  meta: Meta;
+  stats: Stats;
+  progress: Progress;
+  range: Range;
+  subject: string;
+  /** The model picker, beside the range. */
+  picker?: Html;
+  filtered: boolean;
+};
+
+/** Fewer messages than this in a week and its correction rate is too noisy to put on the line. */
+const RATE_MIN_MESSAGES = 50;
+
+/** Vague is muted: blue means the AI. */
+const GRADE_SEG: Record<string, string> = { sharp: "s0", solid: "s1", thin: "s3" };
+/** Follow-up reasons: blue is the AI's side. Yours get red, ink and muted so they can be told apart (Prompting draws all of them red). */
+const STEER_SEG: Record<string, string> = { ai_wrong: "s2", added: "s0", clarified: "s1", redo: "s3" };
+
+/** The clear-the-first-time chart starts at 50% so the tier bands (70/80/90) have room, lower when a week was lower. */
+const landedFloor = (points: Point[]) => Math.min(50, ...points.filter((p) => p.value != null && !p.weak).map((p) => Math.floor((p.value ?? 0) / 10) * 10));
+
+/** Half-width charts draw on a narrower canvas, so their text stays as big as the full-width ones'. */
+const HALF = 460;
+
+const RANGE_TITLES: Record<Range, string> = { "12w": "12 weeks", "6m": "6 months", all: "All time" };
+const RANGE_WEEKS: Record<Range, number> = { "12w": 12, "6m": 26, all: Number.POSITIVE_INFINITY };
+
+/** One point on the charts: a week, or a month when weeks are too sparse to read. */
+export type Bucket = Omit<HistoryWeek, "week"> & { label: string };
+
+const add = (a: Record<string, number>, b: Record<string, number>) => {
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b)) out[k] = (out[k] ?? 0) + v;
+  return out;
+};
+
+/**
+ * The range's weeks as chart points. When a typical week has fewer than `minWeek` tasks, weeks
+ * are summed into months instead, so the lines show a trend rather than noise.
+ */
+export function buckets(weeks: HistoryWeek[], range: Range, minWeek: number): { points: Bucket[]; monthly: boolean } {
+  const shown = weeks.slice(-Math.min(weeks.length, RANGE_WEEKS[range]));
+  const sorted = shown.map((w) => w.tasks).sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)] ?? 0;
+  const monthly = shown.length > 8 && median < minWeek;
+  if (!monthly) {
+    return { points: shown.map(({ week, ...w }) => ({ ...w, label: fmtDay(week) })), monthly };
+  }
+  const months = new Map<string, Bucket>();
+  for (const { week, ...w } of shown) {
+    const key = week.slice(0, 7);
+    const m = months.get(key);
+    months.set(
+      key,
+      m
+        ? {
+            label: m.label,
+            messages: m.messages + w.messages,
+            corrections: m.corrections + w.corrections,
+            humbled: m.humbled + w.humbled,
+            tasks: m.tasks + w.tasks,
+            continued: m.continued + w.continued,
+            landed: m.landed + w.landed,
+            signals: add(m.signals, w.signals),
+            grades: add(m.grades, w.grades),
+            steering: add(m.steering, w.steering),
+            steered: add(m.steered, w.steered),
+          }
+        : { ...w, label: fmtDay(`${key}-01`, { month: "short", year: "2-digit" }) },
+    );
+  }
+  return { points: [...months.values()], monthly };
+}
+
+const pctOf = (n: number, total: number) => (total > 0 ? floorPercent(n, total) : null);
+
+/** Each follow-up kind as a verb phrase (for "…in 15% of tasks or fewer") and as an "-ing" phrase (for "without …"). */
+const STEER_PHRASE: Record<string, [string, string]> = {
+  ai_wrong: ["Have the AI get it wrong", "the AI getting it wrong"],
+  added: ["Add more after sending", "adding more after sending"],
+  clarified: ["Clarify after sending", "clarifying after sending"],
+  redo: ["Start over", "starting over"],
+};
+
+/** What a goal asks, in a sentence. */
+export function goalTitle(g: GoalKind & { target: number }, meta: Meta): string {
+  if (g.kind === "habit") {
+    return `Include ${signalNoun(meta, g.signal)} in ${g.target}% of your prompts each week`;
+  }
+  if (g.kind === "steer") {
+    const [verb, ing] = STEER_PHRASE[g.steer] ?? [`Have “${steerTitle(meta, g.steer).toLowerCase()}”`, `“${steerTitle(meta, g.steer).toLowerCase()}”`];
+    return g.target ? `${verb} in ${g.target}% of tasks or fewer each week` : `Go a whole week without ${ing}`;
+  }
+  return `Reach ${tierName(meta, g.tier)}`;
+}
+
+const WEEK_MARK: Record<GoalWeek["state"], string> = { met: "✓", missed: "✗", paused: "–", open: "•" };
+const WEEK_WORD: Record<GoalWeek["state"], string> = { met: "met", missed: "missed", paused: "too few tasks", open: "in progress" };
+
+function goalWeeksView(st: GoalStatus, meta: Meta): Html {
+  const unit = st.goal.kind === "habit" ? "prompts" : "tasks";
+  return html`<ol class="goal-weeks" aria-label="Weeks so far">${st.weeks.map(
+    (w) =>
+      html`<li class="gw ${w.state}" tabindex="0" data-tip="Week of ${fmtDay(w.week)}: ${w.value}% of ${w.count} ${unit} (${WEEK_WORD[w.state]})"><span aria-hidden="true">${WEEK_MARK[w.state]}</span><span class="sr-only">Week of ${fmtDay(w.week)}: ${w.value}% of ${w.count} ${unit}, ${WEEK_WORD[w.state]}.</span></li>`,
+  )}</ol>
+  <p class="muted small">Weeks with fewer than ${meta.min_week} ${unit} pause the goal instead of breaking the streak.</p>`;
+}
+
+/** This week's progress in words. */
+function thisWeekLine(st: GoalStatus, meta: Meta): string {
+  const g = st.goal;
+  // A tier goal's meter already says "87 of 90 to reach …"; only an unscored one needs words.
+  if (g.kind === "tier") return st.score == null ? "Not scored yet: you need more tasks with a follow-up." : "";
+  const w = last(st.weeks);
+  if (w?.state !== "open") return "";
+  // The meter above already shows the percent; this says how many and what's left.
+  const so = `${plural(w.count, g.kind === "habit" ? "prompt" : "task")} so far.`;
+  if (g.kind === "habit") {
+    if (st.need == null) return `${so} Out of reach this week; next week starts fresh.`;
+    return st.need ? `${so} ${plural(st.need, "more prompt", "more prompts")} with ${signalNoun(meta, g.signal)} would hit it.` : `${so} On track.`;
+  }
+  return w.count >= meta.min_week && w.value <= g.target ? `${so} On track.` : so;
+}
+
+function goalPickerView(p: Progress, meta: Meta, current: Goal | null): Html {
+  const options = p.options;
+  const s = p.suggestion;
+  const same = (a: GoalKind, b: GoalKind) => JSON.stringify(kindArgs(a)) === JSON.stringify(kindArgs(b));
+  const suggested = options.findIndex((o) => same(o, s));
+  return html`<div class="goal-pick">
+    ${current ? "" : html`<p><span class="hand">Try this:</span> <b>${goalTitle(s, meta)}</b>.</p><div class="share"><button data-action="start-goal" data-goal="${goalValue(s)}">Start this goal</button></div>`}
+    <label class="pick-label">${current ? "Switch to" : "Or pick another"}
+      <select id="goal-pick">${options.map((o, i) => html`<option value="${goalValue(o)}"${i === suggested ? raw(" selected") : ""}>${goalTitle(o, meta)}</option>`)}</select>
+    </label>
+    <div class="share"><button class="ghost" data-action="start-goal"${current ? raw(' data-replaces="yes"') : ""}>${current ? "Switch" : "Start it"}</button>${current ? html`<button class="ghost" data-action="clear-goal">Drop this goal</button>` : ""}</div>
+  </div>`;
+}
+
+const kindArgs = (k: GoalKind): Record<string, string> =>
+  k.kind === "habit" ? { kind: k.kind, signal: k.signal } : k.kind === "steer" ? { kind: k.kind, steer: k.steer } : { kind: k.kind, tier: k.tier };
+
+/** A goal choice as a form value: its kind and target, read back by the start-goal action. */
+const goalValue = (g: GoalKind & { target: number }) => JSON.stringify({ ...kindArgs(g), target: g.target });
+
+/** The one number to watch: your score against the tier, or this week against the target. */
+function goalMeter(st: GoalStatus, meta: Meta): Html | "" {
+  const g = st.goal;
+  if (g.kind === "tier") {
+    const floor = tierOf(meta, g.tier)?.floor ?? 100;
+    if (st.score == null) return "";
+    return html`<div class="goal-meter"><span class="big">${st.score}</span><span class="of">of ${floor} to reach ${tierName(meta, g.tier)}</span>
+      <span class="bar-bg" role="img" aria-label="Score ${st.score} of ${floor}"><i data-w="${Math.min(100, Math.round((100 * st.score) / floor))}"></i></span></div>`;
+  }
+  const w = last(st.weeks);
+  if (w?.state !== "open") return "";
+  const word = g.kind === "habit" ? "at least" : "at most";
+  return html`<div class="goal-meter"><span class="big">${w.value}%</span><span class="of">this week · aim for ${word} ${g.target}%</span></div>`;
+}
+
+function goalView(p: Progress, meta: Meta, filtered: boolean): Html {
+  const st = p.goal;
+  const across = filtered ? " · all AI" : "";
+  if (!st) {
+    return html`<section class="card mini goal"><div class="eyebrow">Your goal${across}</div><h2 class="q">Pick one thing to get better at</h2>
+      <p class="muted">One goal at a time, measured each week from your own history. Hit it ${meta.goal_weeks} weeks to win a trophy.</p>
+      ${goalPickerView(p, meta, null)}</section>`;
+  }
+  const g = st.goal;
+  const progressLine =
+    g.kind === "tier"
+      ? ""
+      : html`<p class="goal-count"><b>${st.met}</b> of ${st.needed} weeks met${st.streak > 1 ? html` · <span class="hand">${st.streak} in a row</span>` : ""}</p>`;
+  const line = st.done ? "It's on your trophy shelf. Pick the next one." : thisWeekLine(st, meta);
+  return html`<section class="card mini goal${st.done ? " finished" : ""}">
+    <div class="eyebrow">${st.done ? "Goal done 🏆" : `Your goal · since ${fmtDay(g.start)}`}${across}</div>
+    <h2 class="goal-title">${goalTitle(g, meta)}</h2>
+    ${st.done ? "" : goalMeter(st, meta)}
+    ${progressLine}
+    ${g.kind === "tier" ? "" : goalWeeksView(st, meta)}
+    ${line ? html`<p>${line}</p>` : ""}
+    <details${st.done ? raw(" open") : ""}><summary>${st.done ? "Next goal" : "Change goal"}</summary>${goalPickerView(p, meta, g)}</details>
+  </section>`;
+}
+
+/** Last full week against the week before: what moved. */
+function recapView(weeks: HistoryWeek[], meta: Meta): Html | "" {
+  const done = weeks.slice(0, -1); // the last one is this week, still under way
+  const latest = last(done);
+  const before = last(done, 2);
+  if (!latest || !before || latest.tasks < meta.min_week) return "";
+  const landed = (w: HistoryWeek) => pctOf(w.landed, w.continued);
+  const sharp = (w: HistoryWeek) => pctOf(w.grades.sharp ?? 0, w.tasks);
+  // Fewer corrections isn't worse (it may be getting things right), so that row's change isn't colored.
+  const row = (name: string, a: number | null, b: number | null, unit = "%", neutral = false) => {
+    const diff = a != null && b != null ? a - b : null;
+    const arrow =
+      diff == null || diff === 0
+        ? ""
+        : html`<span aria-hidden="true">${diff > 0 ? "▲" : "▼"}</span><span class="sr-only">${diff > 0 ? "up" : "down"} </span> ${Math.abs(diff)}`;
+    return html`<div class="recap-row"><span>${name}</span><b>${a ?? "–"}${a != null ? unit : ""}</b><span class="delta${neutral || !diff ? "" : diff > 0 ? " up" : " down"}">${arrow}</span></div>`;
+  };
+  return html`<section class="recap"><div class="eyebrow">Last week · ${fmtDay(latest.week)}</div>
+    ${row("Clear the first time", landed(latest), landed(before))}
+    ${row("Specific prompts", sharp(latest), sharp(before))}
+    ${row("Corrections", latest.corrections, before.corrections, "", true)}
+    <p class="muted small">Compared with the week before.</p>
+  </section>`;
+}
+
+function trendsView(ctx: ImproveContext): Html {
+  const { meta, progress: p, range } = ctx;
+  const { points, monthly } = buckets(p.weeks, range, meta.min_week);
+  const per = monthly ? "month" : "week";
+  const weak = (n: number) => n < meta.min_week;
+  const landed: Point[] = points.map((b) => ({ label: b.label, value: pctOf(b.landed, b.continued), weak: weak(b.continued) }));
+  const strong = landed.filter((x) => x.value != null && !x.weak);
+  const firstStrong = strong[0];
+  const lastStrong = last(strong);
+  const landedSummary =
+    firstStrong && lastStrong
+      ? `Clear the first time went from ${firstStrong.value}% (${firstStrong.label}) to ${lastStrong.value}% (${lastStrong.label}).`
+      : "Not enough tasks yet to show a trend.";
+  const bands = meta.prompt_tiers.slice(1).map((t) => ({ from: t.floor, name: t.name }));
+  const signals = meta.signals.map((s) => {
+    const pts = points.map((b) => ({ label: b.label, value: pctOf(b.signals[s.id] ?? 0, b.tasks), weak: weak(b.tasks) }));
+    const now = last(pts.filter((x) => x.value != null && !x.weak))?.value;
+    return html`<div class="cat sig"><span>${s.title}<small class="muted">${s.hint}</small></span>${sparkline(pts, `${s.title} per ${per}`)}<span class="n">${now != null ? `${now}%` : "–"}</span></div>`;
+  });
+  const labels = points.map((b) => b.label);
+  // The AI's mistakes in its blue; the ones on you in red, ink and muted so each reason stands apart.
+  const steerSeries = meta.steers.map((s) => ({ title: s.title, values: points.map((b) => b.steering[s.id] ?? 0), seg: STEER_SEG[s.id] }));
+  const gradeSeries = [...meta.grades].reverse().map((g) => ({ title: g.title, values: points.map((b) => b.grades[g.id] ?? 0), seg: GRADE_SEG[g.id] }));
+  const rate: Point[] = points.map((b) => ({
+    label: b.label,
+    value: b.messages ? (100 * b.corrections) / b.messages : null,
+    weak: b.messages < RATE_MIN_MESSAGES,
+  }));
+  const rateMax = Math.max(5, ...rate.map((r) => Math.ceil(r.value ?? 0)));
+  const latest = (series: { title: string; values: number[] }[]) =>
+    `Latest ${per} (${last(labels) ?? ""}): ${series.map((s) => `${s.title} ${last(s.values) ?? 0}`).join(", ")}.`;
+  const sum = (xs: number[]) => xs.reduce((a, v) => a + v, 0);
+  const rateNow = last(rate.filter((r) => r.value != null));
+  const messages = sum(points.map((b) => b.messages));
+  const average = messages ? (100 * sum(points.map((b) => b.corrections))) / messages : null;
+  const one = (v: number) => String(Math.round(v * 10) / 10);
+  const rateSummary =
+    rateNow?.value != null && average != null
+      ? `Corrections per 100 messages: ${one(rateNow.value)} in the latest ${per} (${rateNow.label}), ${one(average)} on average.`
+      : "Not enough messages yet to show a rate.";
+  const totalSteer = steerSeries.reduce((t, s) => t + s.values.reduce((a, v) => a + v, 0), 0);
+  return html`
+    <section><div class="head"><h2>Prompts clear the first time</h2><p class="muted">Per ${per}. Hollow dots had fewer than ${meta.min_week} prompts with a follow-up, so they're left off the line.</p></div>
+      ${chartBox("Prompts clear the first time chart, scrolls sideways", lineChart({ id: "landed", label: `Percent of prompts clear the first time, per ${per}`, summary: landedSummary, points: landed, bands, unit: "%", min: landedFloor(landed) }))}</section>
+    <section class="split">
+      <div><div class="head"><h2>What your prompts include</h2></div><div class="cats">${signals}</div></div>
+      <div><div class="head"><h2>Prompt grades</h2></div>${chartBox("Prompt grades chart, scrolls sideways", stackChart({ id: "grades", label: `Prompts by grade, per ${per}`, summary: `Prompts by grade over ${points.length} ${per}s. ${latest(gradeSeries)}`, labels, series: gradeSeries, width: HALF, height: 220 }))}</div>
+    </section>
+    <section class="split">
+      <div><div class="head"><h2>Why you followed up</h2></div>${chartBox("Why you followed up chart, scrolls sideways", stackChart({ id: "steering", label: `Follow-ups by reason, per ${per}`, summary: `${plural(totalSteer, "follow-up")} over ${points.length} ${per}s. ${latest(steerSeries)}`, labels, series: steerSeries, width: HALF, height: 220 }))}</div>
+      <div><div class="head"><h2>Corrections per 100 messages</h2><p class="muted">Hollow dots had fewer than ${RATE_MIN_MESSAGES} messages, so they're left off the line.</p></div>${chartBox("Corrections per 100 messages chart, scrolls sideways", lineChart({ id: "rate", label: `Corrections per 100 messages, per ${per}`, summary: rateSummary, points: rate, max: rateMax, width: HALF, height: 220, weakNote: `fewer than ${RATE_MIN_MESSAGES} messages` }))}</div>
+    </section>`;
+}
+
+/** Personal bests are across all AI; with a model picked, they say so. */
+function bestsView(p: Progress, filtered: boolean): Html {
+  const b = p.bests;
+  const stat = (v: string, l: string) => html`<div class="stat"><span class="v">${v}</span><span class="l">${l}${filtered ? " · all AI" : ""}</span></div>`;
+  return html`<section class="stats">
+    ${stat(b.landed ? `${b.landed[0]}%` : "–", b.landed ? `best 4 weeks clear the first time · to ${fmtDay(b.landed[1])}` : "best 4 weeks clear the first time")}
+    ${stat(b.sharp ? `${b.sharp[0]}%` : "–", b.sharp ? `most specific week · ${fmtDay(b.sharp[1])}` : "most specific week")}
+    ${stat(plural(b.goal_streak, "week"), "longest goal streak")}
+    ${stat(`${p.trophies.length}`, p.trophies.length === 1 ? "trophy" : "trophies")}
+  </section>`;
+}
+
+function trophiesView(p: Progress, meta: Meta): Html | "" {
+  if (!p.trophies.length) return "";
+  return html`<section><div class="head"><h2>Trophy shelf</h2></div><ul class="trophies">${p.trophies.map(
+    (t) =>
+      html`<li><span aria-hidden="true">🏆</span> <b>${goalTitle(t.goal, meta)}</b> <span class="muted small">${fmtDay(t.done, { month: "short", year: "numeric" })}</span></li>`,
+  )}</ul></section>`;
+}
+
+function insightsView(p: Progress, meta: Meta): Html {
+  const i = p.insights;
+  const items: Html[] = [];
+  for (const t of i.signals) {
+    if (!t.landed_with_without) continue;
+    const [w, wo] = t.landed_with_without;
+    const l = lessonFor("signal", t.signal);
+    items.push(
+      html`<li>Prompts with ${signalNoun(meta, t.signal)} were clear the first time <b>${Math.round(w)}%</b> of the time, vs ${Math.round(wo)}% without.${l ? html` <button class="link" data-action="open-lesson" data-id="${l.id}">${l.title} →</button>` : ""}</li>`,
+    );
+  }
+  if (i.steer) {
+    const [id, share] = i.steer;
+    const l = lessonFor("steer", id);
+    items.push(
+      html`<li>Your most common follow-up is <b>“${steerTitle(meta, id)}”</b> (${share}%).${l ? html` <button class="link" data-action="open-lesson" data-id="${l.id}">${l.title} →</button>` : ""}</li>`,
+    );
+  }
+  const [best, worst] = i.models;
+  if (best && worst)
+    items.push(
+      html`<li>Your prompts are clear the first time <b>${best.landed}%</b> of the time with ${best.family}, and ${worst.landed}% with ${worst.family}.</li>`,
+    );
+  return html`<section><div class="head"><h2>What works for you</h2><p class="muted">From your own history, and only when there's enough of it to say.</p></div>
+    ${items.length ? html`<ul class="insights">${items}</ul>` : html`<p class="muted">Not enough history yet. Keep going; these show up as your tasks add up.</p>`}</section>`;
+}
+
+function rangeNav(range: Range): Html {
+  return html`<nav class="views" aria-label="Time range">${RANGES.map(
+    (r) =>
+      html`<button class="tab${r === range ? " on" : ""}" data-action="range" data-id="${r}"${r === range ? raw(' aria-current="true"') : ""}>${RANGE_TITLES[r]}</button>`,
+  )}</nav>`;
+}
+
+export function improveView(ctx: ImproveContext): Html {
+  const { meta, progress: p } = ctx;
+  const empty = !p.weeks.length;
+  return html`
+    <section class="toolbar"><h1 class="eyebrow">Are you getting better?</h1></section>
+    <section class="improve-top">${goalView(p, meta, ctx.filtered)}${recapView(p.weeks, meta) || html`<section class="recap"><div class="eyebrow">Last week</div><p class="muted small">Your weekly recap shows up once a full week has ${meta.min_week}+ tasks.</p></section>`}</section>
+    ${bestsView(p, ctx.filtered)}
+    ${trophiesView(p, meta)}
+    <div class="head trends-head"><h2>How ${ctx.subject} and you are trending</h2><div class="filters">${ctx.picker ?? ""}${rangeNav(ctx.range)}</div></div>
+    ${empty ? html`<p class="muted">No history yet. Your charts start with your first tasks.</p>` : trendsView(ctx)}
+    ${insightsView(p, meta)}`;
+}

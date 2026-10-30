@@ -1,27 +1,30 @@
 // The browser demo's stand-in for the Rust side: sample numbers from public/demo.json, read-only.
-import type { ArgsOf, Command, Filter, Meta, ResultOf, SourceInfo, Stats } from "./api";
+import type { ArgsOf, Command, Filter, Goal, GoalStatus, Meta, Overall, Progress, Prompts, ResultOf, SourceInfo, Stats } from "./api";
+import { isFiltered } from "./format";
 import { modelName } from "./picker/picker";
+import { periodSince } from "./state";
 
-export type DemoData = { meta: Meta; stats: Stats };
+export type DemoData = { meta: Meta; stats: Stats; progress: Progress };
 
 const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
 
 /** A light check that demo.json has the shape the UI reads, so a stale file fails loudly, not oddly. */
 export function isDemoData(x: unknown): x is DemoData {
-  if (!isRecord(x) || !isRecord(x.meta) || !isRecord(x.stats)) return false;
-  const { meta, stats } = x;
+  if (!isRecord(x) || !isRecord(x.meta) || !isRecord(x.stats) || !isRecord(x.progress)) return false;
+  const { meta, stats, progress } = x;
   return (
     Array.isArray(meta.tiers) &&
     Array.isArray(meta.categories) &&
     Array.isArray(meta.sources) &&
-    typeof stats.tier === "string" &&
-    (stats.verdict === "no" || stats.verdict === "hmm") &&
-    typeof stats.catches === "number" &&
+    isRecord(stats.overall) &&
+    (stats.overall.verdict === "no" || stats.overall.verdict === "hmm") &&
+    Array.isArray(progress.weeks) &&
+    typeof stats.corrections === "number" &&
     Array.isArray(stats.models) &&
     Array.isArray(stats.weekly) &&
     Array.isArray(stats.hall_of_fame) &&
     isRecord(stats.categories) &&
-    isRecord(stats.briefs)
+    isRecord(stats.prompts)
   );
 }
 
@@ -37,45 +40,132 @@ function demoData(): Promise<DemoData> {
   return loaded;
 }
 
-/** What Rust would say for this many catches this week: the tier reached, the next one, the verdict. */
-export function judge(meta: Meta, catches7d: number): Pick<Stats, "tier" | "next_tier" | "verdict"> {
+/** What Rust's `Score::of` says for a window (engine/src/tier.rs): the demo's stand-in for it. */
+export function judge(meta: Meta, w: { continued: number; landed: number; corrections: number; humbled: number }): Overall {
+  const base = { corrections: w.corrections, humbled: w.humbled, to_rank: Math.max(0, meta.min_prompts - w.continued) };
+  if (w.continued < meta.min_prompts)
+    return {
+      ...base,
+      score: null,
+      direction: null,
+      judgment: null,
+      tier: null,
+      next_tier: null,
+      verdict: "hmm",
+      correction_tier: null,
+      next_correction_tier: null,
+    };
+  const direction = Math.floor((1000 * Math.min(w.landed, w.continued)) / w.continued);
+  const right = Math.max(0, 1000 - Math.floor((meta.humbled_cost * 1000 * Math.max(0, w.humbled)) / Math.max(w.continued, meta.humbled_base)));
+  const judgment = Math.floor((right * Math.min(Math.max(0, w.corrections), meta.correction_proof)) / meta.correction_proof);
+  const score = Math.floor((meta.direction_weight * direction + (100 - meta.direction_weight) * judgment) / 100 / 10);
   const up = [...meta.tiers].sort((a, b) => a.floor - b.floor);
-  const reached = up.filter((t) => catches7d >= t.floor).pop();
-  const next = up.find((t) => t.floor > catches7d);
+  const tier = up.filter((t) => score >= t.floor).pop();
+  const next = up.find((t) => t.floor > score);
   const coworker = up.find((t) => t.id === "coworker")?.floor ?? Number.POSITIVE_INFINITY;
+  const j = Math.floor(judgment / 10);
+  const correctionUp = [...meta.correction_tiers].sort((a, b) => a.floor - b.floor);
   return {
-    tier: reached?.id ?? up[0]?.id ?? "",
-    next_tier: next ? [next.id, next.floor - catches7d] : null,
-    verdict: catches7d >= coworker ? "no" : "hmm",
+    ...base,
+    score,
+    direction: Math.floor(direction / 10),
+    judgment: j,
+    tier: tier?.id ?? null,
+    next_tier: next?.id ?? null,
+    verdict: score >= coworker ? "no" : "hmm",
+    correction_tier: correctionUp.filter((t) => j >= t.floor).pop()?.id ?? null,
+    next_correction_tier: correctionUp.find((t) => t.floor > j)?.id ?? null,
   };
 }
 
 /** The demo narrows its sample numbers by model so the picker visibly does something. */
 export function demoStats({ meta, stats: base }: DemoData, filter: Filter): Stats {
-  if (!Object.values(filter).some((v) => v != null)) return base;
+  if (!isFiltered(filter)) return base;
   const keep = base.models.filter(
     (m) =>
       (!filter.provider || m.provider === filter.provider) &&
       (!filter.family || m.family === filter.family) &&
       (!filter.version || m.version === filter.version),
   );
-  const catches = keep.reduce((a, m) => a + m.catches, 0);
-  const share = base.catches ? catches / base.catches : 0;
+  const corrections = keep.reduce((a, m) => a + m.corrections, 0);
+  const share = base.corrections ? corrections / base.corrections : 0;
   const scale = (n: number) => Math.round(n * share);
-  const catches_last_7d = scale(base.catches_last_7d);
+  const corrections_last_7d = scale(base.corrections_last_7d);
+  const sum = (k: "tasks" | "continued" | "landed") => keep.reduce((a, m) => a + m[k], 0);
+  const taskShare = base.prompts.continued ? sum("continued") / base.prompts.continued : 0;
+  const windowTasks = Math.round(base.prompts.window_tasks * taskShare);
+  const windowLanded = Math.round(base.prompts.window_landed * taskShare);
   const categories: Record<string, number> = {};
   for (const [k, v] of Object.entries(base.categories)) if (scale(v) > 0) categories[k] = scale(v);
   return {
     ...base,
-    ...judge(meta, catches_last_7d),
+    overall: judge(meta, {
+      continued: windowTasks,
+      landed: windowLanded,
+      corrections: scale(base.overall.corrections),
+      humbled: Math.round(base.overall.humbled * share),
+    }),
+    prompts: {
+      ...base.prompts,
+      tasks: sum("tasks"),
+      continued: sum("continued"),
+      landed: sum("landed"),
+      window_tasks: windowTasks,
+      window_landed: windowLanded,
+    },
     models: keep,
-    catches,
+    corrections,
     messages: keep.reduce((a, m) => a + m.messages, 0),
     humbled: keep.reduce((a, m) => a + m.humbled, 0),
-    catches_last_7d,
-    weekly: base.weekly.map((w) => ({ ...w, catches: scale(w.catches), messages: scale(w.messages) })),
+    corrections_last_7d,
+    weekly: base.weekly.map((w) => ({ ...w, corrections: scale(w.corrections), messages: scale(w.messages) })),
     categories,
     hall_of_fame: base.hall_of_fame.filter((h) => keep.some((m) => h.model === modelName(m))),
+  };
+}
+
+/**
+ * The demo's stand-in for a period: counts shrink to the share of weekly corrections since `since`,
+ * and the score is worked out again over them, as in Rust.
+ */
+export function withSince(meta: Meta, s: Stats, since: string | null): Stats {
+  if (!since) return s;
+  const total = s.weekly.reduce((t, w) => t + w.corrections, 0);
+  // A week counts when any of its days is on or after `since`.
+  const weekly = s.weekly.filter((w) => new Date(`${w.week}T00:00`).getTime() + 6 * 86_400_000 >= new Date(`${since}T00:00`).getTime());
+  const share = total ? weekly.reduce((t, w) => t + w.corrections, 0) / total : 0;
+  const scale = (n: number) => Math.round(n * share);
+  const each = (r: Record<string, number>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, scale(v)]));
+  const prompts: Prompts = {
+    ...s.prompts,
+    tasks: scale(s.prompts.tasks),
+    continued: scale(s.prompts.continued),
+    landed: scale(s.prompts.landed),
+    window_tasks: scale(s.prompts.continued),
+    window_landed: scale(s.prompts.landed),
+    grades: each(s.prompts.grades),
+    signals: each(s.prompts.signals),
+    steering: each(s.prompts.steering),
+  };
+  return {
+    ...s,
+    first_day: since > (s.first_day ?? "") ? since : s.first_day,
+    messages: scale(s.messages),
+    corrections: scale(s.corrections),
+    humbled: scale(s.humbled),
+    categories: each(s.categories),
+    weekly,
+    models: s.models.map((m) => ({
+      ...m,
+      corrections: scale(m.corrections),
+      messages: scale(m.messages),
+      humbled: scale(m.humbled),
+      tasks: scale(m.tasks),
+      continued: scale(m.continued),
+      landed: scale(m.landed),
+    })),
+    prompts,
+    overall: judge(meta, { continued: prompts.window_tasks, landed: prompts.window_landed, corrections: scale(s.corrections), humbled: scale(s.humbled) }),
   };
 }
 
@@ -89,10 +179,23 @@ const demoSources: SourceInfo[] = [
 
 type Handlers = { [C in Command]: (args: ArgsOf<C>) => ResultOf<C> | Promise<ResultOf<C>> };
 
+/** The demo keeps what you set in Learn and Improve for the visit, so trying them feels real. */
+const visit: { learned: string[]; goal: GoalStatus | null | undefined; menuBar: boolean } = { learned: [], goal: undefined, menuBar: true };
+
+const fresh = (goal: Goal): GoalStatus => ({ goal, weeks: [], met: 0, streak: 0, needed: goal.kind === "tier" ? 0 : 4, done: false, need: null, score: null });
+
 /** Every command has a demo answer; changes are accepted and ignored. */
 const handlers: Handlers = {
   meta: async () => (await demoData()).meta,
-  stats: async ({ filter }) => demoStats(await demoData(), filter),
+  stats: async ({ filter: { since, ...filter } }) => {
+    const data = await demoData();
+    // demo.json's counts cover all its history (its `overall` is the default 28 days, as with no date in Rust).
+    // A period scales them down by weeks, the same for the 28-day default, so a page's counts agree.
+    const all = demoStats(data, filter);
+    if (since) return withSince(data.meta, all, since);
+    // No date: counts cover everything, and the score covers the last 28 days, as in Rust.
+    return { ...all, overall: withSince(data.meta, all, periodSince("28d")).overall };
+  },
   list_sources: () => demoSources,
   allow_source: () => null,
   revoke_source: () => null,
@@ -116,6 +219,35 @@ const handlers: Handlers = {
   set_auto_update: () => null,
   check_for_updates: () => null,
   install_update: () => null,
+  progress: async () => {
+    const p = (await demoData()).progress;
+    return visit.goal === undefined ? p : { ...p, goal: visit.goal };
+  },
+  set_goal: ({ kind, target }) => {
+    const now = new Date();
+    const local = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const goal: Goal = { ...kind, id: Date.now(), target, start: local };
+    visit.goal = fresh(goal);
+    return goal;
+  },
+  clear_goal: () => {
+    visit.goal = null;
+    return null;
+  },
+  // The rules run in Rust; the browser demo can't grade a draft, and says so.
+  check_prompt: () => {
+    throw new Error("The prompt checker runs in the app.");
+  },
+  learned: () => visit.learned,
+  set_learned: ({ id, done }) => {
+    visit.learned = [...visit.learned.filter((x) => x !== id), ...(done ? [id] : [])];
+    return visit.learned;
+  },
+  get_menu_bar: () => ({ enabled: visit.menuBar, available: true }),
+  set_menu_bar: ({ enabled }) => {
+    visit.menuBar = enabled;
+    return null;
+  },
 };
 
 export async function demoCall<C extends Command>(cmd: C, args: ArgsOf<C>): Promise<ResultOf<C>> {

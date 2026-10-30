@@ -1,7 +1,7 @@
-//! Behavior tests for briefs and steering. Examples mirror real prompts without copying anyone's.
+//! Behavior tests for prompts and steering. Examples mirror real prompts without copying anyone's.
 
 use super::*;
-use crate::{classify, AiMsg};
+use crate::{classify, AiMsg, PromptTier};
 
 fn ai(text: &str) -> AiMsg {
     AiMsg { text: text.into(), model: Some("claude-opus-5-5".into()) }
@@ -19,8 +19,8 @@ fn first_message(human: &str) -> Prompt {
 
 fn signals(human: &str) -> Vec<Signal> {
     match first_message(human) {
-        Prompt::Brief { signals, .. } => Signal::ALL.into_iter().filter(|s| signals.has(*s)).collect(),
-        other => panic!("not a brief: {human:?} -> {other:?}"),
+        Prompt::Task { signals, .. } => Signal::ALL.into_iter().filter(|s| signals.has(*s)).collect(),
+        other => panic!("not a prompt: {human:?} -> {other:?}"),
     }
 }
 
@@ -35,7 +35,7 @@ use Signal::{Done, Limits, Proof, Spot, Why};
 
 /// (prompt, the signals it carries). Each row is one way a person writes; the set must be exact.
 const EXAMPLES: &[(&str, &[Signal])] = &[
-    // Thin: the AI has to guess.
+    // Vague: the AI has to guess.
     ("fix it", &[]),
     ("make the login page better", &[]),
     ("clean this up", &[]),
@@ -48,10 +48,25 @@ const EXAMPLES: &[(&str, &[Signal])] = &[
     ("send the report at 9 a.m.", &[]),
     ("use pnpm instead of npm", &[]),
     ("I'm 100% sure this has to do with caching", &[]),
+    // Where to look once it's done isn't proof of what's wrong.
+    (
+        "Fix the thing in index.php, but don't touch index2.php and you'll know you fixed it when there's no error in the logs",
+        &[Spot, Done, Limits],
+    ),
+    ("it's done once the page loads in under a second", &[Done]),
+    ("we'll know it works if the checkout email arrives", &[Done]),
+    ("see the logs, it keeps crashing", &[Proof]),
+    // A route points at a page, like a URL does.
+    ("fix the bubble at the top of /hi", &[Spot]),
+    ("the /api/users endpoint returns 500 error responses", &[Spot, Proof]),
+    ("make it short and/or simple, ok?", &[]),
+    ("it broke on 10/29", &[]),
+    ("make the signup emails friendlier, we want them to come back", &[Why]),
+    ("I want you to rename it", &[]),
     ("the login needs to be fixed", &[]),
     ("when the user clicks save, the client sends a bad request", &[]),
     ("Since the last update the app is slow", &[]),
-    // Points at it.
+    // Target.
     ("fix the crash in src/auth/session.ts", &[Spot]),
     ("rename getUser to fetchUser", &[Spot]),
     ("bump NODE_ENV handling in the config", &[Spot]),
@@ -63,7 +78,7 @@ const EXAMPLES: &[(&str, &[Signal])] = &[
     ("the Dockerfile is too slow to build", &[Spot]),
     ("read the .env and wire up the keys", &[Spot]),
     ("rename UserProfile to Account", &[Spot]),
-    // Shows it.
+    // Evidence.
     // Pasted blocks show the problem; their words aren't graded as yours.
     ("fix this:\n```\nthread 'main' panicked at src/lib.rs:10, don't panic\n```", &[Proof]),
     ("is this phishing? <pasted_content id=\"1\">Your account.ts must be verified because</pasted_content>", &[Proof]),
@@ -74,15 +89,26 @@ const EXAMPLES: &[(&str, &[Signal])] = &[
     ("expected the total to update but it stays at zero", &[Proof]),
     ("make the dates look like this: Oct 28, 2026", &[Proof]),
     ("see the screenshot, the header overlaps", &[Proof]),
-    // Says what done is.
+    ("look at the logs for reference", &[Proof]),
+    ("check the output, it's off by one", &[Proof]),
+    // Finish line.
     ("the button should redirect to the dashboard", &[Done]),
+    ("You should fix it.", &[]),
+    ("you must probably look into the crash", &[]),
+    ("it needs to be debugged, you have to investigate", &[]),
+    ("it should handle empty input", &[Done]),
+    ("the total should update when the cart changes", &[Done]),
+    (
+        "Something here is not right. You should fix it. Don't forget the monkey. Also, I think we need this because it's red. Look at the logs for reference.",
+        &[Proof, Limits, Why],
+    ),
     ("add a unit test for the parser", &[Done]),
     ("make sure the tests pass", &[Done]),
     ("return the results as a table", &[Done]),
     ("keep the summary under 50 words", &[Done, Limits]),
     ("load in under 200ms", &[Done]),
     ("plan:\n- add the flag\n- wire it to settings\n- document it", &[Done]),
-    // Sets limits.
+    // Guardrails.
     ("refactor the parser, don't change the public API", &[Limits]),
     ("Do not add new dependencies.", &[Limits]),
     ("only change the CSS", &[Limits]),
@@ -91,14 +117,14 @@ const EXAMPLES: &[(&str, &[Signal])] = &[
     ("no new dependencies please", &[Limits]),
     ("I don't want any new dependencies", &[Limits]),
     ("Don't work on main, use a branch", &[Limits]),
-    // Says why.
+    // Purpose.
     ("cache the results because the API is rate limited", &[Why]),
     ("our users can't find the export button", &[Why]),
     ("cache it since we rely on a slow API", &[Why]),
     ("I'm trying to cut the bundle size for the launch", &[Why]),
     ("Goal: one place to see every invoice", &[Why]),
     ("currently the report takes a minute to open", &[Why]),
-    // Sharp: several at once.
+    // Specific: several at once.
     (
         "In src/checkout.ts the total should include tax. Don't touch the cart API, our customers depend on it.",
         &[Spot, Done, Limits, Why],
@@ -124,8 +150,8 @@ fn every_example_carries_exactly_its_signals() {
 #[test]
 fn grades_count_signals_not_words() {
     let g = |p: &str| match first_message(p) {
-        Prompt::Brief { signals, .. } => Grade::of(signals),
-        _ => panic!("not a brief"),
+        Prompt::Task { signals, .. } => Grade::of(signals),
+        _ => panic!("not a prompt"),
     };
     assert_eq!(g("fix it"), Grade::Thin);
     let padded = "please please please make the whole thing a lot better and nicer and faster for everyone ".repeat(20);
@@ -147,7 +173,7 @@ fn signal_bits_never_move() {
 }
 
 #[test]
-fn until_a_chat_has_a_task_its_first_request_is_the_brief() {
+fn until_a_chat_has_a_task_its_first_request_is_the_prompt() {
     let msg = |human: &str, has_task: bool| {
         let turn = Turn {
             human: human.into(),
@@ -157,25 +183,25 @@ fn until_a_chat_has_a_task_its_first_request_is_the_brief() {
         };
         read_prompt(&turn, &classify(&turn), has_task)
     };
-    // After a hello or a question, the real request is the brief.
-    assert!(matches!(msg("add a CSV export to the report page", false), Prompt::Brief { .. }));
+    // After a hello or a question, the real request is the prompt.
+    assert!(matches!(msg("add a CSV export to the report page", false), Prompt::Task { .. }));
     assert_eq!(msg("add a CSV export to the report page", true), Prompt::Other, "mid-task, it's part of the task");
     assert_eq!(msg("thanks", false), Prompt::Other);
     assert_eq!(msg("I meant the other file", false), Prompt::Other, "nothing to steer, and not a request");
-    assert!(matches!(first_message("make sure the tests pass after the upgrade"), Prompt::Brief { .. }));
+    assert!(matches!(first_message("make sure the tests pass after the upgrade"), Prompt::Task { .. }));
     // A correction is still a correction, task or not.
     assert!(matches!(msg("that's wrong", false), Prompt::Steer { cause: Steer::AiWrong, .. }));
 }
 
 #[test]
-fn a_chats_first_message_is_its_brief() {
-    assert!(matches!(first_message("add a CSV export"), Prompt::Brief { .. }));
-    let Prompt::Brief { rules, .. } = first_message("add a test for parse_date") else { panic!() };
-    assert_eq!(rules, ["task.first", "brief.spot.ident", "brief.done.tests"], "says what started it, then why");
+fn a_chats_first_message_is_its_prompt() {
+    assert!(matches!(first_message("add a CSV export"), Prompt::Task { .. }));
+    let Prompt::Task { rules, .. } = first_message("add a test for parse_date") else { panic!() };
+    assert_eq!(rules, ["task.first", "prompt.spot.ident", "prompt.done.tests"], "says what started it, then why");
 }
 
 #[test]
-fn hellos_questions_and_payloads_are_not_briefs() {
+fn hellos_questions_and_payloads_are_not_prompts() {
     for p in [
         "hi",
         "continue",
@@ -200,7 +226,7 @@ fn hellos_questions_and_payloads_are_not_briefs() {
         "Is it possible to add dark mode?",
         "/Users/me/app/src/a.ts is broken",
     ] {
-        assert!(matches!(first_message(p), Prompt::Brief { .. }), "{p:?}");
+        assert!(matches!(first_message(p), Prompt::Task { .. }), "{p:?}");
     }
 }
 
@@ -269,7 +295,7 @@ fn ordinary_replies_are_not_steering() {
 #[test]
 fn a_new_task_partway_through_a_chat() {
     let starts = |human: &str| match read(Some("Done, the export works."), human, "On it.") {
-        Prompt::Brief { rules, .. } => Some(rules[0]),
+        Prompt::Task { rules, .. } => Some(rules[0]),
         _ => None,
     };
     assert_eq!(starts("great, now add a settings page"), Some("task.now"));
@@ -284,20 +310,20 @@ fn a_new_task_partway_through_a_chat() {
 }
 
 #[test]
-fn brief_tiers_follow_the_share_of_tasks_that_landed() {
-    let at = BriefTier::for_tasks;
+fn prompt_tiers_follow_the_share_of_tasks_that_landed() {
+    let at = PromptTier::for_tasks;
     assert_eq!(at(9, 9), None, "too few tasks to say");
-    assert_eq!(at(0, 10), Some(BriefTier::VibesOnly));
-    assert_eq!(at(6, 10), Some(BriefTier::VibesOnly));
-    assert_eq!(at(7, 10), Some(BriefTier::TicketWriter));
-    assert_eq!(at(86, 100), Some(BriefTier::TechLead), "a typical heavy user");
-    assert_eq!(at(9, 10), Some(BriefTier::Architect));
-    assert!(BriefTier::ALL.windows(2).all(|w| w[0] < w[1] && w[0].floor() < w[1].floor()));
-    for t in BriefTier::ALL {
+    assert_eq!(at(0, 10), Some(PromptTier::VibesOnly));
+    assert_eq!(at(6, 10), Some(PromptTier::VibesOnly));
+    assert_eq!(at(7, 10), Some(PromptTier::TicketWriter));
+    assert_eq!(at(86, 100), Some(PromptTier::TechLead), "a typical heavy user");
+    assert_eq!(at(9, 10), Some(PromptTier::Architect));
+    assert!(PromptTier::ALL.windows(2).all(|w| w[0] < w[1] && w[0].floor() < w[1].floor()));
+    for t in PromptTier::ALL {
         assert_eq!(t.id().parse(), Ok(t));
         assert_eq!(serde_json::to_string(&t).unwrap(), format!("\"{}\"", t.id()));
     }
-    assert_eq!((BriefTier::TechLead.next(), BriefTier::Architect.next()), (Some(BriefTier::Architect), None));
+    assert_eq!((PromptTier::TechLead.next(), PromptTier::Architect.next()), (Some(PromptTier::Architect), None));
 }
 
 #[test]

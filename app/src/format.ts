@@ -1,5 +1,6 @@
 // Small pure wording helpers shared by the views.
 import type { Filter, Meta } from "./api";
+import { num } from "./html";
 import { sourceName } from "./meta";
 
 /** "just now", "12 min ago", or a clock time; "never" when there was no sync. */
@@ -28,11 +29,20 @@ export const isFiltered = (filter: Filter): boolean => Object.values(filter).som
 /** The headline's subject: "All AI" until a model is picked. */
 export const subjectLabel = (filter: Filter, meta: Meta): string => (isFiltered(filter) ? filterLabel(filter, meta) : "All AI");
 
+/** Who the questions ask about, in plain words: "AI", or the model the picker narrowed to. */
+export const subjectText = (filter: Filter, meta: Meta): string => (isFiltered(filter) ? filterLabel(filter, meta) : "AI");
+
+/** "1 task", "37 times": a count with its noun. */
+export const plural = (n: number, one: string, many = `${one}s`): string => `${num(n)} ${n === 1 ? one : many}`;
+
+/** The nth item from the end (1 is the last). Not Array.at: the webview may be Safari 15.0. */
+export const last = <T>(xs: readonly T[], n = 1): T | undefined => xs[xs.length - n];
+
 /** "Claude Code", "Claude Code and Codex", "Claude Code, Codex and ChatGPT". */
 export function listNames(names: readonly string[]): string {
-  const last = names[names.length - 1]; // not .at(): the webview may be Safari 15.0
-  if (last === undefined || names.length < 2) return names.join("");
-  return `${names.slice(0, -1).join(", ")} and ${last}`;
+  const end = last(names);
+  if (end === undefined || names.length < 2) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${end}`;
 }
 
 /** The local calendar date as YYYY-MM-DD, matching how the store buckets days (toISOString is UTC). */
@@ -40,6 +50,10 @@ export function localIsoDate(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
+
+/** "Oct 2": a day (YYYY-MM-DD) as the person reads it. `opts` changes which parts show. */
+export const fmtDay = (iso: string, opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" }): string =>
+  new Date(`${iso}T00:00`).toLocaleDateString(undefined, opts);
 
 /** An error from Rust (a string) or JS (an Error) as one readable line. */
 export const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e));

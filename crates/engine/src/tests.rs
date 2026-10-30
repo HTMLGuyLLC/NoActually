@@ -1,4 +1,4 @@
-//! Behavior tests for the rule book. Examples are written to mirror real catches without
+//! Behavior tests for the rule book. Examples are written to mirror real corrections without
 //! copying anyone's chats.
 
 use super::*;
@@ -62,7 +62,7 @@ fn bare_no_is_not_a_rejection() {
 }
 
 #[test]
-fn context_is_never_a_catch() {
+fn context_is_never_a_correction() {
     assert_eq!(label("Here's the script.", "also, I'm on Python 3.8", "You're right to mention it."), None);
     assert_eq!(label("Here it is.", "I forgot to mention we use Postgres", "Good catch, switching."), None);
     assert_eq!(label("Here it is.", "thanks, that works", "Great."), None);
@@ -313,5 +313,5 @@ fn ids_round_trip() {
         assert_eq!(Category::from_id(c.as_str()), Some(c));
     }
     assert_eq!(Category::from_id("nope"), None);
-    assert_eq!(Label::ALL.iter().filter(|l| l.is_catch()).count(), 3);
+    assert_eq!(Label::ALL.iter().filter(|l| l.is_correction()).count(), 3);
 }

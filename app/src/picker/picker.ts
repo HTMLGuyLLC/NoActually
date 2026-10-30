@@ -1,27 +1,41 @@
 // Model picker logic, kept pure so it can be tested without a window.
 import type { Filter, ModelRow } from "../api";
+import { floorPercent } from "../meta";
 
-export type PickItem = { filter: Filter; label: string; path: string; depth: number; catches: number; messages: number };
+/** What a scope's numbers add up to: corrections and messages, and tasks for the prompt score. */
+export type Counts = { corrections: number; messages: number; tasks: number; continued: number; landed: number };
+export type PickItem = Counts & { filter: Filter; label: string; path: string; depth: number };
+/** Which numbers the picker shows beside each model: the ones the page is about. */
+export type PickStat = "corrections" | "prompts" | "both";
 
 export const modelName = (m: { family: string; version: string }) => (m.version ? `${m.family} ${m.version}` : m.family);
 
-const total = (rows: ModelRow[]) => rows.reduce((a, m) => ({ c: a.c + m.catches, m: a.m + m.messages }), { c: 0, m: 0 });
+const total = (rows: ModelRow[]): Counts =>
+  rows.reduce(
+    (a, m) => ({
+      corrections: a.corrections + m.corrections,
+      messages: a.messages + m.messages,
+      tasks: a.tasks + m.tasks,
+      continued: a.continued + m.continued,
+      landed: a.landed + m.landed,
+    }),
+    { corrections: 0, messages: 0, tasks: 0, continued: 0, landed: 0 },
+  );
 
-/** Every pickable scope, most-caught first: all models, each provider, each family, each version. */
+/** Every pickable scope, most-corrected first: all models, each provider, each family, each version. */
 export function buildPickItems(models: ModelRow[]): PickItem[] {
   const all = total(models);
-  const items: PickItem[] = [{ filter: {}, label: "All AI", path: "Every model", depth: 0, catches: all.c, messages: all.m }];
-  const byCatches = (rows: ModelRow[]) => (a: string, b: string) =>
-    total(rows.filter((m) => m.provider === b || m.family === b)).c - total(rows.filter((m) => m.provider === a || m.family === a)).c;
-  const providers = [...new Set(models.map((m) => m.provider))].sort(byCatches(models));
+  const items: PickItem[] = [{ filter: {}, label: "All AI", path: "Every model", depth: 0, ...all }];
+  const byCorrections = (rows: ModelRow[]) => (a: string, b: string) =>
+    total(rows.filter((m) => m.provider === b || m.family === b)).corrections - total(rows.filter((m) => m.provider === a || m.family === a)).corrections;
+  const providers = [...new Set(models.map((m) => m.provider))].sort(byCorrections(models));
   for (const p of providers) {
     const pRows = models.filter((m) => m.provider === p);
-    const pt = total(pRows);
-    items.push({ filter: { provider: p }, label: p, path: "All models", depth: 0, catches: pt.c, messages: pt.m });
-    const families = [...new Set(pRows.map((m) => m.family))].sort(byCatches(pRows));
+    items.push({ filter: { provider: p }, label: p, path: "All models", depth: 0, ...total(pRows) });
+    const families = [...new Set(pRows.map((m) => m.family))].sort(byCorrections(pRows));
     for (const fam of families) {
       const fRows = pRows.filter((m) => m.family === fam);
-      const versions = fRows.filter((m) => m.version).sort((a, b) => b.catches - a.catches);
+      const versions = fRows.filter((m) => m.version).sort((a, b) => b.corrections - a.corrections);
       // A provider whose only family has its own name ("No model recorded") is already listed.
       if (families.length === 1 && fam === p) {
         for (const v of versions) {
@@ -30,8 +44,7 @@ export function buildPickItems(models: ModelRow[]): PickItem[] {
             label: modelName(v),
             path: p,
             depth: 1,
-            catches: v.catches,
-            messages: v.messages,
+            ...total([v]),
           });
         }
         continue;
@@ -44,19 +57,16 @@ export function buildPickItems(models: ModelRow[]): PickItem[] {
           label: modelName(v),
           path: p,
           depth: 1,
-          catches: v.catches,
-          messages: v.messages,
+          ...total([v]),
         });
         continue;
       }
-      const ft = total(fRows);
       items.push({
         filter: { provider: p, family: fam },
         label: fam,
         path: versions.length ? `${p} · all versions` : p,
         depth: 1,
-        catches: ft.c,
-        messages: ft.m,
+        ...total(fRows),
       });
       for (const v of versions) {
         items.push({
@@ -64,8 +74,7 @@ export function buildPickItems(models: ModelRow[]): PickItem[] {
           label: modelName(v),
           path: `${p} · ${fam}`,
           depth: 2,
-          catches: v.catches,
-          messages: v.messages,
+          ...total([v]),
         });
       }
     }
@@ -82,5 +91,8 @@ export function matchPickItems(items: PickItem[], query: string): PickItem[] {
 
 export const sameFilter = (a: Filter, b: Filter) => JSON.stringify(a) === JSON.stringify(b);
 
-/** "12.5%" of messages that were a catch, or "–" when there were none. */
-export const catchRate = (catches: number, messages: number) => (messages ? `${((100 * catches) / messages).toFixed(1)}%` : "–");
+/** "83%" of continued prompts that were clear the first time (rounded down, like the tier floors), or "–" with none. */
+export const landedRate = (landed: number, continued: number) => (continued ? `${floorPercent(landed, continued)}%` : "–");
+
+/** "12.5%" of messages that were a correction, or "–" when there were none. */
+export const correctionRate = (corrections: number, messages: number) => (messages ? `${((100 * corrections) / messages).toFixed(1)}%` : "–");

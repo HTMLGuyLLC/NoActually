@@ -7,6 +7,8 @@
   /* Text on a --pen fill (the pinned tag). */
   --on-pen: #ffffff;
   --ok: #2f9e44;
+  /* Small green text (--ok is 3.4:1 on white); the dark theme's --ok is already light enough. */
+  --ok-text: #237a34;
   /* Shadows and the dialog backdrop: the ink's hue, never pure black. */
   --shade: 10, 14, 30;
   /* The select's chevron, stroked in --muted (data URIs can't read custom properties). */
@@ -21,7 +23,7 @@
   :root {
     --paper: #0f1320; --surface: #171c2c; --ink: #eef1f8; --muted: #9aa3bd; --rule: #2a3147;
     --pen: #ff5a4f; --pen-soft: #3a1c1e; --hl: #6b5f12; --ai: #8ea6ff; --ai-soft: #1d2747;
-    --pen-text: #ff5a4f; --on-pen: #0f1320; --ok: #51cf66;
+    --pen-text: #ff5a4f; --on-pen: #0f1320; --ok: #51cf66; --ok-text: #51cf66;
     --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%239aa3bd' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     color-scheme: dark;
   }
@@ -34,7 +36,7 @@ body { background: var(--paper); color: var(--ink); font: 400 15px/1.55 var(--bo
 h1, h2 { font-family: var(--display); text-wrap: balance; margin: 0 }
 h2 { font-size: 22px; font-weight: 800 }
 p { margin: 0 }
-.wrap { max-width: 1000px; margin: 0 auto; padding: 20px 24px 56px; display: grid; gap: 36px }
+.wrap { max-width: 1000px; margin: 0 auto; padding: 20px 24px 56px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 36px }
 .eyebrow { font: 600 11px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted) }
 .muted { color: var(--muted) }
 .small { font-size: 13px }
@@ -42,7 +44,7 @@ p { margin: 0 }
 .head { display: grid; gap: 6px; margin-bottom: 14px }
 .head p { max-width: 64ch }
 /* Read by screen readers, not shown. */
-.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0 }
+.sr-only, .top .tab.icon-only .tab-name { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0 }
 
 button { font: 600 13px/1 var(--body); color: var(--paper); background: var(--ink); border: 1.5px solid var(--ink); border-radius: 999px; padding: 9px 14px; cursor: pointer }
 button.ghost { background: transparent; color: var(--ink) }
@@ -61,7 +63,9 @@ select:hover, input[type="number"]:hover { border-color: var(--muted) }
 .action-error { flex-basis: 100%; color: var(--pen-text); font-size: 13px }
 
 .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap }
-.top-right { display: flex; align-items: center; gap: 14px; flex-wrap: wrap }
+/* The menu, with the sync status as a quiet line under it. */
+.top-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px }
+.top-right .sync-pill { font-size: 11.5px; padding-right: 10px }
 /* Logo: the icon's mark (check in the text color, red underline) and an ink wordmark. */
 .brand { display: inline-flex; align-items: center; gap: .32em; font: 800 21px/1 var(--display); letter-spacing: -0.025em; color: var(--ink) }
 .brand.small { font-size: 15px }
@@ -70,14 +74,46 @@ select:hover, input[type="number"]:hover { border-color: var(--muted) }
 .mark-check { stroke: var(--ink); stroke-width: 4.4 }
 .mark-line { stroke: var(--pen); stroke-width: 2.6 }
 nav { display: flex; gap: 6px }
-.tab { background: transparent; color: var(--muted); border-color: transparent }
+.tab { background: transparent; color: var(--muted); border-color: transparent; display: inline-flex; align-items: center; gap: 6px }
 .tab.on { color: var(--ink); border-color: var(--ink) }
-.tab { display: inline-flex; align-items: center; gap: 6px }
 .tab-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+/* Settings: a round icon button after a thin divider; the name is the tooltip and the label. */
+.top .tab.icon-only { padding: 8px; width: 34px; height: 34px; justify-content: center }
+.nav-gap { width: 1px; align-self: stretch; margin: 6px 4px; background: var(--rule) }
+.top nav { align-items: center; gap: 2px }
 .home { background: none; border: 0; padding: 0; border-radius: 8px; cursor: pointer }
 .home:hover { filter: none; opacity: .85 }
 .sync-pill { display: inline-flex; align-items: center; gap: 7px; font: 500 12px var(--body); color: var(--muted); background: transparent; border: 0; padding: 0 }
-.sync-pill.bad { color: var(--pen); text-decoration: underline; cursor: pointer }
+.sync-text { border-radius: 6px; cursor: default }
+.sync-text[data-tip]:hover, .sync-text[data-tip]:focus-visible { color: var(--ink) }
+.sync-now { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; background: transparent; color: var(--muted); border: 1px solid var(--rule) }
+.sync-now:hover { filter: none; color: var(--ink); border-color: var(--muted) }
+.sync-now .refresh { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
+.sync-bad { background: none; border: 0; padding: 0; color: var(--pen-text); text-decoration: underline; font: inherit }
+
+/* The app's own tooltips: a small card under the control, on hover or keyboard focus. */
+[data-tip] { position: relative }
+/* A hovered button's filter traps its tooltip in its own layer; lift that layer over the row below. */
+[data-tip]:hover, [data-tip]:focus-visible { z-index: 40 }
+[data-tip]:hover::after, [data-tip]:focus-visible::after {
+  content: attr(data-tip); position: absolute; top: calc(100% + 8px); right: 0; z-index: 40 }
+/* One look for both: CSS tooltips on controls, and the chart marks' card (charttip.ts). */
+[data-tip]:hover::after, [data-tip]:focus-visible::after, .chart-tip {
+  pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: 10px;
+  padding: 7px 10px; font: 500 12px/1.3 var(--body); letter-spacing: 0; text-transform: none; white-space: nowrap;
+  box-shadow: 0 12px 28px -12px rgba(var(--shade), .45) }
+.chart-tip { position: fixed; top: 0; left: 0; z-index: 60; white-space: pre-line; max-width: min(300px, calc(100vw - 24px)); line-height: 1.5 }
+/* Marks with a breakdown look clickable; the pinned one stays lit. */
+svg [data-tip] { cursor: pointer }
+svg .tip-pinned, svg [data-tip]:hover { opacity: 1; filter: brightness(1.12) }
+.chart-tip[hidden] { display: none }
+/* Chart marks show their tip through charttip.ts, not a pseudo-element. */
+svg [data-tip]::after { content: none }
+svg [data-tip]:focus-visible { outline: 3px solid var(--ai); outline-offset: 2px }
+/* Escape hides the CSS tooltips until the pointer moves (charttip.ts). */
+.tips-off [data-tip]:hover::after, .tips-off [data-tip]:focus-visible::after { display: none }
+/* Labeled tabs don't need one until their names are hidden on narrow windows. */
+.top .tab:not(.icon-only)[data-tip]::after { display: none }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok) }
 .dot.live { background: var(--ai) }
 .update-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); font-size: 14px }
@@ -85,8 +121,30 @@ nav { display: flex; gap: 6px }
 #update-slot:empty { display: none }
 
 .toolbar { display: flex; justify-content: space-between; align-items: end; gap: 12px; flex-wrap: wrap; margin-bottom: -20px }
-.chip-clear { background: var(--pen-soft); color: var(--pen-text); border-color: transparent; font-weight: 600 }
-.chip-clear span { margin-left: 4px; font-size: 15px }
+/* The scorecard's period picker: a compact segmented row, no underline. */
+.views.period { border: 0; padding: 0; gap: 2px }
+.views.period .tab { padding: 7px 11px; font-size: 12.5px }
+/* Sections on the left, the period on the right, one underlined row; it wraps on narrow windows. */
+.views-row { display: flex; justify-content: space-between; align-items: center; gap: 8px 16px; flex-wrap: wrap; border-bottom: 1px solid var(--rule); padding-bottom: 8px }
+.views-row .views { border: 0; padding: 0; min-width: 0; flex: 0 1 auto }
+.period-select { display: none; min-height: 34px; font-size: 13px }
+/* The model picker and the time range: what the whole page is filtered by. */
+.filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0 }
+.model-pick { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; font: 600 12.5px var(--body); color: var(--ink);
+  background: transparent; border: 1px solid var(--rule); border-radius: 999px; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.model-pick:hover, .model-pick[aria-expanded="true"] { filter: none; border-color: var(--muted) }
+.model-pick svg { width: 10px; height: 10px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.model-pick[aria-expanded="true"] svg { transform: rotate(180deg) }
+
+/* Narrow windows: the period is a dropdown beside the sections, and the date line goes. */
+@media (max-width: 640px) {
+  .views-row { flex-wrap: nowrap }
+  .views-row .views.period { display: none }
+  .period-select { display: block; flex: none }
+  .top { align-items: flex-start }
+  .top-right { align-items: flex-start }
+  .top-right .sync-pill { padding: 0 0 0 10px }
+}
 
 .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 18px; padding: clamp(20px, 4vw, 36px);
   display: grid; grid-template-columns: 1.25fr 1fr; gap: 28px; position: relative; overflow: hidden }
@@ -98,29 +156,14 @@ nav { display: flex; gap: 6px }
 .no.maybe { color: var(--muted) }
 .because { font-size: 17px; max-width: 30ch; padding-bottom: 4px }
 .because b { background: linear-gradient(transparent 30%, var(--hl) 30%, var(--hl) 94%, transparent 94%); font-weight: 600; padding: 0 .08em }
-.score { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; margin-top: 20px; border-top: 2px solid var(--ink); padding-top: 12px }
-.side { display: grid; gap: 2px } .side.ai { text-align: right }
-.side .n { font: 800 42px/1 var(--display) }
-.side.you .n, .n.you { color: var(--pen) } .side.ai .n, .n.ai { color: var(--ai) }
-.vs { font: 400 22px/1 var(--hand); color: var(--muted) }
 .meter { display: grid; gap: 12px; align-content: start }
-/* A status, not a control: plain label text, no fill or border that would read as a button. */
-.tier-label { font: 600 10.5px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--pen); white-space: nowrap }
-.tier-label span { color: var(--muted); margin-right: 6px }
 .ladder { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px }
 .ladder li { display: grid; grid-template-columns: 1fr auto; padding: 9px 12px; border-radius: 10px; border: 1px dashed var(--rule); color: var(--muted); font-size: 14px }
 .ladder li span:last-child { font: 400 12px/1.6 var(--mono) }
 .ladder li.on { border: 2px solid var(--pen); color: var(--ink); background: var(--pen-soft); font-weight: 600 }
+.ladder li .at { font: 700 15px/1 var(--display); color: var(--pen) }
 .hand-note { font: 400 18px/1.1 var(--hand); color: var(--pen) }
 .share { display: flex; gap: 8px; flex-wrap: wrap }
-
-/* Model picker: the headline's subject is the control. */
-.subject { display: inline-flex; align-items: center; gap: .18em; font: inherit; letter-spacing: inherit; color: var(--pen);
-  background: none; border: 0; border-bottom: 3px dashed color-mix(in srgb, var(--pen) 55%, transparent); border-radius: 0;
-  padding: 0 .05em .02em; cursor: pointer }
-.subject:hover, .subject[aria-expanded="true"] { filter: none; border-bottom-style: solid; background: var(--pen-soft) }
-.subject svg { width: .5em; height: .5em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
-.subject[aria-expanded="true"] svg { transform: rotate(180deg) }
 
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); border-block: 1px solid var(--rule) }
 .stat { padding: 16px; display: grid; gap: 6px; border-left: 1px solid var(--rule) }
@@ -128,19 +171,34 @@ nav { display: flex; gap: 6px }
 .stat .v { font: 800 30px/1 var(--display); font-variant-numeric: tabular-nums }
 .stat .l { color: var(--muted); font-size: 13px }
 
-.chart { overflow-x: auto }
+.chart { overflow-x: auto; padding-bottom: 4px }
+.chart:focus-visible { outline: 3px solid var(--ai); outline-offset: 2px }
 .chart svg { display: block; width: 100%; min-width: 540px; height: auto }
 .chart text { font: 11px var(--mono); fill: var(--muted) }
 .chart .grid { stroke: var(--rule) }
-.chart .line-top { stroke: var(--pen); stroke-dasharray: 4 4; stroke-width: 1.5 }
-.chart .hand { font: 400 16px var(--hand); fill: var(--pen) }
-.chart .bar { fill: var(--ink); opacity: .82 } .chart .bar.hot { fill: var(--pen); opacity: 1 }
-.chart .hotlabel { fill: var(--pen); font-weight: 600 }
+.chart .bar { fill: var(--ink); opacity: .82 }
+.chart .peak-label { fill: var(--muted); font-weight: 600 }
+/* Improve's charts: a red trend line; hollow dots for weeks with too few tasks to count. */
+.chart .trend { fill: none; stroke: var(--pen); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round }
+.chart .dot-strong { fill: var(--pen) }
+.chart .dot-weak { fill: var(--surface); stroke: var(--muted); stroke-width: 1.5 }
+.chart .band-line { stroke: var(--muted); stroke-dasharray: 3 5; opacity: .7 }
+.chart .band-name { font: 400 14px var(--hand); fill: var(--muted); paint-order: stroke; stroke: var(--paper); stroke-width: 5px; stroke-linejoin: round }
+/* Stacked series differ by lightness as well as hue, and a thin gap of the surface color sets each segment apart. */
+.chart .seg { stroke: var(--surface); stroke-width: 1.5 }
+.seg.s0 { fill: var(--pen); background: var(--pen) } .seg.s1 { fill: var(--ink); background: var(--ink); opacity: .75 }
+.seg.s2 { fill: var(--ai); background: var(--ai) } .seg.s3 { fill: var(--muted); background: var(--muted); opacity: .75 }
+.chart-key { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted) }
+.chart-key li { display: inline-flex; align-items: center; gap: 6px }
+.chart-key i { width: 10px; height: 10px; border-radius: 2px; display: inline-block }
+.spark { width: 100%; max-width: 140px; height: 32px }
+.spark path { fill: none; stroke: var(--pen); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round }
 
 .split { display: grid; grid-template-columns: 1.1fr 1fr; gap: 36px }
 .split > * { min-width: 0 }
-/* About as tall as "What you catch" with all six categories; longer lists scroll in place. */
-.models-scroll { max-height: 15rem; overflow-y: auto; overscroll-behavior: contain; border-bottom: 1px solid var(--rule) }
+/* About as tall as "What you correct" with all six categories; longer lists scroll in place. */
+.models-scroll { max-height: 15rem; overflow-y: auto; overscroll-behavior: contain; border-bottom: 1px solid var(--rule);
+  scrollbar-gutter: stable; padding-right: 10px }
 table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .models thead th { position: sticky; top: 0; background: var(--paper); z-index: 1 }
 .models th { text-align: left; font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 8px 6px; border-bottom: 1px solid var(--rule) }
@@ -159,19 +217,25 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .views .tab { white-space: nowrap; flex: none }
 .view-body { display: grid; gap: inherit }
 .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 20px }
-.card.mini { grid-template-columns: 1fr; gap: 10px; align-content: start }
+.card.mini { grid-template-columns: minmax(0, 1fr); gap: 10px; align-content: start }
 .card.mini .no { font-size: clamp(64px, 8vw, 96px) }
-.card.mini.briefs .no { font-size: clamp(48px, 6vw, 72px) }
+.card.mini.prompts .no, .card.mini.corrections .no { font-size: clamp(48px, 6vw, 72px) }
 .card.mini .verdict { margin-top: 22px }
-.tier-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin: 4px 0 0 }
+/* The headline card: the score's two parts as labeled bars. */
+.parts { display: grid; gap: 10px; margin-top: 18px; border-top: 2px solid var(--ink); padding-top: 14px }
+.part { display: grid; grid-template-columns: minmax(10em, 16em) 1fr 3em; align-items: center; gap: 10px; font-size: 14px }
+.part-name { display: grid; gap: 2px; font-weight: 600 }
+.part-name small { font-size: 12px; font-weight: 400 }
+.part .n { text-align: right }
+.tier-blurb { margin: 6px 0 0; color: var(--muted) } .tier-blurb b { color: var(--ink); font-weight: 600 }
 
-/* Briefs: the verdict words are longer than "No.", so they're smaller and may wrap. */
-.briefs .verdict { flex-wrap: wrap; margin-top: 26px }
-.briefs .no { font-size: clamp(54px, 8vw, 84px) }
+/* Prompts: the verdict words are longer than "No.", so they're smaller and may wrap. */
+.prompts .verdict, .corrections .verdict { flex-wrap: wrap; margin-top: 26px }
+.prompts .no, .corrections .no { font-size: clamp(54px, 8vw, 84px) }
 .grades { display: grid; gap: 8px; margin-top: 18px; border-top: 2px solid var(--ink); padding-top: 14px }
 .grade-bar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; background: var(--rule) }
 .grade-bar i { width: var(--w, 0) }
-.g-sharp { background: var(--pen) } .g-solid { background: var(--ink); opacity: .7 } .g-thin { background: var(--rule) }
+.g-sharp { background: var(--pen) } .g-solid { background: var(--ink); opacity: .7 } .g-thin { background: var(--muted); opacity: .75 }
 .grade-key { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px }
 .grade-key li { display: inline-flex; align-items: center; gap: 6px }
 .grade-key i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; border: 1px solid var(--rule) }
@@ -183,19 +247,40 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .tip .hand { font: 400 19px/1 var(--hand); color: var(--pen-text) }
 
 .fame { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px }
-.catch { position: relative; background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 16px; display: grid; gap: 10px; align-content: start }
-.catch .meta { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap }
-/* Pinned catches are the ones you chose to keep: give them the red-pen treatment. */
-.catch.pinned { border: 2px solid var(--pen); background: linear-gradient(var(--pen-soft), var(--pen-soft)) padding-box;
+.correction { position: relative; background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 16px; display: grid; gap: 10px; align-content: start }
+/* The award names the kind, so an entry only says how it was confirmed and when, quietly. */
+.correction .meta { font: 500 10.5px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
+/* Pinned corrections are the ones you chose to keep: give them the red-pen treatment. */
+.correction.pinned { border: 2px solid var(--pen); background: linear-gradient(var(--pen-soft), var(--pen-soft)) padding-box;
   box-shadow: 0 14px 30px -18px color-mix(in srgb, var(--pen) 70%, transparent) }
 .pinned-tag { position: absolute; top: -11px; right: 14px; background: var(--pen); color: var(--on-pen); font: 600 10.5px/1 var(--mono);
   letter-spacing: .08em; text-transform: uppercase; padding: 6px 9px; border-radius: 999px; transform: rotate(2deg) }
 .chip { font: 600 10.5px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 6px 8px; border-radius: 6px; background: var(--pen-soft); color: var(--pen-text) }
-.chip.conf { background: var(--ai-soft); color: var(--ai) }
-.you-said { font: 400 21px/1.2 var(--hand); color: var(--pen); overflow-wrap: anywhere }
-.ai-said { font-size: 14px; color: var(--muted); background: var(--ai-soft); border-radius: 8px; padding: 8px 10px; overflow-wrap: anywhere }
-.ai-said b { color: var(--ai) }
-.catch-actions { display: flex; gap: 8px; flex-wrap: wrap }
+/* One accent per award: the count. The quote is in your hand, in ink; the reply sits back. */
+.you-said { font: 400 21px/1.2 var(--hand); color: var(--ink); overflow-wrap: anywhere }
+.ai-said { font-size: 14px; color: var(--muted); border-left: 2px solid var(--rule); padding: 2px 0 2px 12px; overflow-wrap: anywhere }
+.ai-said b { color: var(--ink); font-weight: 600 }
+.correction-actions { display: flex; gap: 8px; flex-wrap: wrap }
+/* Hall of fame: one award per kind of correction, its best snippet up front. */
+.awards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start }
+.award { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--rule); border-radius: 16px; background: var(--surface) }
+.award header { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center }
+.award h3 { margin: 0; font: 800 19px/1.1 var(--display) }
+.award-emoji { font-size: 30px; line-height: 1 }
+.award-count { font: 800 22px/1 var(--display); color: var(--pen); font-variant-numeric: tabular-nums }
+.award .fame { grid-template-columns: 1fr }
+.award.unearned { border-style: dashed; background: transparent }
+.award.unearned .award-emoji { filter: grayscale(1); opacity: .55 }
+/* An award's entries share one cell, so the card keeps the tallest one's height while you flip. */
+.slides { display: grid }
+.slide { grid-area: 1 / 1; display: grid }
+.slide[aria-hidden] { visibility: hidden }
+/* Entries are capped (quote 3 lines, reply 2) so the tallest one doesn't leave the rest with a gap. */
+.slide .you-said { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden }
+.slide .ai-said { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
+.slide-nav { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 10px }
+.slide-nav button { display: inline-grid; place-items: center; width: 34px; height: 34px; padding: 0; border-radius: 50% }
+.slide-nav svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 
 .sources { display: grid; gap: 10px }
 .source { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface) }
@@ -203,13 +288,14 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .src-main { display: grid; gap: 4px; min-width: 0 }
 .src-main .mono { overflow-wrap: anywhere }
 .status { font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
-.source.on .status { color: var(--pen) }
+.source.on .status { color: var(--pen-text) }
 .src-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap }
 
 .settings-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 0; border-bottom: 1px solid var(--rule) }
 .toggle { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer }
 .toggle input { width: 18px; height: 18px; accent-color: var(--pen) }
-.levels { display: grid; gap: 10px; margin-bottom: 18px }
+.levels { display: grid; gap: 10px; margin: 0 0 18px; padding: 0; border: 0; min-width: 0 }
+.fine-print { margin-top: 18px }
 .level { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); cursor: pointer }
 .level.on { border: 2px solid var(--pen) }
 .level input { margin-top: 4px; accent-color: var(--pen) }
@@ -221,17 +307,26 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .empty .eyebrow, .empty-glance .eyebrow { display: inline-flex; align-items: center; gap: 8px }
 
 /* Quick glance: the small window under the menu bar icon. */
-.glance { padding: 20px 20px 22px; display: grid; gap: 12px; background: var(--surface); min-height: 100vh; align-content: start }
+.glance { padding: 18px 20px; display: grid; gap: 10px; background: var(--surface); min-height: 100vh; align-content: start }
 .empty-glance { align-content: center; justify-items: start }
 .g-top { display: flex; justify-content: space-between; align-items: center }
 .g-q { font: 800 20px/1.1 var(--display); margin-top: 12px }
-.g-row { display: flex; align-items: flex-end; gap: 14px; padding-top: 10px; margin-bottom: 4px }
-.no.sm { font-size: 60px }
-.g-row .because { font-size: 15px }
-.g-score { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; border-top: 2px solid var(--ink); padding-top: 10px }
-.g-score > div { display: grid } .g-score > div:last-child { text-align: right }
-.g-score .n { font: 800 32px/1 var(--display) }
-.g-actions { display: flex; gap: 8px; margin-top: 6px }
+.g-answers { display: grid; gap: 12px }
+.g-ans { display: grid; gap: 2px }
+.g-ask { font: 700 15px/1.2 var(--display) }
+.g-line { display: flex; align-items: baseline; gap: 10px; min-width: 0 }
+.g-word { font: 400 30px/1 var(--hand); color: var(--pen); flex: none }
+.g-word.maybe { color: var(--muted) }
+.g-line .small { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.g-gear { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 50%;
+  background: transparent; color: var(--muted); border: 1px solid var(--rule) }
+.g-gear:hover { filter: none; color: var(--ink); border-color: var(--muted) }
+.g-gear .tab-icon { width: 17px; height: 17px }
+.g-goal { display: grid; gap: 3px; min-width: 0; border-top: 1px solid var(--rule); padding-top: 10px }
+.g-goal-title { font: 600 14px/1.3 var(--body); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical }
+.g-actions { display: flex; margin-top: 4px }
+.g-actions button { flex: 1 }
+.empty-glance .g-top { justify-self: stretch; margin-bottom: auto }
 
 /* The picker's popover (on <body>, so the card can't clip it). */
 .picker-pop { position: fixed; z-index: 50; width: min(380px, calc(100vw - 24px)); background: var(--surface); color: var(--ink);
@@ -240,7 +335,7 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .pick-search { width: 100%; border: 0; border-bottom: 1px solid var(--rule); background: transparent; color: var(--ink);
   font: 500 15px var(--body); padding: 14px 16px; outline: none }
 .pick-search::placeholder { color: var(--muted) }
-.pick-list { list-style: none; margin: 0; padding: 6px; max-height: min(420px, 60vh); overflow-y: auto; overscroll-behavior: contain }
+.pick-list { list-style: none; margin: 0; padding: 6px 12px 6px 6px; max-height: min(420px, 60vh); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable }
 .pick-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 8px; cursor: pointer }
 .pick-list li.d1 { padding-left: 24px } .pick-list li.d2 { padding-left: 40px }
 .pick-list li.active { background: var(--ai-soft) }
@@ -259,7 +354,7 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .share-dialog[open] { display: grid; gap: 12px }
 .share-dialog::backdrop { background: rgba(var(--shade), .55) }
 .sd-head { display: flex; justify-content: space-between; align-items: center }
-.sd-close { background: none; border: 0; color: var(--muted); font-size: 26px; line-height: 1; padding: 2px 6px }
+.sd-close { background: none; border: 0; color: var(--muted); font-size: 26px; line-height: 1; padding: 2px 6px; min-width: 32px; min-height: 32px }
 .sd-close:hover { filter: none; color: var(--ink) }
 #share-text { width: 100%; resize: none; font: 400 14px/1.45 var(--body); color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px }
 .share-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px }
@@ -272,8 +367,104 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .share-guide kbd { font: 600 12px var(--mono); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--muted); background: var(--surface) }
 .sd-foot { display: flex; gap: 8px; justify-content: flex-end }
 
+/* Learn: the prompt checker, tracks of lessons, and the lesson page. */
+.checker textarea { width: 100%; min-height: 9em; resize: vertical; margin: 14px 0 10px; font: 400 15px/1.5 var(--body); color: var(--ink);
+  background: var(--paper); border: 1px solid var(--rule); border-radius: 12px; padding: 12px 14px }
+.check-result { display: grid; gap: 12px; align-content: start }
+.check-grade { font: 800 22px/1.1 var(--display) }
+.check-grade.is-sharp b { color: var(--pen) } .check-grade.is-thin b { color: var(--muted) }
+.check-signals { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 14px }
+.check-signals li { color: var(--muted) } .check-signals li.on { color: var(--ink); font-weight: 600 }
+.check-signals li.on span { color: var(--pen) }
+.check-hints { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px }
+.next-lesson { display: grid; gap: 8px }
+.lesson-next { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; text-align: left; background: var(--surface); color: var(--ink);
+  border: 2px solid var(--pen); border-radius: 14px; padding: 14px 16px; font: 400 14px/1.4 var(--body) }
+.lesson-next b { font: 800 18px/1.2 var(--display) } .lesson-next .muted { grid-column: 1 } .lesson-next .go { grid-row: 1 / span 2; grid-column: 2; align-self: center; font-size: 22px; color: var(--pen) }
+.lesson-next:hover { filter: none; background: var(--pen-soft) }
+.tracks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px }
+.track.finished { border: 2px solid var(--pen) }
+.lessons { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px }
+.lesson-row { width: 100%; display: flex; gap: 10px; align-items: center; text-align: left; background: transparent; color: var(--ink); border: 0; border-radius: 8px; padding: 8px 6px; font: 500 14px/1.3 var(--body) }
+.lesson-row:hover { filter: none; background: var(--paper) }
+.lesson-row span[aria-hidden] { color: var(--muted); width: 1em } .lesson-row.done span[aria-hidden] { color: var(--pen) }
+.lesson { display: grid; gap: 26px; max-width: 760px }
+.lead { font-size: 18px; max-width: 56ch }
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px }
+.ex { display: grid; gap: 10px; align-content: start; background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 16px }
+.ex.after { border: 2px solid var(--pen) }
+.prompt-text { margin: 0; font-size: 15px; line-height: 1.5; overflow-wrap: anywhere }
+.sig-chips { display: flex; flex-wrap: wrap; gap: 6px }
+.chip.sig-on { background: var(--ai-soft); color: var(--ai) }
+.template { padding: 12px 14px; border-radius: 10px; background: var(--paper); border: 1px dashed var(--rule); margin-bottom: 10px; overflow-wrap: anywhere; font-size: 13.5px }
+.tips { margin: 0; padding-left: 18px; display: grid; gap: 6px }
+.quiz { display: grid; gap: 16px }
+.quiz-q { border: 1px solid var(--rule); border-radius: 14px; padding: 14px 16px; display: grid; gap: 8px; margin: 0; background: var(--surface) }
+.quiz-q legend { font-weight: 700; padding: 0 4px }
+.quiz-opt { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--rule); cursor: pointer }
+.quiz-opt input { margin-top: 3px; accent-color: var(--pen) }
+.quiz-opt.right { border: 2px solid var(--ok) } .quiz-opt.wrong { border: 2px solid var(--pen) }
+.quiz-feedback:empty { display: none }
+.quiz-feedback { font-size: 14px }
+.graduate .q { margin-top: 4px }
+button.link { background: none; border: 0; padding: 0; color: var(--pen-text); text-decoration: underline; font: inherit; font-weight: 600 }
+button.link:hover { filter: none }
+
+/* Improve: the goal, last week, trends, bests and trophies. */
+/* Improve leads with the goal: the wide card; last week is a quiet side note. */
+.improve-top { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr); gap: 24px; align-items: start }
+.goal-title { font-size: clamp(24px, 3.2vw, 34px); line-height: 1.1; margin-top: 8px }
+.goal-meter { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 4px 12px; margin: 6px 0 4px }
+.goal-meter .big { font: 800 clamp(40px, 5vw, 56px)/1 var(--display); color: var(--pen); font-variant-numeric: tabular-nums }
+.goal-meter .of { color: var(--muted); font-size: 14px }
+.goal-meter .bar-bg { grid-column: 1 / -1; height: 10px }
+.recap { display: grid; gap: 2px; padding: 4px 0 0 20px; border-left: 1px solid var(--rule) }
+.recap .recap-row b { font-size: 18px }
+.goal-count { font-size: 15px }
+.goal-count .hand { font: 400 18px var(--hand); color: var(--pen) }
+.goal-weeks { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px }
+.gw { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; font: 700 14px var(--mono); border: 1px solid var(--rule); color: var(--muted) }
+.gw.met { background: var(--pen); color: var(--on-pen); border-color: var(--pen) }
+.gw.missed { border-color: var(--muted) } .gw.open { border: 2px dashed var(--pen); color: var(--pen) }
+.goal details summary { cursor: pointer; font-weight: 600; font-size: 14px }
+.goal-pick { display: grid; gap: 10px; margin-top: 10px }
+.goal-pick, .pick-label { min-width: 0 }
+.pick-label { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; font-size: 13px; color: var(--muted) }
+/* Long goal names would size the select past the card; it fits the card and the text truncates. */
+.pick-label select { width: 100%; min-width: 0; text-overflow: ellipsis }
+.goal.finished { border: 2px solid var(--pen) }
+.recap-row { display: grid; grid-template-columns: 1fr auto 4em; align-items: baseline; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--rule) }
+.recap-row b { font: 800 24px/1 var(--display); font-variant-numeric: tabular-nums }
+.delta { font: 600 12px var(--mono); color: var(--muted); text-align: right } .delta.up { color: var(--ok-text) } .delta.down { color: var(--pen-text) }
+.trends-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 10px; margin-bottom: -20px }
+.trends-head .views { border: 0; padding: 0 }
+.trophies { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px }
+.trophies li { padding: 10px 14px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface) }
+.insights { margin: 0; padding-left: 18px; display: grid; gap: 10px; max-width: 70ch }
+
+/* Four tabs don't fit beside the logo on narrow windows: show icons, keep names for screen readers. */
+@media (max-width: 720px) {
+  .top .tab:not(.icon-only)[data-tip]::after { display: block }
+  .top .tab .tab-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
+  .top .tab { padding: 9px 11px }
+}
+
+/* Section tabs show names only while the row has room; on narrow windows they're icons with the
+   name in a tooltip, so the model picker and period stay on the same line. */
+.views-row .views .tab:not(.icon-only)[data-tip]::after { display: none }
+@media (max-width: 860px) {
+  .views-row .views .tab[data-tip]::after { display: block; left: 0; right: auto }
+  .views-row .views .tab .tab-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
+  .views-row .views .tab { padding: 9px 11px }
+  .views-row { flex-wrap: nowrap }
+  .views-row .views { overflow: visible }
+  .filters { flex-wrap: nowrap }
+}
+
 @media (max-width: 760px) {
-  .card, .split, .fame, .duo { grid-template-columns: 1fr }
+  .card, .split, .fame, .duo, .tracks, .compare, .improve-top, .awards { grid-template-columns: 1fr }
+  .recap { padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--rule) }
+  .part { grid-template-columns: 1fr 3em } .part .bar-bg { grid-column: 1 / -1; grid-row: 2 }
   .stats { grid-template-columns: repeat(2, 1fr) }
   .stat:nth-child(3) { border-left: 0; padding-left: 0 }
 }
@@ -282,10 +473,9 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 /* Every animation lives here, so "reduce motion" turns all of them off. */
 @media (prefers-reduced-motion: no-preference) {
   .no { animation: scrawl .6s cubic-bezier(.16, 1, .3, 1) both .1s }
-  /* Redraws (a background check finishing) keep the verdict still; it only plays when it changes.
-     The glance window loads hidden, so it skips the scrawl and shows the resting state. */
-  .no.still, .no.sm { animation: none }
-  .subject svg { transition: transform .15s ease-out }
+  /* Redraws (a background check finishing) keep the verdict still; it only plays when it changes. */
+  .no.still { animation: none }
+  .model-pick svg { transition: transform .15s ease-out }
   .picker-pop { animation: pop .14s ease-out }
   .share-dialog[open] { animation: pop .16s ease-out }
   .dot.live { animation: pulse 1s ease-in-out infinite alternate }
@@ -293,3 +483,14 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
   @keyframes pop { from { opacity: 0; transform: translateY(-4px) } }
   @keyframes pulse { to { opacity: .3 } }
 }
+
+
+/* Share buttons carry the share icon before their label. */
+.share-btn-icon { display: inline-flex; align-items: center; gap: 7px }
+.btn-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.small .btn-icon { width: 13px; height: 13px }
+
+/* Sources: the intro on the left, the check for new chats top right. */
+.sources-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px 24px; flex-wrap: wrap }
+.sources-head > p { flex: 1 1 320px; margin: 0 }
+.sync-check { display: grid; justify-items: end; gap: 6px; text-align: right }

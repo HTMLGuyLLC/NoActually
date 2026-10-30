@@ -21,6 +21,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build.workspace = true
 
 [dependencies]
+engine.workspace = true
 sources.workspace = true
 store.workspace = true
 serde.workspace = true
@@ -41,3 +42,7 @@ notify.workspace = true
 
 [lints]
 workspace = true
+
+# Asks D-Bus whether the desktop shows tray icons (already in the tree through Tauri).
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = "5"

@@ -112,6 +112,8 @@ pub async fn install(handle: AppHandle) -> Result<(), String> {
     changed(&handle, &updates);
     log::info!("installing update {}", update.version);
     // On Windows this hands over to the installer, which closes the app and reopens it.
+    // On Windows the installer closes the app mid-call, so remember the window first.
+    crate::save_main_placement(&handle);
     match update.download_and_install(|_, _| {}, || {}).await {
         Ok(()) => {
             handle.request_restart();

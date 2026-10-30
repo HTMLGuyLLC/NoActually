@@ -103,6 +103,19 @@ describe("share dialog", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("closes on a click outside the box, not on its padding", () => {
+    openShareDialog(post(), opener, onClose);
+    const box = { left: 100, right: 500, top: 50, bottom: 400 } as DOMRect;
+    vi.spyOn(dialog(), "getBoundingClientRect").mockReturnValue(box);
+    const clickAt = (clientX: number, clientY: number) => dialog().dispatchEvent(new MouseEvent("click", { bubbles: true, clientX, clientY }));
+    clickAt(300, 200); // padding inside the box
+    expect(document.querySelector("dialog.share-dialog")).not.toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    clickAt(50, 200); // backdrop
+    expect(document.querySelector("dialog.share-dialog")).toBeNull();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("replaces an open dialog rather than stacking", () => {
     openShareDialog(post(), opener, onClose);
     openShareDialog(post(), opener, onClose);

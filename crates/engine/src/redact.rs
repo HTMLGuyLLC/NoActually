@@ -10,7 +10,7 @@ pub const SNIPPET_CHARS: usize = 140;
 static REDACTIONS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
     let r = |p: &str| Regex::new(p).unwrap();
     vec![
-        // Secrets first, so a key inside a URL is still caught.
+        // Secrets first, so a key inside a URL is still corrected.
         (
             r(
                 r"\b(sk-[A-Za-z0-9_-]{16,}|sk-ant-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|xox[abpr]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})",

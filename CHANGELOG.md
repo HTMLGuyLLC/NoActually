@@ -4,6 +4,59 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-29
+
+### Added
+
+- **Could AI replace you?** is now an overall score from 0 to 100 over the last 28 days: 70% how often your prompts are clear the first time, 30% judgment (how rarely the AI has to correct you, per task, once you've corrected it 3 times). Tiers: Rubber stamp, Coworker 65+, Sharp-eyed 80+, Irreplaceable 90+. Correcting fewer mistakes because you prompted well never costs points. Overall and prompt tiers are announced once, the first time you reach each one.
+- **Improve** tab: one weekly goal suggested from your numbers (a habit, a ceiling on one kind of follow-up or a higher tier), judged once each week is over, with week-by-week marks, streaks that pause on quiet weeks, trophies, personal bests, last week's recap, charts (prompts clear the first time with tier bands, what your prompts include, grades, follow-ups, correction rate) over 12 weeks, 6 months or all time, and "what works for you" from your own history. Finished goal weeks are frozen. Popups when a goal week is met and when a goal is done.
+- **Learn** tab: 12 one-minute lessons in three tracks (the 5 habits, follow up less, correct more), each with a before/after, a template and a quick quiz, plus a prompt checker that grades a draft as you type with the same rules as your score and saves nothing. The next lesson is picked from your prompts. A test grades every lesson example with the real rules and fails if the copy names a product, model or version.
+- **Do you correct it?** now has a one-word answer and tiers from judgment: Autopilot (Rarely.), Spot-checker 50+ (Sometimes.), Reviewer 75+ (Often.), Hawk-eyed 90+ (Religiously.), with **Share your corrections** on the Corrections page. The overview shares your score; Prompting and Corrections each share their own answer.
+- `noactually check "<prompt>"` grades a draft prompt from the command line.
+- The scorecard window opens as tall as your screen allows (940 wide, centered) the first time, then where you left it. If that no longer fits on a connected screen, it goes back to the best fit.
+- Settings: **Keep running in the menu bar**. Off makes it an ordinary app with no menu bar or tray icon that quits when its window closes.
+
+### Changed
+
+- Plainer words everywhere you read the app: **prompts** and **corrections** (not briefs and catches), **clear the first time** (not landed: "82% of your prompts were clear the first time"), **follow-ups** (not steering), what a prompt includes (Target, Evidence, Finish line, Guardrails, Purpose) and its grade (Vague, Decent, Specific). The code, database and settings use the same words: the database migrates in place, and history is re-read once (rules version 6).
+- Download names now include the architecture: `No-Actually-<version>-Mac-universal.dmg`, `-Windows-Setup-x64.exe`, `-Windows-IT-Installer-x64.msi`, `-x86_64.AppImage`, `-Linux-Ubuntu-Debian-amd64.deb` and `-Linux-Fedora-x86_64.rpm`.
+- A time picker on the scorecard (7 days, 28 days, 90 days, all time) sets how far back the whole scorecard looks: the score and tiers, corrections, who corrected whom, prompts, the chart, models, categories and the hall of fame. Popups, goals, the quick glance and the tray stay on the last 28 days. `noactually stats --since YYYY-MM-DD` does the same.
+- The Prompting page leads with its answer and one line of why; the Specific/Decent/Vague bar moved down to What your prompts include.
+- Prompt rules: "you'll know it's fixed when…" and "done once…" give a finish line; "no error in the logs" is no longer proof; "we want them to come back" gives a purpose. History is re-read once to apply them. A route on its own ("/hi", "/api/users") is a target (rules version 7). "Look at the logs" or "check the output" is evidence, and "you should fix it" is no longer a finish line (rules version 8).
+- **Check for updates** (for new chats) sits at the top of Sources; the updater's button, in Settings → General, is now **Check for app updates**.
+- The model picker sits beside the time range (on the scorecard and Improve), so it's clear it filters the whole page; the questions name the model in plain text ("Could AI replace you?"). The "Showing … only" chip is gone: pick All AI to go back.
+- Tier ladders show your number in your tier's row, instead of a note below. Prompting labels its rows by the answer (Constantly, Often, Sometimes, Rarely) and Corrections does too (Rarely, Sometimes, Often, Religiously); the tier's name and a line on what it means sit under the answer ("Hawk-eyed. You catch AI slipping nearly every time.").
+- Click (or hover) a bar in Tasks per week or Corrections per week to see that week's breakdown: what the tasks needed, or which kinds of corrections, and how often it corrected you. Every tooltip is the app's own now, charts included.
+- The Hall of fame flips between an award's entries with ‹ › arrows instead of expanding, and each entry is quieter: your quote in ink, no category chip (the award names it).
+- Share buttons carry a share icon and a short label (Share your score, Share) everywhere, and each overview card can share its own answer next to its See button.
+- Plainer section names: **What your prompts include** and **Why you followed up**. The AI's mistakes are blue in every chart.
+- Cards drop labels that repeated the question or the time picker. Scrolling lists leave room for the scrollbar.
+- Prompting has a **Prompts per week** chart: each week's prompts split into the ones that were clear the first time and the ones that needed more from you, the same tasks your prompt tier counts.
+- Corrections per week no longer colors the busiest week as if it were the good one; it's labeled "Most" instead.
+- The header keeps Scorecard, Improve and Learn labeled; Settings is an icon button with sub-tabs: Sources, General and Privacy. **Choose sources** opens the Sources tab.
+- The quick glance asks the scorecard's three questions, each answered in a word with a short why, plus your goal with this week's number. A gear opens Settings and **Open app** opens the scorecard; the share and copy buttons are gone (share from the app).
+- Live tracking checks at most once a minute while an AI tool is writing (it used to check a few seconds after every write). Under the menu, a refresh button checks now, and hovering the status shows the dates and messages the numbers cover.
+- The Hall of fame is an awards wall: one award per kind of correction (and Touché for the times it corrected you), each with its count and best snippet first, ranked the same way every time: pinned, then admitted, then with both sides kept, then the punchiest line, then the newest. Unearned awards wait, dimmed.
+- Improve leads with your goal: a bigger card with one number to watch (this week's percent, or your score against the tier). Last week's recap sits beside it.
+- The model picker shows the numbers the page is about: clear-the-first-time % on Prompting, corrections on Corrections and Hall of fame, both on the overview.
+- Scorecard sections run Overview, Corrections, Prompting, Hall of fame. The Corrections section asks "Do you correct it?" and shows your judgment score.
+- The top tabs show icons only on narrow windows.
+
+### Fixed
+
+- The Linux AppImage no longer exits at launch when the system has no tray library. The window shows, and closing it quits the app.
+- On Linux desktops that don't show tray icons (GNOME without the AppIndicator extension), the app no longer hides into an icon you can't see. The window stays open, and closing it quits.
+- Finished chats are no longer re-read on every check, which kept the app busy for no reason. Existing chats are read once more after the update, then skipped.
+- Allowing a source again with more history (say, "All history" after "From now on") now reads the older chats instead of skipping them.
+- The window remembers where you left it when you quit with Cmd+Q, log out or restart to update, not only when you close it.
+- Settings says so when your system has no menu bar tray, instead of offering a setting that can't work.
+- The overview no longer shows two different correction counts for the same period, and the model picker's counts follow the time picker.
+- Clicking inside the share dialog's edges no longer closes it. A "Click again to…" button resets after 5 seconds.
+- Charts, the week strip and tooltips work from the keyboard, every page has a heading, small red and green text is easier to read in light mode, and stacked bars no longer rely on color alone.
+- A very large retention value from the CLI no longer breaks every sync.
+- Wording: "It never corrected you", "1 day", "1 was its mistake", "across all time", "Check for new chats", and clearer goal titles ("Add more after sending in 15% of tasks or fewer each week").
+- Bundled font and library licenses are listed in `THIRD_PARTY_NOTICES.md`, and Settings → Privacy notes the app is for fun and not affiliated with any AI company.
+
 ## [0.3.0] - 2026-10-28
 
 ### Added
@@ -95,7 +148,8 @@ First release.
 - Per-source consent: nothing is read until you allow it, and Forget deletes a source's data
 - `noactually` command-line tool (`sources`, `allow`, `sync`, `stats`)
 
-[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.1.0...v0.2.0

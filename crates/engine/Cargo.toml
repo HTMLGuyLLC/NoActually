@@ -1,6 +1,6 @@
 [package]
 name = "noactually-engine"
-description = "Deterministic rules that decide when a human caught an AI being wrong."
+description = "Deterministic rules that decide when a human corrected an AI."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -20,8 +20,8 @@ pub fn cc_ai(model: &str, ts: &str, text: &str) -> String {
     line(&json!({"type":"assistant","timestamp":ts,"message":{"model":model,"content":[{"type":"text","text":text}]}}))
 }
 
-/// A Claude Code catch: "no, that's wrong" answered by "You're right." from Claude Opus 5.5.
-pub fn cc_catch(uuid: &str, ts: &str) -> String {
+/// A Claude Code correction: "no, that's wrong" answered by "You're right." from Claude Opus 5.5.
+pub fn cc_correction(uuid: &str, ts: &str) -> String {
     cc_user(uuid, ts, "no, that's wrong") + &cc_ai("claude-opus-5-5", ts, "You're right.")
 }
 

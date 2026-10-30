@@ -1,48 +1,54 @@
-//! Moments worth a popup: catch counts, tier ups (catches and briefs), streaks. Pure decisions plus the stored
-//! baseline they're measured from; the app only shows what [`crossed`] returns.
+//! Moments worth a popup: correction counts, tier ups (corrections and prompts), streaks. Pure
+//! decisions plus the stored baseline they're measured from; the app only shows what [`crossed`]
+//! returns.
 
-use crate::{Result, Stats, Store};
-use engine::{BriefTier, Tier};
+use crate::progress::floor_pct;
+use crate::{put_setting, GoalWeek, Result, Stats, Store, GOAL_WEEKS};
+use engine::{PromptTier, Tier, WINDOW_DAYS};
 
-/// Catch totals worth announcing.
+/// Correction totals worth announcing.
 pub const COUNTS: [i64; 9] = [1, 10, 25, 50, 100, 250, 500, 1000, 2500];
 /// Streak lengths (days) worth announcing.
 pub const STREAKS: [i64; 5] = [3, 7, 14, 30, 100];
 
 const TOTAL_KEY: &str = "milestone.total";
-const TIER_KEY: &str = "milestone.tier";
+/// The overall tier. (Before the score existed, `milestone.tier` held a correction-count tier.)
+const TIER_KEY: &str = "milestone.score_tier";
 const STREAK_KEY: &str = "milestone.streak";
-const BRIEF_TIER_KEY: &str = "milestone.brief_tier";
+const PROMPT_TIER_KEY: &str = "milestone.prompt_tier";
 
 /// The numbers milestones are measured on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Snapshot {
-    /// Catches ever.
-    pub catches: i64,
-    /// Catches in the last 7 days.
-    pub catches_last_7d: i64,
-    /// This week's tier.
-    pub tier: Tier,
+    /// Corrections ever.
+    pub corrections: i64,
+    /// Corrections in the last 7 days.
+    pub corrections_last_7d: i64,
+    /// The overall tier, once ranked.
+    pub tier: Option<Tier>,
+    /// The overall score (0 until ranked).
+    pub score: i64,
     /// Current streak, in days.
     pub streak: i64,
-    /// This week's brief tier, once ranked.
-    pub brief_tier: Option<BriefTier>,
-    /// Percent of the window's continued tasks that landed, rounded down like the tier floors.
+    /// The prompt tier over the last [`engine::WINDOW_DAYS`] days, once ranked.
+    pub prompt_tier: Option<PromptTier>,
+    /// Percent of the window's continued prompts that were clear the first time, rounded down like the tier floors.
     pub landed_pct: i64,
 }
 
 impl Snapshot {
     /// The snapshot in a scorecard.
     pub fn of(s: &Stats) -> Self {
-        let b = &s.briefs;
+        let p = &s.prompts;
         Snapshot {
-            catches: s.catches,
-            catches_last_7d: s.catches_last_7d,
-            tier: s.tier,
+            corrections: s.corrections,
+            corrections_last_7d: s.corrections_last_7d,
+            tier: s.overall.tier,
+            score: s.overall.score.unwrap_or(0),
             streak: s.current_streak_days,
-            brief_tier: b.tier,
+            prompt_tier: p.tier,
             // Rounded down, like the tier floors, so the popup never says 95% for a Tech lead week.
-            landed_pct: if b.tasks_last_28d > 0 { 100 * b.landed_last_28d / b.tasks_last_28d } else { 0 },
+            landed_pct: floor_pct(p.window_landed, p.window_tasks),
         }
     }
 }
@@ -70,24 +76,24 @@ pub fn ordinal(n: i64) -> String {
 /// What moving from `prev` to `now` earned: at most one of each kind, the biggest crossed.
 pub fn crossed(prev: &Snapshot, now: &Snapshot) -> Vec<Milestone> {
     let mut out = Vec::new();
-    if let Some(m) = COUNTS.iter().rev().find(|m| prev.catches < **m && now.catches >= **m) {
+    if let Some(m) = COUNTS.iter().rev().find(|m| prev.corrections < **m && now.corrections >= **m) {
         out.push(Milestone {
-            title: format!("Your {} catch!", ordinal(*m)),
-            body: format!("You've caught your AI {m} times. Could it replace you? Not today."),
+            title: format!("Your {} correction!", ordinal(*m)),
+            body: format!("You've corrected your AI {m} times. Could it replace you? Not today."),
         });
     }
-    if now.tier > prev.tier {
+    // A first ranking at the bottom isn't news; climbing is.
+    if let Some(t) = now.tier.filter(|t| *t > Tier::RubberStamp && now.tier > prev.tier) {
         out.push(Milestone {
-            title: format!("New tier: {}", now.tier.name()),
-            body: format!("{} catches in the last 7 days. Open the scorecard to share it.", now.catches_last_7d),
+            title: format!("New tier: {}", t.name()),
+            body: format!("Could AI replace you? Your score is {}. Open the scorecard to share it.", now.score),
         });
     }
-    // Getting ranked at the bottom isn't news; climbing is.
-    if let Some(t) = now.brief_tier.filter(|t| *t > BriefTier::VibesOnly && now.brief_tier > prev.brief_tier) {
+    if let Some(t) = now.prompt_tier.filter(|t| *t > PromptTier::VibesOnly && now.prompt_tier > prev.prompt_tier) {
         out.push(Milestone {
-            title: format!("Briefs: {}", t.name()),
+            title: format!("Prompts: {}", t.name()),
             body: format!(
-                "{}% of your tasks in the last 28 days landed without steering. Open the scorecard to share it.",
+                "{}% of your prompts in the last {WINDOW_DAYS} days were clear the first time. Open the scorecard to share it.",
                 now.landed_pct
             ),
         });
@@ -95,10 +101,49 @@ pub fn crossed(prev: &Snapshot, now: &Snapshot) -> Vec<Milestone> {
     if let Some(s) = STREAKS.iter().rev().find(|s| prev.streak < **s && now.streak >= **s) {
         out.push(Milestone {
             title: format!("{s}-day streak"),
-            body: format!("You've caught a mistake {s} days in a row."),
+            body: format!("You've corrected a mistake {s} days in a row."),
         });
     }
     out
+}
+
+/// The goal's popup after a sync froze its finished weeks: a finished goal, or else the latest
+/// week met. At most one, so catching up on several weeks never piles them up.
+pub fn goal_milestones(newly_met: &[GoalWeek], met: i64, finished: bool) -> Vec<Milestone> {
+    if finished {
+        return vec![Milestone {
+            title: "Goal done! 🏆".into(),
+            body: "It's on your trophy shelf. Open Improve to pick the next one.".into(),
+        }];
+    }
+    newly_met
+        .last()
+        .map(|w| Milestone {
+            title: "Goal week met 🎯".into(),
+            body: format!("{}% last week. That's {met} of {GOAL_WEEKS} weeks met.", w.value),
+        })
+        .into_iter()
+        .collect()
+}
+
+/// Saved instead of a tier id while unranked, so the first ranking is measured from "none".
+const UNRANKED: &str = "none";
+
+/// The best tier reached so far (`saved`) and what to save now. Tiers are announced only above
+/// the best: a 28-day score wobbling across a floor would otherwise announce it again and again.
+/// Never saved (first run, or an older version): today's tier is the baseline.
+fn best_tier<T: Copy + Ord + std::str::FromStr>(
+    saved: Option<String>,
+    now: Option<T>,
+    id: fn(T) -> &'static str,
+) -> (Option<T>, String) {
+    let prev = match saved.as_deref() {
+        None => now,
+        Some(UNRANKED) => None,
+        Some(v) => v.parse().ok(),
+    };
+    let best = prev.max(now);
+    (prev, best.map_or(UNRANKED, id).to_string())
 }
 
 impl Store {
@@ -107,27 +152,24 @@ impl Store {
     pub fn advance_milestones(&self, now: &Snapshot) -> Result<Option<Snapshot>> {
         let total = self.get_setting(TOTAL_KEY)?;
         let first_run = total.is_none();
+        let (tier, save_tier) = best_tier(self.get_setting(TIER_KEY)?, now.tier, Tier::id);
+        let (prompt_tier, save_prompt_tier) =
+            best_tier(self.get_setting(PROMPT_TIER_KEY)?, now.prompt_tier, PromptTier::id);
         let prev = Snapshot {
-            catches: total.and_then(|v| v.parse().ok()).unwrap_or(now.catches),
-            catches_last_7d: now.catches_last_7d,
-            // Older versions saved the tier's display name; `Tier::from_str` reads both.
-            tier: self.get_setting(TIER_KEY)?.and_then(|v| v.parse().ok()).unwrap_or(now.tier),
+            corrections: total.and_then(|v| v.parse().ok()).unwrap_or(now.corrections),
+            corrections_last_7d: now.corrections_last_7d,
+            tier,
+            score: now.score,
             streak: self.get_setting(STREAK_KEY)?.and_then(|v| v.parse().ok()).unwrap_or(now.streak),
-            // Never saved (first run, or a version without briefs): today's is the baseline.
-            brief_tier: match self.get_setting(BRIEF_TIER_KEY)? {
-                Some(v) => v.parse().ok(),
-                None => now.brief_tier,
-            },
+            prompt_tier,
             landed_pct: now.landed_pct,
         };
-        self.set_setting(TOTAL_KEY, &now.catches.to_string())?;
-        self.set_setting(TIER_KEY, now.tier.id())?;
-        self.set_setting(STREAK_KEY, &now.streak.to_string())?;
-        // A quiet week (too few tasks to rank) keeps the last tier, so being ranked again at the
-        // same tier isn't announced as new.
-        if let Some(t) = now.brief_tier {
-            self.set_setting(BRIEF_TIER_KEY, t.id())?;
-        }
+        let tx = self.conn().unchecked_transaction()?;
+        put_setting(&tx, TOTAL_KEY, &now.corrections.to_string())?;
+        put_setting(&tx, TIER_KEY, &save_tier)?;
+        put_setting(&tx, STREAK_KEY, &now.streak.to_string())?;
+        put_setting(&tx, PROMPT_TIER_KEY, &save_prompt_tier)?;
+        tx.commit()?;
         Ok((!first_run).then_some(prev))
     }
 }
@@ -136,12 +178,51 @@ impl Store {
 mod tests {
     use super::*;
 
-    fn snap(catches: i64, tier: Tier, streak: i64) -> Snapshot {
-        Snapshot { catches, catches_last_7d: 8, tier, streak, brief_tier: None, landed_pct: 0 }
+    fn snap(corrections: i64, tier: Tier, streak: i64) -> Snapshot {
+        Snapshot {
+            corrections,
+            corrections_last_7d: 8,
+            tier: Some(tier),
+            score: 84,
+            streak,
+            prompt_tier: None,
+            landed_pct: 0,
+        }
     }
 
-    fn briefs(tier: Option<BriefTier>) -> Snapshot {
-        Snapshot { brief_tier: tier, landed_pct: 92, ..snap(30, Tier::Coworker, 0) }
+    fn prompts(tier: Option<PromptTier>) -> Snapshot {
+        Snapshot { prompt_tier: tier, landed_pct: 92, ..snap(30, Tier::Coworker, 0) }
+    }
+
+    #[test]
+    fn a_tier_is_announced_once_however_the_score_wobbles() {
+        let s = Store::open_in_memory().unwrap();
+        let at = |tier| Snapshot { tier, ..snap(30, Tier::Coworker, 0) };
+        let mut popups = 0;
+        s.advance_milestones(&at(None)).unwrap(); // first run: unranked
+        for tier in [
+            None,
+            Some(Tier::Coworker),
+            Some(Tier::SharpEyed),
+            Some(Tier::Coworker),
+            Some(Tier::SharpEyed),
+            None,
+            Some(Tier::SharpEyed),
+        ] {
+            let now = at(tier);
+            let prev = s.advance_milestones(&now).unwrap().unwrap();
+            popups += crossed(&prev, &now).iter().filter(|m| m.title.starts_with("New tier")).count();
+        }
+        assert_eq!(popups, 2, "Coworker once (the first ranking counts), Sharp-eyed once");
+    }
+
+    #[test]
+    fn goal_popups_are_one_at_most() {
+        let w = |value| GoalWeek { week: "2026-10-19".parse().unwrap(), count: 8, value, state: crate::WeekState::Met };
+        assert_eq!(goal_milestones(&[], 0, false), vec![]);
+        let m = goal_milestones(&[w(50), w(62)], 3, false);
+        assert_eq!((m.len(), m[0].body.as_str()), (1, "62% last week. That's 3 of 4 weeks met."));
+        assert_eq!(goal_milestones(&[w(50)], 4, true)[0].title, "Goal done! 🏆");
     }
 
     #[test]
@@ -160,9 +241,12 @@ mod tests {
     fn announces_the_biggest_count_crossed_once() {
         let m = crossed(&snap(8, Tier::Coworker, 0), &snap(27, Tier::Coworker, 0));
         assert_eq!(m.len(), 1);
-        assert_eq!(m[0].title, "Your 25th catch!");
+        assert_eq!(m[0].title, "Your 25th correction!");
         assert_eq!(crossed(&snap(27, Tier::Coworker, 0), &snap(27, Tier::Coworker, 0)), vec![]);
-        assert_eq!(crossed(&snap(0, Tier::RubberStamp, 0), &snap(1, Tier::RubberStamp, 0))[0].title, "Your 1st catch!");
+        assert_eq!(
+            crossed(&snap(0, Tier::RubberStamp, 0), &snap(1, Tier::RubberStamp, 0))[0].title,
+            "Your 1st correction!"
+        );
     }
 
     #[test]
@@ -170,49 +254,60 @@ mod tests {
         let m = crossed(&snap(30, Tier::Coworker, 6), &snap(30, Tier::SharpEyed, 7));
         let titles: Vec<&str> = m.iter().map(|m| m.title.as_str()).collect();
         assert_eq!(titles, ["New tier: Sharp-eyed", "7-day streak"]);
-        assert_eq!(m[0].body, "8 catches in the last 7 days. Open the scorecard to share it.");
+        assert_eq!(m[0].body, "Could AI replace you? Your score is 84. Open the scorecard to share it.");
         assert_eq!(crossed(&snap(30, Tier::SharpEyed, 7), &snap(30, Tier::Coworker, 7)), vec![], "never for a drop");
+        let unranked = Snapshot { tier: None, ..snap(30, Tier::Coworker, 7) };
+        assert_eq!(crossed(&unranked, &snap(30, Tier::RubberStamp, 7)), vec![], "a first ranking at the bottom");
+        assert_eq!(crossed(&unranked, &snap(30, Tier::Coworker, 7)).len(), 1);
     }
 
     #[test]
-    fn brief_tier_ups_but_not_a_first_ranking_at_the_bottom() {
-        use BriefTier::*;
-        let m = crossed(&briefs(Some(TicketWriter)), &briefs(Some(TechLead)));
+    fn prompt_tier_ups_but_not_a_first_ranking_at_the_bottom() {
+        use PromptTier::*;
+        let m = crossed(&prompts(Some(TicketWriter)), &prompts(Some(TechLead)));
         assert_eq!(
             m,
             vec![Milestone {
-                title: "Briefs: Tech lead".into(),
-                body: "92% of your tasks in the last 28 days landed without steering. Open the scorecard to share it."
-                    .into()
+                title: "Prompts: Tech lead".into(),
+                body:
+                    "92% of your prompts in the last 28 days were clear the first time. Open the scorecard to share it."
+                        .into()
             }]
         );
-        assert_eq!(crossed(&briefs(None), &briefs(Some(Architect))).len(), 1, "a first ranking above the bottom");
-        assert_eq!(crossed(&briefs(None), &briefs(Some(VibesOnly))), vec![]);
-        assert_eq!(crossed(&briefs(Some(TechLead)), &briefs(Some(TicketWriter))), vec![], "never for a drop");
-        assert_eq!(crossed(&briefs(Some(TechLead)), &briefs(None)), vec![]);
+        assert_eq!(crossed(&prompts(None), &prompts(Some(Architect))).len(), 1, "a first ranking above the bottom");
+        assert_eq!(crossed(&prompts(None), &prompts(Some(VibesOnly))), vec![]);
+        assert_eq!(crossed(&prompts(Some(TechLead)), &prompts(Some(TicketWriter))), vec![], "never for a drop");
+        assert_eq!(crossed(&prompts(Some(TechLead)), &prompts(None)), vec![]);
     }
 
     #[test]
-    fn brief_tier_baseline_is_saved_and_starts_quiet() {
+    fn prompt_tier_baseline_is_saved_and_starts_quiet() {
         let s = Store::open_in_memory().unwrap();
-        s.advance_milestones(&briefs(None)).unwrap();
-        // An upgrade from a version without briefs has no saved brief tier: no popup for it.
-        s.conn().execute("DELETE FROM settings WHERE key = ?1", [BRIEF_TIER_KEY]).unwrap();
-        let now = briefs(Some(BriefTier::Architect));
-        assert_eq!(s.advance_milestones(&now).unwrap().unwrap().brief_tier, Some(BriefTier::Architect));
-        assert_eq!(s.advance_milestones(&briefs(None)).unwrap().unwrap().brief_tier, Some(BriefTier::Architect));
+        s.advance_milestones(&prompts(None)).unwrap();
+        // An upgrade from a version without prompts has no saved prompt tier: no popup for it.
+        s.conn().execute("DELETE FROM settings WHERE key = ?1", [PROMPT_TIER_KEY]).unwrap();
+        let now = prompts(Some(PromptTier::Architect));
+        assert_eq!(s.advance_milestones(&now).unwrap().unwrap().prompt_tier, Some(PromptTier::Architect));
+        assert_eq!(s.advance_milestones(&prompts(None)).unwrap().unwrap().prompt_tier, Some(PromptTier::Architect));
         let back = s.advance_milestones(&now).unwrap().unwrap();
-        assert_eq!(back.brief_tier, Some(BriefTier::Architect), "a quiet week doesn't reset the tier");
+        assert_eq!(back.prompt_tier, Some(PromptTier::Architect), "a quiet week doesn't reset the tier");
         assert_eq!(crossed(&back, &now), vec![], "so ranking again at the same tier isn't news");
     }
 
     #[test]
-    fn baseline_starts_quiet_and_reads_old_tier_names() {
+    fn baseline_starts_quiet_and_ignores_the_old_correction_tier() {
         let s = Store::open_in_memory().unwrap();
+        // Written by a version whose tiers counted corrections: never compared against the score's.
+        s.set_setting("milestone.tier", "rubber_stamp").unwrap();
         let now = snap(5, Tier::Coworker, 2);
         assert_eq!(s.advance_milestones(&now).unwrap(), None, "first run only sets the baseline");
-        assert_eq!(s.advance_milestones(&snap(11, Tier::SharpEyed, 3)).unwrap(), Some(now));
-        s.set_setting(TIER_KEY, "Sharp-eyed").unwrap(); // written by an older version
-        assert_eq!(s.advance_milestones(&now).unwrap().unwrap().tier, Tier::SharpEyed);
+        assert_eq!(s.advance_milestones(&snap(11, Tier::SharpEyed, 3)).unwrap().unwrap().tier, Some(Tier::Coworker));
+        let quiet = Snapshot { tier: None, ..now };
+        s.advance_milestones(&quiet).unwrap();
+        assert_eq!(
+            s.advance_milestones(&now).unwrap().unwrap().tier,
+            Some(Tier::SharpEyed),
+            "a quiet stretch keeps the tier"
+        );
     }
 }

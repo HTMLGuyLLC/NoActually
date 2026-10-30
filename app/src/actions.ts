@@ -1,17 +1,40 @@
 // What every control does. Views mark controls with data-action="…" (and data-id for the thing
 // acted on); one delegated listener per event type on the root dispatches through the maps below,
 // so nothing is re-bound on each redraw.
-import { api, type BriefTier, type HallEntry, type Meta, type Stats } from "./api";
+import { api, type GoalKind, type HallEntry, type Meta, type PromptTier, type Stats } from "./api";
 import { data, say } from "./dom";
 import { errorText, filterLabel } from "./format";
-import { briefTier, tierName } from "./meta";
+import { scheduleCheck } from "./learn/checker";
+import { lessonById } from "./learn/lessons";
+import { correctionTier, promptTier, tierName } from "./meta";
+import type { PickStat } from "./picker/picker";
 import { buildPickItems, sameFilter } from "./picker/picker";
 import { closePicker, openPicker, pickerOpen } from "./picker/popover";
 import { paintUpdate, render, scheduler } from "./render";
-import { drawBriefCard, drawCatchCard, drawShareCard } from "./share/cards";
+import { drawCorrectionCard, drawCorrectionsCard, drawPromptCard, drawShareCard } from "./share/cards";
 import { openShareDialog, type Post } from "./share/dialog";
-import { briefShareText, catchShareText, shareText } from "./share/share";
-import { isScoreView, isTab, setAutoUpdate, setFilter, setLaterFor, setTab, setView, state } from "./state";
+import { correctionShareText, correctionsShareText, promptShareText, shareText } from "./share/share";
+import {
+  isPeriod,
+  isRange,
+  isScoreView,
+  isSettingsPane,
+  isTab,
+  PERIOD_WHEN,
+  setAutoUpdate,
+  setAwardSlide,
+  setDraft,
+  setFilter,
+  setLaterFor,
+  setLesson,
+  setPeriod,
+  setRange,
+  setSettingsPane,
+  setTab,
+  setView,
+  state,
+} from "./state";
+import { judgeQuiz } from "./views/learn";
 import { parseRetention } from "./views/settings";
 import { allowArgs } from "./views/sources";
 
@@ -48,21 +71,80 @@ const thenRender = async (btn: HTMLButtonElement, work: () => Promise<unknown>, 
 
 const scorePost = (s: Stats, meta: Meta): Post => {
   const who = filterLabel(state.filter, meta);
-  return { title: "Share your score", text: shareText(s, who), image: (shape) => drawShareCard(s, who, tierName(meta, s.tier), shape) };
+  const tier = tierName(meta, s.overall.tier);
+  const w = when();
+  return { title: "Share your score", text: shareText(s, who, tier, w), image: (shape) => drawShareCard(s, who, tier, shape, w) };
 };
 
-const briefsPost = (s: Stats, tier: BriefTier): Post => ({
-  title: "Share your briefs",
-  text: briefShareText(s.briefs, tier),
-  image: (shape) => drawBriefCard(s.briefs, tier, shape),
+const promptsPost = (s: Stats, tier: PromptTier): Post => ({
+  title: "Share your prompts",
+  text: promptShareText(s.prompts, tier, when()),
+  image: (shape) => drawPromptCard(s.prompts, tier, shape, when()),
 });
 
-const catchPost = (e: HallEntry): Post => ({
-  title: "Share this catch",
-  text: catchShareText(e),
-  image: (shape) => drawCatchCard(e, shape),
+const correctionsPost = (s: Stats, tier: PromptTier): Post => ({
+  title: "Share your corrections",
+  text: correctionsShareText(s.overall, tier, when()),
+  image: (shape) => drawCorrectionsCard(s.overall, tier, shape, when()),
+});
+
+const correctionPost = (e: HallEntry): Post => ({
+  title: "Share this correction",
+  text: correctionShareText(e),
+  image: (shape) => drawCorrectionCard(e, shape),
   quotesChat: !!(e.human || e.ai),
 });
+
+/** The period the drawn numbers cover: the scorecard's picker, or the default 28 days elsewhere. */
+const when = () => PERIOD_WHEN[state.tab === "score" ? state.period : "28d"];
+
+/** How long a first click stays armed before the button goes back to normal. */
+const CONFIRM_MS = 5000;
+const armed = new WeakMap<HTMLButtonElement, (flush: boolean) => void>();
+
+/** A hidden status line that reads the "Click again…" prompt aloud; the button's own text change isn't announced. */
+function confirmNote(): HTMLElement {
+  let el = document.getElementById("confirm-note");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "confirm-note";
+    el.className = "sr-only";
+    el.setAttribute("role", "status");
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+/** True on the second click. The first relabels the button and holds off redraws until then; it disarms
+ * itself after a few seconds or when focus leaves, restoring the label. */
+function confirmed(b: HTMLButtonElement, ask: string): boolean {
+  const disarm = armed.get(b);
+  if (disarm) {
+    disarm(false);
+    return true;
+  }
+  const label = b.textContent;
+  const note = confirmNote();
+  const off = (flush: boolean) => {
+    clearTimeout(timer);
+    clearTimeout(announce);
+    b.removeEventListener("blur", onBlur);
+    armed.delete(b);
+    delete b.dataset.confirm;
+    b.textContent = label;
+    say(note, "");
+    if (flush) scheduler.flush(); // apply any redraw that waited on the armed button
+  };
+  const onBlur = () => off(true);
+  const timer = setTimeout(() => off(true), CONFIRM_MS);
+  // Set after the region exists for a tick, so a screen reader notices the change.
+  const announce = setTimeout(() => say(note, ask), 0);
+  b.addEventListener("blur", onBlur);
+  armed.set(b, off);
+  b.dataset.confirm = "yes";
+  b.textContent = ask;
+  return false;
+}
 
 /** The data the scorecard was drawn from; its buttons only exist once both are loaded. */
 function drawn(): { s: Stats; meta: Meta } {
@@ -71,10 +153,17 @@ function drawn(): { s: Stats; meta: Meta } {
   return { s, meta };
 }
 
+/** The picker shows the numbers the page is about. */
+export function pickStatFor(tab: typeof state.tab, view: typeof state.view): PickStat {
+  if (tab !== "score" || view === "overview") return "both";
+  return view === "prompts" ? "prompts" : "corrections";
+}
+
 function togglePicker(trigger: HTMLButtonElement) {
   if (pickerOpen()) return closePicker();
   openPicker(trigger, {
     items: buildPickItems(state.allModels),
+    stat: pickStatFor(state.tab, state.view),
     isSelected: (i) => sameFilter(i.filter, state.filter),
     onChoose: (i) => {
       setFilter(i.filter);
@@ -89,41 +178,43 @@ function togglePicker(trigger: HTMLButtonElement) {
 type Handler = (el: HTMLButtonElement) => unknown;
 
 export const clickActions = {
-  // The button itself confirms the copy, so the quick glance never grows taller.
-  "copy-share": async (b) => {
-    const { s, meta } = drawn();
-    const ok = await navigator.clipboard.writeText(shareText(s, filterLabel(state.filter, meta))).then(
-      () => true,
-      () => false,
-    );
-    b.textContent = ok ? "Copied ✓" : "Couldn't copy";
-    say(b.parentElement?.querySelector("#copy-status") ?? null, ok ? "Copied the share text." : "Couldn't copy the share text.");
-    setTimeout(() => {
-      b.textContent = "Copy text";
-    }, 1800);
-  },
   "open-share": (b) => {
     const { s, meta } = drawn();
     openShareDialog(scorePost(s, meta), b, scheduler.flush);
   },
-  "share-briefs": (b) => {
+  "share-prompts": (b) => {
     const { s, meta } = drawn();
-    const tier = briefTier(meta, s.briefs.tier);
-    if (tier) openShareDialog(briefsPost(s, tier), b, scheduler.flush);
+    const tier = promptTier(meta, s.prompts.tier);
+    if (tier) openShareDialog(promptsPost(s, tier), b, scheduler.flush);
   },
-  "share-catch": (b) => {
+  "share-corrections": (b) => {
+    const { s, meta } = drawn();
+    const tier = correctionTier(meta, s.overall.correction_tier);
+    if (tier) openShareDialog(correctionsPost(s, tier), b, scheduler.flush);
+  },
+  "share-correction": (b) => {
     const id = Number(data(b, "id"));
     const e = drawn().s.hall_of_fame.find((h) => h.id === id);
-    if (e) openShareDialog(catchPost(e), b, scheduler.flush);
+    if (e) openShareDialog(correctionPost(e), b, scheduler.flush);
   },
-  "open-main": () => api.openMain(),
+  "open-main": (b) => {
+    const tab = b.dataset.id;
+    return api.openMain(isTab(tab) ? tab : null);
+  },
   home: () => {
     setTab("score");
     setView("overview");
     return render();
   },
   "go-sources": () => {
-    setTab("sources");
+    setTab("settings");
+    setSettingsPane("sources");
+    return render();
+  },
+  "settings-pane": (b) => {
+    const pane = data(b, "id");
+    if (!isSettingsPane(pane)) throw new Error(`Unknown settings section: ${pane}`);
+    setSettingsPane(pane);
     return render();
   },
   tab: (b) => {
@@ -139,11 +230,99 @@ export const clickActions = {
     setView(view);
     return render();
   },
-  "clear-filter": () => {
-    setFilter({});
+  period: (b) => {
+    const p = data(b, "id");
+    if (!isPeriod(p)) throw new Error(`Unknown period: ${p}`);
+    setPeriod(p);
     return render();
   },
-  pin: (b) => thenRender(b, () => api.pin(Number(data(b, "id")), data(b, "pinned") !== "true")),
+  range: (b) => {
+    const r = data(b, "id");
+    if (!isRange(r)) throw new Error(`Unknown range: ${r}`);
+    setRange(r);
+    return render();
+  },
+  lesson: (b) => {
+    const id = data(b, "id");
+    setLesson(lessonById(id) ? id : null);
+    return render().then(() => window.scrollTo({ top: 0 }));
+  },
+  "open-lesson": (b) => {
+    const id = data(b, "id");
+    setTab("learn");
+    setLesson(lessonById(id) ? id : null);
+    return render().then(() => window.scrollTo({ top: 0 }));
+  },
+  // Flips an award's entry in place: no redraw, so the page doesn't move.
+  "award-slide": (b) => {
+    const award = b.closest<HTMLElement>("[data-award]");
+    const slides = award ? [...award.querySelectorAll<HTMLElement>(".slide")] : [];
+    if (!award || slides.length < 2) return;
+    const now = slides.findIndex((el) => !el.hasAttribute("aria-hidden"));
+    const next = (now + Number(data(b, "step")) + slides.length) % slides.length;
+    slides.forEach((el, n) => {
+      // The same markup the view draws: aria-hidden="true" plus inert on every slide but one.
+      if (n === next) el.removeAttribute("aria-hidden");
+      else el.setAttribute("aria-hidden", "true");
+      el.toggleAttribute("inert", n !== next);
+    });
+    const at = award.querySelector(".slide-at");
+    if (at) at.textContent = String(next + 1);
+    setAwardSlide(data(b, "id"), Number(slides[next]?.dataset.entry));
+  },
+  "lesson-done": (b) =>
+    thenRender(b, async () => {
+      const done = data(b, "done") === "true";
+      await api.setLearned(data(b, "id"), done);
+      // Finishing a lesson goes back to the list, where the track's progress shows it.
+      if (done) setLesson(null);
+    }),
+  "try-template": (b) => {
+    const l = lessonById(data(b, "id"));
+    if (!l) return;
+    setDraft(l.template);
+    setLesson(null);
+    return render().then(() => {
+      const box = document.querySelector<HTMLTextAreaElement>("#draft");
+      box?.focus();
+      box?.scrollIntoView({ block: "center" });
+    });
+  },
+  "copy-draft": async (b) => {
+    const ok = await navigator.clipboard.writeText(state.draft).then(
+      () => true,
+      () => false,
+    );
+    say(b.parentElement?.querySelector("#draft-status") ?? null, ok ? "Copied your prompt." : "Couldn't copy.");
+  },
+  "clear-draft": () => {
+    setDraft("");
+    const box = document.querySelector<HTMLTextAreaElement>("#draft");
+    if (box) {
+      box.value = "";
+      box.focus();
+    }
+    scheduleCheck(document, 0);
+  },
+  // Switching or dropping a goal loses this week's progress on it, so each takes a second click.
+  "start-goal": (b) => {
+    if (b.dataset.replaces === "yes" && !confirmed(b, "Click again to switch")) return;
+    const raw = b.dataset.goal ?? b.closest(".goal-pick")?.querySelector<HTMLSelectElement>("#goal-pick")?.value ?? "";
+    const g = parseGoalChoice(raw);
+    if (!g) throw new Error("Pick a goal first");
+    return thenRender(b, () => api.setGoal(g.kind, g.target));
+  },
+  "clear-goal": (b) => {
+    if (!confirmed(b, "Click again to drop it")) return;
+    return thenRender(b, () => api.clearGoal());
+  },
+  pin: (b) => {
+    const id = Number(data(b, "id"));
+    // Pinning moves the entry to the front of its award; stay on it rather than on its old spot.
+    const award = b.closest<HTMLElement>("[data-award]")?.dataset.award;
+    if (award != null) setAwardSlide(award, id);
+    return thenRender(b, () => api.pin(id, data(b, "pinned") !== "true"));
+  },
   allow: (b) => {
     const id = data(b, "id");
     const choice = b.parentElement?.querySelector<HTMLSelectElement>(`select[data-since="${CSS.escape(id)}"]`)?.value ?? "all";
@@ -155,11 +334,7 @@ export const clickActions = {
   import: (b) => thenRender(b, () => api.importExport(data(b, "id"))),
   // Forget deletes data, so it takes a second click to confirm.
   forget: (b) => {
-    if (b.dataset.confirm !== "yes") {
-      b.dataset.confirm = "yes";
-      b.textContent = "Click again to delete its data";
-      return;
-    }
+    if (!confirmed(b, "Click again to delete its data")) return;
     return thenRender(b, () => api.forget(data(b, "id")));
   },
   "save-privacy": async (b) => {
@@ -188,10 +363,29 @@ export const clickActions = {
   retry: () => render(),
 } satisfies Record<string, Handler>;
 
-type InputHandler = (el: HTMLInputElement) => unknown;
+/** A goal choice from the Improve form, checked before it's sent. */
+export function parseGoalChoice(raw: string): { kind: GoalKind; target: number } | null {
+  let v: unknown;
+  try {
+    v = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof v !== "object" || v === null) return null;
+  const o = v as Record<string, unknown>;
+  const target = typeof o.target === "number" ? o.target : Number.NaN;
+  if (!Number.isFinite(target)) return null;
+  if (o.kind === "habit" && typeof o.signal === "string") return { kind: { kind: "habit", signal: o.signal }, target };
+  if (o.kind === "steer" && typeof o.steer === "string") return { kind: { kind: "steer", steer: o.steer }, target };
+  if (o.kind === "tier" && typeof o.tier === "string") return { kind: { kind: "tier", tier: o.tier }, target };
+  return null;
+}
+
+type InputHandler = (el: HTMLInputElement | HTMLSelectElement) => unknown;
 
 /** Undoes a checkbox the backend refused, so it never shows a setting that isn't saved. */
-const toggle = (save: (on: boolean) => Promise<unknown>, saved?: (on: boolean) => void) => async (box: HTMLInputElement) => {
+const toggle = (save: (on: boolean) => Promise<unknown>, saved?: (on: boolean) => void) => async (box: HTMLInputElement | HTMLSelectElement) => {
+  if (!(box instanceof HTMLInputElement)) return;
   try {
     await save(box.checked);
     saved?.(box.checked);
@@ -206,6 +400,17 @@ export const changeActions = {
   },
   autostart: toggle((on) => api.setAutostart(on)),
   "auto-update": toggle((on) => api.setAutoUpdate(on), setAutoUpdate),
+  // The "Launch at login" hint depends on it, so the page redraws.
+  "menu-bar": toggle(
+    (on) => api.setMenuBar(on),
+    () => void render(),
+  ),
+  quiz: (r) => r instanceof HTMLInputElement && judgeQuiz(r),
+  "period-pick": (sel) => {
+    if (!isPeriod(sel.value)) return;
+    setPeriod(sel.value);
+    return render();
+  },
 } satisfies Record<string, InputHandler>;
 
 const has = <T extends object>(map: T, key: string): key is Extract<keyof T, string> => Object.keys(map).includes(key);
@@ -226,10 +431,17 @@ export function bindActions(root: HTMLElement): void {
       report(err);
     }
   });
+  // Typing in the prompt checker: kept in memory and re-graded when typing pauses.
+  root.addEventListener("input", (e) => {
+    const el = e.target;
+    if (!(el instanceof HTMLTextAreaElement) || el.dataset.action !== "draft") return;
+    setDraft(el.value);
+    scheduleCheck(root);
+  });
   root.addEventListener("change", (e) => {
     const el = actionTarget(e);
     const name = el?.dataset.action;
-    if (!(el instanceof HTMLInputElement) || !name || !has(changeActions, name)) return;
+    if (!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement) || !name || !has(changeActions, name)) return;
     Promise.resolve(changeActions[name](el)).catch(report);
   });
 }

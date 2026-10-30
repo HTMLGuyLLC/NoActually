@@ -1,5 +1,5 @@
 //! Source adapters. Each one knows where an AI tool keeps its history and how to read it.
-//! Adapters never decide what counts as a catch; they only produce `Turn`s for the engine.
+//! Adapters never decide what counts as a correction; they only produce `Turn`s for the engine.
 //!
 //! Every adapter implements [`Source`]. [`all`] lists them in display order, [`find`] looks one
 //! up by id. Shared reading helpers live in `jsonl` (append-only logs) and `export` (one-off

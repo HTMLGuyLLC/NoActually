@@ -52,6 +52,8 @@ Only add a source you have real files for. Format notes alone are not enough.
 - Every rule change needs a test in `crates/engine/src/tests.rs`. Cover the case you add and one near-miss that must not match.
 - Rule ids are stable. Don't rename or reuse one. Stored events refer to them.
 - Keep rules deterministic: no network, no model calls.
+- Prompt grading rules (what counts as a Target, Evidence, Finish line, Guardrails or Purpose) live in `crates/engine/src/prompt.rs`, with tests in `crates/engine/src/prompt_tests.rs`.
+- Every lesson example in `app/src/learn/lessons.json` is graded by the engine's lessons test (`crates/engine/tests/lessons.rs`), so a rule change can fail a lesson. If it does, fix the rule or the example.
 
 ## Checks and code style
 
@@ -84,7 +86,7 @@ CI also runs cargo-deny, an MSRV check, a wasm32 build of the engine and a pnpm 
 ## Tests
 
 - New or changed behavior comes with tests, following the existing style in the crate or folder you touch.
-- Rules: a test for the new case and one near-miss that must not match (`crates/engine/src/tests.rs`).
+- Rules: a test for the new case and one near-miss that must not match (`crates/engine/src/tests.rs`, or `prompt_tests.rs` for prompt grading). Run `cargo test -p noactually-engine --test lessons` too, since lesson examples are graded by the same rules.
 - Source adapters: a fixture test with a small, made-up file.
 - Frontend logic: `vitest` tests next to the code in `app/src`.
 - While working, run just the tests for what you changed (for example `cargo test -p noactually-engine`); `just ci` runs everything.
@@ -118,8 +120,8 @@ In-app updates are signed with a Tauri updater key. Its public half is in `app/s
 1. Make sure `main` is green and `CHANGELOG.md` has the user-facing changes under **Unreleased**.
 2. Run `just bump 0.2.0` (`scripts/bump-version.sh 0.2.0`). It sets the version in `Cargo.toml` (the source of truth), `app/package.json` and, if present, `app/src-tauri/tauri.conf.json`, refreshes `Cargo.lock`, and moves the Unreleased notes under a dated `## [0.2.0]` heading with updated compare links. Commit it on a branch (`git switch -c release-0.2.0 && git commit -am "release: v0.2.0"`) and merge it with a pull request once CI is green (`main` only takes pull requests).
 3. Tag the merged commit on `main` and push the tag: `git switch main && git pull && git tag v0.2.0 && git push origin v0.2.0`. The Release workflow checks the tag against the Cargo version, then builds Windows and Linux into a draft release, with signed update files and a `latest.json` for them.
-4. On a Mac with the Developer ID certificate and the updater key, check out the tag and run `just release-mac` (`scripts/release-macos.sh`). It refuses to run on a dirty tree or when HEAD isn't the tagged commit (`--force` skips the tag check). It builds a universal app, signs it, notarizes and staples both the app and the DMG, and makes the signed update file (`No-Actually-0.2.0-Mac-Update.app.tar.gz` + `.sig`).
-5. Run `scripts/finish-release.sh v0.2.0`. It renames the files to plain names people can pick from ("No-Actually-0.2.0-Mac.dmg", "-Windows-Setup.exe", "-Linux.AppImage"…), setting both the asset name and the label tauri-action v1 adds; uploads the Mac DMG and update file; rewrites `latest.json` so every entry points at the renamed files and adds the Mac entries (`darwin-universal`, `darwin-aarch64`, `darwin-x86_64`); and writes `SHA256SUMS.txt`. It refuses to write a `latest.json` that points at a file missing from the release.
+4. On a Mac with the Developer ID certificate and the updater key, check out the tag and run `just release-mac` (`scripts/release-macos.sh`). It refuses to run on a dirty tree or when HEAD isn't the tagged commit (`--force` skips the tag check). It builds a universal app, signs it, notarizes and staples both the app and the DMG, and makes the signed update file (`No-Actually-0.2.0-Mac-Update-universal.app.tar.gz` + `.sig`).
+5. Run `scripts/finish-release.sh v0.2.0`. It renames the files to plain names people can pick from ("No-Actually-0.2.0-Mac-universal.dmg", "-Windows-Setup-x64.exe", "-x86_64.AppImage"…), setting both the asset name and the label tauri-action v1 adds; uploads the Mac DMG and update file; rewrites `latest.json` so every entry points at the renamed files and adds the Mac entries (`darwin-universal`, `darwin-aarch64`, `darwin-x86_64`); and writes `SHA256SUMS.txt`. It refuses to write a `latest.json` that points at a file missing from the release.
 6. Check the draft and publish it (`gh release edit v0.2.0 -R HTMLGuyLLC/NoActually --draft=false`). Installed apps see the update only once it's published, because they read `releases/latest/download/latest.json`.
 
 If the `APPLE_*` secrets are set in the repo, the Release workflow also signs and notarizes macOS, and step 4 isn't needed.

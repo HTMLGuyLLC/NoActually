@@ -10,7 +10,7 @@ use engine::Answer;
 use std::path::PathBuf;
 use store::{Filter, Level, Retention, Store};
 
-const HELP: &str = "noactually: count the times you caught your AI being wrong
+const HELP: &str = "noactually: could AI replace you? Score how you work with your AI
 
 USAGE
   noactually sources                     List sources, where they read from, and whether they're allowed
@@ -19,7 +19,8 @@ USAGE
   noactually forget <source>             Stop reading and delete everything from it
   noactually import <source> <path>      Import an export file or folder (chatgpt-export, claude-ai-export)
   noactually sync                        Read anything new from allowed sources
-  noactually stats [filters] [--json]    Scorecard. Filters: --source --provider --family --version
+  noactually stats [filters] [--json]    Scorecard. Filters: --source --provider --family --version --since
+  noactually check <prompt>              What a draft prompt includes, graded like your history (nothing is saved)
   noactually retention <full|snippet|category> [--full-days N] [--snippet-days N]
 
 Data lives in NOACTUALLY_DB, or app.noactually/noactually.db in your app data folder (shared with the desktop app).
@@ -36,6 +37,7 @@ enum Command {
     Import { id: String, path: PathBuf },
     Sync,
     Stats { filter: Filter, json: bool },
+    Check { text: String },
     Retention { level: Level, full_days: Option<u32>, snippet_days: Option<u32> },
 }
 
@@ -105,15 +107,21 @@ fn parse_args(args: &[String]) -> Result<Command> {
             Command::Import { id: a.arg(0, "source")?, path: a.arg(1, "path")?.into() }
         }
         "stats" => {
-            let a = Args::split(rest, &["--source", "--provider", "--family", "--version"], &["--json"])?;
+            let a = Args::split(rest, &["--source", "--provider", "--family", "--version", "--since"], &["--json"])?;
+            let since =
+                a.value("--since").map(|d| d.parse::<NaiveDate>()).transpose().context("--since wants YYYY-MM-DD")?;
             let filter = Filter {
                 source: a.value("--source"),
                 provider: a.value("--provider"),
                 family: a.value("--family"),
                 version: a.value("--version"),
+                since,
             };
             Command::Stats { filter, json: a.has("--json") }
         }
+        // The whole rest is the prompt, so it's never read as flags.
+        "check" if !rest.is_empty() => Command::Check { text: rest.join(" ") },
+        "check" => bail!("missing prompt: noactually check \"Fix the crash in checkout.ts…\""),
         "retention" => {
             let a = Args::split(rest, &["--full-days", "--snippet-days"], &[])?;
             Command::Retention {
@@ -174,10 +182,10 @@ fn run(cmd: Command, store: &mut Store, all: &[Box<dyn sources::Source>]) -> Res
             let t = std::time::Instant::now();
             let r = store::sync(store, all)?;
             println!(
-                "Read {} files: {} messages, {} catches ({:.1}s)",
+                "Read {} files: {} messages, {} corrections ({:.1}s)",
                 r.files_read,
                 r.messages,
-                r.catches,
+                r.corrections,
                 t.elapsed().as_secs_f64()
             );
             for e in r.errors.iter().take(5) {
@@ -189,7 +197,12 @@ fn run(cmd: Command, store: &mut Store, all: &[Box<dyn sources::Source>]) -> Res
             if json {
                 println!("{}", serde_json::to_string_pretty(&s)?);
             } else {
-                print_card(&s);
+                print_card(&s, filter.since);
+            }
+        }
+        Command::Check { text } => {
+            for line in check_lines(&text) {
+                println!("{line}");
             }
         }
         Command::Retention { level, full_days, snippet_days } => {
@@ -229,91 +242,141 @@ fn print_sources(store: &Store, all: &[Box<dyn sources::Source>]) -> Result<()> 
     Ok(())
 }
 
-fn print_card(s: &store::Stats) {
+fn print_card(s: &store::Stats, since: Option<NaiveDate>) {
     if s.messages == 0 {
         println!("No messages yet. Allow a source and run `noactually sync`.");
         return;
     }
-    let verdict = match s.verdict {
-        Answer::No => "No.",
-        Answer::Hmm => "Maybe…",
-    };
-    println!("Could AI replace you? {verdict} You caught it {} times in the last 7 days.\n", s.catches_last_7d);
-    println!(
-        "  Tier            {}{}",
-        s.tier.name(),
-        s.next_tier.map_or(String::new(), |(n, k)| format!("  ({k} more this week for {})", n.name()))
-    );
-    println!("  You vs AI       {} – {}", s.catches, s.humbled);
+    let window = window_label(since);
+    for line in overall_lines(&s.overall, &window) {
+        println!("{line}");
+    }
+    println!("  All time        you corrected it {} · it corrected you {}", s.corrections, s.humbled);
     println!(
         "  Messages        {}  ({} to {})",
         s.messages,
         s.first_day.as_deref().unwrap_or("?"),
         s.last_day.as_deref().unwrap_or("?")
     );
-    if let Some(n) = s.messages_per_catch {
-        println!("  1 catch every   {n} messages");
+    if let Some(n) = s.messages_per_correction {
+        println!("  1 correction every {n} messages");
     }
-    if let Some(p) = s.pct_real_chats_with_catch {
-        println!("  Real chats      {p}% of {} had a catch", s.real_chats);
+    if let Some(p) = s.pct_real_chats_with_correction {
+        println!("  Real chats      {p}% of {} had a correction", s.real_chats);
     }
     println!("  Streak          {} days now, best {}", s.current_streak_days, s.best_streak_days);
     println!("\n  By model");
     for m in s.models.iter().filter(|m| m.messages > 0).take(10) {
         let name = if m.version.is_empty() { m.family.clone() } else { format!("{} {}", m.family, m.version) };
-        let rate = 100.0 * m.catches as f64 / m.messages as f64;
-        println!("    {:<24} {:>5} catches  {:>6} msgs  {:>4.1}%", name, m.catches, m.messages, rate);
+        let rate = 100.0 * m.corrections as f64 / m.messages as f64;
+        println!("    {:<24} {:>5} corrections  {:>6} msgs  {:>4.1}%", name, m.corrections, m.messages, rate);
     }
-    println!("\n  Catches by kind");
+    println!("\n  Corrections by kind");
     for c in engine::Category::ALL {
         if let Some(n) = s.categories.get(c.as_str()) {
             println!("    {:<24} {n}", c.title());
         }
     }
-    for line in brief_lines(&s.briefs) {
+    for line in prompt_lines(&s.prompts, &window) {
         println!("{line}");
     }
 }
 
-/// The "Do you make it guess?" half of the card.
-fn brief_lines(b: &store::Briefs) -> Vec<String> {
-    if b.tasks == 0 {
+/// The span the score looks at: from `--since` when given, else the last [`engine::WINDOW_DAYS`] days.
+fn window_label(since: Option<NaiveDate>) -> String {
+    since.map_or_else(|| format!("in {} days", engine::WINDOW_DAYS), |d| format!("since {d}"))
+}
+
+/// "Could AI replace you?": the overall score and what it's made of, over `window`.
+fn overall_lines(o: &store::Overall, window: &str) -> Vec<String> {
+    let verdict = match o.verdict {
+        Answer::No => "No.",
+        Answer::Hmm => "Hmm.",
+    };
+    match (o.score, o.tier, o.direction, o.judgment) {
+        (Some(score), Some(tier), Some(direction), Some(judgment)) => vec![
+            format!(
+                "Could AI replace you? {verdict} {} · score {score}{}\n",
+                tier.name(),
+                o.next_tier.map_or(String::new(), |n| format!("  ({} at {})", n.name(), n.floor()))
+            ),
+            format!(
+                "  Your prompts    {direction}% clear the first time {window} ({}% of the score)",
+                engine::DIRECTION_WEIGHT
+            ),
+            format!(
+                "  Who corrects    you {} · it {} {window} → {judgment}{} ({}% of the score)",
+                o.corrections,
+                o.humbled,
+                o.correction_tier.map_or(String::new(), |t| format!(", {}", t.name())),
+                100 - engine::DIRECTION_WEIGHT
+            ),
+        ],
+        _ => vec![format!(
+            "Could AI replace you? {verdict} Not scored yet: {} more tasks with a follow-up {window}.\n",
+            o.to_rank
+        )],
+    }
+}
+
+/// `noactually check "<prompt>"`: what a draft prompt carries, with the same rules scoring uses.
+fn check_lines(text: &str) -> Vec<String> {
+    let c = engine::check(text);
+    let mut out = vec![format!(
+        "{} ({} of {} things a prompt can include)",
+        c.grade.title(),
+        c.signals.count(),
+        engine::Signal::ALL.len()
+    )];
+    for s in engine::Signal::ALL {
+        let mark = if c.signals.has(s) { "✓" } else { "·" };
+        out.push(format!("  {mark} {:<18} {}", s.title(), s.hint()));
+    }
+    if c.not_a_prompt {
+        out.push("  (Reads as a question or a hello: your history doesn't grade those as prompts.)".into());
+    }
+    out
+}
+
+/// The "Do you make it guess?" half of the card; the tier's rate is over `window`.
+fn prompt_lines(p: &store::Prompts, window: &str) -> Vec<String> {
+    if p.tasks == 0 {
         return Vec::new();
     }
-    let pct = |n: i64, of: i64| if of > 0 { 100 * n / of } else { 0 };
-    let recent = pct(b.landed_last_28d, b.tasks_last_28d);
-    let tier = match b.tier {
+    let pct = store::floor_pct;
+    let recent = pct(p.window_landed, p.window_tasks);
+    let tier = match p.tier {
         Some(t) => format!(
-            "{} {}  ({recent}% landed in {} days{})",
+            "{} {}  ({recent}% clear the first time {window}{})",
             t.verdict(),
             t.name(),
-            engine::WINDOW_DAYS,
-            b.next_tier.map_or(String::new(), |n| format!("; {} at {}%", n.name(), n.floor()))
+            p.next_tier.map_or(String::new(), |n| format!("; {} at {}%", n.name(), n.floor()))
         ),
-        None => format!("Hmm. {} more tasks with a follow-up to get ranked", b.to_rank),
+        None => format!("Hmm. {} more tasks with a follow-up to get ranked", p.to_rank),
     };
     let mut out = vec![
         String::new(),
         format!("Do you make it guess? {tier}"),
         format!(
-            "  Landed           {}% of {} tasks with a follow-up needed no adding, clarifying or redoing",
-            pct(b.landed, b.continued),
-            b.continued
+            "  Clear first time {}% of {} prompts with a follow-up needed no adding, clarifying or redoing",
+            pct(p.landed, p.continued),
+            p.continued
         ),
         format!(
-            "  Sharp briefs     {}%  ({}+ of the 5 signals)",
-            pct(b.grades.get("sharp").copied().unwrap_or(0), b.tasks),
-            engine::Grade::SHARP
+            "  Specific prompts {}%  ({}+ of the {} things a prompt can include)",
+            pct(p.grades.get("sharp").copied().unwrap_or(0), p.tasks),
+            engine::Grade::SHARP,
+            engine::Signal::ALL.len()
         ),
-        "\n  Your briefs".into(),
+        "\n  Your prompts".into(),
     ];
     for sig in engine::Signal::ALL {
-        let n = b.signals.get(sig.as_str()).copied().unwrap_or(0);
-        out.push(format!("    {:<20} {:>3}%  {}", sig.title(), pct(n, b.tasks), sig.hint()));
+        let n = p.signals.get(sig.as_str()).copied().unwrap_or(0);
+        out.push(format!("    {:<20} {:>3}%  {}", sig.title(), pct(n, p.tasks), sig.hint()));
     }
-    out.push("\n  Steering".into());
+    out.push("\n  Why you followed up".into());
     for c in engine::Steer::ALL {
-        out.push(format!("    {:<20} {}", c.title(), b.steering.get(c.as_str()).copied().unwrap_or(0)));
+        out.push(format!("    {:<20} {}", c.title(), p.steering.get(c.as_str()).copied().unwrap_or(0)));
     }
     out
 }
@@ -349,9 +412,12 @@ mod tests {
             parse("import chatgpt-export ./conversations.json").unwrap(),
             Command::Import { id: "chatgpt-export".into(), path: "./conversations.json".into() }
         );
-        let Command::Stats { filter, json } = parse("stats --family Claude --version 5.5 --json").unwrap() else {
+        let Command::Stats { filter, json } =
+            parse("stats --family Claude --version 5.5 --json --since 2026-10-01").unwrap()
+        else {
             panic!("not stats")
         };
+        assert_eq!(filter.since, Some("2026-10-01".parse().unwrap()));
         assert!(json);
         assert_eq!(
             (filter.family.as_deref(), filter.version.as_deref(), filter.source),
@@ -361,6 +427,45 @@ mod tests {
             parse("retention full --snippet-days 90").unwrap(),
             Command::Retention { level: Level::Full, full_days: None, snippet_days: Some(90) }
         );
+    }
+
+    #[test]
+    fn check_reads_the_whole_rest_as_the_prompt() {
+        assert_eq!(parse("check --fix the thing").unwrap(), Command::Check { text: "--fix the thing".into() });
+        assert!(err("check").starts_with("missing prompt"));
+        let lines = check_lines("Fix the crash in `checkout.ts`. Done when the tests pass. Don't touch the API.");
+        assert_eq!(lines[0], "Specific (3 of 5 things a prompt can include)");
+        assert!(lines.iter().any(|l| l.starts_with("  ✓ Target")));
+        assert!(lines.iter().any(|l| l.starts_with("  · Purpose")));
+        assert!(check_lines("how does this work?").last().unwrap().contains("question"));
+    }
+
+    #[test]
+    fn overall_lines_show_the_score_or_how_far_off_it_is() {
+        let o = store::Overall {
+            score: Some(86),
+            direction: Some(83),
+            judgment: Some(95),
+            tier: Some(engine::Tier::SharpEyed),
+            next_tier: Some(engine::Tier::Irreplaceable),
+            verdict: Answer::No,
+            correction_tier: Some(engine::CorrectionTier::HawkEyed),
+            next_correction_tier: None,
+            corrections: 41,
+            humbled: 2,
+            to_rank: 0,
+        };
+        let text = overall_lines(&o, &window_label(None)).join("\n");
+        assert!(text.starts_with("Could AI replace you? No. Sharp-eyed · score 86  (Irreplaceable at 90)"), "{text}");
+        assert!(text.contains("you 41 · it 2 in 28 days → 95, Hawk-eyed (30% of the score)"), "{text}");
+        let unranked = store::Overall { score: None, tier: None, verdict: Answer::Hmm, to_rank: 4, ..o };
+        assert!(overall_lines(&unranked, &window_label(None))[0].contains("Not scored yet: 4 more tasks"));
+        let since = window_label(Some("2026-09-01".parse().unwrap()));
+        let text = overall_lines(&o, &since).join("\n");
+        assert!(text.contains("83% clear the first time since 2026-09-01"), "{text}");
+        assert!(text.contains("you 41 · it 2 since 2026-09-01 →"), "{text}");
+        assert!(!text.contains("28 days"), "{text}");
+        assert!(overall_lines(&unranked, &since)[0].contains("with a follow-up since 2026-09-01"));
     }
 
     #[test]
@@ -379,22 +484,29 @@ mod tests {
     }
 
     #[test]
-    fn brief_lines_say_the_tier_or_how_far_off_it_is() {
-        assert!(brief_lines(&store::Briefs::default()).is_empty(), "nothing before the first task");
-        let mut b = store::Briefs { tasks: 10, continued: 8, landed: 6, to_rank: 2, ..Default::default() };
+    fn prompt_lines_say_the_tier_or_how_far_off_it_is() {
+        assert!(
+            prompt_lines(&store::Prompts::default(), &window_label(None)).is_empty(),
+            "nothing before the first task"
+        );
+        let mut b = store::Prompts { tasks: 10, continued: 8, landed: 6, to_rank: 2, ..Default::default() };
         b.grades.insert("sharp".into(), 3);
         b.signals.insert("why".into(), 5);
         b.steering.insert("added".into(), 1);
-        let text = brief_lines(&b).join("\n");
+        let text = prompt_lines(&b, &window_label(None)).join("\n");
         assert!(text.contains("Do you make it guess? Hmm. 2 more tasks with a follow-up to get ranked"), "{text}");
-        assert!(text.contains("Landed           75% of 8 tasks with a follow-up"), "{text}");
-        assert!(text.contains("Sharp briefs     30%"), "{text}");
-        assert!(text.contains("Says why              50%"), "{text}");
+        assert!(text.contains("Clear first time 75% of 8 prompts with a follow-up"), "{text}");
+        assert!(text.contains("Specific prompts 30%"), "{text}");
+        assert!(text.contains("Purpose               50%"), "{text}");
         assert!(text.contains("You added more       1"), "{text}");
-        b.tier = Some(engine::BriefTier::TechLead);
-        b.next_tier = Some(engine::BriefTier::Architect);
-        (b.tasks_last_28d, b.landed_last_28d) = (40, 34);
-        assert!(brief_lines(&b)[1].ends_with("Sometimes. Tech lead  (85% landed in 28 days; Architect at 90%)"));
+        b.tier = Some(engine::PromptTier::TechLead);
+        b.next_tier = Some(engine::PromptTier::Architect);
+        (b.window_tasks, b.window_landed) = (40, 34);
+        assert!(prompt_lines(&b, &window_label(None))[1]
+            .ends_with("Sometimes. Tech lead  (85% clear the first time in 28 days; Architect at 90%)"));
+        let since = window_label(Some("2026-09-01".parse().unwrap()));
+        assert!(prompt_lines(&b, &since)[1]
+            .ends_with("Sometimes. Tech lead  (85% clear the first time since 2026-09-01; Architect at 90%)"));
     }
 
     #[test]

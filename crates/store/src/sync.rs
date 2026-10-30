@@ -20,8 +20,8 @@ pub struct SyncReport {
     pub files_read: usize,
     /// New messages counted.
     pub messages: usize,
-    /// New catches counted.
-    pub catches: usize,
+    /// New corrections counted.
+    pub corrections: usize,
     /// One line per file that was skipped, with the reason.
     pub errors: Vec<String>,
     /// Scores were rebuilt because the rules changed since they were counted.
@@ -53,14 +53,14 @@ pub fn sync(store: &mut Store, all: &[Box<dyn Source>]) -> Result<SyncReport> {
                 let saved = scan.map_err(|e| e.to_string()).and_then(|scan| {
                     // One file failing to save (a locked database, say) must not stop the rest.
                     store
-                        .ingest(&state, &job.path.to_string_lossy(), &scan, job.meta)
+                        .ingest(&state, &job.path.to_string_lossy(), &scan, job.meta, job.finalize)
                         .map_err(|e| format!("{}: couldn't save: {e}", job.path.display()))
                 });
                 match saved {
                     Ok((m, c)) => {
                         report.files_read += 1;
                         report.messages += m;
-                        report.catches += c;
+                        report.corrections += c;
                     }
                     Err(e) => report.errors.push(e),
                 }
@@ -92,15 +92,16 @@ fn plan(store: &Store, src: &dyn Source, state: &SourceState, now: SystemTime, r
 }
 
 /// Where to start reading a file, or `None` to skip it. `prev` is (checkpoint, size and mtime
-/// then); `quiet` means it hasn't changed in a while, so a last unanswered message is final.
-fn resume_from(prev: Option<(u64, FileMeta)>, now: FileMeta, quiet: bool, append_only: bool) -> Option<u64> {
+/// then, and whether that pass was final); `quiet` means it hasn't changed in a while, so a last
+/// unanswered message is final.
+fn resume_from(prev: Option<(u64, FileMeta, bool)>, now: FileMeta, quiet: bool, append_only: bool) -> Option<u64> {
     match prev {
-        Some((_, then)) if then == now && !quiet => None, // unchanged
-        Some((cp, then)) if append_only && now.size >= then.size && cp <= now.size => {
+        Some((_, then, finalized)) if then == now && (!quiet || finalized) => None, // unchanged
+        Some((cp, then, _)) if append_only && now.size >= then.size && cp <= now.size => {
             // Grew (or just went quiet): resume at the checkpoint, unless it's all read already.
             (cp != now.size || then.size != now.size).then_some(cp)
         }
-        Some((_, then)) if then == now => None,
+        Some((_, then, _)) if then == now => None,
         _ => Some(0), // new, rewritten, or shrank: re-read; message keys stop double counts
     }
 }
@@ -116,12 +117,22 @@ mod tests {
     #[test]
     fn resume_points() {
         assert_eq!(resume_from(None, m(10, 1), false, true), Some(0), "new file");
-        assert_eq!(resume_from(Some((10, m(10, 1))), m(10, 1), false, true), None, "unchanged");
-        assert_eq!(resume_from(Some((6, m(10, 1))), m(20, 2), false, true), Some(6), "appended");
-        assert_eq!(resume_from(Some((6, m(10, 1))), m(10, 1), true, true), Some(6), "went quiet: finalize the tail");
-        assert_eq!(resume_from(Some((10, m(10, 1))), m(10, 1), true, true), None, "quiet and fully read");
-        assert_eq!(resume_from(Some((10, m(10, 1))), m(4, 2), false, true), Some(0), "shrank");
-        assert_eq!(resume_from(Some((10, m(10, 1))), m(12, 2), false, false), Some(0), "whole files re-read");
-        assert_eq!(resume_from(Some((10, m(10, 1))), m(10, 1), true, false), None, "quiet whole file unchanged");
+        assert_eq!(resume_from(Some((10, m(10, 1), false)), m(10, 1), false, true), None, "unchanged");
+        assert_eq!(resume_from(Some((6, m(10, 1), false)), m(20, 2), false, true), Some(6), "appended");
+        assert_eq!(
+            resume_from(Some((6, m(10, 1), false)), m(10, 1), true, true),
+            Some(6),
+            "went quiet: finalize the tail"
+        );
+        assert_eq!(resume_from(Some((10, m(10, 1), false)), m(10, 1), true, true), None, "quiet and fully read");
+        assert_eq!(resume_from(Some((10, m(10, 1), false)), m(4, 2), false, true), Some(0), "shrank");
+        assert_eq!(resume_from(Some((10, m(10, 1), false)), m(12, 2), false, false), Some(0), "whole files re-read");
+        assert_eq!(resume_from(Some((10, m(10, 1), false)), m(10, 1), true, false), None, "quiet whole file unchanged");
+        assert_eq!(
+            resume_from(Some((6, m(10, 1), true)), m(10, 1), true, true),
+            None,
+            "quiet, finalized, checkpoint < size"
+        );
+        assert_eq!(resume_from(Some((6, m(10, 1), true)), m(20, 2), false, true), Some(6), "finalized, then appended");
     }
 }

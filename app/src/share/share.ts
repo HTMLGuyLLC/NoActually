@@ -1,27 +1,34 @@
 // Share text, network links and the dialog's guidance. All made on this machine from numbers only
-// (or, for a single catch, the stored and already redacted snippet the person can edit first).
-import type { Briefs, BriefTier, Stats } from "../api";
+// (or, for a single correction, the stored and already redacted snippet the person can edit first).
+import type { Overall, Prompts, PromptTier, Stats } from "../api";
+import { plural } from "../format";
 import { type Html, html } from "../html";
 import { landedPct } from "../meta";
+import { PERIOD_WHEN } from "../state";
+import type { CardShape } from "./cards";
 
 export const SHARE_URL = "https://github.com/HTMLGuyLLC/NoActually";
 /** The link as printed on the cards: "github.com/HTMLGuyLLC/NoActually". */
 export const SHARE_URL_SHORT = SHARE_URL.replace(/^https:\/\//, "");
 
-type ScoreLike = Pick<Stats, "verdict" | "catches_last_7d" | "pct_real_chats_with_catch" | "catches" | "humbled">;
+type ScoreLike = Pick<Stats, "overall">;
 
-export function shareText(s: ScoreLike, who: string) {
-  const pct = s.pct_real_chats_with_catch != null ? `, and in ${Math.round(s.pct_real_chats_with_catch)}% of my chats` : "";
-  const times = s.catches_last_7d === 1 ? "time" : "times";
-  return `Could ${who} replace me? ${s.verdict === "no" ? "No." : "Maybe…"} I caught it ${s.catches_last_7d} ${times} this week${pct}. Me ${s.catches}, ${who} ${s.humbled}. What's your score? ${SHARE_URL}`;
+/** The score, ready to post: the answer, the score and its two halves. Numbers only. Only offered once there is a tier. */
+export function shareText(s: ScoreLike, who: string, tier: string, when = PERIOD_WHEN["28d"]) {
+  const o = s.overall;
+  const answer = o.verdict === "no" ? "No." : "Hmm.";
+  return `Could ${who} replace me? ${answer} My score is ${o.score} (${tier}): ${o.direction}% of my prompts were clear the first time, and I corrected it ${plural(o.corrections, "time")} to its ${o.humbled} ${when}. What's yours? ${SHARE_URL}`;
 }
 
-/** The briefs score, ready to post: the tier's answer and how many tasks landed. Numbers only. */
-export function briefShareText(b: Pick<Briefs, "landed_last_28d" | "tasks_last_28d">, tier: BriefTier) {
-  return `Do I make my AI guess? ${tier.verdict} ${landedPct(b)}% of my tasks in the last 28 days landed without me adding, clarifying or starting over. Brief tier: ${tier.name}. Do you make yours guess? ${SHARE_URL}`;
+/** The prompts score, ready to post: the tier's answer and how many prompts were clear the first time. Numbers only. */
+export function promptShareText(b: Pick<Prompts, "window_landed" | "window_tasks">, tier: PromptTier, when = PERIOD_WHEN["28d"]) {
+  return `Do I make my AI guess? ${tier.verdict} ${landedPct(b)}% of my prompts ${when} were clear the first time. Prompt tier: ${tier.name}. Do you make yours guess? ${SHARE_URL}`;
 }
 
-import type { CardShape } from "./cards";
+/** The corrections answer, ready to post: the tier's word and who corrected whom. Numbers only. */
+export function correctionsShareText(o: Pick<Overall, "corrections" | "humbled">, tier: PromptTier, when = PERIOD_WHEN["28d"]) {
+  return `Do I correct my AI? ${tier.verdict} I corrected it ${plural(o.corrections, "time")} ${when}, and it corrected me ${plural(o.humbled, "time")}. Correction tier: ${tier.name}. Do you correct yours? ${SHARE_URL}`;
+}
 
 export type ShareTarget = {
   id: string;
@@ -36,7 +43,7 @@ export type ShareTarget = {
 
 /**
  * Each network's own "share" link, pre-filled with `text` where the network allows it. For a
- * score that's numbers and the project link; for a catch it's the redacted, clipped snippet,
+ * score that's numbers and the project link; for a correction it's the redacted, clipped snippet,
  * which the share dialog shows (and lets the person edit) before anything opens.
  */
 export function shareTargets(text: string, url = SHARE_URL): ShareTarget[] {
@@ -90,17 +97,17 @@ export function shareGuide(target: ShareTarget, copied: boolean, pasteKey: strin
   return { saveImage: false, open: true, paste: false, guide: html`Opening ${target.label} with your post filled in…` };
 }
 
-type CatchLike = { model: string; human: string | null; ai: string | null };
+export type CorrectionLike = { model: string; human: string | null; ai: string | null };
 
 export function clip(s: string, n: number) {
   const t = s.replace(/\s+/g, " ").trim();
   return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t;
 }
 
-/** A single catch, ready to post. Quotes are the stored (already redacted) snippets, clipped short. */
-export function catchShareText(e: CatchLike, url = SHARE_URL) {
+/** A single correction, ready to post. Quotes are the stored (already redacted) snippets, clipped short. */
+export function correctionShareText(e: CorrectionLike, url = SHARE_URL) {
   const who = e.model || "my AI";
   const you = e.human ? ` Me: “${clip(e.human, 90)}”` : "";
   const ai = e.ai ? ` ${who}: “${clip(e.ai, 90)}”` : "";
-  return `I caught ${who} being wrong.${you}${ai} Could AI replace me? No, actually. ${url}`;
+  return `I corrected ${who}.${you}${ai} Could AI replace me? No, actually. ${url}`;
 }

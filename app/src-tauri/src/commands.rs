@@ -10,8 +10,8 @@ use chrono::{Local, NaiveDate};
 use serde::Serialize;
 use sources::{Kind, Source};
 use std::sync::Arc;
-use store::{Filter, Meta, Retention, SourceState, Stats};
-use tauri::{AppHandle, State};
+use store::{Filter, Goal, GoalKind, Meta, Progress, Retention, SourceState, Stats};
+use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_dialog::{DialogExt, FileDialogBuilder, FilePath};
 use tauri_plugin_notification::{NotificationExt, PermissionState};
@@ -50,12 +50,79 @@ pub fn meta(app: State<Arc<App>>) -> Meta {
     store::meta(&app.sources)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stats(app: State<Arc<App>>, filter: Filter) -> Res<Stats> {
     lock(&app.reader).stats(&filter, Local::now().date_naive()).map_err(err)
 }
 
+/// The Improve tab: history for the filter, plus your goal, trophies and bests. Off the main
+/// thread: it reads every week of history.
+#[tauri::command(async)]
+pub fn progress(app: State<Arc<App>>, filter: Filter) -> Res<Progress> {
+    lock(&app.reader).progress(&filter, Local::now().date_naive()).map_err(err)
+}
+
+#[tauri::command(async)]
+pub fn set_goal(app: State<Arc<App>>, kind: GoalKind, target: i64) -> Res<Goal> {
+    let now = chrono::Local::now();
+    lock(&app.writer).set_goal(kind, target, now.date_naive(), now.timestamp_millis()).map_err(err)
+}
+
+#[tauri::command(async)]
+pub fn clear_goal(app: State<Arc<App>>) -> Res<()> {
+    lock(&app.writer).clear_goal().map_err(err)
+}
+
+/// Longest draft the prompt checker grades. The engine reads the first 4,000 characters anyway;
+/// this just keeps a giant paste from crossing the bridge.
+const CHECK_MAX_BYTES: usize = 64 * 1024;
+
+/// Grades a draft prompt with the same rules scoring uses. Nothing is stored or logged.
 #[tauri::command]
+pub fn check_prompt(text: String) -> engine::Check {
+    let mut end = text.len().min(CHECK_MAX_BYTES);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    engine::check(&text[..end])
+}
+
+#[tauri::command]
+pub fn learned(app: State<Arc<App>>) -> Res<Vec<String>> {
+    lock(&app.reader).learned().map_err(err)
+}
+
+#[tauri::command(async)]
+pub fn set_learned(app: State<Arc<App>>, id: String, done: bool) -> Res<Vec<String>> {
+    lock(&app.writer).set_learned(&id, done).map_err(err)
+}
+
+/// The menu bar setting, and whether this system could build the icon at all.
+#[derive(Serialize)]
+pub struct MenuBar {
+    /// The saved choice: keep running in the menu bar (macOS) or system tray after the window
+    /// closes. False means an ordinary app that quits.
+    enabled: bool,
+    /// False when the tray failed to build, so the choice has no effect here.
+    available: bool,
+}
+
+#[tauri::command]
+pub fn get_menu_bar(app: State<Arc<App>>, tray: State<crate::HasTray>) -> MenuBar {
+    MenuBar { enabled: app.menu_bar(), available: tray.0 }
+}
+
+#[tauri::command(async)]
+pub fn set_menu_bar(handle: AppHandle, app: State<Arc<App>>, tray: State<crate::HasTray>, enabled: bool) -> Res<()> {
+    if !tray.0 {
+        return Ok(()); // no icon to show or hide; closing the window quits either way
+    }
+    lock(&app.writer).set_setting(crate::MENU_BAR_KEY, if enabled { "on" } else { "off" }).map_err(err)?;
+    crate::apply_menu_bar(&handle, &app, enabled);
+    Ok(())
+}
+
+#[tauri::command(async)]
 pub fn list_sources(app: State<Arc<App>>) -> Res<Vec<SourceListing>> {
     let states = lock(&app.reader).source_states().map_err(err)?;
     Ok(app
@@ -180,9 +247,13 @@ pub fn sync_status(app: State<Arc<App>>) -> SyncStatus {
     lock(&app.status).clone()
 }
 
+/// Shows the scorecard window, on `tab` when given (the main window checks it's a real tab).
 #[tauri::command]
-pub fn open_main(handle: AppHandle) {
+pub fn open_main(handle: AppHandle, tab: Option<String>) {
     crate::show_main(&handle);
+    if let Some(tab) = tab {
+        let _ = handle.emit_to("main", "open-tab", tab);
+    }
 }
 
 #[tauri::command]
@@ -204,11 +275,17 @@ pub fn is_png(bytes: &[u8]) -> bool {
     bytes.starts_with(&PNG_SIGNATURE)
 }
 
+/// Biggest share card accepted. A real one is a few hundred KB.
+const SHARE_CARD_MAX_BYTES: usize = 10 * 1024 * 1024;
+
 /// Saves the share card the window drew. The user picks where; nothing is uploaded.
 #[tauri::command]
 pub async fn save_share_card(handle: AppHandle, png: Vec<u8>) -> Res<Option<String>> {
     if !is_png(&png) {
         return Err("That isn't a PNG image.".into());
+    }
+    if png.len() > SHARE_CARD_MAX_BYTES {
+        return Err("That image is too big to be a scorecard.".into());
     }
     let dialog = handle
         .dialog()
@@ -291,6 +368,13 @@ mod tests {
     }
 
     #[test]
+    fn the_checker_cuts_giant_drafts_on_a_char_boundary() {
+        let huge = "é".repeat(CHECK_MAX_BYTES); // two bytes each: the cut lands mid-character
+        assert_eq!(check_prompt(huge).grade, engine::Grade::Thin);
+        assert_eq!(check_prompt("Fix `a.ts`. Done when tests pass. Don't touch b.".into()).grade, engine::Grade::Sharp);
+    }
+
+    #[test]
     fn png_needs_the_whole_signature() {
         assert!(is_png(b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR"));
         assert!(!is_png(b"xPNG\r\n\x1a\n"), "first byte matters");
@@ -325,10 +409,23 @@ mod tests {
             ("models", serde_json::to_value(store::ModelRow::default()).unwrap()),
             ("weekly", serde_json::to_value(store::WeekRow::default()).unwrap()),
         ];
-        let briefs =
-            serde_json::to_value(store::Briefs { tip: Some(store::Tip::default()), ..Default::default() }).unwrap();
-        assert_eq!(keys(&demo["stats"]["briefs"]), keys(&briefs), "demo.json `briefs` keys differ from `Briefs`");
-        assert_eq!(keys(&demo["stats"]["briefs"]["tip"]), keys(&briefs["tip"]), "demo.json `briefs.tip` keys differ");
+        let prompts =
+            serde_json::to_value(store::Prompts { tip: Some(store::Tip::default()), ..Default::default() }).unwrap();
+        assert_eq!(keys(&demo["stats"]["prompts"]), keys(&prompts), "demo.json `prompts` keys differ from `Prompts`");
+        assert_eq!(
+            keys(&demo["stats"]["prompts"]["tip"]),
+            keys(&prompts["tip"]),
+            "demo.json `prompts.tip` keys differ"
+        );
+        assert_eq!(keys(&demo["stats"]["overall"]), keys(&stats["overall"]), "demo.json `overall` keys differ");
+        let progress =
+            serde_json::to_value(db.progress(&Filter::default(), Local::now().date_naive()).unwrap()).unwrap();
+        assert_eq!(keys(&demo["progress"]), keys(&progress), "demo.json `progress` keys differ from `Progress`");
+        let week = serde_json::to_value(store::HistoryWeek::default()).unwrap();
+        for w in demo["progress"]["weeks"].as_array().unwrap() {
+            assert_eq!(keys(w), keys(&week), "a demo.json `progress.weeks` row has different keys");
+        }
+        assert!(demo["progress"]["goal"].is_object(), "the demo shows a goal under way");
         for (field, row) in rows {
             let demo_rows = demo["stats"][field].as_array().unwrap();
             assert!(!demo_rows.is_empty(), "demo.json `{field}` is empty, so nothing is checked");

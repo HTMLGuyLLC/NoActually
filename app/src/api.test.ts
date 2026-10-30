@@ -1,18 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import { api, demo, isLevel } from "./api";
-import { meta, stats } from "./test/fixtures";
+import { meta, progress, stats } from "./test/fixtures";
 
 describe("api outside Tauri", () => {
   it("runs as the demo, answering every command", async () => {
     expect(demo).toBe(true);
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({ json: async () => ({ meta, stats: stats() }) })),
+      vi.fn(async () => ({ json: async () => ({ meta, stats: stats(), progress: progress() }) })),
     );
     const open = vi.fn();
     vi.stubGlobal("window", { open });
     expect(await api.meta()).toEqual(meta);
-    expect((await api.stats({})).tier).toBe("irreplaceable");
+    expect((await api.stats({})).overall.tier).toBe("sharp_eyed");
     expect(await api.sources()).not.toHaveLength(0);
     expect(await api.retention()).toEqual({ level: "snippet", full_days: 30, snippet_days: 365 });
     expect(await api.getAutostart()).toBe(false);

@@ -1,44 +1,56 @@
 import { describe, expect, it } from "vitest";
-import { briefs, HOSTILE, meta, stats } from "../test/fixtures";
-import { briefLines, gradeKey } from "./cards";
-import { briefShareText, catchShareText, clip, SHARE_HOSTS, SHARE_URL, SHARE_URL_SHORT, type ShareTarget, shareGuide, shareTargets, shareText } from "./share";
+import { HOSTILE, meta, overall, prompts, stats } from "../test/fixtures";
+import { gradeKey, promptLines } from "./cards";
+import {
+  clip,
+  correctionShareText,
+  promptShareText,
+  SHARE_HOSTS,
+  SHARE_URL,
+  SHARE_URL_SHORT,
+  type ShareTarget,
+  shareGuide,
+  shareTargets,
+  shareText,
+} from "./share";
 
 describe("shareText", () => {
-  it("brags with numbers only and links to the project", () => {
-    const t = shareText(stats(), "Claude Opus 5.5");
+  it("brags with the score and its tier, numbers only, and links to the project", () => {
+    const t = shareText(stats(), "Claude Opus 5.5", "Sharp-eyed");
     expect(t).toBe(
-      `Could Claude Opus 5.5 replace me? No. I caught it 17 times this week, and in 38% of my chats. Me 177, Claude Opus 5.5 3. What's your score? ${SHARE_URL}`,
+      `Could Claude Opus 5.5 replace me? No. My score is 86 (Sharp-eyed): 83% of my prompts were clear the first time, and I corrected it 41 times to its 2 in the last 28 days. What's yours? ${SHARE_URL}`,
     );
   });
 
-  it("hedges when Rust's verdict is hmm, and handles the singular", () => {
-    const t = shareText(stats({ verdict: "hmm", catches_last_7d: 1, pct_real_chats_with_catch: null }), "AI");
-    expect(t).toContain("Maybe… I caught it 1 time this week.");
+  it("handles the singular", () => {
+    const s = stats({ overall: overall({ corrections: 1, humbled: 1 }) });
+    expect(shareText(s, "AI", "Sharp-eyed")).toContain("I corrected it 1 time to its 1 in the last 28 days.");
   });
 
-  it("follows the verdict, never re-deriving it from the count", () => {
-    expect(shareText(stats({ verdict: "hmm", catches_last_7d: 50 }), "AI")).toContain("Maybe…");
-    expect(shareText(stats({ verdict: "no", catches_last_7d: 0 }), "AI")).toContain("No.");
+  it("follows the verdict, never re-deriving it from the score", () => {
+    expect(shareText(stats({ overall: overall({ verdict: "hmm" }) }), "AI", "Sharp-eyed")).toContain("Hmm.");
+    expect(shareText(stats({ overall: overall({ verdict: "no", score: 10 }) }), "AI", "Rubber stamp")).toContain("No.");
   });
 });
 
-describe("briefShareText", () => {
+describe("promptShareText", () => {
   it("posts the tier's answer and the landed share, numbers only", () => {
-    const tier = meta.brief_tiers[2];
+    const tier = meta.prompt_tiers[2];
     if (!tier) throw new Error("fixture");
-    expect(briefShareText(briefs(), tier)).toBe(
-      `Do I make my AI guess? Sometimes. 95% of my tasks in the last 28 days landed without me adding, clarifying or starting over. Brief tier: Tech lead. Do you make yours guess? ${SHARE_URL}`,
+    expect(promptShareText(prompts(), tier)).toBe(
+      `Do I make my AI guess? Sometimes. 95% of my prompts in the last 28 days were clear the first time. Prompt tier: Tech lead. Do you make yours guess? ${SHARE_URL}`,
     );
   });
 
   it("matches the card's lines", () => {
-    expect(briefLines(briefs())).toEqual(["95% of my tasks landed without steering (last 28 days).", "20% of all my briefs were sharp."]);
-    expect(gradeKey(briefs())).toBe("SHARP 20%  ·  SOLID 30%  ·  THIN 50%");
+    expect(promptLines(prompts())).toEqual(["95% of my prompts in the last 28 days were clear the first time.", "20% of all my prompts were specific."]);
+    expect(promptLines(prompts(), "across all time")[0]).toBe("95% of my prompts across all time were clear the first time.");
+    expect(gradeKey(prompts())).toBe("SPECIFIC 20%  ·  DECENT 30%  ·  VAGUE 50%");
   });
 });
 
 describe("shareTargets", () => {
-  const text = shareText(stats(), "AI");
+  const text = shareText(stats(), "AI", "Sharp-eyed");
   const targets = shareTargets(text);
   const by = (id: string): ShareTarget => {
     const t = targets.find((x) => x.id === id);
@@ -111,19 +123,19 @@ describe("shareGuide", () => {
   });
 });
 
-describe("catchShareText", () => {
+describe("correctionShareText", () => {
   it("quotes both sides, clipped, and links the project", () => {
-    const t = catchShareText({ model: "Claude Opus 5", human: "that's not a real page", ai: "You're right, that route doesn't exist." });
+    const t = correctionShareText({ model: "Claude Opus 5", human: "that's not a real page", ai: "You're right, that route doesn't exist." });
     expect(t).toBe(
-      `I caught Claude Opus 5 being wrong. Me: “that's not a real page” Claude Opus 5: “You're right, that route doesn't exist.” Could AI replace me? No, actually. ${SHARE_URL}`,
+      `I corrected Claude Opus 5. Me: “that's not a real page” Claude Opus 5: “You're right, that route doesn't exist.” Could AI replace me? No, actually. ${SHARE_URL}`,
     );
-    const long = catchShareText({ model: "GPT", human: "x".repeat(300), ai: null });
+    const long = correctionShareText({ model: "GPT", human: "x".repeat(300), ai: null });
     expect(long).toContain("…”");
     expect(long.length).toBeLessThan(220);
   });
 
   it("works when only the category was kept", () => {
-    expect(catchShareText({ model: "", human: null, ai: null })).toBe(`I caught my AI being wrong. Could AI replace me? No, actually. ${SHARE_URL}`);
+    expect(correctionShareText({ model: "", human: null, ai: null })).toBe(`I corrected my AI. Could AI replace me? No, actually. ${SHARE_URL}`);
   });
 });
 
@@ -131,5 +143,22 @@ describe("clip", () => {
   it("collapses whitespace and cuts with an ellipsis", () => {
     expect(clip("  a \n b  ", 10)).toBe("a b");
     expect(clip("abcdefghij", 5)).toBe("abcd…");
+  });
+});
+
+describe("corrections share", () => {
+  it("posts the correction tier's word and who corrected whom, numbers only", async () => {
+    const { correctionsShareText } = await import("./share");
+    const { correctionLines } = await import("./cards");
+    const tier = { id: "hawk_eyed", name: "Hawk-eyed", floor: 90, verdict: "Religiously.", blurb: "You catch AI slipping nearly every time." };
+    expect(correctionsShareText({ corrections: 37, humbled: 1 }, tier)).toBe(
+      "Do I correct my AI? Religiously. I corrected it 37 times in the last 28 days, and it corrected me 1 time. Correction tier: Hawk-eyed. Do you correct yours? https://github.com/HTMLGuyLLC/NoActually",
+    );
+    expect(correctionLines({ corrections: 1, humbled: 0, judgment: 96 }, tier, "across all time")).toEqual([
+      "I corrected it 1 time across all time. It corrected me 0.",
+      "Judgment 96 of 100. You catch AI slipping nearly every time.",
+    ]);
+    const low = { ...tier, blurb: "Most of its slips get past you." };
+    expect(correctionLines({ corrections: 1, humbled: 4, judgment: 20 }, low)[1]).toBe("Judgment 20 of 100. Most of its slips get past you.");
   });
 });

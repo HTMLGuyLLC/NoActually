@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Finishes a draft GitHub release made by the Release workflow:
-#   1. renames the CI-built files to plain names ("No-Actually-0.1.0-Windows-Setup.exe")
+#   1. renames the CI-built files to plain names ("No-Actually-0.1.0-Windows-Setup-x64.exe")
 #   2. uploads the notarized Mac DMG and the Mac update file from scripts/release-macos.sh
 #   3. writes latest.json for in-app updates: the CI's Windows and Linux entries, pointed at the
 #      renamed files, plus the Mac entries (see scripts/latest-json.mjs)
@@ -13,8 +13,8 @@ TAG="${1:?usage: scripts/finish-release.sh vX.Y.Z}"
 VERSION="${TAG#v}"
 REPO="HTMLGuyLLC/NoActually"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DMG="$ROOT/target/universal-apple-darwin/release/bundle/dmg/No-Actually-${VERSION}-Mac.dmg"
-UPDATE="$ROOT/target/universal-apple-darwin/release/bundle/macos/No-Actually-${VERSION}-Mac-Update.app.tar.gz"
+DMG="$ROOT/target/universal-apple-darwin/release/bundle/dmg/No-Actually-${VERSION}-Mac-universal.dmg"
+UPDATE="$ROOT/target/universal-apple-darwin/release/bundle/macos/No-Actually-${VERSION}-Mac-Update-universal.app.tar.gz"
 P="No-Actually-${VERSION}"
 
 WORK=""

@@ -43,7 +43,7 @@ CREATE TABLE sessions (
     messages INTEGER NOT NULL, catches INTEGER NOT NULL
 );
 
--- Catches and humbled moments. Text columns obey the retention level.
+-- Corrections and humbled moments. Text columns obey the retention level.
 CREATE TABLE events (
     id INTEGER PRIMARY KEY,
     ts TEXT NOT NULL, day TEXT NOT NULL, source TEXT NOT NULL, session TEXT NOT NULL,
@@ -61,12 +61,12 @@ CREATE INDEX daily_day ON daily (day);
     r"
 ALTER TABLE sources ADD COLUMN start_after TEXT;
 ",
-    // 3: Pinned catches survive a rules rebuild; re-reading one looks it up by key.
+    // 3: Pinned corrections survive a rules rebuild; re-reading one looks it up by key.
     r"
 CREATE INDEX events_seen_key ON events (seen_key);
 ",
-    // 4: Briefs. One row per task (a chat's opening request, or a "next, ..."): which signals its
-    // brief carried and how often it was steered, per cause. Numbers only, never text.
+    // 4: Prompts. One row per task (a chat's opening request, or a "next, ..."): which signals its
+    // prompt carried and how often it was steered, per cause. Numbers only, never text.
     r"
 CREATE TABLE tasks (
     id INTEGER PRIMARY KEY,
@@ -81,6 +81,26 @@ CREATE TABLE tasks (
 );
 CREATE INDEX tasks_session ON tasks (session);
 CREATE INDEX tasks_day ON tasks (day);
+",
+    // 5: Goals. A goal's closed weeks, frozen as they were, and finished goals. Numbers only.
+    // Not score tables: a rules rebuild or Forget doesn't take back a week you already earned.
+    r"
+CREATE TABLE goal_weeks (
+    goal INTEGER NOT NULL, week TEXT NOT NULL,
+    count INTEGER NOT NULL, value INTEGER NOT NULL, state TEXT NOT NULL,
+    PRIMARY KEY (goal, week)
+) WITHOUT ROWID;
+CREATE TABLE trophies (id INTEGER PRIMARY KEY, goal TEXT NOT NULL, done TEXT NOT NULL);
+",
+    // 6: The words changed: catches are corrections, briefs are prompts. Rename the column and
+    // move the saved tier baseline to its new settings key.
+    r"
+ALTER TABLE sessions RENAME COLUMN catches TO corrections;
+UPDATE settings SET key = 'milestone.prompt_tier' WHERE key = 'milestone.brief_tier';
+",
+    // 7: Remember which checkpoints came from a final pass, so a finished chat isn't re-read.
+    r"
+ALTER TABLE files ADD COLUMN finalized INTEGER NOT NULL DEFAULT 0;
 ",
 ];
 
@@ -122,6 +142,28 @@ mod tests {
         let mut again = Connection::open(&path).unwrap();
         migrate(&mut again).unwrap();
         assert_eq!(user_version(&again), MIGRATIONS.len());
+    }
+
+    #[test]
+    fn version_5_migrates_to_corrections_and_prompt_tier_key() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        for sql in &MIGRATIONS[..5] {
+            conn.execute_batch(sql).unwrap();
+        }
+        conn.pragma_update(None, "user_version", 5).unwrap();
+        conn.execute("INSERT INTO sessions VALUES ('s', 'x', '2026-01-01', '2026-01-01', 4, 3)", []).unwrap();
+        conn.execute("INSERT INTO settings VALUES ('milestone.brief_tier', 'hawk_eyed')", []).unwrap();
+        migrate(&mut conn).unwrap();
+        assert_eq!(user_version(&conn), MIGRATIONS.len());
+        let n: i64 = conn.query_row("SELECT corrections FROM sessions WHERE id = 's'", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 3);
+        let v: String =
+            conn.query_row("SELECT value FROM settings WHERE key = 'milestone.prompt_tier'", [], |r| r.get(0)).unwrap();
+        assert_eq!(v, "hawk_eyed");
+        let old: i64 = conn
+            .query_row("SELECT COUNT(*) FROM settings WHERE key = 'milestone.brief_tier'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(old, 0);
     }
 
     #[test]

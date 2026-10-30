@@ -1,11 +1,20 @@
 // The model picker's popover: a searchable listbox anchored to the headline's model name. It lives
 // on <body> so the card can't clip it. Follows the ARIA combobox pattern: focus stays in the search
 // field and the highlighted option is announced through aria-activedescendant.
-import { html, num } from "../html";
-import { catchRate, matchPickItems, type PickItem } from "./picker";
+import { type Html, html, num } from "../html";
+import { correctionRate, landedRate, matchPickItems, type PickItem, type PickStat } from "./picker";
+
+/** The numbers beside one model, for what the page is about. */
+export function pickStatView(i: PickItem, stat: PickStat): Html {
+  if (stat === "prompts") return html`<b>${landedRate(i.landed, i.continued)}</b> clear · ${num(i.tasks)} prompts`;
+  if (stat === "both") return html`<b>${correctionRate(i.corrections, i.messages)}</b> corrected · <b>${landedRate(i.landed, i.continued)}</b> clear`;
+  return html`<b>${num(i.corrections)}</b> corrections · ${correctionRate(i.corrections, i.messages)}`;
+}
 
 export type PickerOptions = {
   items: PickItem[];
+  /** Which numbers to show beside each model. */
+  stat: PickStat;
   /** Whether this item is the current scope (gets a check). */
   isSelected: (item: PickItem) => boolean;
   onChoose: (item: PickItem) => void;
@@ -69,7 +78,7 @@ export function openPicker(trigger: HTMLElement, opts: PickerOptions): HTMLEleme
               n,
             ) => html`<li role="option" id="${optionId(n)}" data-n="${n}" class="d${searching ? 0 : i.depth}" aria-selected="${String(opts.isSelected(i))}">
               <span class="pick-name"><b>${i.label}</b>${searching || i.depth === 0 ? html`<span class="pick-path">${i.path}</span>` : ""}</span>
-              <span class="pick-count"><b>${num(i.catches)}</b> catches · ${catchRate(i.catches, i.messages)}</span></li>`,
+              <span class="pick-count">${pickStatView(i, opts.stat)}</span></li>`,
           )}`
         : html`<li class="pick-empty" role="presentation">No model matches “${input.value}”</li>`
     ).value;
