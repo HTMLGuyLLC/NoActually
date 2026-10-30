@@ -33,7 +33,11 @@ fn events(conv: &Value) -> Vec<Event> {
                     out.push(Event::Human { text, ts, key, pos });
                 }
             }
-            Some("assistant") => out.push(Event::Ai { text, model: Some("claude".into()), pos }),
+            Some("assistant") => {
+                let ts = m["created_at"].as_str().and_then(parse_ts);
+                let key = m["uuid"].as_str().map(|id| format!("claude-ai:{id}"));
+                out.push(Event::Ai { text, model: Some("claude".into()), ts, key, pos });
+            }
             _ => {}
         }
     }

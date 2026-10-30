@@ -78,8 +78,21 @@ The `noactually` binary shares the engine and database with the app:
 | Lessons done | The ids of lessons marked done | Never | Forever |
 | Settings and milestones | Retention, update and menu bar choices, and the tiers already announced | Never | Forever |
 | Correction / humbled events | Time, source, model, label, category, matched rule ids | Per retention level | Per TTL |
+| Report cards | Day, source, hashed chat id, model, letter grade, round counts, missing habits (bitmask), tokens, minutes. Not a score table: rebuilds keep it | Never | Until the source is forgotten or the user clears report card history |
 | File checkpoints | Path, byte offset, size, modified time | Never | Until the source is forgotten |
 | Message fingerprints | Short hashes of message ids (dedupe) | Never | Until the source is forgotten |
+
+### Report cards
+
+Optional. The score never reads them. Plan: [`docs/plans/prompt-feedback.md`](plans/prompt-feedback.md).
+
+1. The user types `/grade:me` (Codex: `$grade-me`). The user's own AI writes the card and a small `noactually` record block into the chat.
+2. The transcript holds both. The adapter looks for the fence in AI messages only. The whole reply that holds a card is hidden from the engine, so a card can't trip a correction rule, and the `/grade:me` prompt and any "Stop hook feedback" message never count as the person's messages.
+3. When a block appears, the whole chat is re-read once. That checks the block's seal (a per-chat HMAC keyed by `report-cards.key`), checks every id against the chat's prompts, and measures rounds, tokens and minutes from the transcript.
+4. The numbers go into the `report_cards` table. Block text is never kept.
+5. A rules rebuild keeps the table (transcripts expire, so these rows are the history). Writes are idempotent. Forget deletes the source's rows, and a Settings button clears all of them.
+
+Planned CLI additions, arriving with the helper step: `digest`, `hook stop`, and `stats --report-cards`.
 
 ### Retention levels for correction text
 

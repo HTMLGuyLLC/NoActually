@@ -1,7 +1,12 @@
 //! Codex (CLI and desktop) rollouts: JSONL, older days compressed as `.jsonl.zst`.
 
 use crate::jsonl::{for_each_line, open_at};
-use crate::{contains, file_name, home, pair, parse_ts, walk, Error, Event, FileScan, Kind, Result, Source};
+use crate::view::{build, Cut, Sample};
+use crate::{
+    contains, file_name, home, is_grade_request, pair, parse_ts, walk, ChatView, Error, Event, FileScan, Kind, Result,
+    Source,
+};
+use engine::Usage;
 use serde_json::Value;
 use std::io::{BufRead, Read};
 use std::path::{Path, PathBuf};
@@ -19,6 +24,9 @@ const NOISE: &[&str] = &[
     "<permissions",
     "<turn_aborted",
 ];
+
+/// How the Codex skill that writes a report card is invoked.
+const GRADE_SKILL: &str = "$grade-me";
 
 fn is_zst(p: &Path) -> bool {
     p.extension().is_some_and(|e| e == "zst")
@@ -101,7 +109,22 @@ impl Source for Codex {
         !is_zst(path)
     }
 
+    fn view(&self, path: &Path) -> Option<Result<ChatView>> {
+        Some(Self::read(path, 0, true).map(|(rollout, session, end)| {
+            build(self.id(), &session, rollout.events, rollout.samples, rollout.cuts, end)
+        }))
+    }
+
     fn scan(&self, path: &Path, from: u64, finalize: bool) -> Result<FileScan> {
+        let (rollout, session, end) = Self::read(path, from, false)?;
+        // Compressed files are finished sessions: read whole, always final.
+        Ok(pair(self.id(), &session, rollout.events, end, finalize || is_zst(path)))
+    }
+}
+
+impl Codex {
+    /// Reads a rollout from the top. `usage` also collects the token counts (for the chat view).
+    fn read(path: &Path, from: u64, usage: bool) -> Result<(Rollout, String, u64)> {
         // Rollouts are always read from the top: the lines before `from` were already emitted,
         // but they carry the session's metadata and current model.
         let reader: Box<dyn BufRead> = if is_zst(path) {
@@ -115,37 +138,93 @@ impl Source for Codex {
         } else {
             Box::new(open_at(path, 0)?)
         };
-        // Compressed files are finished sessions: read whole, always final.
-        let (from, finalize) = if is_zst(path) { (0, true) } else { (from, finalize) };
+        let from = if is_zst(path) { 0 } else { from };
         // The filename's uuid is the session id; it's stable no matter where a pass resumes.
         let session = file_name(path).trim_end_matches(".zst").trim_end_matches(".jsonl").to_string();
-        let mut rollout = Rollout { session: &session, from, model: None, human: true, events: Vec::new() };
+        let mut rollout = Rollout {
+            session: session.clone(),
+            from,
+            model: None,
+            human: true,
+            usage,
+            last_total: Usage::default(),
+            events: Vec::new(),
+            samples: Vec::new(),
+            cuts: Vec::new(),
+        };
         let end = for_each_line(reader, 0, |pos, buf| rollout.line(pos, buf)).map_err(Error::io(path))?;
-        Ok(pair(self.id(), &session, rollout.events, end, finalize))
+        Ok((rollout, session, end))
     }
 }
 
 /// State carried down one rollout as it's read.
-struct Rollout<'a> {
-    session: &'a str,
+struct Rollout {
+    session: String,
     /// Lines before this were already emitted; they're read only for metadata and the model.
     from: u64,
     model: Option<String>,
     /// False for guardian / subagent threads.
     human: bool,
+    /// Also collect token counts.
+    usage: bool,
+    /// The running totals at the last `token_count`.
+    last_total: Usage,
     events: Vec<Event>,
+    samples: Vec<Sample>,
+    /// Where grade requests were dropped.
+    cuts: Vec<Cut>,
 }
 
-impl Rollout<'_> {
+/// Codex's running totals as [`Usage`]. Its input counts cached and cache-written tokens too, and
+/// its output counts reasoning, so input is split and output taken as is.
+fn total_usage(t: &Value) -> Usage {
+    let n = |k: &str| t[k].as_u64().unwrap_or(0);
+    let (cached, written) = (n("cached_input_tokens"), n("cache_write_input_tokens"));
+    Usage {
+        input: n("input_tokens").saturating_sub(cached + written),
+        cache_write: written,
+        cache_read: cached,
+        output: n("output_tokens"),
+    }
+}
+
+/// Tokens used since `b`. Totals that went down (a reset, or a forked thread) start over.
+fn minus(a: &Usage, b: &Usage) -> Usage {
+    let all = |u: &Usage| u.input + u.cache_write + u.cache_read + u.output;
+    if all(a) < all(b) {
+        return *a;
+    }
+    Usage {
+        input: a.input.saturating_sub(b.input),
+        cache_write: a.cache_write.saturating_sub(b.cache_write),
+        cache_read: a.cache_read.saturating_sub(b.cache_read),
+        output: a.output.saturating_sub(b.output),
+    }
+}
+
+impl Rollout {
     fn line(&mut self, pos: u64, buf: &[u8]) {
         let fresh = pos >= self.from;
         let meta = contains(buf, b"session_meta") || contains(buf, b"turn_context");
-        if !(meta || (fresh && contains(buf, b"\"message\""))) {
+        let counts = self.usage && contains(buf, b"token_count");
+        if !(meta || counts || (fresh && contains(buf, b"\"message\""))) {
             return;
         }
         let Ok(v) = serde_json::from_slice::<Value>(buf) else { return };
         let payload = &v["payload"];
         match v["type"].as_str() {
+            Some("event_msg") if counts && payload["type"] == "token_count" => {
+                // `info` is null before the first reply. Totals only grow, so a round's cost is
+                // the step from the last count.
+                let total = &payload["info"]["total_token_usage"];
+                if total.is_object() {
+                    let now = total_usage(total);
+                    let ts = v["timestamp"].as_str().and_then(parse_ts);
+                    let usage = minus(&now, &self.last_total);
+                    self.last_total = now;
+                    self.samples.push(Sample { pos, ts, model: None, usage });
+                }
+            }
             Some("session_meta") => self.human = human_thread(payload),
             Some("turn_context") => {
                 if let Some(m) = payload["model"].as_str() {
@@ -159,6 +238,13 @@ impl Rollout<'_> {
                     if text.is_empty() || NOISE.iter().any(|n| text.starts_with(n)) {
                         return;
                     }
+                    if text.trim_start().starts_with(GRADE_SKILL) || is_grade_request(&text) {
+                        if self.usage {
+                            let ts = v["timestamp"].as_str().and_then(parse_ts);
+                            self.cuts.push(Cut { pos, ts });
+                        }
+                        return;
+                    }
                     if let Some(ts) = v["timestamp"].as_str().and_then(parse_ts) {
                         let key = payload["id"].as_str().map(|id| format!("{}:{id}", self.session));
                         self.events.push(Event::Human { text, ts, key, pos });
@@ -166,7 +252,9 @@ impl Rollout<'_> {
                 }
                 Some("assistant") => {
                     if let Some(text) = text_items(&payload["content"], "output_text") {
-                        self.events.push(Event::Ai { text, model: self.model.clone(), pos });
+                        let ts = v["timestamp"].as_str().and_then(parse_ts);
+                        let key = payload["id"].as_str().map(|id| format!("{}:{id}", self.session));
+                        self.events.push(Event::Ai { text, model: self.model.clone(), ts, key, pos });
                     }
                 }
                 _ => {}
@@ -180,6 +268,7 @@ impl Rollout<'_> {
 mod tests {
     use super::*;
     use crate::testing::{line, zstd};
+    use crate::AUTO_GRADE_PROMPT;
     use serde_json::json;
 
     #[test]
@@ -270,6 +359,113 @@ mod tests {
         std::fs::write(&p, b"not zstd").unwrap();
         let err = Codex.scan(&p, 0, false).err().unwrap().to_string();
         assert!(err.contains("rollout-2026-09-01-old.jsonl.zst"), "{err}");
+    }
+
+    fn counts(ts: &str, input: u64, cached: u64, output: u64, reasoning: u64) -> String {
+        line(&json!({"timestamp":ts,"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{
+            "input_tokens":input,"cached_input_tokens":cached,"cache_write_input_tokens":0,
+            "output_tokens":output,"reasoning_output_tokens":reasoning,"total_tokens":input+output}}}}))
+    }
+
+    fn msg_at(ts: &str, role: &str, kind: &str, text: &str, id: &str) -> String {
+        line(&json!({"timestamp":ts,"type":"response_item",
+            "payload":{"type":"message","role":role,"id":id,"content":[{"type":kind,"text":text}]}}))
+    }
+
+    fn rollout(body: &str) -> (tempfile::TempDir, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("rollout-2026-10-20-abc.jsonl");
+        std::fs::write(&p, body).unwrap();
+        (dir, p)
+    }
+
+    #[test]
+    fn grade_requests_are_not_the_persons_messages() {
+        let body = opening()
+            + &msg("assistant", "output_text", "You're right.", "a2")
+            + &msg("user", "input_text", "$grade-me", "g1")
+            + &msg("user", "input_text", &format!("{AUTO_GRADE_PROMPT}7"), "g2")
+            + &msg("assistant", "output_text", "Card.", "a3");
+        let (_d, p) = rollout(&body);
+        let scan = Codex.scan(&p, 0, true).unwrap();
+        assert_eq!(scan.turns.len(), 1);
+        assert_eq!(scan.turns[0].turn.human, "that function doesn't exist");
+    }
+
+    #[test]
+    fn cards_are_pulled_from_replies() {
+        let body = opening() + &msg("assistant", "output_text", "Report.\n```noactually\n{}\n```", "a2");
+        let (_d, p) = rollout(&body);
+        let scan = Codex.scan(&p, 0, true).unwrap();
+        assert_eq!(scan.cards.len(), 1);
+        assert_eq!(scan.cards[0].key.as_deref(), Some("rollout-2026-10-20-abc:a2"));
+        assert_eq!(scan.turns[0].turn.next_ai.as_ref().unwrap().text, "");
+    }
+
+    #[test]
+    fn view_turns_running_totals_into_per_round_usage() {
+        let t = |m: u32| format!("2026-10-20T10:{m:02}:00Z");
+        let null = line(&json!({"timestamp":t(0),"type":"event_msg","payload":{"type":"token_count","info":null}}));
+        let body = line(&json!({"type":"session_meta","payload":{"id":"abc","thread_source":"user"}}))
+            + &line(&json!({"type":"turn_context","payload":{"model":"gpt-6-astra"}}))
+            + &null
+            + &msg_at(&t(1), "user", "input_text", "build a settings page with tabs", "u1")
+            + &msg_at(&t(2), "assistant", "output_text", "On it.", "a1")
+            + &counts(&t(2), 1000, 600, 50, 20) // first round: from zero
+            + &counts(&t(3), 1500, 900, 80, 30)
+            + &msg_at(&t(40), "user", "input_text", "thanks", "u2")
+            + &counts(&t(41), 1500, 900, 80, 30) // repeat of the same totals: nothing new
+            + &counts(&t(42), 1800, 900, 100, 40);
+        let (_d, p) = rollout(&body);
+        let v = Codex.view(&p).unwrap().unwrap();
+        assert_eq!(v.prompts.len(), 2);
+        // Input counts cached tokens and output counts reasoning, so input is split.
+        assert_eq!(v.prompts[0].usage, Usage { input: 600, cache_write: 0, cache_read: 900, output: 80 });
+        assert_eq!(v.prompts[0].model.as_deref(), Some("gpt-6-astra"));
+        assert_eq!(v.prompts[0].minutes, 30);
+        assert_eq!(v.prompts[1].usage, Usage { input: 300, cache_write: 0, cache_read: 0, output: 20 });
+        assert_eq!(v.prompts[1].minutes, 2);
+        let scan = Codex.scan(&p, 0, true).unwrap();
+        for (pv, st) in v.prompts.iter().zip(&scan.turns) {
+            let want =
+                engine::message_key("codex", &st.session, st.key.as_deref(), &st.ts.to_rfc3339(), &st.turn.human);
+            assert_eq!(pv.key, want);
+        }
+    }
+
+    #[test]
+    fn view_handles_resets_quiet_rounds_and_repeated_totals() {
+        let t = |m: u32| format!("2026-10-20T10:{m:02}:00Z");
+        let body = msg_at(&t(1), "user", "input_text", "build a settings page with tabs", "u1")
+            + &counts(&t(2), 1000, 0, 100, 10)
+            + &msg_at(&t(3), "user", "input_text", "now add the tests", "u2") // no counts in this round
+            + &msg_at(&t(4), "user", "input_text", "and the docs", "u3")
+            + &counts(&t(4), 1000, 0, 100, 10) // same totals again, right at the boundary
+            + &counts(&t(5), 300, 0, 50, 5); // totals went down: a reset, so these are all new
+        let (_d, p) = rollout(&body);
+        let v = Codex.view(&p).unwrap().unwrap();
+        let used: Vec<_> = v.prompts.iter().map(|p| (p.usage.input, p.usage.output)).collect();
+        assert_eq!(used, [(1000, 100), (0, 0), (300, 50)]);
+    }
+
+    #[test]
+    fn view_cuts_at_grade_requests() {
+        let t = |m: u32| format!("2026-10-20T10:{m:02}:00Z");
+        for cut in ["  $grade-me please", &format!("{AUTO_GRADE_PROMPT}7")] {
+            let body = msg_at(&t(1), "user", "input_text", "build a settings page with tabs", "u1")
+                + &counts(&t(3), 100, 0, 10, 0)
+                + &msg_at(&t(5), "user", "input_text", cut, "g")
+                + &counts(&t(9), 900, 0, 90, 0)
+                + &msg_at(&t(20), "user", "input_text", "thanks", "u2")
+                + &counts(&t(21), 1000, 0, 100, 0);
+            let (_d, p) = rollout(&body);
+            let v = Codex.view(&p).unwrap().unwrap();
+            assert_eq!(v.prompts.len(), 2, "{cut}");
+            assert_eq!(v.prompts[0].usage.input, 100, "{cut}");
+            assert_eq!(v.prompts[0].minutes, 4, "{cut}");
+            // The grading round's tokens are skipped, but the totals still move on.
+            assert_eq!(v.prompts[1].usage.input, 100, "{cut}");
+        }
     }
 
     #[test]

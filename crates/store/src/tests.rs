@@ -24,7 +24,7 @@ fn turn(human: &str, next: &str, model: &str, ts: &str, key: &str) -> SourceTurn
 }
 
 fn scan(turns: Vec<SourceTurn>) -> FileScan {
-    FileScan { turns, checkpoint: 100 }
+    FileScan { turns, checkpoint: 100, cards: Vec::new() }
 }
 
 fn test_source() -> SourceState {

@@ -1,8 +1,8 @@
 //! Shared pairing: a stream of human / AI events becomes turns, plus a safe resume point.
 
-use crate::{FileScan, SourceTurn};
+use crate::{CardSeen, FileScan, SourceTurn};
 use chrono::{DateTime, Utc};
-use engine::{head_chars, tail_chars, AiMsg, Turn};
+use engine::{find_cards, has_card, head_chars, tail_chars, AiMsg, Turn};
 
 const KEEP_PREV: usize = 600; // chars from the end of the reply you answered
 const KEEP_NEXT: usize = 2000; // chars from the start of the reply after you
@@ -28,9 +28,19 @@ pub enum Event {
         text: String,
         /// The raw model id, if the tool recorded one.
         model: Option<String>,
+        /// When it was written, if the tool recorded that.
+        ts: Option<DateTime<Utc>>,
+        /// The tool's id for it (see [`CardSeen::key`]).
+        key: Option<String>,
         /// Where it starts.
         pos: u64,
     },
+}
+
+/// True when `text` holds a real record block. A reply that only mentions the fence in prose
+/// doesn't, and is scored like any other.
+pub(crate) fn holds_card(text: &str) -> bool {
+    has_card(text) && !find_cards(text).is_empty()
 }
 
 impl Event {
@@ -48,7 +58,7 @@ impl Event {
 /// the turn exactly once. A pass that ends on a reply also resumes at that reply, so the next
 /// message still knows what it answered. `end` is the byte offset after the last whole line read.
 pub fn pair(source: &'static str, session: &str, events: Vec<Event>, end: u64, finalize: bool) -> FileScan {
-    let mut scan = FileScan { turns: Vec::new(), checkpoint: end };
+    let mut scan = FileScan { turns: Vec::new(), checkpoint: end, cards: Vec::new() };
     // The chat's model near each message: the last real one before it, else the first after it.
     let real = |e: &Event| match e {
         Event::Ai { model: Some(m), .. } if engine::is_real_model(m) => Some(m.clone()),
@@ -75,7 +85,20 @@ pub fn pair(source: &'static str, session: &str, events: Vec<Event>, end: u64, f
     }
     for (i, ev) in events.iter().enumerate() {
         match ev {
-            Event::Ai { .. } => {
+            Event::Ai { text, ts, key, pos, .. } => {
+                // Report cards are read out here, and the reply is hidden from scoring below.
+                // A re-read reply (after a checkpoint rewind) yields the same blocks again;
+                // the store dedupes them.
+                if has_card(text) {
+                    scan.cards.extend(find_cards(text).into_iter().map(|body| CardSeen {
+                        source,
+                        session: session.to_string(),
+                        key: key.clone(),
+                        ts: *ts,
+                        pos: *pos,
+                        body: body.to_string(),
+                    }));
+                }
                 last_ai = Some((i, ev));
                 last_real = real(ev).or(last_real.take());
             }
@@ -88,7 +111,8 @@ pub fn pair(source: &'static str, session: &str, events: Vec<Event>, end: u64, f
                 // Keep only what the rules read: the end of the previous reply, the start of the next.
                 let ai = |e: Option<&Event>, keep: fn(&str, usize) -> &str, n: usize| match e {
                     Some(Event::Ai { text, model, .. }) => {
-                        Some(AiMsg { text: keep(text, n).to_string(), model: model.clone() })
+                        let text = if holds_card(text) { "" } else { keep(text, n) };
+                        Some(AiMsg { text: text.to_string(), model: model.clone() })
                     }
                     _ => None,
                 };
@@ -118,7 +142,7 @@ mod tests {
         Event::Human { text: text.into(), ts: Utc::now(), key: Some(text.into()), pos }
     }
     fn a(text: &str, pos: u64) -> Event {
-        Event::Ai { text: text.into(), model: Some("m".into()), pos }
+        Event::Ai { text: text.into(), model: Some("m".into()), ts: None, key: None, pos }
     }
 
     #[test]
@@ -157,13 +181,23 @@ mod tests {
     fn unanswered_first_message_takes_the_chats_model() {
         let ev = vec![
             h("first, never answered", 0),
-            Event::Ai { text: "placeholder".into(), model: Some("<synthetic>".into()), pos: 5 },
+            Event::Ai { text: "placeholder".into(), model: Some("<synthetic>".into()), ts: None, key: None, pos: 5 },
             h("second", 10),
             a("real reply", 20),
         ];
         let scan = pair("t", "s", ev, 30, true);
         assert_eq!(scan.turns[0].turn.chat_model.as_deref(), Some("m"));
         assert_eq!(scan.turns[1].turn.chat_model.as_deref(), Some("m"));
+    }
+
+    #[test]
+    fn a_reply_that_only_mentions_the_fence_is_scored_as_usual() {
+        let mention = "Put it in a ```noactually block when you are done.";
+        let ev = vec![a(mention, 0), h("no, wrong", 10), a(mention, 20)];
+        let scan = pair("t", "s", ev, 30, true);
+        assert_eq!(scan.cards.len(), 0);
+        assert_eq!(scan.turns[0].turn.prev_ai.as_ref().unwrap().text, mention);
+        assert_eq!(scan.turns[0].turn.next_ai.as_ref().unwrap().text, mention);
     }
 
     #[test]

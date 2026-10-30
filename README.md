@@ -16,7 +16,7 @@
 
 <p align="center">
   🔒 Private: everything stays on your computer unless you share it<br>
-  💸 Free: no AI calls, so nothing to pay for
+  💸 Free: the score never calls an AI, so nothing to pay for
 </p>
 
 <p align="center">
@@ -37,7 +37,7 @@ You correct your AI all day: the function that doesn't exist, the instruction it
 
 Better prompts mean fewer mistakes to correct, and that never costs you: once you've corrected it a few times (proof you check its work), more corrections add nothing.
 
-> **💸 Costs nothing to run.** No AI does the judging, so there's no API key, no tokens spent and no subscription. Fixed, readable rules score your chats right on your computer: the same history always gives the same score, and nothing is uploaded.
+> **💸 Costs nothing to run.** No AI does the judging, so there's no API key, no tokens spent and no subscription. (Optional [report cards](#report-cards-optional) are the one exception: your own AI writes them, so they use some of your tokens.) Fixed, readable rules score your chats right on your computer: the same history always gives the same score, and nothing is uploaded.
 
 ## Get started in a minute
 
@@ -60,6 +60,26 @@ Better prompts mean fewer mistakes to correct, and that never costs you: once yo
 - **A Hall of Fame** of awards, one per kind of correction: The Fabulist (made it up), Selective Hearing, The Blind Spot, “Fixed” It, Big Brain Energy, and Touché for the times it corrected you. Each shows its best snippet, picked the same way every time. Pin the ones you want to keep forever.
 - **Popups** for your 10th correction, a new tier, a streak, a goal week met, or a goal done.
 - **Made to brag.** Share cards for X, LinkedIn, Bluesky, Threads, Reddit, Facebook, WhatsApp and Instagram. You always see exactly what will be posted before anything goes anywhere.
+
+### Report cards (optional)
+
+Finish a task in Claude Code or Codex, type `/grade:me` (Codex: `$grade-me`), and get a report card:
+
+- A letter grade, A to F, and why
+- What you could have said up front, with a better first message to copy
+- What the extra back-and-forth cost you, in minutes and dollars
+
+It talks at your level: plain words if you're new, short and technical if you're not.
+No, Actually... saves each report card's numbers (never your words) and shows how you're doing over time.
+
+**Turn it on:** Settings → Report cards → Turn on. That's it.
+
+**Without the app:** in Claude Code run `/plugin marketplace add HTMLGuyLLC/NoActually` then
+`/plugin install grade@noactually`. You get report cards, but no history.
+
+**Cost:** report cards are written by your own AI, so each one uses some of your tokens.
+They only run when you ask, unless you turn on "Grade automatically when I say thanks".
+Your score never uses AI and stays free.
 
 ## Private and secure by design
 
@@ -86,7 +106,7 @@ No. Everything is read and scored on your computer, and the results live in a lo
 <details>
 <summary><b>Does it use AI to judge my chats?</b></summary>
 
-No. Using an AI to grade AI would mean uploading your chats and getting a different answer each run. Scoring is plain pattern rules you can read in [`rules.rs`](crates/engine/src/rules.rs) and [`prompt.rs`](crates/engine/src/prompt.rs).
+No. Using an AI to grade AI would mean uploading your chats and getting a different answer each run. Scoring is plain pattern rules you can read in [`rules.rs`](crates/engine/src/rules.rs) and [`prompt.rs`](crates/engine/src/prompt.rs). The one exception is the optional [report card](#report-cards-optional), which your own AI writes when you ask. It never changes your score.
 </details>
 
 <details>
@@ -134,15 +154,33 @@ It's also a for-fun self-check, not a measure of job performance, and it shouldn
 </details>
 
 <details>
+<summary><b>Does a report card change my score?</b></summary>
+
+No. Your score comes from fixed rules and never looks at report cards.
+</details>
+
+<details>
+<summary><b>Why does a report card cost tokens when the rest of the app doesn't?</b></summary>
+
+Your own AI writes it, inside Claude Code or Codex, so it uses some of your tokens. The app itself never calls an AI. Report cards are off until you turn them on, and automatic grading is a separate setting that is off by default.
+</details>
+
+<details>
+<summary><b>Can I see my old report cards?</b></summary>
+
+The app keeps each report card's numbers, so you can see how you're trending. The words stay in your chat history.
+</details>
+
+<details>
 <summary><b>How do I delete everything?</b></summary>
 
-Click **Forget** on a source to delete everything read from it. To remove it all, quit the app and delete its data folder (the paths are in [PRIVACY.md](PRIVACY.md#how-to-delete-your-data)). Uninstalling alone leaves the data behind.
+Click **Forget** on a source to delete everything read from it, including its report cards. **Delete report card history** in Settings clears them all. To remove it all, quit the app and delete its data folder (the paths are in [PRIVACY.md](PRIVACY.md#how-to-delete-your-data)). Uninstalling alone leaves the data behind.
 </details>
 
 <details>
 <summary><b>Is it really free? What does it cost to run?</b></summary>
 
-Free, and it costs nothing to run. It never calls an AI, so there's no API key to add and no tokens on your bill, however much history you have. MIT licensed, no paid tier, no ads.
+Free, and it costs nothing to run. The score never calls an AI, so there's no API key to add and no tokens on your bill, however much history you have. Optional report cards are written by your own AI, so they use some of your tokens, only when you ask. MIT licensed, no paid tier, no ads.
 </details>
 
 ---

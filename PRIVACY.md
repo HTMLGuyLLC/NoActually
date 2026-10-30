@@ -19,6 +19,7 @@ macOS may show its own "access data from other apps" prompt for some sources. Sa
 | Goal weeks and trophies | Each finished week's count, percent and result; finished goals and the day | Never | Forever (kept even after Forget, since they're totals across sources) |
 | Lessons done | The ids of lessons you marked done | Never | Forever |
 | Correction / humbled events | Time, source, model, label, category, matched rule ids | Per retention level | Per TTL |
+| Report cards | Day, source, hashed chat id, model, letter grade, round counts, which habits were missing, tokens, minutes | Never | Until you Forget the source or delete report card history |
 | File checkpoints | Path, byte offset, size, modified time | Never | Until you forget the source |
 | Message fingerprints | Short hashes of message ids, so copies are never counted twice | Never | Until you forget the source |
 
@@ -45,6 +46,10 @@ Stored text has emails, URLs, keys, numbers and home paths removed. This is done
 - Share cards are rendered locally
 - Fonts are bundled, not fetched
 
+- Report cards are off until you turn them on in **Settings → Report cards**. Turning them on adds a small plugin to your AI tool. Claude Code downloads it from GitHub, pinned to the app's version. No, Actually... itself still sends nothing.
+- Report cards are written inside your AI tool, by the provider that already has the chat, and they use your tokens. The app only reads the card's small block of numbers from your local chat history and keeps the numbers.
+- A small secret file, `report-cards.key`, sits in the app data folder. It lets the app check that a block of numbers came from that chat and not from pasted text.
+
 A future global board would be a separate opt-in that sends numbers only.
 
 ## Update checks
@@ -59,6 +64,7 @@ To offer new versions, the app downloads one small public file, `latest.json`, f
 ## How to delete your data
 
 - **Forget a source** in the app: deletes that source's events, aggregates and checkpoints. (Revoke only stops reading.) Goal weeks already finished stay, as totals.
+- **Delete report cards:** click **Delete report card history** in Settings to remove all of them. **Forget** on a source removes that source's report cards too. Turning report cards off removes the plugin but keeps the history until you delete it.
 - **Delete everything:** quit the app and delete the three `noactually.db*` files (`noactually.db`, `-wal`, `-shm`) in the app data folder for `app.noactually` (macOS: `~/Library/Application Support/app.noactually/`, Windows: `%APPDATA%\app.noactually\`, Linux: `~/.local/share/app.noactually/`).
 - Deleted text is overwritten in the database, not just unlinked, and the write-ahead log is truncated after Forget and after text ages out.
 

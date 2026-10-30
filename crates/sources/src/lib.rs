@@ -19,8 +19,10 @@ mod jsonl;
 mod pair;
 #[cfg(any(test, feature = "test-support"))]
 pub mod testing;
+mod view;
 
 pub use pair::{pair, Event};
+pub use view::{ChatView, PromptView};
 
 use chrono::{DateTime, Utc};
 use std::path::{Path, PathBuf};
@@ -93,6 +95,38 @@ pub struct FileScan {
     pub turns: Vec<SourceTurn>,
     /// Where the next pass should resume. Only ever past turns that are complete.
     pub checkpoint: u64,
+    /// Record blocks found in AI replies, in file order. A pass that re-reads a reply (after a
+    /// checkpoint rewind) can report its blocks again; whoever stores them dedupes.
+    pub cards: Vec<CardSeen>,
+}
+
+/// A record block (a fenced `noactually` block) found in an AI reply. Not yet validated.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CardSeen {
+    /// The adapter's id.
+    pub source: &'static str,
+    /// The chat the reply belongs to, as the tool names it.
+    pub session: String,
+    /// The tool's own id for the reply, if it gave one.
+    pub key: Option<String>,
+    /// When the reply was written, if the tool said.
+    pub ts: Option<DateTime<Utc>>,
+    /// Where the reply starts in the file.
+    pub pos: u64,
+    /// The text between the fences, as written.
+    pub body: String,
+}
+
+/// The start of the message the Stop hook sends to have a finished task graded. Matched as a
+/// prefix; the task id follows. Messages like it are the tool talking, not the person.
+pub const AUTO_GRADE_PROMPT: &str = "Use the grade:me skill in short mode for task ";
+
+/// True for a message that asks for a report card rather than being the person's own words:
+/// the grade prompt, bare or as a Stop hook's feedback. Another hook's feedback is not one.
+pub(crate) fn is_grade_request(text: &str) -> bool {
+    let t = text.trim_start();
+    let t = t.strip_prefix("Stop hook feedback:").map_or(t, str::trim_start);
+    t.starts_with(AUTO_GRADE_PROMPT)
 }
 
 /// How a source's files arrive.
@@ -121,6 +155,11 @@ pub trait Source: Send + Sync {
     fn scan(&self, path: &Path, from: u64, finalize: bool) -> Result<FileScan>;
     /// Append-only sources resume from a byte offset; others are re-read whole when they change.
     fn append_only(&self, path: &Path) -> bool;
+    /// The whole chat in `path` with every prompt, what it cost and any report cards. `None` for
+    /// sources that can't say.
+    fn view(&self, _path: &Path) -> Option<Result<ChatView>> {
+        None
+    }
 }
 
 /// Every adapter, in display order.
