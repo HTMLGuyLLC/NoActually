@@ -32,8 +32,8 @@ You correct your AI all day: the function that doesn't exist, the instruction it
 | | The question | What it measures | Tiers |
 |---|---|---|---|
 | 🧠 | **Could AI replace you?** | Your overall score, 0 to 100, from both questions below | Rubber stamp → Coworker → Sharp-eyed → **Irreplaceable** |
-| 🎯 | ↳ **Do you make it guess?** | How often your prompts are clear the first time: no adding, clarifying or starting over | Vibes only → Ticket writer → Tech lead → **Architect** |
-| 🧐 | ↳ **Do you correct it?** | Who corrects whom: you correcting it, or it correcting you | Autopilot → Spot-checker → Reviewer → **Hawk-eyed** |
+| 🎯 | ↳ **Do you make it guess?** | How often your prompts are clear the first time: no adding, clarifying or starting over | Constantly → Often → Sometimes → **Rarely** |
+| 🧐 | ↳ **Do you correct it?** | Who corrects whom: you correcting it, or it correcting you | Rarely → Sometimes → Often → **Religiously** |
 
 Better prompts mean fewer mistakes to correct, and that never costs you: once you've corrected it a few times (proof you check its work), more corrections add nothing.
 
@@ -43,7 +43,7 @@ Better prompts mean fewer mistakes to correct, and that never costs you: once yo
 
 1. **[Download it](https://github.com/HTMLGuyLLC/NoActually/releases/latest)** for Mac, Windows or Linux ([which file?](#download-and-install)).
 2. Open it, click **Choose sources**, and **Allow** the AI tools you want counted. Nothing is read until you do.
-3. That's it. It backfills your history, then keeps score as you work, from your menu bar (Mac) or system tray (Windows and Linux). Prefer an ordinary app that quits when you close it? Turn off **Keep running in the menu bar** in Settings.
+3. That's it. It backfills your history, then keeps score as you work, from your menu bar (Mac) or system tray (Windows and Linux). Prefer an ordinary app that quits when you close it? Turn off **Keep running in the menu bar** in Settings → General.
 
 <p align="center">
   <img src="docs/screenshot-glance.png" alt="The menu bar quick glance: the three questions, each answered in a word with why, and your goal" width="300">
@@ -57,8 +57,8 @@ Better prompts mean fewer mistakes to correct, and that never costs you: once yo
 - **Learn.** 13 one-minute lessons in three tracks (the 6 habits, follow up less, correct more), quick quizzes, and a prompt checker that grades a draft as you type, with the same rules as your score.
 - **Any time window.** 7 days, 28 days, 90 days or all time: the whole scorecard follows the picker, score included. Every part of the score is a rate, so tiers mean the same thing in any window.
 - **Every model, side by side.** All AI, one provider, one family, or one exact version (say, Claude Opus 5.5). The picker shows the numbers that page is about.
-- **A Hall of Fame** of awards, one per kind of correction: The Fabulist (made it up), Selective Hearing, The Blind Spot, “Fixed” It, Big Brain Energy, and Touché for the times it corrected you. Each shows its best snippet, picked the same way every time. Pin the ones you want to keep forever.
-- **Popups** for your 10th correction, a new tier, a streak, a goal week met, or a goal done.
+- **A Hall of fame** of awards, one per kind of correction: The Fabulist (made it up), Selective Hearing, Reading Is Hard, The Blind Spot, “Fixed” It, Big Brain Energy, and Touché for the times it corrected you. Each shows its best snippet, picked the same way every time. Pin the ones you want to keep forever.
+- **Popups** for your 1st, 10th, 25th… correction, a new tier, a streak, a goal week met, or a goal done.
 - **Made to brag.** Share cards for X, LinkedIn, Bluesky, Threads, Reddit, Facebook, WhatsApp and Instagram. You always see exactly what will be posted before anything goes anywhere.
 
 ### Report cards (optional)
@@ -215,14 +215,25 @@ judgment  = 100, minus 5 for each 1% of your tasks where the AI had to correct y
 | Coworker | 65–79 | No. |
 | Rubber stamp | under 65 | Hmm. |
 
-Each question below the score gets a one-word answer too. Do you make it guess? goes by how many prompts were clear the first time (next section). Do you correct it? goes by judgment:
+Each question below the score gets a one-word answer too, and that word is its tier. Each tier also has a short name, shown in the quick glance and on share cards.
 
-| Correction tier | Judgment | Answer |
+Do you correct it? goes by judgment:
+
+| Answer | Judgment | Name |
 |---|---|---|
-| Hawk-eyed | 90+ | Religiously. |
-| Reviewer | 75–89 | Often. |
-| Spot-checker | 50–74 | Sometimes. |
-| Autopilot | under 50 | Rarely. |
+| Religiously. | 90+ | Hawk-eyed |
+| Often. | 75–89 | Reviewer |
+| Sometimes. | 50–74 | Spot-checker |
+| Rarely. | under 50 | Autopilot |
+
+Do you make it guess? goes by the share of prompts that were clear the first time (see "How a prompt is graded"):
+
+| Answer | Clear the first time | Name |
+|---|---|---|
+| Rarely. | 90%+ | Architect |
+| Sometimes. | 80–89% | Tech lead |
+| Often. | 70–79% | Ticket writer |
+| Constantly. | under 70% | Vibes only |
 
 A few things this gets right on purpose:
 - **Prompting better never costs you.** Past 3 corrections, more corrections add nothing, so an AI that makes fewer mistakes because you prompted it well doesn't lower your score.
@@ -252,13 +263,13 @@ Adding context ("also", "fyi", "I forgot to mention") never counts against the A
 
   Three or more is **specific**, two is **decent**, fewer is **vague**. Pasted blocks count as evidence, but their words aren't graded as yours.
 - **A follow-up** is a later message that redirects the task. Either the AI got it wrong (a correction), or it's on you: **added more** ("also…", "I forgot to mention"), **clarified** ("I meant…", "to be clear") or **started over** ("scrap that", "revert it").
-- **A prompt is clear the first time** when nothing on you followed it. The tier is the share of prompts with a follow-up that were clear the first time over the last 28 days (at least 10 of them): Vibes only, Ticket writer 70%+, Tech lead 80%+, Architect 90%+.
+- **A prompt is clear the first time** when nothing on you followed it. The answer (Rarely, Sometimes, Often, Constantly) comes from the share of prompts with a follow-up that were clear the first time over the last 28 days, once there are at least 10 of them.
 
 The tip names the thing your prompts include least. It only quotes "prompts with guardrails were clear the first time X% vs Y%" when your own history shows a real gap.
 
 ### How goals work
 
-- **One goal at a time**, across all AI: a habit ("include guardrails in 25% of your prompts"), a ceiling on one kind of follow-up ("keep 'you added more' to 15% of tasks"), or a tier to reach.
+- **One goal at a time**, across all AI: a habit ("include guardrails in 25% of your prompts"), a ceiling on one kind of follow-up ("add more after sending in 15% of tasks or fewer"), or a tier to reach.
 - **Suggested from your numbers.** A habit goal asks for 15 points more than your last 8 weeks, capped at 80%, so it's a stretch, not a wall.
 - **Weeks run Monday to Sunday**, local time, counting only tasks from the day you set the goal. A week needs 5 prompts to count; quieter weeks pause the goal instead of breaking your streak.
 - **Met 4 weeks, it's done**, and it goes on your trophy shelf. Finished weeks are frozen, so a rules update or an import can't take back a week you earned.
@@ -305,7 +316,7 @@ The other files are for special cases:
 - `-Linux-Ubuntu-Debian-amd64.deb` and `-Linux-Fedora-x86_64.rpm` install through your package manager.
 - `SHA256SUMS.txt` lets you verify a download.
 
-The app checks for new versions and shows **Restart to update** when one is ready. Nothing is downloaded or installed until you click it, and an update only installs if its signature matches the project's key. Turn the check off in Settings.
+The app checks for new versions and shows **Restart to update** when one is ready. Nothing is downloaded or installed until you click it, and an update only installs if its signature matches the project's key. Turn the check off in Settings → General.
 
 ## For developers
 
@@ -384,10 +395,6 @@ pnpm --dir app lint
 pnpm --dir app test
 node --test scripts/*.test.mjs
 ```
-
-## History
-
-The first version was a Python prototype. The Rust engine replaced it, and the original is kept at the git tag `prototype-v0`. The roadmap and what scoring means are in [docs/PRODUCT.md](docs/PRODUCT.md).
 
 ## License
 
