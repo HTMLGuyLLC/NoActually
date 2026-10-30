@@ -251,7 +251,7 @@ fn print_card(s: &store::Stats, since: Option<NaiveDate>) {
     for line in overall_lines(&s.overall, &window) {
         println!("{line}");
     }
-    println!("  You vs AI       {} – {}  (all time)", s.corrections, s.humbled);
+    println!("  All time        you corrected it {} · it corrected you {}", s.corrections, s.humbled);
     println!(
         "  Messages        {}  ({} to {})",
         s.messages,
