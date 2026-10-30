@@ -132,7 +132,7 @@ impl Env {
 
     /// Just the real folders, for what doesn't need to know which tools are installed.
     fn folders() -> Res<Env> {
-        let home = dirs::home_dir().ok_or("Couldn't find your home folder.")?;
+        let home = std::env::home_dir().ok_or("Couldn't find your home folder.")?;
         let db = store::default_db_path().map_err(|e| plain("find the app's data folder", &e))?;
         let data = db.parent().map(Path::to_path_buf).ok_or("Couldn't find the app's data folder.")?;
         let windows = cfg!(windows);

@@ -219,9 +219,10 @@ pub fn claude_code_at(root: PathBuf) -> Box<dyn Source> {
     Box::new(claude_code::ClaudeCode::code_at(root))
 }
 
-/// The home folder. `None` when the OS can't say, so a source never reads a relative path.
+/// The home folder. `None` when the OS can't say, so a source never reads a relative path. The standard
+/// library's answer, because on Windows it goes by `USERPROFILE`, the same as the tools whose files we read.
 pub(crate) fn home() -> Option<PathBuf> {
-    dirs::home_dir().filter(|p| p.is_absolute())
+    std::env::home_dir().filter(|p| p.is_absolute())
 }
 
 /// Per-user app data: ~/Library/Application Support, %APPDATA%, or ~/.local/share.
