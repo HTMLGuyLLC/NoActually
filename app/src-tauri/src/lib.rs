@@ -128,25 +128,18 @@ fn tray_built(build: impl FnOnce() -> tauri::Result<()>) -> bool {
     }
 }
 
-/// Whether the desktop shows tray icons. GNOME without the AppIndicator extension loads the tray
-/// library fine but never shows the icon, so ask D-Bus whether a StatusNotifierWatcher is running.
-/// When unsure, say no: the window then stays the way in, and closing it quits.
+/// Whether the desktop shows tray icons. GNOME without the `AppIndicator` extension loads the
+/// tray library fine but never shows the icon, so ask D-Bus whether a `StatusNotifierWatcher` is
+/// running. When unsure, say no: the window then stays the way in, and closing it quits.
 #[cfg(target_os = "linux")]
 fn tray_host_running() -> bool {
-    use gio::prelude::*;
-    let Ok(bus) = gio::bus_get_sync(gio::BusType::Session, gio::Cancellable::NONE) else { return false };
-    let reply = bus.call_sync(
-        Some("org.freedesktop.DBus"),
-        "/org/freedesktop/DBus",
-        "org.freedesktop.DBus",
-        "NameHasOwner",
-        Some(&("org.kde.StatusNotifierWatcher",).to_variant()),
-        Some(glib::VariantTy::new("(b)").expect("valid type")),
-        gio::DBusCallFlags::NONE,
-        1000,
-        gio::Cancellable::NONE,
-    );
-    let shown = reply.ok().and_then(|v| v.get::<(bool,)>()).is_some_and(|(b,)| b);
+    let has_owner = || {
+        let bus = zbus::blocking::Connection::session().ok()?;
+        let dbus = zbus::blocking::fdo::DBusProxy::new(&bus).ok()?;
+        let name = zbus::names::BusName::try_from("org.kde.StatusNotifierWatcher").ok()?;
+        dbus.name_has_owner(name).ok()
+    };
+    let shown = has_owner().unwrap_or(false);
     if !shown {
         log::warn!("no menu bar icon: the desktop has no tray (StatusNotifierWatcher) running");
     }

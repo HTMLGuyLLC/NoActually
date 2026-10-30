@@ -8,7 +8,11 @@ all-features = false
 # Fail on any vulnerability or unsound crate; unmaintained crates only in our direct dependencies.
 unmaintained = "workspace"
 yanked = "deny"
-ignore = []
+ignore = [
+  # glib 0.18's VariantStrIter is unsound. Tauri pins gtk-rs 0.18 on Linux, so it can't be
+  # upgraded until Tauri moves; nothing here uses VariantStrIter. Drop this once glib >= 0.20.
+  { id = "RUSTSEC-2024-0429", reason = "glib 0.18 is pinned by Tauri's GTK stack; VariantStrIter is unused" },
+]
 
 [licenses]
 # Permissive licenses only. Everything here is compatible with shipping an MIT app.

@@ -2423,8 +2423,6 @@ name = "noactually-app"
 version = "0.4.0"
 dependencies = [
  "chrono",
- "gio",
- "glib",
  "log",
  "noactually-engine",
  "noactually-sources",
@@ -2442,6 +2440,7 @@ dependencies = [
  "tauri-plugin-positioner",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
+ "zbus",
 ]
 
 [[package]]
