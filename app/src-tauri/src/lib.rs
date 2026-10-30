@@ -128,6 +128,36 @@ fn tray_built(build: impl FnOnce() -> tauri::Result<()>) -> bool {
     }
 }
 
+/// Whether the desktop shows tray icons. GNOME without the AppIndicator extension loads the tray
+/// library fine but never shows the icon, so ask D-Bus whether a StatusNotifierWatcher is running.
+/// When unsure, say no: the window then stays the way in, and closing it quits.
+#[cfg(target_os = "linux")]
+fn tray_host_running() -> bool {
+    use gio::prelude::*;
+    let Ok(bus) = gio::bus_get_sync(gio::BusType::Session, gio::Cancellable::NONE) else { return false };
+    let reply = bus.call_sync(
+        Some("org.freedesktop.DBus"),
+        "/org/freedesktop/DBus",
+        "org.freedesktop.DBus",
+        "NameHasOwner",
+        Some(&("org.kde.StatusNotifierWatcher",).to_variant()),
+        Some(glib::VariantTy::new("(b)").expect("valid type")),
+        gio::DBusCallFlags::NONE,
+        1000,
+        gio::Cancellable::NONE,
+    );
+    let shown = reply.ok().and_then(|v| v.get::<(bool,)>()).is_some_and(|(b,)| b);
+    if !shown {
+        log::warn!("no menu bar icon: the desktop has no tray (StatusNotifierWatcher) running");
+    }
+    shown
+}
+
+#[cfg(not(target_os = "linux"))]
+fn tray_host_running() -> bool {
+    true
+}
+
 /// A launch at login starts quietly in the menu bar, but only when there is a menu bar icon.
 fn starts_hidden(hidden_arg: bool, has_tray: bool) -> bool {
     hidden_arg && has_tray
@@ -280,7 +310,7 @@ fn setup(tauri_app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let menu = Menu::with_items(tauri_app, &[&open, &sync, &update, &quit])?;
     let (update_tx, update_rx) = mpsc::channel();
     tauri_app.manage(updater::Updates::new(&handle, update_tx, update));
-    let has_tray = tray_built(|| build_tray(tauri_app, &menu));
+    let has_tray = tray_host_running() && tray_built(|| build_tray(tauri_app, &menu));
     tauri_app.manage(HasTray(has_tray));
     apply_menu_bar(&handle, &app, menu_bar);
 

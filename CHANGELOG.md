@@ -45,6 +45,7 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 ### Fixed
 
 - The Linux AppImage no longer exits at launch when the system has no tray library. The window shows, and closing it quits the app.
+- On Linux desktops that don't show tray icons (GNOME without the AppIndicator extension), the app no longer hides into an icon you can't see. The window stays open, and closing it quits.
 - Finished chats are no longer re-read on every check, which kept the app busy for no reason. Existing chats are read once more after the update, then skipped.
 - Allowing a source again with more history (say, "All history" after "From now on") now reads the older chats instead of skipping them.
 - The window remembers where you left it when you quit with Cmd+Q, log out or restart to update, not only when you close it.

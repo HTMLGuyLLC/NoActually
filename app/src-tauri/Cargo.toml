@@ -42,3 +42,8 @@ notify.workspace = true
 
 [lints]
 workspace = true
+
+# Asks D-Bus whether the desktop shows tray icons (already in the tree through GTK).
+[target.'cfg(target_os = "linux")'.dependencies]
+gio = "0.18"
+glib = "0.18"
