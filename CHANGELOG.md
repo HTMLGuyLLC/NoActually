@@ -4,6 +4,8 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-31
+
 ### Fixed
 
 - Turning on report cards for Claude Code no longer fails with "The downloaded plugin didn't match this app version": the check now allows the folder Claude Code keeps inside its plugins.
@@ -170,7 +172,8 @@ First release.
 - Per-source consent: nothing is read until you allow it, and Forget deletes a source's data
 - `noactually` command-line tool (`sources`, `allow`, `sync`, `stats`)
 
-[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.2.1...v0.3.0
