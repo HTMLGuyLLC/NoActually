@@ -2420,7 +2420,7 @@ dependencies = [
 
 [[package]]
 name = "noactually-app"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "dirs 6.0.0",
@@ -2448,7 +2448,7 @@ dependencies = [
 
 [[package]]
 name = "noactually-cli"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2464,7 +2464,7 @@ dependencies = [
 
 [[package]]
 name = "noactually-engine"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "regex",
  "serde",
@@ -2474,7 +2474,7 @@ dependencies = [
 
 [[package]]
 name = "noactually-sources"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "dirs 6.0.0",
@@ -2489,7 +2489,7 @@ dependencies = [
 
 [[package]]
 name = "noactually-store"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "dirs 6.0.0",
