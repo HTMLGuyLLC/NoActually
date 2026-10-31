@@ -326,8 +326,11 @@ mod tests {
         let first = Codex.scan(&p, 0, false).unwrap();
         assert!(first.turns.is_empty(), "waits for the reply");
 
-        std::fs::write(&p, opening() + &msg("assistant", "output_text", "You're right, it's read_excel.", "a2"))
-            .unwrap();
+        let replied = opening() + &msg("assistant", "output_text", "You're right, it's read_excel.", "a2");
+        std::fs::write(&p, replied.clone()).unwrap();
+        assert!(Codex.scan(&p, first.checkpoint, false).unwrap().turns.is_empty(), "the AI may not be done");
+
+        std::fs::write(&p, replied + &msg("user", "input_text", "thanks", "u2")).unwrap();
         let second = Codex.scan(&p, first.checkpoint, false).unwrap();
         assert_eq!(second.turns.len(), 1);
         let t = &second.turns[0];

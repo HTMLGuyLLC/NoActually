@@ -74,6 +74,9 @@ struct Lab {
     secret: Vec<u8>,
 }
 
+/// A chat that has gone quiet, so its last message is final.
+const SETTLED: StdDuration = StdDuration::from_secs(20 * 60);
+
 impl Lab {
     fn new() -> Self {
         let dir = tempfile::tempdir().unwrap();
@@ -105,7 +108,7 @@ impl Lab {
         let path = self.path(session);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, body).unwrap();
-        set_mtime_ago(&path, StdDuration::ZERO);
+        set_mtime_ago(&path, SETTLED);
     }
 
     fn append(&self, session: &str, body: &str) {
@@ -113,7 +116,7 @@ impl Lab {
         let mut f = std::fs::OpenOptions::new().append(true).open(&path).unwrap();
         f.write_all(body.as_bytes()).unwrap();
         drop(f);
-        set_mtime_ago(&path, StdDuration::ZERO);
+        set_mtime_ago(&path, SETTLED);
     }
 
     fn seal(&self, session: &str) -> String {
@@ -354,7 +357,7 @@ fn a_card_that_could_not_be_checked_is_read_again_even_after_a_whole_turn_that_f
     lab.append("chat1", &cc_user("n2", &t(47), "and a light one"));
     lab.sync();
     assert_eq!(stored(&lab.store).len(), 1);
-    assert_eq!(count(&lab.store, "seen"), prompts);
+    assert_eq!(count(&lab.store, "seen"), prompts + 1, "only the new message");
     let cp = lab.store.file_checkpoint(&lab.path("chat1").to_string_lossy()).unwrap().unwrap();
     assert!(cp.cards_to.is_some(), "and now it is read");
 }

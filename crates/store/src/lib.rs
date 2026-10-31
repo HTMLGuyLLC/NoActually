@@ -894,13 +894,17 @@ impl EventText {
         if level == Level::Category {
             return text;
         }
-        let ai = turn.next_ai.as_ref();
-        let ai_norm = engine::normalize_quotes(ai.map_or("", |m| m.text.as_str()));
+        // The span points into the message that held the admission.
+        let ai = match v.ai_later {
+            Some(i) => turn.later_ai.get(i).map(String::as_str),
+            None => turn.next_ai.as_ref().map(|m| m.text.as_str()),
+        };
+        let ai_norm = engine::normalize_quotes(ai.unwrap_or(""));
         text.human_snip = Some(snippet(&engine::normalize_quotes(turn.human.trim()), v.human_span));
         text.ai_snip = (!ai_norm.is_empty()).then(|| snippet(&ai_norm, v.ai_span));
         if level == Level::Full {
             text.human_full = Some(engine::redact(turn.human.trim()));
-            text.ai_full = ai.map(|m| engine::redact(&m.text));
+            text.ai_full = ai.map(engine::redact);
         }
         text
     }

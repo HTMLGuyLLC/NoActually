@@ -23,7 +23,7 @@ Each of your messages is checked against the AI reply before it and the AI reply
 | Label | Meaning | Counts as |
 |---|---|---|
 | **Confirmed** | You push back and the AI admits the mistake | Correction |
-| **Admitted** | The AI's next reply opens with an admission ("you're right", "good catch") | Correction |
+| **Admitted** | The AI's next reply opens with an admission ("you're right", "good catch"), or a later message before your next one says you were right | Correction |
 | **Claimed** | Your message opens with correction language ("no, that…", "still not working"), and you aren't answering a question the AI just asked | Correction |
 | **Humbled** | The AI's reply opens by correcting you ("Actually…") | Tracked separately |
 | **Context** | You add information the AI couldn't have known ("also", "fyi") | Never a correction |

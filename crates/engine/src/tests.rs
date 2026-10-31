@@ -8,6 +8,7 @@ fn turn(prev: &str, human: &str, next: &str) -> Turn {
         human: human.into(),
         prev_ai: Some(AiMsg { text: prev.into(), model: Some("claude-opus-5-5".into()) }),
         next_ai: Some(AiMsg { text: next.into(), model: Some("claude-opus-5-5".into()) }),
+        later_ai: Vec::new(),
         chat_model: None,
     }
 }
@@ -66,6 +67,64 @@ fn context_is_never_a_correction() {
     assert_eq!(label("Here's the script.", "also, I'm on Python 3.8", "You're right to mention it."), None);
     assert_eq!(label("Here it is.", "I forgot to mention we use Postgres", "Good catch, switching."), None);
     assert_eq!(label("Here it is.", "thanks, that works", "Great."), None);
+}
+
+#[test]
+fn praise_and_a_promise_to_check_is_no_admission() {
+    for reply in [
+        "Good catch — let me check what's actually running.",
+        "Good catch - let me check.",
+        "Good catch! Let me verify that.",
+        "Great catch. I'll look into it.",
+        "Nice catch, thanks — let me double-check the config.",
+        "Sharp catch. Let me take a look.",
+        "Good catch there, I'm going to confirm which one is live.",
+        "Good catch on the port number, let me re-check it.",
+        "Good catch — first let me see what the script does.",
+        "Good catch, checking now.",
+        "Good catch, if that's the case I'll change it.",
+        "Good question — let me check.",
+        "Good point, let me verify.",
+        "Let me look.",
+        "You're right to ask, let me check.",
+        "You are right to question that. Let me see.",
+        "You're absolutely right to be suspicious of it.",
+        "Let me check whether you're right.",
+        "I'll see if you're right about the flag.",
+        "Let me check if I missed anything.",
+        "Let me see what I missed.",
+        "I'm not sure you're right about that.",
+        "That might be a good catch, let me see.",
+        "Sorry for the delay, let me check.",
+    ] {
+        assert_eq!(rules::first(&rules::AI_ADMIT, reply).map(|m| m.rule), None, "{reply}");
+        assert_eq!(label("We use the old tool.", "aren't we on the new tool now?", reply), None, "{reply}");
+    }
+    // Your pushback still counts on its own: it just isn't confirmed.
+    assert_eq!(label("Fixed.", "that's wrong", "Good catch — let me check."), Some(Label::Claimed));
+}
+
+#[test]
+fn the_whole_reply_can_still_admit_it() {
+    for (reply, id) in [
+        ("Good catch, I was wrong.", "ai.good_catch"),
+        ("Good catch, the loop was off by one.", "ai.good_catch"),
+        ("Good catch — let me fix that.", "ai.good_catch"),
+        ("Good catch.", "ai.good_catch"),
+        ("You're right, I used the wrong one.", "ai.youre_right"),
+        ("You're right, let me check the rest.", "ai.youre_right"),
+        ("Let me check. You're correct, it's the new tool.", "ai.youre_right"),
+        ("Good catch — let me check. You're right, it was stale.", "ai.youre_right"),
+        ("Good catch, let me look. Yes, you were right.", "ai.you_are_right"),
+        ("Good catch — let me check. I used the wrong one.", "ai.i_was_wrong"),
+        ("You're right to ask: I missed that.", "ai.i_was_wrong"),
+        ("Good question. I should have asked first.", "ai.should_have"),
+        ("Here's what I missed: the flag.", "ai.i_was_wrong"),
+        ("Sorry for the mix-up.", "ai.sorry"),
+    ] {
+        assert_eq!(rules::first(&rules::AI_ADMIT, reply).map(|m| m.rule), Some(id), "{reply}");
+        assert_eq!(label("x", "are you sure about that?", reply), Some(Label::Admitted), "{reply}");
+    }
 }
 
 #[test]
@@ -249,6 +308,7 @@ fn blame_goes_to_the_reply_you_corrected() {
         human: "that's not a real page".into(),
         prev_ai: Some(AiMsg { text: "Go to /admin".into(), model: Some("gpt-5.1".into()) }),
         next_ai: Some(AiMsg { text: "You're right.".into(), model: Some("gpt-5.1-mini".into()) }),
+        later_ai: Vec::new(),
         chat_model: None,
     };
     let v = classify(&t);
@@ -280,6 +340,7 @@ fn placeholder_models_are_never_blamed() {
             text: "You're right, there's no import button.".into(),
             model: Some("claude-opus-5-5".into()),
         }),
+        later_ai: Vec::new(),
         chat_model: None,
     };
     let v = classify(&t);
@@ -314,4 +375,56 @@ fn ids_round_trip() {
     }
     assert_eq!(Category::from_id("nope"), None);
     assert_eq!(Label::ALL.iter().filter(|l| l.is_correction()).count(), 3);
+}
+
+fn after_checking(human: &str, later: &[&str]) -> Verdict {
+    let mut t = turn("It's Acme.", human, "Good catch — let me check what's actually running.");
+    t.later_ai = later.iter().map(ToString::to_string).collect();
+    classify(&t)
+}
+
+#[test]
+fn an_ai_that_checks_first_and_then_says_you_were_right_counts() {
+    let v =
+        after_checking("are you sure it's not Globex?", &["Reading the config now.", "You're right — it's Globex."]);
+    assert_eq!(v.label, Some(Label::Admitted));
+    assert_eq!(v.rules, ["ai.youre_right"]);
+    assert_eq!(v.ai_later, Some(1));
+    assert_eq!(v.ai_span, Some((0, 12)), "the span is in that message");
+    assert_eq!(after_checking("that's wrong", &["You were right."]).label, Some(Label::Confirmed));
+    assert_eq!(after_checking("are you sure?", &["You’re correct, it was stale."]).label, Some(Label::Admitted));
+}
+
+#[test]
+fn a_mistake_the_ai_found_itself_later_is_not_yours() {
+    for later in [
+        "My mistake, the replace wrapped twice.",
+        "I was wrong about the loop.",
+        "Found my error.",
+        "Good catch by the test.",
+    ] {
+        assert_eq!(after_checking("go ahead", &[later]).label, None, "{later}");
+    }
+}
+
+#[test]
+fn later_messages_that_only_stay_unsure_dont_count() {
+    for later in ["Good catch, let me look further.", "You're right to ask.", "Let me check if you're right."] {
+        assert_eq!(after_checking("go ahead", &[later]).label, None, "{later}");
+    }
+}
+
+#[test]
+fn only_the_start_of_a_later_message_is_read() {
+    let late = format!("{} you're right", "x".repeat(300));
+    assert_eq!(after_checking("go ahead", &[&late]).label, None);
+}
+
+#[test]
+fn the_next_reply_wins_over_a_later_one() {
+    let mut t = turn("Fixed.", "that's wrong", "You're right, sorry.");
+    t.later_ai = vec!["Good catch.".into()];
+    let v = classify(&t);
+    assert_eq!(v.rules[0], "ai.youre_right");
+    assert_eq!(v.ai_later, None);
 }

@@ -667,7 +667,7 @@ describe("improveView report cards", () => {
     const m = view(progress({ weeks: weeks(12, 2, () => cards(2, { grades: { A: 1, B: 1 }, avoidable: 1 })) }));
     expect(m).toContain('aria-label="Report cards by letter grade, per month"');
     expect(m).toContain("24 report cards over 3 months.");
-    expect(m).toMatch(/data-tip="Aug \d{2}: A 5"/);
+    expect(m).toContain(`data-tip="${fmtDay("2026-08-01", { month: "short", year: "2-digit" })}: A 5"`);
   });
 
   it("lists the latest report cards: day graded, tool, grade, what was left out, what it took", () => {

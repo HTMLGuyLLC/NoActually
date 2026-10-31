@@ -27,7 +27,7 @@ source files ──adapter──▶ SourceTurn { source, session, ts, key, turn:
         daily aggregates   session tally    correction event (text kept per retention level)
 ```
 
-A **turn** is one human message plus the AI reply before it and the AI reply after it. The adapter only emits a turn once the next AI reply exists (or the next human message arrives), so live tailing and backfill produce identical results.
+A **turn** is one human message plus the AI reply before it and the AI's messages after it, up to the next human message. Those later messages count only when they say the person was right. The adapter only emits a turn once the next human message arrives (or the file goes quiet), so live tailing and backfill produce identical results.
 
 ## Consent
 

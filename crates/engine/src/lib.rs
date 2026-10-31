@@ -61,6 +61,10 @@ pub struct Turn {
     pub prev_ai: Option<AiMsg>,
     /// The AI reply that came next.
     pub next_ai: Option<AiMsg>,
+    /// The AI's messages after that one, before the person's next message. An agent says "let me
+    /// check", works, and only then says what it found.
+    #[serde(default)]
+    pub later_ai: Vec<String>,
     /// The model this chat was using nearby, for when neither neighboring reply names one
     /// (a first message that was never answered, or replies the tool didn't tag).
     #[serde(default)]
@@ -172,8 +176,10 @@ pub struct Verdict {
     pub rules: Vec<&'static str>,
     /// Byte range in the normalized, trimmed human text.
     pub human_span: Option<(usize, usize)>,
-    /// Byte range in the normalized next AI reply.
+    /// Byte range in the normalized next AI reply, or in the later message [`Verdict::ai_later`] names.
     pub ai_span: Option<(usize, usize)>,
+    /// Which of [`Turn::later_ai`] held the admission, when the next reply didn't.
+    pub ai_later: Option<usize>,
 }
 
 impl Verdict {
@@ -201,7 +207,10 @@ impl Verdict {
 /// 7: a route on its own ("/hi", "/api/users") points at it.
 /// 8: "look at the logs" (or check, read, review the output) shows proof; "you should fix it"
 ///    names the job, not a finish line.
-pub const RULES_VERSION: u32 = 8;
+/// 9: "Good catch, let me check" and "You're right to ask" aren't admissions, nor is one left open
+///    ("let me check if I missed it"); "you were right" and "you're correct" are.
+/// 10: an AI that checks first and then says you were right counts, from any message before your next.
+pub const RULES_VERSION: u32 = 10;
 
 /// Tools write placeholder ids for replies no model wrote (Claude Code's "<synthetic>" for errors,
 /// interruptions and "No response requested").
@@ -232,6 +241,11 @@ pub fn classify(turn: &Turn) -> Verdict {
     let pasted = t.chars().count() > PASTE;
 
     let ai_admit = rules::first(&rules::AI_ADMIT, next);
+    let later = if ai_admit.is_none() { said_later(turn) } else { None };
+    let (ai_admit, admit_text) = match &later {
+        Some((_, text, m)) => (Some(*m), text.as_str()),
+        None => (ai_admit, next),
+    };
     let user_open = if pasted { None } else { rules::first(&rules::USER_OPEN, head) };
     let user_any = if pasted { None } else { rules::first(&rules::USER_ANY, body) };
     let context = rules::first(&rules::CONTEXT, head);
@@ -249,13 +263,14 @@ pub fn classify(turn: &Turn) -> Verdict {
         if let Some(m) = ai_admit {
             v.rules.push(m.rule);
             v.ai_span = Some(m.span);
+            v.ai_later = later.as_ref().map(|(i, ..)| *i);
         }
         if let Some(m) = user_open.or(user_any) {
             v.rules.push(m.rule);
             v.human_span = Some(m.span);
         }
         // The rest of the AI's reply often names the mistake, so categories look at both sides.
-        v.category = Some(rules::category(body, next, ai_admit.map(|m| m.span)));
+        v.category = Some(rules::category(body, admit_text, ai_admit.map(|m| m.span)));
         return v;
     }
 
@@ -271,6 +286,16 @@ pub fn classify(turn: &Turn) -> Verdict {
         }
     }
     Verdict::default()
+}
+
+/// The first later message that says the person was right: its index, its normalized text, and
+/// the match. "My mistake" doesn't count here: that far in, the AI may have found it on its own.
+fn said_later(turn: &Turn) -> Option<(usize, String, rules::Match)> {
+    turn.later_ai.iter().enumerate().find_map(|(i, text)| {
+        let text = normalize_quotes(text);
+        let m = rules::you_were_right(head_chars(&text, AI_HEAD))?;
+        Some((i, text, m))
+    })
 }
 
 /// Curly quotes become straight ones so "you’re right" and "you're right" match the same rule.

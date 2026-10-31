@@ -18,6 +18,7 @@ fn turn(human: &str, next: &str, model: &str, ts: &str, key: &str) -> SourceTurn
             human: human.into(),
             prev_ai: Some(engine::AiMsg { text: "Here you go.".into(), model: Some(model.into()) }),
             next_ai: Some(engine::AiMsg { text: next.into(), model: Some(model.into()) }),
+            later_ai: Vec::new(),
             chat_model: None,
         },
     }
@@ -48,16 +49,24 @@ fn stats(s: &Store) -> Stats {
     s.stats(&Filter::default(), today()).unwrap()
 }
 
+/// A chat that has gone quiet, so its last message is final.
+const SETTLED: StdDuration = StdDuration::from_secs(20 * 60);
+
 fn claude_code(dir: &tempfile::TempDir) -> Vec<Box<dyn Source>> {
     vec![sources::claude_code_at(dir.path().to_path_buf())]
 }
 
 /// Appends to a history file and moves its mtime, as a tool writing to it would.
+fn write_settled(path: &Path, text: impl AsRef<[u8]>) {
+    std::fs::write(path, text).unwrap();
+    set_mtime_ago(path, SETTLED);
+}
+
 fn append(path: &Path, text: &str) {
     let mut f = std::fs::OpenOptions::new().append(true).open(path).unwrap();
     f.write_all(text.as_bytes()).unwrap();
     drop(f);
-    set_mtime_ago(path, StdDuration::ZERO);
+    set_mtime_ago(path, SETTLED);
 }
 
 #[test]
@@ -361,7 +370,7 @@ fn rewritten_or_shrunk_files_never_double_count() {
     let body = cc_ai("claude-opus-5-5", &ts, "Use /admin.")
         + &cc_user("u1", &ts, "that's not a real page")
         + &cc_ai("claude-opus-5-5", &ts, "You're right.");
-    std::fs::write(&path, &body).unwrap();
+    write_settled(&path, &body);
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
     s.allow("claude-code", None).unwrap();
@@ -369,10 +378,10 @@ fn rewritten_or_shrunk_files_never_double_count() {
 
     // The tool rewrites the file (compaction, re-save): it's re-read from zero, keys block copies.
     std::fs::write(&path, format!("{{\"type\":\"summary\"}}\n{body}")).unwrap();
-    set_mtime_ago(&path, StdDuration::ZERO);
+    set_mtime_ago(&path, SETTLED);
     assert_eq!(sync(&mut s, &all).unwrap().files_read, 1);
     std::fs::write(&path, &body[..body.len() / 2]).unwrap(); // shrinks
-    set_mtime_ago(&path, StdDuration::ZERO);
+    set_mtime_ago(&path, SETTLED);
     assert_eq!(sync(&mut s, &all).unwrap().files_read, 1);
 
     let st = stats(&s);
@@ -383,7 +392,7 @@ fn rewritten_or_shrunk_files_never_double_count() {
 fn unreadable_files_are_reported_not_fatal() {
     let dir = tempfile::tempdir().unwrap();
     let ts = Utc::now().to_rfc3339();
-    std::fs::write(dir.path().join("a.jsonl"), cc_correction("u", &ts)).unwrap();
+    write_settled(&dir.path().join("a.jsonl"), cc_correction("u", &ts));
     let mut s = Store::open_in_memory().unwrap();
     s.import("chatgpt-export", &dir.path().join("conversations.json").to_string_lossy()).unwrap();
     std::fs::write(dir.path().join("conversations.json"), "{not json").unwrap();
@@ -400,7 +409,7 @@ fn unreadable_files_are_reported_not_fatal() {
 fn paused_and_revoked_sources_are_not_read() {
     let dir = tempfile::tempdir().unwrap();
     let ts = Utc::now().to_rfc3339();
-    std::fs::write(dir.path().join("a.jsonl"), cc_correction("u", &ts)).unwrap();
+    write_settled(&dir.path().join("a.jsonl"), cc_correction("u", &ts));
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
     s.allow("claude-code", None).unwrap();
@@ -417,8 +426,7 @@ fn paused_and_revoked_sources_are_not_read() {
 fn rule_changes_rebuild_scores_but_keep_consent() {
     let dir = tempfile::tempdir().unwrap();
     let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
-    std::fs::write(dir.path().join("a.jsonl"), cc_ai("<synthetic>", &ts, "API Error") + &cc_correction("u", &ts))
-        .unwrap();
+    write_settled(&dir.path().join("a.jsonl"), cc_ai("<synthetic>", &ts, "API Error") + &cc_correction("u", &ts));
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
     s.allow("claude-code", None).unwrap();
@@ -461,7 +469,7 @@ fn from_now_on_skips_existing_history_but_counts_new_messages() {
 fn allowing_more_history_re_reads_old_files() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("a.jsonl");
-    std::fs::write(&path, cc_correction("old", &(Utc::now() - Duration::hours(3)).to_rfc3339())).unwrap();
+    write_settled(&path, cc_correction("old", &(Utc::now() - Duration::hours(3)).to_rfc3339()));
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
     s.allow("claude-code", None).unwrap();
@@ -481,7 +489,7 @@ fn allowing_more_history_re_reads_old_files() {
 fn from_now_on_survives_a_rules_rebuild() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("a.jsonl");
-    std::fs::write(&path, cc_correction("old", &(Utc::now() - Duration::hours(3)).to_rfc3339())).unwrap();
+    write_settled(&path, cc_correction("old", &(Utc::now() - Duration::hours(3)).to_rfc3339()));
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
     s.allow("claude-code", None).unwrap();
@@ -524,7 +532,7 @@ fn pins_survive_a_rules_rebuild() {
     let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
     let file = dir.path().join("a.jsonl");
     let correction = |n: &str| cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction(n, &ts);
-    std::fs::write(&file, correction("u1") + &correction("u2")).unwrap();
+    write_settled(&file, correction("u1") + &correction("u2"));
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
     s.allow("claude-code", None).unwrap();
@@ -918,4 +926,34 @@ fn card_secret_is_made_once_and_kept() {
         let perms = std::fs::metadata(db.with_file_name(CARD_KEY_FILE)).unwrap().permissions().mode();
         assert_eq!(perms & 0o777, 0o600, "owner-only");
     }
+}
+
+#[test]
+fn a_later_admission_is_the_text_kept() {
+    let mut s = Store::open_in_memory().unwrap();
+    let mut t = turn("no, that's wrong", "Let me check.", "m", &now_ts(0), "k");
+    t.turn.later_ai = vec!["You're right, it was stale.".into()];
+    ingest(&mut s, "f", vec![t]);
+    let ai: String = s.conn.query_row("SELECT ai_snip FROM events", [], |r| r.get(0)).unwrap();
+    assert!(ai.contains("it was stale"), "{ai}");
+}
+
+#[test]
+fn a_message_waits_for_the_ai_to_finish_and_gets_its_later_admission() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("a.jsonl");
+    let ts = Utc::now().to_rfc3339();
+    let body = cc_user("u1", &ts, "are you sure?") + &cc_ai("claude-opus-5-5", &ts, "Let me check.");
+    std::fs::write(&path, body).unwrap();
+    let all = claude_code(&dir);
+    let mut s = Store::open_in_memory().unwrap();
+    s.allow("claude-code", None).unwrap();
+    assert_eq!(sync(&mut s, &all).unwrap().messages, 0, "it may still be working");
+
+    let mut f = std::fs::OpenOptions::new().append(true).open(&path).unwrap();
+    f.write_all(cc_ai("claude-opus-5-5", &ts, "You're right, it was stale.").as_bytes()).unwrap();
+    f.write_all(cc_user("u2", &ts, "thanks").as_bytes()).unwrap();
+    drop(f);
+    let r = sync(&mut s, &all).unwrap();
+    assert_eq!((r.messages, r.corrections), (1, 1), "counted once, with what it found");
 }
