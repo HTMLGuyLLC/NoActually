@@ -4,6 +4,10 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+### Fixed
+
+- Turning on report cards for Claude Code no longer fails with "The downloaded plugin didn't match this app version": the check now allows the folder Claude Code keeps inside its plugins.
+
 ## [0.5.0] - 2026-10-30
 
 ### Added

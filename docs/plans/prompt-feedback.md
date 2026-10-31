@@ -67,8 +67,8 @@ The app is the history.**
   
 - **The downloaded plugin is checked against an allowlist.** After a Claude Code install, and at each release-build launch, the
   installed plugin (the folder `installPath` names in the plugin list, never a guess at Claude Code's cache) may hold only
-  the shim, hook, skill, manifest and icon, each matching the copy built into the app byte for byte, plus the `.orphaned_at`
-  marker. Anything else, or any difference, and the plugin is uninstalled. With no `installPath` it is kept and unverified.
+  the shim, hook, skill, manifest and icon, each matching the copy built into the app byte for byte, plus Claude Code's own
+  `.orphaned_at` and `.links_materialized` markers and `.in_use` folder. Anything else, or any difference, and the plugin is uninstalled. With no `installPath` it is kept and unverified.
 - **The launch check only moves a marketplace added from exactly `HTMLGuyLLC/NoActually#v<tag>`.** Anything else named
   `noactually` (the README's unpinned one, a local folder) is left alone. A failed move re-adds the old tag and installs the plugin again (removing a marketplace uninstalls its plugins), switches it off
   again if it was off, and leaves `report-cards-repin` beside the database so the next launch retries even when the plugin is gone;
