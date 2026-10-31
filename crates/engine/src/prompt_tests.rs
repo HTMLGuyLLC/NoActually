@@ -9,7 +9,13 @@ fn ai(text: &str) -> AiMsg {
 
 /// A message with the AI reply before it (`None`: the chat's first message) and after it.
 fn read(prev: Option<&str>, human: &str, next: &str) -> Prompt {
-    let turn = Turn { human: human.into(), prev_ai: prev.map(ai), next_ai: Some(ai(next)), chat_model: None };
+    let turn = Turn {
+        human: human.into(),
+        prev_ai: prev.map(ai),
+        next_ai: Some(ai(next)),
+        later_ai: Vec::new(),
+        chat_model: None,
+    };
     read_prompt(&turn, &classify(&turn), prev.is_some())
 }
 
@@ -179,6 +185,7 @@ fn until_a_chat_has_a_task_its_first_request_is_the_prompt() {
             human: human.into(),
             prev_ai: Some(ai("Hi, here is the overview.")),
             next_ai: None,
+            later_ai: Vec::new(),
             chat_model: None,
         };
         read_prompt(&turn, &classify(&turn), has_task)

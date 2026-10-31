@@ -245,7 +245,7 @@ A few things this gets right on purpose:
 | Label | Rule |
 |---|---|
 | **Confirmed** | You push back **and** the AI admits the mistake |
-| **Admitted** | The AI's next reply opens with "you're right", "good catch", "my mistake"… |
+| **Admitted** | The AI's next reply opens with "you're right", "good catch", "my mistake"… or it checks first and then says you were right |
 | **Claimed** | Your message opens with "no, that…", "still not working", "you missed"… (not when you're answering its question) |
 | **Humbled** | The AI corrects *you* ("Actually…", "Not quite") |
 

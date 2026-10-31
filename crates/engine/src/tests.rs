@@ -8,6 +8,7 @@ fn turn(prev: &str, human: &str, next: &str) -> Turn {
         human: human.into(),
         prev_ai: Some(AiMsg { text: prev.into(), model: Some("claude-opus-5-5".into()) }),
         next_ai: Some(AiMsg { text: next.into(), model: Some("claude-opus-5-5".into()) }),
+        later_ai: Vec::new(),
         chat_model: None,
     }
 }
@@ -307,6 +308,7 @@ fn blame_goes_to_the_reply_you_corrected() {
         human: "that's not a real page".into(),
         prev_ai: Some(AiMsg { text: "Go to /admin".into(), model: Some("gpt-5.1".into()) }),
         next_ai: Some(AiMsg { text: "You're right.".into(), model: Some("gpt-5.1-mini".into()) }),
+        later_ai: Vec::new(),
         chat_model: None,
     };
     let v = classify(&t);
@@ -338,6 +340,7 @@ fn placeholder_models_are_never_blamed() {
             text: "You're right, there's no import button.".into(),
             model: Some("claude-opus-5-5".into()),
         }),
+        later_ai: Vec::new(),
         chat_model: None,
     };
     let v = classify(&t);
@@ -372,4 +375,56 @@ fn ids_round_trip() {
     }
     assert_eq!(Category::from_id("nope"), None);
     assert_eq!(Label::ALL.iter().filter(|l| l.is_correction()).count(), 3);
+}
+
+fn after_checking(human: &str, later: &[&str]) -> Verdict {
+    let mut t = turn("It's Acme.", human, "Good catch — let me check what's actually running.");
+    t.later_ai = later.iter().map(ToString::to_string).collect();
+    classify(&t)
+}
+
+#[test]
+fn an_ai_that_checks_first_and_then_says_you_were_right_counts() {
+    let v =
+        after_checking("are you sure it's not Globex?", &["Reading the config now.", "You're right — it's Globex."]);
+    assert_eq!(v.label, Some(Label::Admitted));
+    assert_eq!(v.rules, ["ai.youre_right"]);
+    assert_eq!(v.ai_later, Some(1));
+    assert_eq!(v.ai_span, Some((0, 12)), "the span is in that message");
+    assert_eq!(after_checking("that's wrong", &["You were right."]).label, Some(Label::Confirmed));
+    assert_eq!(after_checking("are you sure?", &["You’re correct, it was stale."]).label, Some(Label::Admitted));
+}
+
+#[test]
+fn a_mistake_the_ai_found_itself_later_is_not_yours() {
+    for later in [
+        "My mistake, the replace wrapped twice.",
+        "I was wrong about the loop.",
+        "Found my error.",
+        "Good catch by the test.",
+    ] {
+        assert_eq!(after_checking("go ahead", &[later]).label, None, "{later}");
+    }
+}
+
+#[test]
+fn later_messages_that_only_stay_unsure_dont_count() {
+    for later in ["Good catch, let me look further.", "You're right to ask.", "Let me check if you're right."] {
+        assert_eq!(after_checking("go ahead", &[later]).label, None, "{later}");
+    }
+}
+
+#[test]
+fn only_the_start_of_a_later_message_is_read() {
+    let late = format!("{} you're right", "x".repeat(300));
+    assert_eq!(after_checking("go ahead", &[&late]).label, None);
+}
+
+#[test]
+fn the_next_reply_wins_over_a_later_one() {
+    let mut t = turn("Fixed.", "that's wrong", "You're right, sorry.");
+    t.later_ai = vec!["Good catch.".into()];
+    let v = classify(&t);
+    assert_eq!(v.rules[0], "ai.youre_right");
+    assert_eq!(v.ai_later, None);
 }

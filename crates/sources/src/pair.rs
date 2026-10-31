@@ -70,10 +70,11 @@ impl Event {
 
 /// Pairs each human event with the AI text around it.
 ///
-/// A human message is complete once anything follows it. If the last one isn't, the checkpoint
-/// rewinds to the AI reply before it, so the next pass re-reads that reply as context and emits
-/// the turn exactly once. A pass that ends on a reply also resumes at that reply, so the next
-/// message still knows what it answered. `end` is the byte offset after the last whole line read.
+/// A human message is complete once the next one follows it, since the AI may still be working
+/// and only say what it found at the end. If the last one isn't, the checkpoint rewinds to the AI
+/// reply before it, so the next pass re-reads that reply as context and emits the turn exactly
+/// once. A pass that ends on a reply also resumes at that reply, so the next message still knows
+/// what it answered. `end` is the byte offset after the last whole line read.
 pub fn pair(source: &'static str, session: &str, mut events: Vec<Event>, end: u64, finalize: bool) -> FileScan {
     let tips = read_tips(session, &events);
     // A tip on its own is no reply: what came before it is still what the person answered.
@@ -99,6 +100,7 @@ pub fn pair(source: &'static str, session: &str, mut events: Vec<Event>, end: u6
     };
     let mut last_real: Option<String> = None;
     let mut last_ai: Option<(usize, &Event)> = None;
+    let mut held = None;
     // Re-reading a reply emits nothing (only human messages become turns).
     if let Some(Event::Ai { pos, .. }) = events.last() {
         scan.checkpoint = *pos;
@@ -123,12 +125,16 @@ pub fn pair(source: &'static str, session: &str, mut events: Vec<Event>, end: u6
                 last_real = real(ev).or(last_real.take());
             }
             Event::Human { text, ts, key, pos } => {
-                let next = events[i + 1..].first();
-                if next.is_none() && !finalize {
-                    scan.checkpoint = last_ai.map_or(*pos, |(_, e)| e.pos());
-                    break;
+                let after = &events[i + 1..];
+                let until = after.iter().position(|e| matches!(e, Event::Human { .. }));
+                if until.is_none() && !finalize {
+                    // Report cards in the replies still get read below.
+                    held = Some(last_ai.map_or(*pos, |(_, e)| e.pos()));
+                    continue;
                 }
-                // Keep only what the rules read: the end of the previous reply, the start of the next.
+                let next = after.first();
+                let replies = &after[..until.unwrap_or(after.len())];
+                // Keep only what the rules read: the end of the previous reply, the start of the rest.
                 let ai = |e: Option<&Event>, keep: fn(&str, usize) -> &str, n: usize| match e {
                     Some(Event::Ai { text, model, .. }) => {
                         let text = if holds_card(text) { "" } else { keep(strip_tip(text), n) };
@@ -145,11 +151,21 @@ pub fn pair(source: &'static str, session: &str, mut events: Vec<Event>, end: u6
                         human: text.clone(),
                         prev_ai: ai(last_ai.map(|(_, e)| e), tail_chars, KEEP_PREV),
                         next_ai: ai(next, head_chars, KEEP_NEXT),
+                        later_ai: replies
+                            .iter()
+                            .skip(1)
+                            .filter_map(|e| ai(Some(e), head_chars, KEEP_NEXT))
+                            .map(|m| m.text)
+                            .filter(|text| !text.is_empty())
+                            .collect(),
                         chat_model: last_real.clone().or_else(|| first_after[i].clone()),
                     },
                 });
             }
         }
+    }
+    if let Some(at) = held {
+        scan.checkpoint = at;
     }
     scan
 }
@@ -202,7 +218,7 @@ mod tests {
 
     #[test]
     fn a_reply_that_is_only_a_tip_is_no_reply() {
-        let scan = pair("t", "s", vec![h("one", 0), a("r1", 10), a(TIP, 20), h("two", 30), a("r2", 40)], 50, false);
+        let scan = pair("t", "s", vec![h("one", 0), a("r1", 10), a(TIP, 20), h("two", 30), a("r2", 40)], 50, true);
         assert_eq!(scan.tips.len(), 1);
         assert_eq!(scan.turns[0].turn.next_ai.as_ref().unwrap().text, "r1");
         assert_eq!(scan.turns[1].turn.prev_ai.as_ref().unwrap().text, "r1", "the real reply, not an empty one");
@@ -223,10 +239,10 @@ mod tests {
     fn a_re_read_reply_reports_its_tip_again() {
         let reply = format!("Done.\n\n{TIP}");
         let first = pair("t", "s", vec![h("one", 0), a(&reply, 10)], 20, false);
-        assert_eq!(first.checkpoint, 10, "the reply is read again next time");
-        let next = pair("t", "s", vec![a(&reply, 10), h("two", 20), a("r2", 30)], 40, false);
+        assert_eq!(first.checkpoint, 0, "the reply is read again next time");
+        let next = pair("t", "s", vec![h("one", 0), a(&reply, 10), h("two", 20), a("r2", 30)], 40, false);
         assert_eq!(next.tips, first.tips, "the store keeps one");
-        assert_eq!(next.turns[0].turn.prev_ai.as_ref().unwrap().text, "Done.");
+        assert_eq!(next.turns[0].turn.next_ai.as_ref().unwrap().text, "Done.");
     }
 
     #[test]
@@ -235,7 +251,7 @@ mod tests {
         assert_eq!(scan.turns.len(), 1);
         assert_eq!(scan.checkpoint, 10);
         // The next pass starts at the reply and now sees the answer: "two" is emitted once.
-        let next = pair("t", "s", vec![a("r1", 10), h("two", 20), a("r2", 30)], 40, false);
+        let next = pair("t", "s", vec![a("r1", 10), h("two", 20), a("r2", 30), h("three", 40)], 50, false);
         assert_eq!(next.turns.len(), 1);
         assert_eq!(next.turns[0].turn.human, "two");
         assert_eq!(next.turns[0].turn.prev_ai.as_ref().unwrap().text, "r1");
@@ -244,13 +260,44 @@ mod tests {
     }
 
     #[test]
-    fn a_pass_ending_on_a_reply_resumes_at_it() {
-        let scan = pair("t", "s", vec![h("one", 0), a("r1", 10)], 20, false);
-        assert_eq!(scan.checkpoint, 10, "the reply is re-read next time");
-        // So the next message, written after this pass, still has its context.
-        let next = pair("t", "s", vec![a("r1", 10), h("still broken", 20), a("r2", 30)], 40, false);
-        assert_eq!(next.turns.len(), 1);
-        assert_eq!(next.turns[0].turn.prev_ai.as_ref().unwrap().text, "r1");
+    fn a_pass_ending_on_a_reply_waits_for_the_ai_to_finish() {
+        let scan = pair("t", "s", vec![a("r0", 0), h("one", 10), a("Let me check.", 20)], 30, false);
+        assert!(scan.turns.is_empty(), "it may still be working");
+        assert_eq!(scan.checkpoint, 0, "the context and the message are re-read next time");
+        let events =
+            vec![a("r0", 0), h("one", 10), a("Let me check.", 20), a("You're right.", 30), h("two", 40), a("r2", 50)];
+        let next = pair("t", "s", events, 60, false);
+        assert_eq!(next.turns.len(), 1, "emitted once, with everything the AI said");
+        assert_eq!(next.turns[0].turn.prev_ai.as_ref().unwrap().text, "r0");
+        assert_eq!(next.turns[0].turn.next_ai.as_ref().unwrap().text, "Let me check.");
+        assert_eq!(next.turns[0].turn.later_ai, ["You're right."]);
+    }
+
+    #[test]
+    fn a_held_message_still_reports_the_card_in_its_reply() {
+        let block = r#"{"v":1,"k":"9c41e0aa","tasks":[{"at":"7f3a9c21","to":"e44a1b90"}]}"#;
+        let reply = format!("Report card: A\n\n```noactually\n{block}\n```");
+        assert_eq!(pair("t", "s", vec![h("grade me", 0), a(&reply, 10)], 20, false).cards.len(), 1);
+    }
+
+    #[test]
+    fn later_replies_stop_at_the_next_message_and_leave_out_cards_and_tips() {
+        let block = r#"{"v":1,"k":"9c41e0aa","tasks":[{"at":"7f3a9c21","to":"e44a1b90"}]}"#;
+        let card = format!("```noactually\n{block}\n```");
+        let with_tip = format!("Fixed.\n\n{TIP}");
+        let events = vec![
+            h("one", 0),
+            a("Looking.", 10),
+            a(&card, 20),
+            a(&with_tip, 30),
+            a(TIP, 40),
+            h("two", 50),
+            a("r2", 60),
+            a("You're right.", 70),
+        ];
+        let scan = pair("t", "s", events, 80, true);
+        assert_eq!(scan.turns[0].turn.later_ai, ["Fixed."]);
+        assert_eq!(scan.turns[1].turn.later_ai, ["You're right."]);
     }
 
     #[test]
@@ -314,8 +361,9 @@ mod tests {
 
     #[test]
     fn back_to_back_humans_are_both_complete() {
-        let scan = pair("t", "s", vec![h("one", 0), h("two", 5), a("r", 9)], 12, false);
+        let scan = pair("t", "s", vec![h("one", 0), h("two", 5), a("r", 9), a("r2", 10)], 12, true);
         assert_eq!(scan.turns.len(), 2);
         assert!(scan.turns[0].turn.next_ai.is_none());
+        assert_eq!(scan.turns[0].turn.later_ai.len(), 0);
     }
 }

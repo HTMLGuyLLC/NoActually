@@ -106,6 +106,15 @@ pub static AI_ADMIT: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     .collect()
 });
 
+/// Credits the person, rather than only owning up. "Good catch" isn't here: that far into a reply
+/// it's mostly about a test or the AI's own check.
+const YOU_WERE_RIGHT: [&str; 2] = ["ai.youre_right", "ai.you_are_right"];
+
+/// The admissions that say the person was right, for a later message in a reply.
+pub fn you_were_right(text: &str) -> Option<Match> {
+    AI_ADMIT.iter().filter(|r| YOU_WERE_RIGHT.contains(&r.id)).find_map(|r| r.find(text))
+}
+
 /// You open your message by pushing back.
 pub static USER_OPEN: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![

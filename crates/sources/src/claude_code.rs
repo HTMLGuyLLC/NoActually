@@ -403,7 +403,7 @@ mod tests {
         let body = hook_context("hook_additional_context", engine::TIP_RULES, false)
             + &cc_user("u1", TS, "build the page")
             + &cc_ai("claude-opus-5-5", TS, "Built it.");
-        assert_eq!(scan_str(&body, false).turns.len(), 1);
+        assert_eq!(scan_str(&body, true).turns.len(), 1);
     }
 
     #[test]
@@ -444,7 +444,7 @@ mod tests {
             + &line(&json!({"type":"user","timestamp":TS,"isSidechain":true,"message":{"content":"subagent prompt"}}))
             + &cc_ai("claude-opus-5-5", TS, "You're right.")
             + "{\"type\":\"user\",\"partial"; // half-written line
-        let scan = scan_str(&body, false);
+        let scan = scan_str(&body, true);
         assert_eq!(scan.turns.len(), 1);
         let t = &scan.turns[0].turn;
         assert_eq!(t.human, "that's not a real page");
@@ -465,7 +465,7 @@ mod tests {
         let queued = line(&json!({"type":"attachment","uuid":"q1","timestamp":TS,
             "attachment":{"type":"queued_command","prompt":"you missed the tests"}}));
         let body = cc_ai("claude-opus-5-5", TS, "Done.") + &queued + &cc_ai("claude-opus-5-5", TS, "Adding them.");
-        let scan = scan_str(&body, false);
+        let scan = scan_str(&body, true);
         assert_eq!(scan.turns.len(), 1);
         assert_eq!(scan.turns[0].turn.human, "you missed the tests");
         assert_eq!(scan.turns[0].key.as_deref(), Some("q1"));
@@ -477,7 +477,7 @@ mod tests {
             + &cc_user("u1", TS, "that's not a real page")
             + &cc_ai("<synthetic>", TS, "No response requested.")
             + &cc_ai("claude-opus-5-5", TS, "You're right.");
-        let scan = scan_str(&body, false);
+        let scan = scan_str(&body, true);
         assert_eq!(scan.turns.len(), 1);
         assert_eq!(scan.turns[0].turn.next_ai.as_ref().unwrap().text, "You're right.", "placeholder is not the reply");
     }
@@ -533,7 +533,7 @@ mod tests {
             + &reply("a1", "m1", TS, Some(&card), (1, 0, 0, 1))
             + &cc_user("u2", TS, "no, that's wrong")
             + &cc_ai("claude-opus-5-5", TS, "You're right.");
-        let scan = scan_str(&body, false);
+        let scan = scan_str(&body, true);
         assert_eq!(scan.cards.len(), 1);
         let c = &scan.cards[0];
         assert_eq!((c.source, c.session.as_str(), c.key.as_deref()), ("claude-code", "abc", Some("a1")));
