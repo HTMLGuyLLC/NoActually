@@ -27,7 +27,12 @@ const FOLDERS: [&str; 5] = [".claude-plugin", "bin", "hooks", "skills", "skills/
 
 /// Files Claude Code itself leaves at the root of a plugin's folder, which hold no code and are never
 /// run or read as instructions. Dotfiles only, as plain files.
-const MARKERS: [&str; 1] = [".orphaned_at"];
+const MARKERS: [&str; 2] = [".orphaned_at", ".links_materialized"];
+
+/// The folder Claude Code keeps at the root of a plugin's folder, with one file for each running session
+/// that uses the plugin. Claude Code never runs or reads it as part of the plugin, and its contents come
+/// and go, so it isn't looked inside. It must be a real folder: a link is still refused.
+const IN_USE: &str = ".in_use";
 
 /// Files a file manager leaves in any folder it has opened (macOS Finder, Windows Explorer). They are
 /// never run or read, so they are allowed in any of the plugin's folders, as plain files with exactly
@@ -66,7 +71,7 @@ pub(super) enum Difference {
 }
 
 /// How the plugin in `dir` differs from the one this app ships, or `None` if it doesn't: nothing is in
-/// it but the [`FOLDERS`], the [`SHIPPED`] files, the [`MARKERS`] and the [`INERT`] files, and every
+/// it but the [`FOLDERS`], the [`SHIPPED`] files, the [`MARKERS`], [`IN_USE`] and the [`INERT`] files, and every
 /// shipped file is there and the same. A folder or an entry that can't be read counts as changed: this
 /// app's own install never has one. Only a plugin that is otherwise exactly ours is called [`Difference::Extra`].
 pub(super) fn compare(dir: &Path) -> Option<Difference> {
@@ -139,6 +144,9 @@ fn unexpected(dir: &Path, rel: &str) -> Option<Found> {
         let Ok(kind) = entry.file_type() else { return Some(Found::Unreadable(path)) };
         if !kind.is_dir() && !kind.is_file() {
             return Some(Found::Odd(path));
+        }
+        if kind.is_dir() && rel.is_empty() && name == IN_USE {
+            continue;
         }
         let ours = if kind.is_dir() {
             FOLDERS.contains(&path.as_str())

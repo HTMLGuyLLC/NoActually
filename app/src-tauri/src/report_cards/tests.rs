@@ -1279,6 +1279,13 @@ fn only_the_plugins_own_files_and_the_markers_may_be_in_the_download() {
     // The marker Claude Code leaves at the root does nothing, so it is let through.
     fs::write(plugin.join(".orphaned_at"), "1730000000").unwrap();
     assert_eq!(difference(plugin), None, "a marker file");
+    fs::write(plugin.join(".links_materialized"), "").unwrap();
+    assert_eq!(difference(plugin), None, "the other marker file");
+    // So is the folder of running sessions, empty or not, whatever is in it.
+    fs::create_dir_all(plugin.join(".in_use")).unwrap();
+    assert_eq!(difference(plugin), None, "an empty in-use folder");
+    fs::write(plugin.join(".in_use/12345"), "").unwrap();
+    assert_eq!(difference(plugin), None, "a running session");
 
     // Each of these, added to an otherwise good plugin, is turned down.
     let adds = [
@@ -1328,6 +1335,18 @@ fn only_the_plugins_own_files_and_the_markers_may_be_in_the_download() {
     plant_plugin(lab.path());
     fs::create_dir_all(lab.path().join(".orphaned_at")).unwrap();
     assert!(difference(lab.path()).is_some_and(|why| why.contains(".orphaned_at")), "a folder by a marker's name");
+    // The in-use folder is only let through as a folder at the root.
+    for (path, folder) in [(".in_use", false), ("bin/.in_use", true), ("skills/me/.in_use", true)] {
+        let lab = tempfile::tempdir().unwrap();
+        plant_plugin(lab.path());
+        let path = lab.path().join(path);
+        if folder {
+            fs::create_dir_all(&path).unwrap();
+        } else {
+            fs::write(&path, "x").unwrap();
+        }
+        assert!(difference(lab.path()).is_some_and(|why| why.contains(".in_use")), "{}", path.display());
+    }
 
     // A folder that isn't theirs is turned down even when it's empty.
     for folder in ["hooks/empty", "commands", "skills/me/scripts", "bin/x", "other"] {
@@ -1490,6 +1509,9 @@ fn a_link_cannot_stand_in_for_anything() {
     let plugin = fresh();
     symlink(&elsewhere, plugin.path().join(".orphaned_at")).unwrap();
     assert!(difference(plugin.path()).is_some_and(|why| why.contains(".orphaned_at")), "a marker that is a link");
+    fs::remove_file(plugin.path().join(".orphaned_at")).unwrap();
+    symlink(&elsewhere, plugin.path().join(".in_use")).unwrap();
+    assert!(difference(plugin.path()).is_some_and(|why| why.contains(".in_use")), "an in-use folder that is a link");
     // A shipped file replaced by a link to a copy of it, and a shipped folder replaced by a link to a folder.
     let plugin = fresh();
     fs::copy(plugin.path().join("bin/na"), elsewhere.join("na")).unwrap();
