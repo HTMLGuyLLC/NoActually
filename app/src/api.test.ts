@@ -32,6 +32,7 @@ describe("api outside Tauri", () => {
       api.saveShareCard([1, 2, 3]),
       api.openMain(),
       api.setAutoUpdate(false),
+      api.setUpdateChannel("beta"),
       api.checkForUpdates(),
       api.installUpdate(),
     ];

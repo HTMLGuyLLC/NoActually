@@ -4,6 +4,10 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+### Added
+
+- **Update channel** in Settings → General: Stable gets full releases, and Beta gets new versions first.
+
 ## [0.5.1] - 2026-10-31
 
 ### Fixed

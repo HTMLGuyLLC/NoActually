@@ -210,4 +210,6 @@ export function paintUpdate(): void {
   if (line) line.textContent = updateLine(u);
   const box = root.querySelector<HTMLInputElement>("#auto-update");
   if (box && document.activeElement !== box) box.checked = u.auto;
+  const channel = root.querySelector<HTMLSelectElement>("#update-channel");
+  if (channel && document.activeElement !== channel) channel.value = u.channel;
 }

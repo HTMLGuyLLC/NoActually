@@ -286,9 +286,11 @@ export type SourceState = {
   paths: string[];
 };
 export type SyncStatus = { syncing: boolean; last_sync: string | null; last_error: string | null; files_with_errors: number };
+export type UpdateChannel = "stable" | "beta";
 export type UpdateStatus = {
   current: string;
   auto: boolean;
+  channel: UpdateChannel;
   checking: boolean;
   installing: boolean;
   available: string | null;
@@ -319,6 +321,7 @@ export type Commands = {
   open_main: { args: { tab: Tab | null }; result: null };
   update_status: { args: undefined; result: UpdateStatus };
   set_auto_update: { args: { enabled: boolean }; result: null };
+  set_update_channel: { args: { channel: UpdateChannel }; result: null };
   check_for_updates: { args: undefined; result: null };
   install_update: { args: undefined; result: null };
   progress: { args: { filter: Filter }; result: Progress };
@@ -370,6 +373,7 @@ export const api = {
   openMain: (tab: Tab | null = null) => call("open_main", { tab }),
   updateStatus: () => call("update_status", undefined),
   setAutoUpdate: (enabled: boolean) => call("set_auto_update", { enabled }),
+  setUpdateChannel: (channel: UpdateChannel) => call("set_update_channel", { channel }),
   checkForUpdates: () => call("check_for_updates", undefined),
   installUpdate: () => call("install_update", undefined),
   progress: (filter: Filter) => call("progress", { filter }),

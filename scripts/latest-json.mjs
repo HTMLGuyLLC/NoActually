@@ -4,6 +4,9 @@
 //   node scripts/latest-json.mjs plain-name <file> <version>
 //     Prints the plain name a release file gets ("No-Actually-0.2.0-Windows-Setup-x64.exe").
 //
+//   node scripts/latest-json.mjs version <latest.json>
+//     Prints the version a latest.json offers, for scripts/publish-release.sh.
+//
 //   node scripts/latest-json.mjs finish --version 0.2.0 --tag v0.2.0 --repo owner/name \
 //     --assets assets.txt (one "<id>\t<name>" or "<name>" per line) [--in latest.json] [--mac-file NAME --mac-sig FILE.sig]
 //     Prints latest.json with every URL pointing at the renamed files, plus the Mac entries.
@@ -61,6 +64,12 @@ export function finishLatest({ latest, version, tag, repo, assets, assetIds = {}
 
 function main(argv) {
   const [cmd, ...rest] = argv;
+  if (cmd === "version") {
+    const { version } = JSON.parse(readFileSync(rest[0], "utf8"));
+    if (typeof version !== "string" || !version) throw new Error("latest.json has no version");
+    console.log(version);
+    return;
+  }
   if (cmd === "plain-name") {
     const [file, version] = rest;
     if (!file || !version) throw new Error("usage: plain-name <file> <version>");
@@ -83,7 +92,7 @@ function main(argv) {
     console.log(JSON.stringify(finishLatest({ latest, version: v.version, tag: v.tag, repo: v.repo, assets, assetIds, mac }), null, 2));
     return;
   }
-  throw new Error("usage: latest-json.mjs plain-name|finish …");
+  throw new Error("usage: latest-json.mjs plain-name|version|finish …");
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

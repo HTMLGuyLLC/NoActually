@@ -76,4 +76,4 @@ gh release download "$TAG" -R "$REPO" --pattern "$P-*" --dir "$WORK"
 gh release upload "$TAG" -R "$REPO" "$WORK/SHA256SUMS.txt" --clobber
 rm -rf "$WORK"
 
-echo "Done. Review the draft, then publish: gh release edit $TAG -R $REPO --draft=false"
+echo "Done. Review the draft, then publish it as a beta: scripts/publish-release.sh $TAG beta"

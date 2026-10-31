@@ -68,6 +68,10 @@ dev: install
 bump VERSION:
     scripts/bump-version.sh {{VERSION}}
 
+# Publish a finished draft to beta, or a beta to everyone: just publish v0.2.0 beta
+publish TAG CHANNEL:
+    scripts/publish-release.sh {{TAG}} {{CHANNEL}}
+
 # Build, sign, notarize and staple the macOS release (on the release Mac, with HEAD at the tag).
 release-mac *ARGS:
     scripts/release-macos.sh {{ARGS}}

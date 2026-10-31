@@ -226,8 +226,18 @@ const handlers: Handlers = {
     return null;
   },
   open_main: () => null,
-  update_status: () => ({ current: "0.1.0", auto: true, checking: false, installing: false, available: null, last_check: null, last_error: null }),
+  update_status: () => ({
+    current: "0.1.0",
+    auto: true,
+    channel: "stable",
+    checking: false,
+    installing: false,
+    available: null,
+    last_check: null,
+    last_error: null,
+  }),
   set_auto_update: () => null,
+  set_update_channel: () => null,
   check_for_updates: () => null,
   install_update: () => null,
   progress: async () => {

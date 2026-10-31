@@ -440,14 +440,30 @@ describe("settingsView", () => {
 
   it("ties each toggle to its help text", () => {
     const m = settingsView(base).value;
-    for (const id of ["menu-bar", "autostart", "auto-update"]) {
+    for (const id of ["menu-bar", "autostart", "auto-update", "update-channel"]) {
       expect(m).toContain(`aria-describedby="${id}-help"`);
       expect(m).toContain(`id="${id}-help"`);
     }
   });
 
+  it("shows the update channel that's saved", () => {
+    const update = {
+      current: "0.5.1",
+      auto: true,
+      channel: "beta",
+      checking: false,
+      installing: false,
+      available: null,
+      last_check: null,
+      last_error: null,
+    } as const;
+    expect(settingsView({ ...base, update }).value).toContain('<option value="beta" selected>Beta</option>');
+    expect(settingsView({ ...base, update: { ...update, channel: "stable" } }).value).toContain('<option value="stable" selected>Stable</option>');
+  });
+
   it("disables what the demo can't do", () => {
     const m = settingsView({ ...base, demo: true }).value;
+    expect(m).toContain('data-action="update-channel" aria-describedby="update-channel-help" disabled');
     expect(m).toContain('data-action="check-update" disabled');
     expect(m).toContain('id="menu-bar" data-action="menu-bar" type="checkbox" aria-describedby="menu-bar-help" checked disabled');
   });
