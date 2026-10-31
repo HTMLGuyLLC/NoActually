@@ -4,6 +4,8 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-30
+
 ### Added
 
 - **Report cards** (optional): finish a task in Claude Code, type `/grade:me` (Codex: `$grade-me`), and your AI gives you a letter grade, A to F, on how you asked: why, what you could have said up front, a better first message to copy, and the extra back-and-forth it cost in minutes (plus dollars at pay-as-you-go prices, when the model has a price). It writes for your level: plain words if you're new, short and technical if you're not. Only follow-ups you could have known up front count against you, and a follow-up that only adds new work is a tip, not a lower grade.
@@ -164,7 +166,8 @@ First release.
 - Per-source consent: nothing is read until you allow it, and Forget deletes a source's data
 - `noactually` command-line tool (`sources`, `allow`, `sync`, `stats`)
 
-[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.2.0...v0.2.1
