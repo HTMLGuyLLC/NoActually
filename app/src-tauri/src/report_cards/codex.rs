@@ -49,14 +49,23 @@ fn shim_file(env: &Env) -> PathBuf {
     skill_dir(env).join("scripts").join("na")
 }
 
+/// Codex's own folder: `$CODEX_HOME`, else `~/.codex`. A variable that isn't an absolute path counts as unset.
+pub(super) fn codex_dir(env: &Env) -> PathBuf {
+    codex_dir_in(std::env::var_os("CODEX_HOME"), &env.home)
+}
+
+fn codex_dir_in(var: Option<std::ffi::OsString>, home: &Path) -> PathBuf {
+    var.map(PathBuf::from).filter(|p| p.is_absolute()).unwrap_or_else(|| home.join(".codex"))
+}
+
 fn hooks_file(env: &Env) -> PathBuf {
-    env.home.join(".codex").join("hooks.json")
+    codex_dir(env).join("hooks.json")
 }
 
 /// Codex is here if it has a folder in the home folder (the app reads its chats from there) or a
 /// command was found.
 pub(super) fn installed(env: &Env) -> bool {
-    env.codex.is_some() || env.home.join(".codex").is_dir()
+    env.codex.is_some() || codex_dir(env).is_dir()
 }
 
 // ---- the skill ------------------------------------------------------------------------------
@@ -543,4 +552,19 @@ pub(super) fn turn_off(env: &Env) -> Res<()> {
         let _ = std::fs::remove_dir(folder);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn codex_home_moves_the_hooks_but_only_to_an_absolute_path() {
+        let home = Path::new("/home/me");
+        let var = |v: &str| Some(std::ffi::OsString::from(v));
+        assert_eq!(codex_dir_in(None, home), Path::new("/home/me/.codex"));
+        assert_eq!(codex_dir_in(var("/data/codex"), home), Path::new("/data/codex"));
+        assert_eq!(codex_dir_in(var(""), home), Path::new("/home/me/.codex"), "empty is unset");
+        assert_eq!(codex_dir_in(var("codex"), home), Path::new("/home/me/.codex"), "never relative");
+    }
 }

@@ -24,7 +24,7 @@ import { coverage, headerView, statusPillView } from "./views/chrome";
 import { emptyGlanceView, glanceView } from "./views/glance";
 import { canGrade, improveView } from "./views/improve";
 import { learnView } from "./views/learn";
-import { modelPicker, onboardingView, scorecardView } from "./views/scorecard";
+import { modelPicker, noChatsView, onboardingView, scorecardView } from "./views/scorecard";
 import { settingsView } from "./views/settings";
 import { watchingNames } from "./views/sources";
 
@@ -63,7 +63,7 @@ async function view(): Promise<Html> {
   if (!isFiltered(state.filter)) setAllModels(s.models, scope);
   else if (state.allModelsScope !== scope) setAllModels((await api.stats(since ? { since } : {})).models, scope);
   if (isGlance) {
-    if (!s.messages) return emptyGlanceView(await watching());
+    if (!s.messages) return emptyGlanceView(await watching(), meta.min_prompts);
     // The goal is all-AI, like Improve's; the glance still draws if it can't be read.
     const goal = await api.progress(state.filter).then(
       (p) => p.goal,
@@ -124,6 +124,7 @@ async function view(): Promise<Html> {
       filtered: isFiltered(state.filter),
       recent,
       canGrade: canGrade(meta, sources),
+      noSource: sources.length > 0 && !sources.some((x) => x.state?.allowed),
       hintDismissed: isDismissed("report-cards"),
       cardsOn: REPORT_CARD_TOOLS.find((t) => cards?.[t].on) ?? null,
     });
@@ -141,6 +142,9 @@ async function view(): Promise<Html> {
     setLastVerdict(s.overall.verdict);
     setLastPromptTier(s.prompts.tier);
     setLastCorrectionTier(s.overall.correction_tier);
+  } else if ((await api.stats({ since: periodSince("all") })).messages) {
+    // Nothing in this period or for this model, but there is history: keep the pickers so it can be widened.
+    body = noChatsView({ filter: state.filter, meta, period: state.period });
   } else body = onboardingView(await watching());
   const banner = state.update ? updateBanner(state.update, state.laterFor) : "";
   return html`<div class="wrap">${headerView(state.tab, state.status, demo, coverage(state.current))}<div id="update-slot">${banner}</div>${body}</div>`;
@@ -158,7 +162,7 @@ async function draw(): Promise<void> {
   try {
     markup = await view();
   } catch (e) {
-    markup = html`<div class="wrap"><section class="empty"><h1 class="q">Something went wrong.</h1><p class="muted mono small">${errorText(e)}</p><button data-action="retry">Try again</button></section></div>`;
+    markup = html`<div class="wrap">${headerView(state.tab, state.status, demo, coverage(state.current))}<section class="empty"><h1 class="q">Something went wrong.</h1><p class="muted mono small">${errorText(e)}</p><div class="src-actions"><button data-action="retry">Try again</button>${demo ? "" : html`<button class="ghost" data-action="open-log-folder">Show log folder</button>`}</div></section></div>`;
   }
   root.innerHTML = markup.value;
   applyBarWidths(root);

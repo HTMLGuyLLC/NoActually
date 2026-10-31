@@ -3,7 +3,7 @@ import type { Overall, Prompts, PromptTier, Stats } from "../api";
 import { plural } from "../format";
 import { landedPct, percent } from "../meta";
 import { PERIOD_WHEN } from "../state";
-import { type CorrectionLike, clip, SHARE_URL_SHORT } from "./share";
+import { type CorrectionLike, clip, QUOTE_CLIP, SHARE_URL_SHORT } from "./share";
 
 /** The light theme's colors (style.css :root), which the cards always use whatever the app's theme. */
 export const CARD_THEME = {
@@ -262,7 +262,7 @@ const CORRECTION_LAYOUT = {
   portrait: { x: 96, k: 1.4, markY: 150, titleY: 300, titleLines: 2, quoteY: 0, center: true, quoteLines: 5, aiLines: 5, footerY: 1290 },
 } as const;
 
-/** A card for one correction: your words in red pen, the AI's admission underneath. */
+/** A card for one correction: your words in red pen, the AI's admission underneath. Pass the quotes as edited, never the stored entry. */
 export async function drawCorrectionCard(e: CorrectionLike, shape: CardShape = "wide"): Promise<Blob> {
   const { c, g } = await canvas(shape, CORRECTION_FONTS);
   const { w } = CARD_SIZES[shape];
@@ -288,9 +288,9 @@ export async function drawCorrectionCard(e: CorrectionLike, shape: CardShape = "
   const pad = 26 * k;
   const lead = 36 * k;
   g.font = quoteFont;
-  const quote = e.human ? wrap(g, `“${clip(e.human, 160)}”`, inner, L.quoteLines) : [];
+  const quote = e.human ? wrap(g, `“${clip(e.human, QUOTE_CLIP)}”`, inner, L.quoteLines) : [];
   g.font = aiFont;
-  const reply = e.ai ? wrap(g, clip(e.ai, 200), inner - 2 * pad - 8 * k, L.aiLines) : [];
+  const reply = e.ai ? wrap(g, clip(e.ai, QUOTE_CLIP), inner - 2 * pad - 8 * k, L.aiLines) : [];
   const boxH = 34 * k + reply.length * lead;
 
   y = Math.max(y + 20 * k, L.quoteY);

@@ -21,8 +21,9 @@ export function allowArgs(choice: string, now: Date): { since: string | null; fr
   return { since: localIsoDate(start), fromNow: false };
 }
 
-/** Allowed, unpaused sources: what the app is reading right now. */
-export const watchingNames = (list: SourceInfo[]): string[] => list.filter((x) => x.state?.allowed && !x.state.paused).map((x) => shortSourceName(x.name));
+/** Allowed, unpaused live sources: what the app is reading right now. A file you imported is read once, not watched. */
+export const watchingNames = (list: SourceInfo[]): string[] =>
+  list.filter((x) => x.kind !== "import" && x.state?.allowed && !x.state.paused).map((x) => shortSourceName(x.name));
 
 function sourceRow(s: SourceInfo): Html {
   const st = s.state;
@@ -65,6 +66,6 @@ export function sourcesView(list: SourceInfo[], status: SyncStatus): Html {
         <span class="muted small" id="sync-line">New chats last checked ${ago(status.last_sync)}.</span>
       </div></div>
       <div class="sources">${list.map(sourceRow)}</div>
-      <p class="muted small">Stop reading keeps your scores. Forget also deletes everything that source produced.</p>
+      <p class="muted small">Stop reading keeps your scores. Forget also deletes what that source produced, pins included. Finished goal weeks and trophies stay, as totals.</p>
     </section>`;
 }

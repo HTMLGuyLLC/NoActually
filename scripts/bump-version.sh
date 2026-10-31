@@ -2,7 +2,7 @@
 # Sets the release version everywhere it lives:
 #   - Cargo.toml          [workspace.package] version (the source of truth)
 #   - app/package.json    version
-#   - app/src-tauri/tauri.conf.json   version, if that file still has one
+#   - app/src-tauri/tauri.conf.json   version
 #   - plugins/grade/.claude-plugin/plugin.json   the report card plugin's version
 #   - Cargo.lock          refreshed for the new workspace version
 #   - CHANGELOG.md        the Unreleased entries move under "## [X.Y.Z] - <today>", and the
@@ -12,7 +12,8 @@
 set -euo pipefail
 
 NEW="${1:?usage: scripts/bump-version.sh X.Y.Z}"
-[[ "$NEW" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "'$NEW' isn't a version like 1.2.3" >&2; exit 1; }
+# No -beta.1 style suffixes: a beta and the stable release share one version (publish-release.sh).
+[[ "$NEW" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "'$NEW' isn't a version like 1.2.3 (no -beta suffix; beta and stable share a version)." >&2; exit 1; }
 # Check the tools first, so a missing one can't leave the version half bumped.
 for tool in cargo node; do
   command -v "$tool" >/dev/null || { echo "$tool isn't on PATH; nothing was changed." >&2; exit 1; }
@@ -45,7 +46,6 @@ bump_json() {
     const fs = require("fs");
     const file = process.argv[1];
     const text = fs.readFileSync(file, "utf8");
-    if (!("version" in JSON.parse(text))) { console.log("  " + file + ": no version key, skipped"); process.exit(0); }
     const re = /^(\s*"version"\s*:\s*)"[^"]*"/m;
     if (!re.test(text)) { console.error(file + ": version line not found"); process.exit(1); }
     const out = text.replace(re, `$1"${process.env.NEW}"`);

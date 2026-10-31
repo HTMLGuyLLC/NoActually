@@ -8,4 +8,4 @@
 
 Logs help with most bugs, and never contain chat text. Find them with **Settings → General → Show log folder**, or at `~/Library/Logs/app.noactually/` (macOS), `%LOCALAPPDATA%\app.noactually\logs\` (Windows) or `~/.local/share/app.noactually/logs/` (Linux).
 
-**Going back to an older version?** Turn report cards off first, in Settings → Report cards.
+**Going back to an older version?** It isn't supported. If you do it anyway, turn report cards off first, in Settings → Report cards.

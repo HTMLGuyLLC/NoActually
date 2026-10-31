@@ -248,7 +248,7 @@ pub(crate) fn build(
         } else {
             &st.turn
         };
-        let prompt = read_prompt(turn, &classify(&st.turn), has_task);
+        let prompt = read_prompt(turn, &classify(turn), has_task);
         has_task |= matches!(prompt, Prompt::Task { .. });
         let r = &rounds[i];
         let stop = match cut_in[i] {

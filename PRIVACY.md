@@ -1,12 +1,12 @@
 # Privacy
 
-*Last updated 2026-10-30. No, Actually... is made by HTMLGuy LLC. Questions: [GitHub Discussions](https://github.com/HTMLGuyLLC/NoActually/discussions).*
+*Last updated 2026-10-31. No, Actually... is made by HTMLGuy LLC. Questions: [GitHub Discussions](https://github.com/HTMLGuyLLC/NoActually/discussions).*
 
 No, Actually... runs on your computer. The app doesn't send your chats anywhere.
 
 ## What it reads
 
-Only sources you allow. On first launch the app lists each AI tool it detects, with the exact path it would read. Every source is off until you tap **Allow**. You can also set a backfill window (everything, since a date, or none), pause a source, or revoke it. While a source is paused, revoked or forgotten, the report card hooks stay out of its chats too.
+Only sources you allow. On first launch the app lists each AI tool it detects, with the exact path it would read. Every source is off until you tap **Allow**. You can also set a backfill window (everything, since a date, or none), pause a source, or revoke it. While a source is paused, revoked, forgotten or was never allowed, the report card hooks stay out of its chats too. If you install the plugin yourself and never set up the app, there are no sources to allow, so the plugin works in the chats you use it in.
 
 macOS may show its own "access data from other apps" prompt for some sources. Saying no there only means that source can't be read.
 
@@ -50,6 +50,8 @@ Stored text has emails, URLs, keys, numbers and home paths removed. This is done
 - Share cards are rendered locally
 - Fonts are bundled, not fetched
 
+The one exception is text you choose to share. When you share a Hall of fame correction, its redacted quotes go in the link to the site you pick, and you see that text first. Score cards carry numbers only.
+
 ## Report cards (optional)
 
 Report cards are off until you turn them on in **Settings → Report cards**. What turning them on does:
@@ -57,8 +59,8 @@ Report cards are off until you turn them on in **Settings → Report cards**. Wh
 - Adds a small plugin to your AI tool. Claude Code downloads it from GitHub, pinned to the app's version. After an app update, Claude Code downloads the matching plugin from GitHub. No, Actually... itself still sends nothing.
 - With report cards on, a small check runs after each AI reply and reads the end of that chat on your computer. It uses no AI, sends nothing and saves nothing.
 - When you ask for a report card, your AI reads a short summary of the chat that the app makes on your computer. The report card is written inside your AI tool, by the provider that already has the chat, and it uses your tokens. The app only reads the card's small block of numbers from your local chat history and keeps the numbers.
-- If you turn on **Give me tips as I work** (Claude Code only, off by default), a small check gives your AI the tip instructions when a chat starts, which adds about 480 tokens to that chat. Settings shows those instructions word for word. Tips are part of your AI's replies, so they go wherever a reply goes. The app stores the habit each tip was about and how much was redone, never the words.
-- Small marker files beside the database hold these settings: `report-cards-tips`, `report-cards-tips-off`, and `source-stopped-…` for a source you paused, revoked or forgot, and `report-cards-problem` for a plugin problem Settings needs to keep showing. They hold no chat data.
+- If you turn on **Give me tips as I work** (Claude Code only, off by default), a small check gives your AI the tip instructions when a chat starts, and again after a long chat is compacted. That's about 480 tokens each time, re-read with the rest of the chat, and it came to about 2.5% more tokens overall in testing. Settings shows those instructions word for word. Tips are part of your AI's replies, so they go wherever a reply goes. The app stores the habit each tip was about and how much was redone, never the words.
+- Small marker files beside the database hold these settings: `report-cards-tips`, `report-cards-tips-off`, `source-allowed-…` for a source you allowed, `source-stopped-…` for one you paused, revoked or forgot, and `report-cards-problem` for a plugin problem Settings needs to keep showing. They hold no chat data.
 - To find Claude Code again after a restart, the app saves its location (a file path, in `report-cards-claude` beside the database). It is only used to run `claude plugin` commands to add, check and remove the plugin.
 - A small secret file, `report-cards.key`, sits in the app data folder. It stops a block of numbers that was copied or pasted from somewhere else (another chat, a web page, a file) from being counted. It does not stop text injected into the same chat, which could still fake that chat's own report card.
 
@@ -78,22 +80,20 @@ A future global board would be a separate opt-in that sends numbers only.
 
 ## Update checks
 
-To offer new versions, the app downloads one small public file, `latest.json`, from this project's GitHub releases (`https://github.com/HTMLGuyLLC/NoActually/releases/latest/download/latest.json`). It does this a minute after launch and then every 6 hours.
+To offer new versions, the app downloads one small public file, `latest.json`, from this project's GitHub releases (`https://github.com/HTMLGuyLLC/NoActually/releases/latest/download/latest.json`, or `https://github.com/HTMLGuyLLC/NoActually/releases/download/beta-channel/latest.json` on the Beta channel). It does this a minute after launch and then every 6 hours.
 
 - The request carries no identifiers: no account, install id, stats or chat data. It's a plain HTTPS GET with the updater's standard user agent (`tauri-plugin-updater/<version>`). Like any download, GitHub sees your IP address.
 - `latest.json` only lists the newest version number and where to download it. If it's newer than yours, you see "Restart to update" in the scorecard and the menu bar menu.
 - Nothing is downloaded or installed until you click it. The update file comes from the same GitHub release, and the app installs it only if its signature matches the project's key built into the app.
-- Turn it off in **Settings → General → Check for app updates automatically**. With it off, the app only checks when you click **Check for app updates** (same page).
+- Turn it off in **Settings → General → Check for app updates automatically**. With it off, the app only checks when you click **Check for app updates** on that page or **Check for updates** in the menu bar menu.
 
 ## How to delete your data
 
-- **Forget a source** in the app: deletes that source's events, aggregates and checkpoints. (Revoke only stops reading.) Goal weeks already finished stay, as totals.
+- **Forget a source** in the app: deletes that source's events, aggregates and checkpoints, pinned corrections included. (Revoke only stops reading, and keeps your scores.) Finished goal weeks and trophies stay, as totals across sources.
 - **Delete report cards and tips:** click **Delete report card and tip history** in Settings to remove all of them. **Forget** on a source removes that source's report cards and tips too. Tips stop while Claude Code is paused, revoked or forgotten, and start again when you allow it. Turning report cards off removes the plugin but keeps the history until you delete it.
-- **Delete everything:** first turn report cards off in **Settings → Report cards** (that removes what they added to Claude Code and Codex), then quit the app and delete the whole app data folder for `app.noactually` (macOS: `~/Library/Application Support/app.noactually/`, Windows: `%APPDATA%\app.noactually\`, Linux: `~/.local/share/app.noactually/`). It holds the database (`noactually.db`, `-wal` and `-shm`) and a few small report-card files: `report-cards.key`, `cli-path`, `report-cards-claude` and the on/off switch files (`report-cards-tips`, `report-cards-tips-off`, `source-stopped-…`, `report-cards-problem`, `report-cards-quiet`, and `report-cards-repin` while a plugin update is unfinished). Deleting only the database leaves those behind.
+- **Delete everything:** first turn report cards off in **Settings → Report cards** (that removes what they added to Claude Code and Codex) and turn off **Launch at login** in **Settings → General**, then quit the app and delete the whole app data folder for `app.noactually` (macOS: `~/Library/Application Support/app.noactually/`, Windows: `%APPDATA%\app.noactually\`, Linux: `~/.local/share/app.noactually/`). It holds the database (`noactually.db`, `-wal` and `-shm`) and a few small report-card files: `report-cards.key`, `cli-path`, `report-cards-claude` and the on/off switch files (`report-cards-tips`, `report-cards-tips-off`, `source-allowed-…`, `source-stopped-…`, `report-cards-problem`, `report-cards-quiet`, and `report-cards-repin` while a plugin update is unfinished). Deleting only the database leaves those behind. Then delete the log folder (see Logs). Uninstalling the app does not remove any of this.
 - Deleted text is overwritten in the database, not just unlinked, and the write-ahead log is truncated after Forget and after text ages out.
 
 ## Logs
 
-The app keeps a small log for troubleshooting (macOS: `~/Library/Logs/app.noactually/`, Windows: `%LOCALAPPDATA%\app.noactually\logs\`, Linux: `~/.local/share/app.noactually/logs/`, up to about 2 MB). It records counts, timings and errors. Errors can name history files by path, which includes your project folder names. Logs never contain chat text.
-
-Uninstalling the app does not remove the database. Delete it yourself.
+The app keeps a small log for troubleshooting (macOS: `~/Library/Logs/app.noactually/`, Windows: `%LOCALAPPDATA%\app.noactually\logs\`, Linux: `~/.local/share/app.noactually/logs/`, up to about 2 MB). It records the app version, your system, counts, timings and errors. Errors can name history files by path, which includes your project folder names. Forget doesn't clear the log, so those names stay until the log rolls over or you delete it. Logs never contain chat text.

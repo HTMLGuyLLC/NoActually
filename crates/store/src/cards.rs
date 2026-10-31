@@ -82,6 +82,9 @@ pub(crate) struct Cards {
     /// chat to check them against). They are not "read": the position they were at must not be
     /// remembered, so a later pass looks at them again.
     pub unchecked: bool,
+    /// The whole chat was checked, so [`Cards::left_out`] is every card left out of this file, not
+    /// just the new ones.
+    pub checked: bool,
 }
 
 impl Cards {
@@ -115,7 +118,7 @@ struct Block {
 /// The task's first prompt must be one the source's consent allows. `cleared` is when the history
 /// was last deleted: nothing graded before it comes back.
 pub(crate) fn read(state: &SourceState, view: &ChatView, secret: &[u8], cleared: Option<&str>) -> Cards {
-    let mut out = Cards::default();
+    let mut out = Cards { checked: true, ..Cards::default() };
     let sealed = view.sealed_spans(secret);
     for (why, n) in sealed.left_out {
         out.skip(why, n);
@@ -225,8 +228,8 @@ fn row(state: &SourceState, view: &ChatView, block: &Block, st: &SealedTask) -> 
 pub(crate) fn save(conn: &Connection, rows: &[CardRow]) -> Result<()> {
     let mut stmt = conn.prepare_cached(
         "INSERT OR REPLACE INTO report_cards (key, card, source, session, first, day, start_ts, end_ts, provider, family,
-            version, grade, rounds, avoidable, missing, auto, tokens, minutes, graded_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,0,?16,?17,?18)",
+            version, grade, rounds, avoidable, missing, tokens, minutes, graded_at)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
     )?;
     for r in rows {
         stmt.execute(params![

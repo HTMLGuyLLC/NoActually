@@ -1,7 +1,7 @@
 //! `noactually`: the command-line scorecard. Same engine, sources and database as the desktop
 //! app, so either one can allow a source and both see the same numbers.
 //!
-//! Arguments are parsed by hand ([`parse_args`]): nine commands and a handful of flags don't
+//! Arguments are parsed by hand ([`parse_args`]): eleven commands and a handful of flags don't
 //! justify a parser dependency, and the help text stays exactly as written.
 //!
 //! `digest` and `hook` are not for people. The report-card plugin and the Codex hooks call them
@@ -25,17 +25,19 @@ use store::{Filter, Level, Retention, Store};
 const HELP: &str = "noactually: could AI replace you? Score how you work with your AI
 
 USAGE
-  noactually sources                     List sources, where they read from, and whether they're allowed
+  noactually sources [--json]            List sources, where they read from, and whether they're allowed
   noactually allow <source> [--since YYYY-MM-DD | --from-now]
+  noactually pause <source>              Stop reading for now (keeps consent and scores)
+  noactually resume <source>             Start reading again after a pause (never allows a source)
   noactually revoke <source>             Stop reading (keeps scores)
   noactually forget <source>             Stop reading and delete everything from it
   noactually import <source> <path>      Import an export file or folder (chatgpt-export, claude-ai-export)
-  noactually sync                        Read anything new from allowed sources
+  noactually sync [--json]               Read anything new from allowed sources. Exits 1 if any file was skipped
   noactually stats [filters] [--json]    Scorecard. Filters: --source --provider --family --version --since
   noactually stats --report-cards [filters] [--json]
                                          Report cards instead: graded tasks, % A or B, extra rounds, cost and minutes,
                                          the habit left out most, and the last 5 cards. Same filters
-  noactually check <prompt>              What a draft prompt includes, graded like your history (nothing is saved)
+  noactually check <prompt> [--json]     What a draft prompt includes, graded like your history (nothing is saved)
   noactually retention <full|snippet|category> [--full-days N] [--snippet-days N]
 
 Data lives in NOACTUALLY_DB, or app.noactually/noactually.db in your app data folder (shared with the desktop app).
@@ -45,14 +47,16 @@ Nothing is read until you allow a source. Nothing leaves this machine.";
 #[derive(Debug, PartialEq)]
 enum Command {
     Help,
-    Sources,
+    Sources { json: bool },
     Allow { id: String, since: Option<NaiveDate>, from_now: bool },
+    Pause { id: String },
+    Resume { id: String },
     Revoke { id: String },
     Forget { id: String },
     Import { id: String, path: PathBuf },
-    Sync,
+    Sync { json: bool },
     Stats { filter: Filter, json: bool, report_cards: bool },
-    Check { text: String },
+    Check { text: String, json: bool },
     Retention { level: Level, full_days: Option<u32>, snippet_days: Option<u32> },
 }
 
@@ -103,8 +107,8 @@ impl<'a> Args<'a> {
 fn parse_args(args: &[String]) -> Result<Command> {
     let Some((cmd, rest)) = args.split_first() else { return Ok(Command::Help) };
     Ok(match cmd.as_str() {
-        "sources" => Command::Sources,
-        "sync" => Command::Sync,
+        "sources" => Command::Sources { json: Args::split(rest, &[], &["--json"])?.has("--json") },
+        "sync" => Command::Sync { json: Args::split(rest, &[], &["--json"])?.has("--json") },
         "allow" => {
             let a = Args::split(rest, &["--since"], &["--from-now"])?;
             let since =
@@ -115,6 +119,8 @@ fn parse_args(args: &[String]) -> Result<Command> {
             }
             Command::Allow { id: a.arg(0, "source")?, since, from_now }
         }
+        "pause" => Command::Pause { id: Args::split(rest, &[], &[])?.arg(0, "source")? },
+        "resume" => Command::Resume { id: Args::split(rest, &[], &[])?.arg(0, "source")? },
         "revoke" => Command::Revoke { id: Args::split(rest, &[], &[])?.arg(0, "source")? },
         "forget" => Command::Forget { id: Args::split(rest, &[], &[])?.arg(0, "source")? },
         "import" => {
@@ -138,8 +144,11 @@ fn parse_args(args: &[String]) -> Result<Command> {
             };
             Command::Stats { filter, json: a.has("--json"), report_cards: a.has("--report-cards") }
         }
-        // The whole rest is the prompt, so it's never read as flags.
-        "check" if !rest.is_empty() => Command::Check { text: rest.join(" ") },
+        // The whole rest is the prompt, so it's never read as flags, except a last `--json`.
+        "check" if rest.last().is_some_and(|a| a == "--json") && rest.len() > 1 => {
+            Command::Check { text: rest[..rest.len() - 1].join(" "), json: true }
+        }
+        "check" if !rest.is_empty() => Command::Check { text: rest.join(" "), json: false },
         "check" => bail!("missing prompt: noactually check \"Fix the crash in checkout.ts…\""),
         "retention" => {
             let a = Args::split(rest, &["--full-days", "--snippet-days"], &[])?;
@@ -188,7 +197,9 @@ pub fn run(args: impl IntoIterator<Item = String>) -> ExitCode {
     }
     stderr_log::init();
     match command(&args) {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(true) => ExitCode::SUCCESS,
+        // The command ran but part of it didn't (a sync that skipped files): it said so already.
+        Ok(false) => ExitCode::FAILURE,
         // What returning an error from `main` prints.
         Err(e) => {
             eprintln!("Error: {e:?}");
@@ -197,11 +208,12 @@ pub fn run(args: impl IntoIterator<Item = String>) -> ExitCode {
     }
 }
 
-fn command(args: &[String]) -> Result<()> {
+/// Parses and runs `args`. `Ok(false)` means it ran but only in part.
+fn command(args: &[String]) -> Result<bool> {
     let cmd = parse_args(args)?;
     if cmd == Command::Help {
         println!("{HELP}");
-        return Ok(());
+        return Ok(true);
     }
     if store::legacy_db_env_in_use() {
         eprintln!("note: {} is deprecated; set {} instead.", store::LEGACY_DB_ENV, store::DB_ENV);
@@ -210,10 +222,12 @@ fn command(args: &[String]) -> Result<()> {
     execute(cmd, &mut store, &sources::all())
 }
 
-fn execute(cmd: Command, store: &mut Store, all: &[Box<dyn sources::Source>]) -> Result<()> {
+/// Runs one command. `Ok(false)` means it ran but only in part: a sync that had to skip files.
+fn execute(cmd: Command, store: &mut Store, all: &[Box<dyn sources::Source>]) -> Result<bool> {
+    let mut complete = true;
     match cmd {
         Command::Help => println!("{HELP}"),
-        Command::Sources => print_sources(store, all)?,
+        Command::Sources { json } => print_sources(store, all, json)?,
         Command::Allow { id, since, from_now } => {
             let src = known(all, &id)?;
             store.allow(&id, since)?;
@@ -223,6 +237,18 @@ fn execute(cmd: Command, store: &mut Store, all: &[Box<dyn sources::Source>]) ->
             } else {
                 println!("Allowed {id}. Run `noactually sync` to read it.");
             }
+        }
+        Command::Pause { id } => {
+            known(all, &id)?;
+            allowed_only(store, &id, "pause")?;
+            store.set_paused(&id, true)?;
+            println!("Paused {id}. Nothing is read until `noactually resume {id}`. Scores so far are kept.");
+        }
+        Command::Resume { id } => {
+            known(all, &id)?;
+            allowed_only(store, &id, "resume")?;
+            store.set_paused(&id, false)?;
+            println!("Resumed {id}. Run `noactually sync` to read what came in meanwhile.");
         }
         Command::Revoke { id } => {
             known(all, &id)?;
@@ -240,44 +266,33 @@ fn execute(cmd: Command, store: &mut Store, all: &[Box<dyn sources::Source>]) ->
             store.import(&id, &path.to_string_lossy())?;
             println!("Added {} and allowed {id}. Run `noactually sync` to import it.", path.display());
         }
-        Command::Sync => {
+        Command::Sync { json } => {
             let t = std::time::Instant::now();
             let r = store::sync(store, all)?;
-            println!(
-                "Read {} files: {} messages, {} corrections ({:.1}s)",
-                r.files_read,
-                r.messages,
-                r.corrections,
-                t.elapsed().as_secs_f64()
-            );
-            for e in r.errors.iter().take(5) {
-                eprintln!("  skipped {e}");
-            }
-        }
-        Command::Stats { filter, json, report_cards: true } => {
-            let habits = store::meta(all).habits;
-            let totals = store.report_card_totals(&filter)?;
-            let (tip_trend, top_tip) = store.tip_summary(&filter, Local::now().date_naive())?;
-            let left_out = all.iter().map(|src| store.report_cards_left_out(src.id())).sum::<store::Result<i64>>()?;
-            let s = report_cards::Summary {
-                tip_trend,
-                top_tip,
-                left_out,
-                ..report_cards::summary(
-                    &totals,
-                    store.recent_report_cards(&filter, store::RECENT_REPORT_CARDS)?,
-                    &habits,
-                )
-            };
+            complete = r.errors.is_empty();
             if json {
-                println!("{}", serde_json::to_string_pretty(&s)?);
+                println!("{}", serde_json::to_string_pretty(&r)?);
             } else {
-                let window = filter.since.map_or("in all history".to_string(), |d| format!("since {d}"));
-                for line in report_cards::lines(&s, &window, &habits) {
-                    println!("{line}");
+                println!(
+                    "Read {} files: {} messages, {} corrections ({:.1}s)",
+                    r.files_read,
+                    r.messages,
+                    r.corrections,
+                    t.elapsed().as_secs_f64()
+                );
+                for e in r.errors.iter().take(5) {
+                    eprintln!("  skipped {e}");
+                }
+                if !complete {
+                    eprintln!(
+                        "{} files were skipped (the first {} are listed).",
+                        r.errors.len(),
+                        r.errors.len().min(5)
+                    );
                 }
             }
         }
+        Command::Stats { filter, json, report_cards: true } => print_report_cards(store, all, &filter, json)?,
         Command::Stats { filter, json, report_cards: false } => {
             let s = store.stats(&filter, Local::now().date_naive())?;
             if json {
@@ -286,9 +301,13 @@ fn execute(cmd: Command, store: &mut Store, all: &[Box<dyn sources::Source>]) ->
                 print_card(&s, filter.since);
             }
         }
-        Command::Check { text } => {
-            for line in check_lines(&text) {
-                println!("{line}");
+        Command::Check { text, json } => {
+            if json {
+                println!("{}", serde_json::to_string_pretty(&check_json(&text))?);
+            } else {
+                for line in check_lines(&text) {
+                    println!("{line}");
+                }
             }
         }
         Command::Retention { level, full_days, snippet_days } => {
@@ -302,6 +321,39 @@ fn execute(cmd: Command, store: &mut Store, all: &[Box<dyn sources::Source>]) ->
             println!("Keeping {:?} text; full text {} days, snippets {} days.", r.level, r.full_days, r.snippet_days);
         }
     }
+    Ok(complete)
+}
+
+/// Fails unless `id` is allowed: pausing or resuming a source nobody allowed (or one that was
+/// stopped for good) must not read as, or turn into, consent. `allow` is the only way to give it.
+fn allowed_only(store: &Store, id: &str, what: &str) -> Result<()> {
+    if store.source_state(id)?.is_some_and(|s| s.allowed) {
+        Ok(())
+    } else {
+        bail!("can't {what} {id}: it isn't allowed. Run `noactually allow {id}` to allow it.")
+    }
+}
+
+/// `noactually stats --report-cards`: graded tasks instead of corrections.
+fn print_report_cards(store: &Store, all: &[Box<dyn sources::Source>], filter: &Filter, json: bool) -> Result<()> {
+    let habits = store::meta(all).habits;
+    let totals = store.report_card_totals(filter)?;
+    let (tip_trend, top_tip) = store.tip_summary(filter, Local::now().date_naive())?;
+    let left_out = all.iter().map(|src| store.report_cards_left_out(src.id())).sum::<store::Result<i64>>()?;
+    let s = report_cards::Summary {
+        tip_trend,
+        top_tip,
+        left_out,
+        ..report_cards::summary(&totals, store.recent_report_cards(filter, store::RECENT_REPORT_CARDS)?, &habits)
+    };
+    if json {
+        println!("{}", serde_json::to_string_pretty(&s)?);
+    } else {
+        let window = filter.since.map_or("in all history".to_string(), |d| format!("since {d}"));
+        for line in report_cards::lines(&s, &window, &habits) {
+            println!("{line}");
+        }
+    }
     Ok(())
 }
 
@@ -310,8 +362,9 @@ fn known<'a>(all: &'a [Box<dyn sources::Source>], id: &str) -> Result<&'a dyn so
     sources::find(all, id).map_err(|e| anyhow!("{e}. Run `noactually sources` to see them."))
 }
 
-fn print_sources(store: &Store, all: &[Box<dyn sources::Source>]) -> Result<()> {
+fn print_sources(store: &Store, all: &[Box<dyn sources::Source>], json: bool) -> Result<()> {
     let decided = store.source_states()?;
+    let mut rows = Vec::new();
     for s in all {
         let st = decided.iter().find(|x| x.id == s.id());
         let status = match st {
@@ -322,8 +375,15 @@ fn print_sources(store: &Store, all: &[Box<dyn sources::Source>]) -> Result<()> 
         let mut places: Vec<String> =
             s.roots().iter().filter(|r| r.exists()).map(|r| r.display().to_string()).collect();
         places.extend(st.map(|x| x.paths.clone()).unwrap_or_default());
-        let found = if places.is_empty() { "nothing found".to_string() } else { places.join(", ") };
-        println!("{:<18} {:<12} {}", s.id(), status, found);
+        if json {
+            rows.push(serde_json::json!({ "id": s.id(), "name": s.name(), "status": status, "places": places }));
+        } else {
+            let found = if places.is_empty() { "nothing found".to_string() } else { places.join(", ") };
+            println!("{:<18} {:<12} {}", s.id(), status, found);
+        }
+    }
+    if json {
+        println!("{}", serde_json::to_string_pretty(&rows)?);
     }
     Ok(())
 }
@@ -424,6 +484,19 @@ fn check_lines(text: &str) -> Vec<String> {
     out
 }
 
+/// `noactually check --json`: the same reading as [`check_lines`], with ids instead of words.
+fn check_json(text: &str) -> serde_json::Value {
+    let c = engine::check(text);
+    let (carried, missing): (Vec<_>, Vec<_>) = engine::Signal::ALL.into_iter().partition(|s| c.signals.has(*s));
+    let ids = |v: Vec<engine::Signal>| v.into_iter().map(engine::Signal::as_str).collect::<Vec<_>>();
+    serde_json::json!({
+        "grade": c.grade.as_str(),
+        "signals": ids(carried),
+        "missing": ids(missing),
+        "not_a_prompt": c.not_a_prompt,
+    })
+}
+
 /// The "Do you make it guess?" half of the card; the tier's rate is over `window`.
 fn prompt_lines(p: &store::Prompts, window: &str) -> Vec<String> {
     if p.tasks == 0 {
@@ -484,7 +557,11 @@ mod tests {
     fn commands_and_flags() {
         assert_eq!(parse("").unwrap(), Command::Help);
         assert_eq!(parse("frobnicate").unwrap(), Command::Help);
-        assert_eq!(parse("sync").unwrap(), Command::Sync);
+        assert_eq!(parse("sync").unwrap(), Command::Sync { json: false });
+        assert_eq!(parse("sync --json").unwrap(), Command::Sync { json: true });
+        assert_eq!(parse("sources --json").unwrap(), Command::Sources { json: true });
+        assert_eq!(parse("pause codex").unwrap(), Command::Pause { id: "codex".into() });
+        assert_eq!(parse("resume codex").unwrap(), Command::Resume { id: "codex".into() });
         assert_eq!(
             parse("allow codex --since 2026-10-01").unwrap(),
             Command::Allow { id: "codex".into(), since: Some("2026-10-01".parse().unwrap()), from_now: false }
@@ -552,7 +629,12 @@ mod tests {
 
     #[test]
     fn check_reads_the_whole_rest_as_the_prompt() {
-        assert_eq!(parse("check --fix the thing").unwrap(), Command::Check { text: "--fix the thing".into() });
+        assert_eq!(
+            parse("check --fix the thing").unwrap(),
+            Command::Check { text: "--fix the thing".into(), json: false }
+        );
+        assert_eq!(parse("check fix it --json").unwrap(), Command::Check { text: "fix it".into(), json: true });
+        assert_eq!(parse("check --json").unwrap(), Command::Check { text: "--json".into(), json: false });
         assert!(err("check").starts_with("missing prompt"));
         let lines = check_lines("Fix the crash in `checkout.ts`. Done when the tests pass. Don't touch the API.");
         assert_eq!(lines[0], "Specific (3 of 5 things a prompt can include)");
@@ -593,6 +675,8 @@ mod tests {
     fn mistakes_are_explained() {
         assert!(err("allow").starts_with("missing source"));
         assert!(err("import codex").starts_with("missing path"));
+        assert!(err("pause").starts_with("missing source"));
+        assert!(err("sync --jsno").starts_with("unknown option '--jsno'"));
         assert_eq!(err("allow codex --since yesterday"), "--since wants YYYY-MM-DD: input contains invalid characters");
         assert_eq!(err("allow codex --since 2026-10-01 --from-now"), "use --since or --from-now, not both");
         assert_eq!(err("stats --source"), "--source needs a value");
@@ -647,5 +731,53 @@ mod tests {
         std::fs::write(&p, "[]").unwrap();
         execute(Command::Import { id: "chatgpt-export".into(), path: p }, &mut s, &all).unwrap();
         assert!(s.source_state("chatgpt-export").unwrap().unwrap().allowed, "import allows, like the app");
+    }
+
+    #[test]
+    fn pause_and_resume_never_allow_anything() {
+        let mut s = Store::open_in_memory().unwrap();
+        let all = sources::all();
+        let run = |s: &mut Store, cmd| execute(cmd, s, &all);
+        let pause = || Command::Pause { id: "codex".into() };
+        let resume = || Command::Resume { id: "codex".into() };
+        assert!(run(&mut s, pause()).unwrap_err().to_string().contains("isn't allowed"));
+        assert!(run(&mut s, resume()).is_err());
+        assert!(s.source_state("codex").unwrap().is_none(), "nothing was decided by trying");
+
+        run(&mut s, Command::Allow { id: "codex".into(), since: None, from_now: false }).unwrap();
+        run(&mut s, pause()).unwrap();
+        let state = s.source_state("codex").unwrap().unwrap();
+        assert!(state.allowed && state.paused);
+        run(&mut s, resume()).unwrap();
+        let state = s.source_state("codex").unwrap().unwrap();
+        assert!(state.allowed && !state.paused);
+
+        // A stopped source stays stopped: resume is not a way back from revoke.
+        run(&mut s, Command::Revoke { id: "codex".into() }).unwrap();
+        assert!(run(&mut s, resume()).is_err());
+        assert!(!s.source_state("codex").unwrap().unwrap().allowed);
+    }
+
+    #[test]
+    fn a_sync_that_skipped_a_file_is_not_a_success() {
+        let mut s = Store::open_in_memory().unwrap();
+        let all = sources::all();
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("conversations.json");
+        std::fs::write(&p, "[]").unwrap();
+        execute(Command::Import { id: "chatgpt-export".into(), path: p.clone() }, &mut s, &all).unwrap();
+        assert!(execute(Command::Sync { json: false }, &mut s, &all).unwrap(), "a clean pass");
+        std::fs::write(&p, "this is not json").unwrap();
+        assert!(!execute(Command::Sync { json: true }, &mut s, &all).unwrap(), "one file skipped");
+    }
+
+    #[test]
+    fn check_json_names_what_a_prompt_carries_and_lacks() {
+        let v = check_json("Fix the crash in `checkout.ts`. Done when the tests pass. Don't touch the API.");
+        assert_eq!(v["grade"], "sharp");
+        assert_eq!(v["signals"], serde_json::json!(["spot", "done", "limits"]));
+        assert_eq!(v["missing"], serde_json::json!(["proof", "why"]));
+        assert_eq!(v["not_a_prompt"], false);
+        assert_eq!(check_json("how does this work?")["not_a_prompt"], true);
     }
 }

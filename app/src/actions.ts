@@ -44,25 +44,33 @@ import { judgeQuiz } from "./views/learn";
 import { parseRetention } from "./views/settings";
 import { allowArgs } from "./views/sources";
 
+/** Removes the note a failed action left in `slot`. */
+const clearError = (slot: Element | null) => slot?.querySelector(":scope > .action-error")?.remove();
+
+/** Shows why something failed, in `slot`, as an alert. */
+function showError(slot: Element | null, e: unknown): void {
+  clearError(slot);
+  const err = document.createElement("span");
+  err.className = "action-error";
+  err.setAttribute("role", "alert");
+  err.textContent = `Couldn't do that: ${errorText(e)}`;
+  slot?.append(err);
+}
+
 /**
  * Runs a button's async work: disables it (optionally relabelled, "Allowing…"), and always puts it
  * back. A failure shows inline next to the button instead of vanishing. Resolves true on success.
  */
 export async function run(btn: HTMLButtonElement, work: () => Promise<unknown>, pending?: string): Promise<boolean> {
   const label = btn.textContent;
-  const slot = btn.parentElement;
-  slot?.querySelector(":scope > .action-error")?.remove();
+  clearError(btn.parentElement);
   btn.disabled = true;
   if (pending) btn.textContent = pending;
   try {
     await work();
     return true;
   } catch (e) {
-    const err = document.createElement("span");
-    err.className = "action-error";
-    err.setAttribute("role", "alert");
-    err.textContent = `Couldn't do that: ${errorText(e)}`;
-    slot?.append(err);
+    showError(btn.parentElement, e);
     return false;
   } finally {
     btn.disabled = false;
@@ -97,8 +105,8 @@ const correctionsPost = (s: Stats, tier: PromptTier): Post => ({
 const correctionPost = (e: HallEntry): Post => ({
   title: "Share this correction",
   text: correctionShareText(e),
-  image: (shape) => drawCorrectionCard(e, shape),
-  quotesChat: !!(e.human || e.ai),
+  image: (shape, edited) => drawCorrectionCard(edited ?? e, shape),
+  ...(e.human || e.ai ? { quotes: e } : {}),
 });
 
 /** The period the drawn numbers cover: the scorecard's picker, or the default 28 days elsewhere. */
@@ -151,6 +159,9 @@ function confirmed(b: HTMLButtonElement, ask: string): boolean {
   b.textContent = ask;
   return false;
 }
+
+/** The form for a correction that was counted wrong. */
+export const COUNTED_WRONG_URL = "https://github.com/HTMLGuyLLC/NoActually/issues/new?template=false_positive.yml";
 
 /** A report cards tool named by a button, checked before it's sent to the app. */
 function reportCardTool(id: string): ReportCardTool {
@@ -275,6 +286,12 @@ export const clickActions = {
     const view = data(b, "id");
     if (!isScoreView(view)) throw new Error(`Unknown view: ${view}`);
     setView(view);
+    return render().then(() => window.scrollTo({ top: 0 }));
+  },
+  // From "No chats in this period": back to all time, and all AI when a model was picked.
+  widen: () => {
+    setPeriod("all");
+    setFilter({});
     return render();
   },
   period: (b) => {
@@ -440,8 +457,19 @@ export const clickActions = {
       say(out, errorText(e));
     }
   },
-  "check-update": () => api.checkForUpdates(),
-  "sync-now": () => api.syncNow(),
+  "check-update": (b) => run(b, () => api.checkForUpdates()),
+  // The pill's button holds an icon, which `run` would wipe, so this shows its failure by hand.
+  "sync-now": async (b) => {
+    clearError(b.parentElement);
+    try {
+      await api.syncNow();
+    } catch (e) {
+      showError(b.parentElement, e);
+      say(confirmNote(), `Couldn't check for new chats: ${errorText(e)}`);
+    }
+  },
+  // Opens the false-positive form in the browser (github.com is on the app's allowed-link list).
+  "counted-wrong": (b) => run(b, () => api.openShare(COUNTED_WRONG_URL)),
   // Opens or closes the tooltip for touch and keyboard. Closing happens in `bindActions` (blur, Escape, a click elsewhere).
   "sync-tip": (b) => b.setAttribute("aria-expanded", String(b.getAttribute("aria-expanded") !== "true")),
   "open-log-folder": (b) => run(b, () => api.openLogFolder()),
@@ -473,14 +501,19 @@ export function parseGoalChoice(raw: string): { kind: GoalKind; target: number }
 
 type InputHandler = (el: HTMLInputElement | HTMLSelectElement) => unknown;
 
-/** Undoes a checkbox the backend refused, so it never shows a setting that isn't saved. */
+/** The row a Settings control sits in, where a refusal is shown. */
+const rowOf = (el: HTMLElement) => el.closest(".settings-row") ?? el.parentElement;
+
+/** Undoes a checkbox the backend refused, so it never shows a setting that isn't saved, and says why. */
 const toggle = (save: (on: boolean) => Promise<unknown>, saved?: (on: boolean) => void) => async (box: HTMLInputElement | HTMLSelectElement) => {
   if (!(box instanceof HTMLInputElement)) return;
+  clearError(rowOf(box));
   try {
     await save(box.checked);
     saved?.(box.checked);
-  } catch {
+  } catch (e) {
     box.checked = !box.checked;
+    showError(rowOf(box), e);
   }
 };
 
@@ -531,11 +564,13 @@ export const changeActions = {
   "update-channel": async (sel) => {
     if (sel.value !== "stable" && sel.value !== "beta") return;
     const before = state.update?.channel ?? "stable";
+    clearError(rowOf(sel));
     try {
       await api.setUpdateChannel(sel.value);
       setUpdateChannel(sel.value);
-    } catch {
+    } catch (e) {
       sel.value = before;
+      showError(rowOf(sel), e);
     }
   },
   "period-pick": (sel) => {

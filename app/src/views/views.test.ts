@@ -3,7 +3,7 @@ import { emptyReportCards } from "../state";
 import { HOSTILE, hallEntry, meta, overall, row, source, stats } from "../test/fixtures";
 import { headerView, statusPillView } from "./chrome";
 import { emptyGlanceView, glanceView } from "./glance";
-import { chartSummary, chartView, hallView, onboardingView, scorecardView } from "./scorecard";
+import { chartSummary, chartView, hallView, noChatsView, onboardingView, scorecardView } from "./scorecard";
 import { parseRetention, settingsView } from "./settings";
 import { allowArgs, sourcesView, watchingNames } from "./sources";
 
@@ -13,6 +13,14 @@ const safe = (markup: string) => {
   expect(markup).not.toContain("<img");
   expect(markup).not.toContain('onerror="');
 };
+
+describe("verdict text for screen readers", () => {
+  it("matches the Hmm. on screen", () => {
+    const m = scorecardView(stats({ overall: overall({ verdict: "hmm" }) }), ctx).value;
+    expect(m).toContain("Hmm. ");
+    expect(m).not.toContain("Not yet.");
+  });
+});
 
 describe("scorecardView", () => {
   it("opens on an overview with both verdicts and the section tabs", () => {
@@ -205,15 +213,40 @@ describe("hallView", () => {
   it("uses Rust's category title, never the label, and the source name when no model was recorded", () => {
     const m = hallView([hallEntry({ category_title: "Made it up", label: "confirmed", model: "", source_name: "ChatGPT (export)" })]).value;
     expect(m).not.toContain("Made it up"); // the award names the kind
-    expect(m).toContain('<div class="meta">confirmed · ');
+    expect(m).not.toContain("confirmed");
+    expect(m).toContain('<div class="meta">');
     expect(m).toContain("<b>ChatGPT:</b>");
   });
 
   it("marks pinned corrections and says how to unpin", () => {
     const m = hallView([hallEntry({ pinned: true })]).value;
-    expect(m).toContain("Pinned · kept forever");
+    expect(m).toContain(">Pinned<");
+    expect(m).not.toContain("forever");
     expect(m).toContain('data-pinned="true"');
     expect(m).toContain(">Unpin<");
+  });
+});
+
+describe("hall entries", () => {
+  it("offers a link to report a wrong count, with the redaction reminder", () => {
+    const m = hallView([hallEntry()]).value;
+    expect(m).toContain('data-action="counted-wrong"');
+    expect(m).toContain("Leave out names, secrets");
+    expect(m).toContain(">Pin it<");
+  });
+});
+
+describe("noChatsView", () => {
+  it("names the period and offers all time", () => {
+    const m = noChatsView({ meta, filter: {}, period: "28d" }).value;
+    expect(m).toContain("No chats in the last 28 days.");
+    expect(m).toContain(">Show all time<");
+    expect(m).toContain('data-action="period"');
+    expect(m).toContain('id="model-trigger"');
+  });
+
+  it("offers all AI when a model is picked", () => {
+    expect(noChatsView({ meta, filter: { family: "Claude" }, period: "all" }).value).toContain(">Show all AI<");
   });
 });
 
@@ -348,8 +381,14 @@ describe("sourcesView", () => {
 
   it("lists what's being read right now", () => {
     const on = { id: "x", allowed: true, paused: false, backfill_since: null, granted_at: null, start_after: null, paths: [] };
-    const list = [source({ name: "ChatGPT (export)", state: on }), source({ name: "Codex", state: { ...on, paused: true } }), source()];
-    expect(watchingNames(list)).toEqual(["ChatGPT"]);
+    const list = [
+      source({ name: "ChatGPT (export)", kind: "import", state: on }),
+      source({ name: "Claude Code", state: on }),
+      source({ name: "Codex", state: { ...on, paused: true } }),
+      source(),
+    ];
+    // A file you imported is read once, never "watched".
+    expect(watchingNames(list)).toEqual(["Claude Code"]);
   });
 });
 

@@ -164,6 +164,31 @@ CREATE TABLE tip_chats (
     day TEXT NOT NULL
 ) WITHOUT ROWID;
 ",
+    // 10: Where a rules rebuild sets scores aside while it reads history again. Days it couldn't read
+    // come back from here, so history whose files are gone isn't lost. Empty between rebuilds.
+    r"
+CREATE TABLE kept_events AS SELECT * FROM events WHERE 0;
+CREATE TABLE kept_daily AS SELECT * FROM daily WHERE 0;
+CREATE TABLE kept_sessions AS SELECT * FROM sessions WHERE 0;
+CREATE TABLE kept_tasks AS SELECT * FROM tasks WHERE 0;
+CREATE TABLE kept_seen AS SELECT * FROM seen WHERE 0;
+CREATE TABLE kept_tips AS SELECT * FROM tips WHERE 0;
+CREATE TABLE kept_tip_chats AS SELECT * FROM tip_chats WHERE 0;
+",
+    // 11: `report_cards.auto` was never used. The view selects `*`, so it goes first and comes back
+    // after, with the same rule as migration 8.
+    r"
+DROP VIEW current_report_cards;
+ALTER TABLE report_cards DROP COLUMN auto;
+CREATE VIEW current_report_cards AS
+SELECT * FROM report_cards a WHERE NOT EXISTS (
+    SELECT 1 FROM report_cards b
+    WHERE b.card <> a.card
+      AND (b.graded_at, b.rounds, b.key) > (a.graded_at, a.rounds, a.key)
+      AND ((b.source = a.source AND b.first = a.first)
+        OR (b.session = a.session AND b.start_ts < a.end_ts AND a.start_ts < b.end_ts))
+);
+",
 ];
 
 /// Sets connection pragmas and applies any migrations the database hasn't had. Each migration
@@ -247,6 +272,37 @@ mod tests {
             conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap()
         };
         assert_eq!((count("report_cards"), count("current_report_cards"), count("settings")), (0, 0, 1));
+    }
+
+    #[test]
+    fn version_10_loses_the_unused_auto_column_and_keeps_its_cards() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        for sql in &MIGRATIONS[..10] {
+            conn.execute_batch(sql).unwrap();
+        }
+        conn.pragma_update(None, "user_version", 10).unwrap();
+        conn.execute(
+            "INSERT INTO report_cards VALUES ('k','c','claude-code','s','f','2026-10-05','2026-10-05T10:00:00.000Z',
+               '2026-10-05T10:30:00.000Z','Anthropic','Claude Opus','5.5','B',3,1,0,0,'{}',2,'2026-10-05T11:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        migrate(&mut conn).unwrap();
+        assert_eq!(user_version(&conn), MIGRATIONS.len());
+        let columns: Vec<String> = conn
+            .prepare("SELECT name FROM pragma_table_info('report_cards')")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert!(!columns.iter().any(|c| c == "auto"), "{columns:?}");
+        let (grade, minutes): (String, i64) = conn
+            .query_row("SELECT grade, minutes FROM current_report_cards WHERE key = 'k'", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+        assert_eq!((grade.as_str(), minutes), ("B", 2), "the view works again, on the same rows");
     }
 
     #[test]

@@ -1,10 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, demo, isLevel } from "./api";
 import { meta, progress, stats } from "./test/fixtures";
 
 describe("api outside Tauri", () => {
+  afterEach(() => vi.useRealTimers());
+
   it("runs as the demo, answering every command", async () => {
     expect(demo).toBe(true);
+    // The fixtures end in October 2026; the demo's window must not depend on the real date.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-28T12:00:00"));
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({ json: async () => ({ meta, stats: stats(), progress: progress(), recent_report_cards: [] }) })),

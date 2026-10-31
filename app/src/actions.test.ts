@@ -23,6 +23,9 @@ const api = vi.hoisted(() => ({
   reportCardsStatus: vi.fn(),
   logError: vi.fn(),
   openLogFolder: vi.fn(),
+  openShare: vi.fn(),
+  syncNow: vi.fn(),
+  setAutoUpdate: vi.fn(),
 }));
 vi.mock("./api", async (importOriginal) => ({ ...(await importOriginal<typeof import("./api")>()), api, demo: false }));
 
@@ -344,6 +347,73 @@ describe("delegated actions", () => {
     await click('[data-action="view"][data-id="prompts"]');
     expect(root.querySelector('[data-action="view"][aria-current="page"]')?.textContent).toBe("Prompting");
     expect(root.textContent).toContain("Why you followed up");
+  });
+
+  it("scrolls to the top on a section change", async () => {
+    const scrollTo = vi.fn();
+    vi.stubGlobal("scrollTo", scrollTo);
+    await click('[data-action="view"][data-id="corrections"]');
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps the pickers on an empty period when history exists, and widens from there", async () => {
+    api.stats.mockImplementation((f?: { since?: string }) => Promise.resolve(f?.since === "1970-01-01" ? stats() : stats({ messages: 0 })));
+    state.setFilter({ family: "Claude" });
+    await render();
+    expect(root.textContent).toContain("No chats with");
+    expect(root.textContent).not.toContain("Let's see if AI could replace you.");
+    expect(root.querySelector("#model-trigger")).not.toBeNull();
+    expect(root.querySelector('[data-action="period"]')).not.toBeNull();
+    expect(btn('[data-action="widen"]').textContent).toBe("Show all time and all AI");
+    api.stats.mockResolvedValue(stats());
+    await click('[data-action="widen"]');
+    expect(state.state.period).toBe("all");
+    expect(state.state.filter).toEqual({});
+    expect(root.querySelector('[data-action="widen"]')).toBeNull();
+  });
+
+  it("shows first-run onboarding only when all time is empty too", async () => {
+    api.stats.mockResolvedValue(stats({ messages: 0 }));
+    await render();
+    expect(root.textContent).toContain("You're all set.");
+    expect(root.querySelector('[data-action="widen"]')).toBeNull();
+  });
+
+  it("keeps the header on the error page and offers the log folder", async () => {
+    api.stats.mockRejectedValue(new Error("boom"));
+    await render();
+    expect(root.textContent).toContain("Something went wrong.");
+    expect(root.querySelector('[data-action="tab"]')).not.toBeNull();
+    await click('[data-action="open-log-folder"]');
+    expect(api.openLogFolder).toHaveBeenCalled();
+  });
+
+  it("opens the false-positive form from a correction", async () => {
+    await click('[data-action="view"][data-id="hall"]');
+    const b = btn('[data-action="counted-wrong"]');
+    expect(b.title).toContain("Leave out");
+    await click('[data-action="counted-wrong"]');
+    expect(api.openShare).toHaveBeenCalledWith("https://github.com/HTMLGuyLLC/NoActually/issues/new?template=false_positive.yml");
+  });
+
+  it("says so when a check for new chats fails", async () => {
+    await toTab("settings");
+    api.syncNow.mockRejectedValue(new Error("offline"));
+    await click('[data-action="sync-now"]:not(.sync-now)');
+    expect(root.querySelector('.action-error[role="alert"]')?.textContent).toBe("Couldn't do that: offline");
+  });
+
+  it("puts a refused toggle back and says why", async () => {
+    await toTab("settings");
+    await click('[data-action="settings-pane"][data-id="general"]');
+    api.setAutostart.mockRejectedValue(new Error("not allowed"));
+    const box = btn("#autostart") as unknown as HTMLInputElement;
+    const before = box.checked;
+    box.click();
+    await settle();
+    expect(root.querySelector<HTMLInputElement>("#autostart")?.checked).toBe(before);
+    expect(root.querySelector("#autostart")?.closest(".settings-row")?.querySelector(".action-error")?.textContent).toBe("Couldn't do that: not allowed");
   });
 
   it("sends the logo home: scorecard overview", async () => {

@@ -678,12 +678,12 @@ static SOURCE_NAMES: LazyLock<Vec<(&'static str, &'static str)>> =
     LazyLock::new(|| sources::all().iter().map(|s| (s.id(), s.name())).collect());
 
 /// The overall score from the window's tasks (already in `p`) and corrections.
-fn overall(p: &Prompts, corrections: i64, humbled: i64) -> Overall {
-    overall_of(p.window_tasks, p.window_landed, corrections, humbled)
+fn overall(p: &Prompts, corrections: i64, humbled: i64, days: i64) -> Overall {
+    overall_of(p.window_tasks, p.window_landed, corrections, humbled, days)
 }
 
-fn overall_of(continued: i64, landed: i64, corrections: i64, humbled: i64) -> Overall {
-    let score = Score::of(Window { continued, landed, corrections, humbled });
+fn overall_of(continued: i64, landed: i64, corrections: i64, humbled: i64, days: i64) -> Overall {
+    let score = Score::of(Window { continued, landed, corrections, humbled, days });
     let tier = score.map(|s| s.tier);
     let correction_tier = score.map(|s| CorrectionTier::for_judgment(s.judgment));
     Overall {
@@ -708,7 +708,7 @@ impl Store {
         let start = score_start(None, today);
         let (continued, landed) = window_counts(&v, start)?;
         let (corrections, humbled) = window_sums(&v, start)?;
-        Ok(overall_of(continued, landed, corrections, humbled))
+        Ok(overall_of(continued, landed, corrections, humbled, WINDOW_DAYS))
     }
 
     /// The scorecard for `f`, with "this week" ending on `today`.
@@ -732,7 +732,7 @@ impl Store {
             humbled: t.humbled,
             labels,
             corrections_last_7d: t.corrections_last_7d,
-            overall: overall(&prompts, t.window_corrections, t.window_humbled),
+            overall: overall(&prompts, t.window_corrections, t.window_humbled, (today - start).num_days() + 1),
             messages_per_correction: (t.corrections > 0)
                 .then(|| (t.messages as f64 / t.corrections as f64).round() as i64),
             real_chats,
@@ -796,12 +796,12 @@ mod tests {
             to_rank: (MIN_PROMPTS - continued).max(0),
             ..Prompts::default()
         };
-        let o = overall(&p(150, 125), 41, 2);
+        let o = overall(&p(150, 125), 41, 2, WINDOW_DAYS);
         assert_eq!(
             (o.score, o.tier, o.next_tier, o.verdict),
             (Some(86), Some(Tier::SharpEyed), Some(Tier::Irreplaceable), Answer::No)
         );
-        let o = overall(&p(4, 4), 9, 0);
+        let o = overall(&p(4, 4), 9, 0, WINDOW_DAYS);
         assert_eq!(
             (o.score, o.tier, o.verdict, o.to_rank, o.corrections),
             (None, None, Answer::Hmm, MIN_PROMPTS - 4, 9)

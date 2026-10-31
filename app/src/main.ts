@@ -19,6 +19,16 @@ function refresh() {
   if (isGlance || state.tab === "score") scheduler.refresh();
 }
 
+/** New numbers arrived while the window was hidden: drawn when it's shown again. */
+let redrawOnShow = false;
+
+/** Like `refresh`, but a hidden window only updates the status line and waits to be shown to redraw. */
+function refreshIfShown() {
+  if (!document.hidden) return refresh();
+  paintStatus();
+  redrawOnShow = isGlance || state.tab === "score";
+}
+
 /** A check ended: once "Checking…" has been up long enough, reads where things stand now. */
 const checkDone = (after: () => void) =>
   setTimeout(
@@ -69,9 +79,15 @@ if (!demo) {
     setSyncing();
     paintStatus();
   });
-  void listen("stats-changed", () => checkDone(refresh));
+  void listen("stats-changed", () => checkDone(refreshIfShown));
+  void listen("sync-idle", () => checkDone(paintStatus));
   void listen("sync-failed", () => checkDone(paintStatus));
 }
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden || !redrawOnShow) return;
+  redrawOnShow = false;
+  scheduler.refresh();
+});
 // Keep "Checked 3 min ago" honest without re-querying stats.
 setInterval(() => state.current && paintStatus(), 30_000);
 window.addEventListener("hashchange", () => location.reload());

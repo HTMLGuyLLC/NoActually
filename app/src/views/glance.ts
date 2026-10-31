@@ -58,9 +58,9 @@ export function glanceView(s: Stats, meta: Meta, goal: GoalStatus | null = null)
   </div>`;
 }
 
-/** Before there is a score. `watching` names the sources being read right now (empty: none allowed yet). */
-export function emptyGlanceView(watching: string): Html {
+/** Before there is a score. `watching` names the sources being read right now (empty: none allowed yet); `minPrompts` is how many tasks with a follow-up a score needs. */
+export function emptyGlanceView(watching: string, minPrompts = 10): Html {
   return watching
-    ? html`<div class="glance empty-glance"><h1 class="sr-only">Quick glance</h1>${topView()}<span class="eyebrow"><i class="dot live"></i> Watching ${watching}</span><div class="g-q">No corrections yet.</div><p class="muted small">Your score shows up after a few prompts.</p>${openView()}</div>`
+    ? html`<div class="glance empty-glance"><h1 class="sr-only">Quick glance</h1>${topView()}<span class="eyebrow"><i class="dot live"></i> Watching ${watching}</span><div class="g-q">No corrections yet.</div><p class="muted small">Your score shows up after ${minPrompts} tasks with a follow-up.</p>${openView()}</div>`
     : html`<div class="glance empty-glance"><h1 class="sr-only">Quick glance</h1>${topView()}<div class="g-q">Could AI replace you?</div><p class="muted small">Pick which AI tools to count, then find out.</p>${openView("Set up")}</div>`;
 }

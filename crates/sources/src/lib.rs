@@ -22,7 +22,7 @@ pub mod testing;
 mod view;
 
 pub use claude_code::has_tip_rules;
-pub use pair::{pair, Event};
+pub use pair::{pair, pair_from, Event};
 pub use view::{ChatView, PromptView, Sealed, SealedTask};
 
 use chrono::{DateTime, Utc};

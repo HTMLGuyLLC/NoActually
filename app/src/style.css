@@ -72,11 +72,11 @@ button:disabled, button[aria-disabled="true"] { opacity: .55; cursor: default }
 button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, .models-scroll:focus-visible { outline: 3px solid var(--ai); outline-offset: 2px }
 /* Headings take focus only so a redraw doesn't drop it on <body>; no ring for that. */
 [tabindex="-1"]:focus { outline: none }
-select, input[type="number"] { font: 500 14px var(--body); color: var(--ink); background-color: var(--surface); border: 1px solid var(--rule); border-radius: 10px; min-height: 40px; padding: 0 12px }
+select, input[type="number"] { font: 500 14px var(--body); color: var(--ink); background-color: var(--surface); border: 1px solid var(--muted); border-radius: 10px; min-height: 40px; padding: 0 12px }
 /* Native selects ignore padding on macOS; draw our own chevron so they can breathe. */
 select { appearance: none; -webkit-appearance: none; padding: 0 38px 0 14px; cursor: pointer;
   background-image: var(--chevron); background-repeat: no-repeat; background-position: right 13px center; background-size: 12px }
-select:hover, input[type="number"]:hover { border-color: var(--muted) }
+select:hover, input[type="number"]:hover { border-color: var(--ink) }
 .action-error { flex-basis: 100%; color: var(--pen-text); font-size: 13px }
 .action-note { flex-basis: 100% }
 
@@ -288,7 +288,10 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .correction .meta { font: 500 10.5px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
 /* Pinned corrections are the ones you chose to keep: give them the red-pen treatment. */
 .correction.pinned { border: 2px solid var(--pen); background: linear-gradient(var(--pen-soft), var(--pen-soft)) padding-box;
-  box-shadow: 0 14px 30px -18px color-mix(in srgb, var(--pen) 70%, transparent) }
+  box-shadow: 0 14px 30px -18px var(--pen) }
+@supports (color: color-mix(in srgb, red, blue)) {
+  .correction.pinned { box-shadow: 0 14px 30px -18px color-mix(in srgb, var(--pen) 70%, transparent) }
+}
 .pinned-tag { position: absolute; top: -11px; right: 14px; background: var(--pen); color: var(--on-pen); font: 600 10.5px/1 var(--mono);
   letter-spacing: .08em; text-transform: uppercase; padding: 6px 9px; border-radius: 999px; transform: rotate(2deg) }
 .chip { font: 600 10.5px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 6px 8px; border-radius: 6px; background: var(--pen-soft); color: var(--pen-text) }
@@ -397,14 +400,17 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .sd-head { display: flex; justify-content: space-between; align-items: center }
 .sd-close { background: none; border: 0; color: var(--muted); font-size: 26px; line-height: 1; padding: 2px 6px; min-width: 32px; min-height: 32px }
 .sd-close:hover { filter: none; color: var(--ink) }
-#share-text { width: 100%; resize: none; font: 400 14px/1.45 var(--body); color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px }
+#share-text { width: 100%; resize: none; font: 400 14px/1.45 var(--body); color: var(--ink); background: var(--paper); border: 1px solid var(--muted); border-radius: 10px; padding: 10px 12px }
 .share-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px }
 .share-btn { display: grid; gap: 3px; justify-items: start; text-align: left; background: transparent; color: var(--ink); border: 1px solid var(--rule); border-radius: 12px; padding: 10px 11px; font: 600 14px var(--body) }
 .share-btn span { font: 500 11px/1.25 var(--body); color: var(--muted) }
 .share-btn .needs-paste { color: var(--pen) }
 .share-btn:hover { filter: none; border-color: var(--ink); background: var(--pen-soft) }
 .share-guide { font-size: 13px; color: var(--muted); padding: 10px 12px; border-radius: 10px; background: var(--paper) }
-.share-guide.paste { color: var(--ink); background: color-mix(in srgb, var(--hl) 55%, transparent); border: 1px solid color-mix(in srgb, var(--hl) 90%, var(--ink) 10%) }
+.share-guide.paste { color: var(--ink); background: var(--hl); border: 1px solid var(--muted) }
+@supports (color: color-mix(in srgb, red, blue)) {
+  .share-guide.paste { background: color-mix(in srgb, var(--hl) 55%, transparent); border: 1px solid color-mix(in srgb, var(--hl) 90%, var(--ink) 10%) }
+}
 .share-guide kbd { font: 600 12px var(--mono); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--muted); background: var(--surface) }
 .sd-foot { display: flex; gap: 8px; justify-content: flex-end }
 .confirm-dialog h2 { font-size: 20px }
@@ -412,7 +418,7 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 
 /* Learn: the prompt checker, tracks of lessons, and the lesson page. */
 .checker textarea { width: 100%; min-height: 9em; resize: vertical; margin: 14px 0 10px; font: 400 15px/1.5 var(--body); color: var(--ink);
-  background: var(--paper); border: 1px solid var(--rule); border-radius: 12px; padding: 12px 14px }
+  background: var(--paper); border: 1px solid var(--muted); border-radius: 12px; padding: 12px 14px }
 .check-result { display: grid; gap: 12px; align-content: start }
 .check-grade { font: 800 22px/1.1 var(--display) }
 .check-grade.is-sharp b { color: var(--pen) } .check-grade.is-thin b { color: var(--muted) }

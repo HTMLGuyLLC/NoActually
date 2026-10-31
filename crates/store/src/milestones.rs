@@ -206,8 +206,9 @@ impl Store {
         let (tier, save_tier) = best_tier(self.get_setting(TIER_KEY)?, now.tier, Tier::id);
         let (prompt_tier, save_prompt_tier) =
             best_tier(self.get_setting(PROMPT_TIER_KEY)?, now.prompt_tier, PromptTier::id);
+        let corrections = total.and_then(|v| v.parse().ok()).unwrap_or(now.corrections);
         let prev = Snapshot {
-            corrections: total.and_then(|v| v.parse().ok()).unwrap_or(now.corrections),
+            corrections,
             corrections_last_7d: now.corrections_last_7d,
             tier,
             score: now.score,
@@ -216,7 +217,9 @@ impl Store {
             landed_pct: now.landed_pct,
         };
         let tx = self.conn().unchecked_transaction()?;
-        put_setting(&tx, TOTAL_KEY, &now.corrections.to_string())?;
+        // The most ever reached, like the tiers: after Forget or a rebuild the count drops, and
+        // climbing back through a number already announced is not news.
+        put_setting(&tx, TOTAL_KEY, &corrections.max(now.corrections).to_string())?;
         put_setting(&tx, TIER_KEY, &save_tier)?;
         put_setting(&tx, STREAK_KEY, &now.streak.to_string())?;
         put_setting(&tx, PROMPT_TIER_KEY, &save_prompt_tier)?;
@@ -265,6 +268,22 @@ mod tests {
             popups += crossed(&prev, &now).iter().filter(|m| m.title.starts_with("New tier")).count();
         }
         assert_eq!(popups, 2, "Coworker once (the first ranking counts), Sharp-eyed once");
+    }
+
+    #[test]
+    fn a_count_popup_is_not_repeated_after_the_total_drops() {
+        let s = Store::open_in_memory().unwrap();
+        s.advance_milestones(&snap(12, Tier::Coworker, 0)).unwrap();
+        // Forget or a rebuild: the total falls, then climbs back through 10.
+        let low = s.advance_milestones(&snap(3, Tier::Coworker, 0)).unwrap().unwrap();
+        assert_eq!(low.corrections, 12, "the baseline is the most ever reached");
+        let now = snap(11, Tier::Coworker, 0);
+        let prev = s.advance_milestones(&now).unwrap().unwrap();
+        assert_eq!(prev.corrections, 12);
+        assert_eq!(crossed(&prev, &now), vec![], "10 was announced before");
+        let next = snap(26, Tier::Coworker, 0);
+        let prev = s.advance_milestones(&next).unwrap().unwrap();
+        assert_eq!(crossed(&prev, &next)[0].title, "Your 25th correction!", "a new high still counts");
     }
 
     #[test]

@@ -24,6 +24,16 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
+/// Fails unless `label` is the scorecard window. What changes consent or deletes data is done only
+/// there: the small window under the menu bar icon never does.
+fn only_main(label: &str) -> Res<()> {
+    if label == "main" {
+        Ok(())
+    } else {
+        Err("That can only be done from the main window.".into())
+    }
+}
+
 fn changed(app: &App) {
     let _ = app.tracker.send(Msg::SourcesChanged);
 }
@@ -146,12 +156,14 @@ pub fn list_sources(app: State<Arc<App>>) -> Res<Vec<SourceListing>> {
 
 #[tauri::command(async)]
 pub fn allow_source(
+    window: tauri::Window,
     handle: AppHandle,
     app: State<Arc<App>>,
     id: String,
     since: Option<NaiveDate>,
     from_now: Option<bool>,
 ) -> Res<()> {
+    only_main(window.label())?;
     let src = source(&app, &id)?;
     {
         let mut store = lock(&app.writer);
@@ -171,7 +183,8 @@ pub fn allow_source(
 }
 
 #[tauri::command(async)]
-pub fn revoke_source(app: State<Arc<App>>, id: String) -> Res<()> {
+pub fn revoke_source(window: tauri::Window, app: State<Arc<App>>, id: String) -> Res<()> {
+    only_main(window.label())?;
     source(&app, &id)?;
     lock(&app.writer).revoke(&id).map_err(err)?;
     changed(&app);
@@ -179,7 +192,8 @@ pub fn revoke_source(app: State<Arc<App>>, id: String) -> Res<()> {
 }
 
 #[tauri::command(async)]
-pub fn forget_source(app: State<Arc<App>>, id: String) -> Res<()> {
+pub fn forget_source(window: tauri::Window, app: State<Arc<App>>, id: String) -> Res<()> {
+    only_main(window.label())?;
     source(&app, &id)?;
     lock(&app.writer).forget(&id).map_err(err)?;
     log::info!("forgot source {id}");
@@ -188,7 +202,8 @@ pub fn forget_source(app: State<Arc<App>>, id: String) -> Res<()> {
 }
 
 #[tauri::command(async)]
-pub fn pause_source(app: State<Arc<App>>, id: String, paused: bool) -> Res<()> {
+pub fn pause_source(window: tauri::Window, app: State<Arc<App>>, id: String, paused: bool) -> Res<()> {
+    only_main(window.label())?;
     source(&app, &id)?;
     lock(&app.writer).set_paused(&id, paused).map_err(err)?;
     changed(&app);
@@ -212,7 +227,13 @@ async fn pick(dialog: FileDialogBuilder<tauri::Wry>, save: bool) -> Option<FileP
 /// Opens a native file picker for an export (ChatGPT / Claude.ai `conversations.json`), then
 /// imports it: the path is added and the source allowed, same as `noactually import`.
 #[tauri::command]
-pub async fn import_export(handle: AppHandle, app: State<'_, Arc<App>>, id: String) -> Res<Option<String>> {
+pub async fn import_export(
+    window: tauri::Window,
+    handle: AppHandle,
+    app: State<'_, Arc<App>>,
+    id: String,
+) -> Res<Option<String>> {
+    only_main(window.label())?;
     source(&app, &id)?;
     let dialog = handle.dialog().file().set_title("Choose your conversations.json").add_filter("Export", &["json"]);
     let Some(file) = pick(dialog, false).await else { return Ok(None) };
@@ -233,7 +254,8 @@ pub fn get_retention(app: State<Arc<App>>) -> Res<Retention> {
 }
 
 #[tauri::command(async)]
-pub fn set_retention(app: State<Arc<App>>, retention: Retention) -> Res<()> {
+pub fn set_retention(window: tauri::Window, app: State<Arc<App>>, retention: Retention) -> Res<()> {
+    only_main(window.label())?;
     retention.validate().map_err(|e| e.to_string())?;
     lock(&app.writer).set_retention(retention).map_err(err)
 }
@@ -324,8 +346,8 @@ pub fn is_share_url(url: &str) -> bool {
     SHARE_HOSTS.contains(&host)
 }
 
-/// Opens a network's share page in the person's browser. Only the share text (numbers and the
-/// project link) is in the URL; nothing is sent until they post it themselves.
+/// Opens a network's share page in the person's browser. The share text is in the URL: numbers and
+/// the project link, and for a correction its quote too. Nothing is sent until they post it themselves.
 #[tauri::command]
 pub fn open_share(handle: AppHandle, url: String) -> Res<()> {
     if !is_share_url(&url) {
@@ -351,9 +373,7 @@ pub fn log_error(message: String) {
 /// Opens the folder the app log lives in, so someone can attach it to a bug report.
 #[tauri::command]
 pub fn open_log_folder(window: tauri::Window, handle: AppHandle) -> Res<()> {
-    if window.label() != "main" {
-        return Err("That can only be done from the main window.".into());
-    }
+    only_main(window.label())?;
     let dir = handle.path().app_log_dir().map_err(err)?;
     std::fs::create_dir_all(&dir).map_err(err)?;
     handle.opener().open_path(dir.to_string_lossy(), None::<&str>).map_err(err)
@@ -386,7 +406,10 @@ pub fn set_update_channel(
     }
     lock(&app.writer).set_setting(updater::CHANNEL_KEY, &channel).map_err(err)?;
     updates.forget_offer(&handle);
-    let _ = updates.tx.send(updater::Msg::CheckNow);
+    // With automatic checks off, only "Check for app updates" may reach the network.
+    if updates.status(&app).auto {
+        let _ = updates.tx.send(updater::Msg::CheckNow);
+    }
     Ok(())
 }
 
@@ -413,6 +436,21 @@ mod tests {
         assert!(!is_share_url("https://x.com.evil.test/"), "exact host");
         assert!(!is_share_url("https://evil.test/?x.com"));
         assert!(!is_share_url("file:///etc/passwd"));
+    }
+
+    #[test]
+    fn the_share_hosts_here_and_in_the_window_are_the_same_list() {
+        let ts = include_str!("../../src/share/share.ts");
+        let list = ts.split("export const SHARE_HOSTS = [").nth(1).and_then(|rest| rest.split(']').next()).unwrap();
+        let hosts: Vec<&str> = list.split('"').skip(1).step_by(2).collect();
+        assert_eq!(hosts, SHARE_HOSTS, "update both lists together");
+    }
+
+    #[test]
+    fn only_the_scorecard_window_changes_consent() {
+        assert!(only_main("main").is_ok());
+        assert!(only_main("glance").is_err());
+        assert!(only_main("").is_err());
     }
 
     #[test]

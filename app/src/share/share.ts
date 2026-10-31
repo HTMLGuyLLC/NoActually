@@ -1,5 +1,5 @@
 // Share text, network links and the dialog's guidance. All made on this machine from numbers only
-// (or, for a single correction, the stored and already redacted snippet the person can edit first).
+// (or, for a single correction, the redacted snippet the person can edit first).
 import type { Overall, Prompts, PromptTier, Stats } from "../api";
 import { plural } from "../format";
 import { type Html, html } from "../html";
@@ -104,10 +104,13 @@ export function clip(s: string, n: number) {
   return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t;
 }
 
-/** A single correction, ready to post. Quotes are the stored (already redacted) snippets, clipped short. */
+/** The longest quote, in chars, in the post text and on the card image alike, so the image never shows more than the box. */
+export const QUOTE_CLIP = 90;
+
+/** A single correction, ready to post. Quotes are the (redacted, possibly edited) snippets, clipped to `QUOTE_CLIP`. */
 export function correctionShareText(e: CorrectionLike, url = SHARE_URL) {
   const who = e.model || "my AI";
-  const you = e.human ? ` Me: “${clip(e.human, 90)}”` : "";
-  const ai = e.ai ? ` ${who}: “${clip(e.ai, 90)}”` : "";
+  const you = e.human ? ` Me: “${clip(e.human, QUOTE_CLIP)}”` : "";
+  const ai = e.ai ? ` ${who}: “${clip(e.ai, QUOTE_CLIP)}”` : "";
   return `I corrected ${who}.${you}${ai} Could AI replace me? No, actually. ${url}`;
 }

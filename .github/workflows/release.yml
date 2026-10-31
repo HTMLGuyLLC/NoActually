@@ -54,6 +54,25 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         if: ${{ !matrix.mac || env.SIGN_MAC == 'true' }}
+        with:
+          # Full history, so the next step can tell whether the tag is on main.
+          fetch-depth: 0
+
+      # A tag can be pushed from any commit. Only build one that is on main and passed CI.
+      # Release commits land by squash merge, so the tagged commit is the commit on main and
+      # its own `ci-ok` check run is the one to read.
+      - name: Tagged commit is on main and green
+        if: ${{ github.ref_type == 'tag' && (!matrix.mac || env.SIGN_MAC == 'true') }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "Tagged commit $GITHUB_SHA is not on main."; exit 1; }
+          result=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?check_name=ci-ok&filter=latest" \
+            --jq '[.check_runs[] | select(.conclusion == "success")] | length')
+          [ "$result" -ge 1 ] || { echo "No passing ci-ok check on $GITHUB_SHA."; exit 1; }
 
       # tauri-action names the release after the app version; a different tag would silently
       # publish a second, mismatched release. The Cargo workspace version is the source of truth.
@@ -131,4 +150,5 @@ jobs:
           # The signatures are inside latest.json; the .sig files would only clutter the release page.
           uploadUpdaterSignatures: false
           prerelease: false
-          args: ${{ matrix.args }}
+          # Everything after `--` goes to cargo: build exactly what Cargo.lock says.
+          args: ${{ matrix.args }} -- --locked

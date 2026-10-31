@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::sync::{mpsc, Arc};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
+use tauri_plugin_notification::NotificationExt;
 
 pub enum Msg {
     SyncNow,
@@ -23,6 +24,9 @@ const DEBOUNCE: Duration = Duration::from_secs(2);
 const MIN_GAP: Duration = Duration::from_secs(60);
 /// More new messages than a person writes between two checks means history was just read.
 const BACKFILL_MESSAGES: usize = 40;
+/// Shown once after the rules change, because scores can move with no new chats.
+const RESCORED_TITLE: &str = "Your scores were updated";
+const RESCORED_BODY: &str = "The scoring rules improved, so your history was counted again. Chats no longer on your computer keep their old counts.";
 
 /// Folders to watch: only the roots of sources the user has allowed.
 fn watched_roots(app: &App) -> Vec<PathBuf> {
@@ -80,10 +84,19 @@ fn sync_once(handle: &AppHandle, app: &App, quiet: bool) {
             for e in &r.errors {
                 log::warn!("skipped file: {e}");
             }
+            // Numbers moved, or what the status line says did. A pass that found nothing new only
+            // ends the check: redrawing every window for it is wasted work.
+            let changed = r.files_read > 0
+                || r.rescored
+                || status.files_with_errors != r.errors.len()
+                || status.last_error.is_some();
             status.last_error = None;
             status.files_with_errors = r.errors.len();
             drop(status);
-            let _ = handle.emit("stats-changed", &r);
+            let _ = handle.emit(if changed { "stats-changed" } else { "sync-idle" }, &r);
+            if r.rescored {
+                let _ = handle.notification().builder().title(RESCORED_TITLE).body(RESCORED_BODY).show();
+            }
             // A big pass is history arriving, not new corrections: don't celebrate old milestones.
             let backfill = quiet || r.rescored || r.messages > BACKFILL_MESSAGES;
             milestones::check(handle, app, backfill);

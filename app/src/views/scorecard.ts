@@ -1,7 +1,7 @@
 // The scorecard: the overall score and its two halves (prompts, who corrects whom), the weekly
 // chart, model and category breakdowns, and the hall of fame.
 import type { Filter, HallEntry, Meta, Overall, Stats, WeekRow } from "../api";
-import { fmtDay, plural, shortSourceName, subjectLabel, subjectText } from "../format";
+import { fmtDay, isFiltered, plural, shortSourceName, subjectLabel, subjectText } from "../format";
 import { type Html, html, num, raw } from "../html";
 import { categoryTitle, correctionTier, correctionTierRanges, tierName, tierOf, tierRanges } from "../meta";
 import { correctionRate, modelName } from "../picker/picker";
@@ -71,7 +71,7 @@ function answerView(o: Overall, meta: Meta, still: boolean): Html {
   const no = o.verdict === "no";
   return verdictMark(
     no ? "No." : null,
-    `${no ? "No." : "Not yet."} ${o.tier ? `Your tier is ${tierName(meta, o.tier)}, score ${o.score}.` : "Not scored yet."}`,
+    `${no ? "No." : "Hmm."} ${o.tier ? `Your tier is ${tierName(meta, o.tier)}, score ${o.score}.` : "Not scored yet."}`,
     still,
   );
 }
@@ -215,17 +215,21 @@ export function chartSummary(weeks: Stats["weekly"]): string {
   return `${weeks.length} ${weeks.length === 1 ? "week" : "weeks"} from ${fmtDay(first.week)}. Most corrections: ${peak.corrections}, the week of ${fmtDay(peak.week)}.`;
 }
 
+/** Shown on the "Counted wrong?" link: the form is public, so say what to leave out. */
+const COUNTED_WRONG_HINT = "Opens a GitHub form. Leave out names, secrets and anything private before you paste.";
+
 export function hallView(entries: HallEntry[]): Html {
   return html`<div class="fame">${entries.map(
     (e) => html`
       <article class="correction${e.pinned ? " pinned" : ""}">
-        ${e.pinned ? html`<span class="pinned-tag">Pinned · kept forever</span>` : ""}
-        <div class="meta">${e.label} · ${e.day}</div>
+        ${e.pinned ? html`<span class="pinned-tag">Pinned</span>` : ""}
+        <div class="meta">${fmtDay(e.day)}</div>
         ${e.human ? html`<div class="you-said">“${e.human}”</div>` : ""}
         ${e.ai ? html`<div class="ai-said"><b>${e.model || shortSourceName(e.source_name)}:</b> ${e.ai}</div>` : ""}
         <div class="correction-actions">
           ${shareButton("share-correction", "Share", { id: e.id, ghost: true, small: true })}
-          <button class="ghost small" data-action="pin" data-id="${e.id}" data-pinned="${String(e.pinned)}">${e.pinned ? "Unpin" : "Pin, keep forever"}</button>
+          <button class="link small" data-action="counted-wrong" title="${COUNTED_WRONG_HINT}">Counted wrong?</button>
+          <button class="ghost small" data-action="pin" data-id="${e.id}" data-pinned="${String(e.pinned)}">${e.pinned ? "Unpin" : "Pin it"}</button>
         </div>
       </article>`,
   )}</div>`;
@@ -388,6 +392,16 @@ export function scorecardView(s: Stats, input: ScorecardContext): Html {
   return html`
     <div class="views-row">${viewsNav(view)}<div class="filters">${modelPicker(ctx)}${periodNav(period)}</div></div>
     <div class="view-body">${body}</div>`;
+}
+
+/** A period or model with no chats, while other history exists: the filters stay so it can be widened. */
+export function noChatsView(ctx: Pick<ScorecardContext, "filter" | "meta" | "period">): Html {
+  const period = ctx.period ?? "28d";
+  const filtered = isFiltered(ctx.filter);
+  const text = `No chats ${filtered ? `with ${subjectText(ctx.filter, ctx.meta)} ` : ""}${PERIOD_WHEN[period]}.`;
+  const label = period === "all" ? "Show all AI" : filtered ? "Show all time and all AI" : "Show all time";
+  return html`<div class="views-row"><div class="filters">${modelPicker(ctx)}${periodNav(period)}</div></div>
+    <section class="empty"><p>${text}</p><button data-action="widen">${label}</button></section>`;
 }
 
 /** Shown before there's anything to score. `watching` names the sources being read right now. */

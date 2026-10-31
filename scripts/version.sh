@@ -16,11 +16,10 @@ case "${1:-}" in
   "") echo "$v" ;;
   check)
     pkg="$(node -p "require('$ROOT/app/package.json').version")"
-    # tauri.conf.json may leave the version out; then Tauri uses Cargo's.
     conf="$(node -p "require('$ROOT/app/src-tauri/tauri.conf.json').version || ''")"
-    echo "Cargo workspace: $v, app/package.json: $pkg, tauri.conf.json: ${conf:-<unset>}"
+    echo "Cargo workspace: $v, app/package.json: $pkg, tauri.conf.json: ${conf:-<missing>}"
     [[ "$pkg" == "$v" ]] || { echo "app/package.json version differs." >&2; exit 1; }
-    [[ -z "$conf" || "$conf" == "$v" ]] || { echo "tauri.conf.json version differs." >&2; exit 1; }
+    [[ "$conf" == "$v" ]] || { echo "tauri.conf.json version differs." >&2; exit 1; }
     # The report card plugin ships from the same tag, so it carries the same version.
     plugin="$ROOT/plugins/grade/.claude-plugin/plugin.json"
     if [[ -f "$plugin" ]]; then

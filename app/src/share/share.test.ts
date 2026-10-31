@@ -5,6 +5,7 @@ import {
   clip,
   correctionShareText,
   promptShareText,
+  QUOTE_CLIP,
   SHARE_HOSTS,
   SHARE_URL,
   SHARE_URL_SHORT,
@@ -132,6 +133,12 @@ describe("correctionShareText", () => {
     const long = correctionShareText({ model: "GPT", human: "x".repeat(300), ai: null });
     expect(long).toContain("…”");
     expect(long.length).toBeLessThan(220);
+  });
+
+  it("clips both quotes at QUOTE_CLIP, the same length the card image uses", () => {
+    const t = correctionShareText({ model: "GPT", human: "h".repeat(300), ai: "a".repeat(300) });
+    expect(t).toContain(`“${"h".repeat(QUOTE_CLIP - 1)}…”`);
+    expect(t).toContain(`“${"a".repeat(QUOTE_CLIP - 1)}…”`);
   });
 
   it("works when only the category was kept", () => {

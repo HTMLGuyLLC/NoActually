@@ -42,14 +42,25 @@ test("prints the [workspace.package] version, not a later `version =` line", () 
   }
 });
 
-test("check passes when the versions agree, or tauri.conf.json or the plugin is absent", () => {
-  for (const opts of [{}, { conf: "" }, { plugin: "" }]) {
+test("check passes when the versions agree, or the plugin is absent", () => {
+  for (const opts of [{}, { plugin: "" }]) {
     const root = repo(opts);
     try {
       assert.equal(run(root, "check").status, 0, JSON.stringify(opts));
     } finally {
       rmSync(root, { recursive: true });
     }
+  }
+});
+
+test("check fails when tauri.conf.json has no version", () => {
+  const root = repo({ conf: "" });
+  try {
+    const r = run(root, "check");
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /differs/);
+  } finally {
+    rmSync(root, { recursive: true });
   }
 });
 

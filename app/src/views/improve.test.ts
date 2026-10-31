@@ -241,6 +241,14 @@ describe("improveView goal", () => {
   });
 });
 
+describe("improveView first run", () => {
+  it("leads with Choose sources when none is allowed", () => {
+    const m = view(progress({ weeks: [] }), { noSource: true });
+    expect(m).toContain('data-action="go-settings" data-id="sources">Choose sources</button>');
+    expect(view(progress({ weeks: [] }))).not.toContain("Choose sources");
+  });
+});
+
 describe("improveView history", () => {
   it("says there is no history yet, and draws no chart", () => {
     const m = view(progress({ weeks: [] }));

@@ -3,11 +3,12 @@
 use crate::jsonl::{for_each_line, open_at};
 use crate::view::{build, Cut, Sample};
 use crate::{
-    contains, file_name, home, pair, parse_ts, walk, ChatView, Error, Event, FileScan, Kind, Result, Source,
+    contains, file_name, home, pair_from, parse_ts, walk, ChatView, Error, Event, FileScan, Kind, Result, Source,
     GRADE_SKILL_CODEX,
 };
 use engine::Usage;
 use serde_json::Value;
+use std::ffi::OsString;
 use std::io::{BufRead, Read};
 use std::path::{Path, PathBuf};
 
@@ -24,6 +25,16 @@ const NOISE: &[&str] = &[
     "<permissions",
     "<turn_aborted",
 ];
+
+/// Codex's folder: `$CODEX_HOME`, else `~/.codex`. A variable that isn't an absolute path counts as
+/// unset, so nothing is read from wherever the app happens to run.
+fn codex_dir() -> Option<PathBuf> {
+    codex_dir_in(|k| std::env::var_os(k), home())
+}
+
+fn codex_dir_in(env: impl Fn(&str) -> Option<OsString>, home: Option<PathBuf>) -> Option<PathBuf> {
+    env("CODEX_HOME").map(PathBuf::from).filter(|p| p.is_absolute()).or_else(|| home.map(|h| h.join(".codex")))
+}
 
 fn is_zst(p: &Path) -> bool {
     p.extension().is_some_and(|e| e == "zst")
@@ -93,7 +104,7 @@ impl Source for Codex {
         Kind::Live
     }
     fn roots(&self) -> Vec<PathBuf> {
-        let Some(codex) = home().map(|h| h.join(".codex")) else { return Vec::new() };
+        let Some(codex) = codex_dir() else { return Vec::new() };
         vec![codex.join("sessions"), codex.join("archived_sessions")]
     }
     fn files(&self, root: &Path) -> Vec<PathBuf> {
@@ -124,17 +135,19 @@ impl Source for Codex {
     }
 
     fn scan(&self, path: &Path, from: u64, finalize: bool) -> Result<FileScan> {
-        let (rollout, end) = Self::read(path, from, false)?;
+        let (rollout, end) =
+            if from > 0 && !is_zst(path) { Self::read_resumed(path, from)? } else { Self::read(path, from, false)? };
         // Compressed files are finished sessions: read whole, always final.
-        Ok(pair(self.id(), &rollout.session, rollout.events, end, finalize || is_zst(path)))
+        let from = if is_zst(path) { 0 } else { from };
+        Ok(pair_from(self.id(), &rollout.session, rollout.events, from, end, finalize || is_zst(path)))
     }
 }
 
 impl Codex {
     /// Reads a rollout from the top. `usage` also collects the token counts (for the chat view).
     fn read(path: &Path, from: u64, usage: bool) -> Result<(Rollout, u64)> {
-        // Rollouts are always read from the top: the lines before `from` were already emitted,
-        // but they carry the session's metadata and current model.
+        // Read from the top: the lines before `from` were already emitted, but they carry the
+        // session's metadata and current model. (A scan that resumes uses [`Codex::read_resumed`].)
         let reader: Box<dyn BufRead> = if is_zst(path) {
             let file = std::fs::File::open(path).map_err(Error::io(path))?;
             let mut raw = Vec::new();
@@ -152,6 +165,33 @@ impl Codex {
         Ok((rollout, end))
     }
 
+    /// Reads a rollout from `from` without going over the lines before it again. Of those, only the
+    /// first line (whose thread it is) and the last `turn_context` (the model) matter. The model is
+    /// looked for in the [`MODEL_WINDOW`] bytes before `from`; if a rollout went longer than that
+    /// without naming one, it is read from the top, as a first pass would.
+    fn read_resumed(path: &Path, from: u64) -> Result<(Rollout, u64)> {
+        let start = from.saturating_sub(MODEL_WINDOW);
+        let mut rollout = Rollout::new(path, from, false);
+        if start > 0 {
+            let mut first = Vec::new();
+            open_at(path, 0)?.read_until(b'\n', &mut first).map_err(Error::io(path))?;
+            rollout.line(0, &first);
+        }
+        let mut window = open_at(path, start)?.take(from - start);
+        let mut at = start;
+        if start > 0 {
+            // The window may begin mid-line: that line is dropped.
+            at += window.read_until(b'\n', &mut Vec::new()).map_err(Error::io(path))? as u64;
+        }
+        for_each_line(window, at, |pos, buf| rollout.line(pos, buf)).map_err(Error::io(path))?;
+        if start > 0 && rollout.model.is_none() {
+            return Self::read(path, from, false);
+        }
+        let end =
+            for_each_line(open_at(path, from)?, from, |pos, buf| rollout.line(pos, buf)).map_err(Error::io(path))?;
+        Ok((rollout, end))
+    }
+
     /// Reads the end of a rollout, from `from`, and its first line, which says whose thread it is.
     /// The model is only known if the end names it.
     fn read_tail(path: &Path, from: u64) -> Result<(Rollout, u64)> {
@@ -164,6 +204,9 @@ impl Codex {
         Ok((rollout, end))
     }
 }
+
+/// How far back from a resume point to look for the model the rollout last named.
+const MODEL_WINDOW: u64 = 256 * 1024;
 
 /// State carried down one rollout as it's read.
 struct Rollout {
@@ -507,6 +550,47 @@ mod tests {
             // The grading round's tokens are skipped, but the totals still move on.
             assert_eq!(v.prompts[1].usage.input, 100, "{cut}");
         }
+    }
+
+    #[test]
+    fn codex_home_moves_the_folder_but_only_to_an_absolute_path() {
+        let home = Some(PathBuf::from("/home/me"));
+        let var = |v: &'static str| move |k: &str| (k == "CODEX_HOME").then(|| OsString::from(v));
+        assert_eq!(codex_dir_in(|_| None, home.clone()), Some("/home/me/.codex".into()));
+        assert_eq!(codex_dir_in(var("/data/codex"), home.clone()), Some("/data/codex".into()));
+        assert_eq!(codex_dir_in(var(""), home.clone()), Some("/home/me/.codex".into()), "empty is unset");
+        assert_eq!(codex_dir_in(var("relative/codex"), home), Some("/home/me/.codex".into()));
+        assert_eq!(codex_dir_in(var("/data/codex"), None), Some("/data/codex".into()));
+        assert_eq!(codex_dir_in(|_| None, None), None);
+    }
+
+    /// A line the scan skips, `bytes` long, to push a model name out of the window.
+    fn filler(bytes: usize) -> String {
+        line(&json!({"type":"event_msg","payload":{"type":"noise","pad":"x".repeat(bytes)}}))
+    }
+
+    #[test]
+    fn a_resumed_scan_finds_the_model_without_reading_from_the_top() {
+        let model = |m: &str| line(&json!({"type":"turn_context","payload":{"model":m}}));
+        let meta = line(&json!({"type":"session_meta","payload":{"id":"abc","thread_source":"user"}}));
+        let pad: String = (0..300).map(|_| filler(1000)).collect(); // 300 KB: past the window
+        let rest = msg("assistant", "output_text", "Use read_xlsx.", "a1")
+            + &msg("user", "input_text", "that function doesn't exist", "u1")
+            + &msg("assistant", "output_text", "You're right, it's read_excel.", "a2")
+            + &msg("user", "input_text", "thanks", "u2");
+        let prev_model = |body: &str, from: usize| {
+            let (_d, p) = rollout(body);
+            let scan = Codex.scan(&p, from as u64, false).unwrap();
+            let turn = scan.turns.iter().find(|t| t.turn.human == "that function doesn't exist");
+            turn.and_then(|t| t.turn.prev_ai.as_ref().and_then(|m| m.model.clone()))
+        };
+
+        // Named just before the resume point: found in the window.
+        let near = meta.clone() + &model("gpt-6-old") + &pad + &model("gpt-6-astra");
+        assert_eq!(prev_model(&(near.clone() + &rest), near.len()).as_deref(), Some("gpt-6-astra"));
+        // Named once, long before it: not in the window, so the rollout is read from the top.
+        let far = meta + &model("gpt-6-old") + &pad;
+        assert_eq!(prev_model(&(far.clone() + &rest), far.len()).as_deref(), Some("gpt-6-old"));
     }
 
     #[test]
