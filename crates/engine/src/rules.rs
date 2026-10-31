@@ -12,13 +12,23 @@ pub struct Rule {
     /// the next one is tried. The regex crate has no lookahead, so this is how a rule says "but
     /// not when ...".
     unless: Option<Regex>,
+    /// Checked on the text before each match, the same way: "but not right after ...".
+    not_after: Option<Regex>,
 }
 
 impl Rule {
     pub fn find(&self, text: &str) -> Option<Match> {
-        let vetoed = |start: usize| self.unless.as_ref().is_some_and(|u| u.is_match(&text[start..]));
+        let vetoed = |start: usize| {
+            self.unless.as_ref().is_some_and(|u| u.is_match(&text[start..]))
+                || self.not_after.as_ref().is_some_and(|b| b.is_match(&text[..start]))
+        };
         let m = self.re.find_iter(text).find(|m| !vetoed(m.start()))?;
         Some(Match { rule: self.id, span: (m.start(), m.end()) })
+    }
+
+    /// Adds the words that leave an admission open: "let me check if I missed it" admits nothing.
+    fn not_when_unsure(self) -> Rule {
+        Rule { not_after: Some(re(self.id, &format!("(?:{UNSURE})$"))), ..self }
     }
 }
 
@@ -33,12 +43,12 @@ fn re(id: &str, pattern: &str) -> Regex {
 }
 
 pub(crate) fn rule(id: &'static str, pattern: &str) -> Rule {
-    Rule { id, re: re(id, pattern), unless: None }
+    Rule { id, re: re(id, pattern), unless: None, not_after: None }
 }
 
 /// A rule that doesn't fire when `unless` (anchored at the match start) also matches.
 pub(crate) fn rule_unless(id: &'static str, pattern: &str, unless: &str) -> Rule {
-    Rule { id, re: re(id, pattern), unless: Some(re(id, &format!("^(?:{unless})"))) }
+    Rule { id, re: re(id, pattern), unless: Some(re(id, &format!("^(?:{unless})"))), not_after: None }
 }
 
 pub fn first(rules: &[Rule], text: &str) -> Option<Match> {
@@ -50,25 +60,50 @@ pub fn first(rules: &[Rule], text: &str) -> Option<Match> {
 /// only: "No, it worked before you changed it" and "it was fine until…" are corrections.
 const APPROVAL: &str = r"(that|this|it|you)('s|'re|s|re|\s+is|\s+are|\s+looks?|\s+sounds?|\s+seems?)?(\s+(all|also|actually|just|totally|perfectly|pretty|really|now))?\s+(fine|good|great|ok|okay|perfect|right|correct|works?|working)\b";
 
+/// Right before an admission, these leave it open: "let me check if you're right", "I don't think
+/// you're right", "that might be a good catch".
+const UNSURE: &str = r"\b(if|whether|unless|in case|not( sure| certain)?|don'?t think|do not think|doubt|maybe|perhaps|possibly|(might|could|may|would) be|(let me|let's|i'll|i will|to) (check|see|find out|figure out|look at|review|verify) (what|where))\s+((that's|that is|this is|it's)\s+)?(a\s+)?";
+
+/// Separators after a phrase of praise, as in "Good catch, thanks — ".
+const GAP: &str = r"[\s,.!;:—–-]*";
+
+/// "Good catch — let me check what's running": praise, then a promise to go and look. It says the
+/// question was smart, not that you were right. "Good catch — if that's so" hedges the same way.
+const WILL_CHECK: &str = r"(let me|let's|lemme|i'?ll|i will|i'?m going to|i need to|i should|i want to|i'?d like to|going to)\s+((first|just|quickly|go|also|actually)\s+)*(double[- ]?|re-?)?(check|verify|confirm|look|see|investigate|inspect|review|dig|examine|trace|read|find out|take a look|have a look)\b|(checking|verifying|confirming|looking|investigating|digging|inspecting|reviewing|examining)\b|if (so|true|that|this|it|you)\b";
+
+/// "You're right to ask": the question was fair, which doesn't make the claim true.
+const RIGHT_TO_ASK: &str = r"you('?re| are) (absolutely |totally |completely )?(right|correct) to (ask|question|wonder|check|double-check|verify|confirm|be (suspicious|skeptical|sceptical|cautious|careful|concerned|curious|wary|worried))\b";
+
 /// The AI admits it was wrong (checked at the start of its next reply).
 pub static AI_ADMIT: LazyLock<Vec<Rule>> = LazyLock::new(|| {
+    let good_catch = format!(
+        r"(good|great|nice|sharp) catch(\s+(there|on\s[^.!?,;:\n—–]{{1,40}}))?{GAP}((thanks|thank you|and|but|so|first|now|ok|okay|hmm|hold on|one sec|one moment)\b{GAP})*({WILL_CHECK})"
+    );
     vec![
-        rule("ai.youre_right", r"\byou'?re (absolutely |totally |completely )?right\b"),
-        rule("ai.you_are_right", r"\byou are (absolutely )?right\b"),
-        rule("ai.good_catch", r"\b(good|great|nice|sharp) catch\b"),
+        rule_unless("ai.youre_right", r"\byou'?re (absolutely |totally |completely )?(right|correct)\b", RIGHT_TO_ASK),
+        rule_unless("ai.you_are_right", r"\byou (are|were) (absolutely |totally |completely )?(right|correct)\b", RIGHT_TO_ASK),
+        rule_unless("ai.good_catch", r"\b(good|great|nice|sharp) catch\b", &good_catch),
         rule("ai.my_mistake", r"\bmy (mistake|bad|apologies|error)\b"),
         rule(
             "ai.i_was_wrong",
-            r"\bi (was wrong|got (that|it) wrong|missed|misread|overlooked|misunderstood|made (a|an) (mistake|error))\b",
+            r"\bi (was wrong|got (that|it) wrong|missed|misread|overlooked|misunderstood|made (a|an) (mistake|error)|used the wrong)\b",
         ),
         rule("ai.apologize", r"\bi apologi[sz]e\b"),
-        rule("ai.sorry", r"\bsorry,? (about that|for (the|that))\b"),
+        rule_unless(
+            "ai.sorry",
+            r"\bsorry,? (about that|for (the|that))\b",
+            // A slow reply is manners, not a mistake.
+            r"sorry,? for (the|that) (long |short )?(delay|wait|interruption)\b",
+        ),
         rule("ai.on_me", r"\bthat'?s on me\b"),
         rule("ai.should_have", r"\bi should have\b"),
         rule("ai.incorrectly", r"\bi incorrectly\b"),
         rule("ai.that_was_wrong", r"\bthat was (wrong|incorrect|a mistake)\b"),
         rule("ai.didnt_check", r"\bi (didn'?t|did not) (actually )?(check|verify|read|correction)\b"),
     ]
+    .into_iter()
+    .map(Rule::not_when_unsure)
+    .collect()
 });
 
 /// You open your message by pushing back.

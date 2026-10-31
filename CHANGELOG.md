@@ -4,6 +4,10 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+### Fixed
+
+- "Good catch, let me check" no longer counts as the AI admitting it was wrong. That reply only says the question was smart. The same goes for "You're right to ask" and for "let me check if I missed it". Real admissions still count, including when they come later in the same reply, and "you were right" and "you're correct" now count too. Replies are still read one at a time, so a confirmation in a later reply isn't counted. History is re-read once to apply this (rules version 9).
+
 ## [0.5.2] - 2026-10-31
 
 ### Added

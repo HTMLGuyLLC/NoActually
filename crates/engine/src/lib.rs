@@ -201,7 +201,9 @@ impl Verdict {
 /// 7: a route on its own ("/hi", "/api/users") points at it.
 /// 8: "look at the logs" (or check, read, review the output) shows proof; "you should fix it"
 ///    names the job, not a finish line.
-pub const RULES_VERSION: u32 = 8;
+/// 9: "Good catch, let me check" and "You're right to ask" aren't admissions, nor is one left open
+///    ("let me check if I missed it"); "you were right" and "you're correct" are.
+pub const RULES_VERSION: u32 = 9;
 
 /// Tools write placeholder ids for replies no model wrote (Claude Code's "<synthetic>" for errors,
 /// interruptions and "No response requested").

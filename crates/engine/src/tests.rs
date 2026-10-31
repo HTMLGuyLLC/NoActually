@@ -69,6 +69,64 @@ fn context_is_never_a_correction() {
 }
 
 #[test]
+fn praise_and_a_promise_to_check_is_no_admission() {
+    for reply in [
+        "Good catch — let me check what's actually running.",
+        "Good catch - let me check.",
+        "Good catch! Let me verify that.",
+        "Great catch. I'll look into it.",
+        "Nice catch, thanks — let me double-check the config.",
+        "Sharp catch. Let me take a look.",
+        "Good catch there, I'm going to confirm which one is live.",
+        "Good catch on the port number, let me re-check it.",
+        "Good catch — first let me see what the script does.",
+        "Good catch, checking now.",
+        "Good catch, if that's the case I'll change it.",
+        "Good question — let me check.",
+        "Good point, let me verify.",
+        "Let me look.",
+        "You're right to ask, let me check.",
+        "You are right to question that. Let me see.",
+        "You're absolutely right to be suspicious of it.",
+        "Let me check whether you're right.",
+        "I'll see if you're right about the flag.",
+        "Let me check if I missed anything.",
+        "Let me see what I missed.",
+        "I'm not sure you're right about that.",
+        "That might be a good catch, let me see.",
+        "Sorry for the delay, let me check.",
+    ] {
+        assert_eq!(rules::first(&rules::AI_ADMIT, reply).map(|m| m.rule), None, "{reply}");
+        assert_eq!(label("We use the old tool.", "aren't we on the new tool now?", reply), None, "{reply}");
+    }
+    // Your pushback still counts on its own: it just isn't confirmed.
+    assert_eq!(label("Fixed.", "that's wrong", "Good catch — let me check."), Some(Label::Claimed));
+}
+
+#[test]
+fn the_whole_reply_can_still_admit_it() {
+    for (reply, id) in [
+        ("Good catch, I was wrong.", "ai.good_catch"),
+        ("Good catch, the loop was off by one.", "ai.good_catch"),
+        ("Good catch — let me fix that.", "ai.good_catch"),
+        ("Good catch.", "ai.good_catch"),
+        ("You're right, I used the wrong one.", "ai.youre_right"),
+        ("You're right, let me check the rest.", "ai.youre_right"),
+        ("Let me check. You're correct, it's the new tool.", "ai.youre_right"),
+        ("Good catch — let me check. You're right, it was stale.", "ai.youre_right"),
+        ("Good catch, let me look. Yes, you were right.", "ai.you_are_right"),
+        ("Good catch — let me check. I used the wrong one.", "ai.i_was_wrong"),
+        ("You're right to ask: I missed that.", "ai.i_was_wrong"),
+        ("Good question. I should have asked first.", "ai.should_have"),
+        ("Here's what I missed: the flag.", "ai.i_was_wrong"),
+        ("Sorry for the mix-up.", "ai.sorry"),
+    ] {
+        assert_eq!(rules::first(&rules::AI_ADMIT, reply).map(|m| m.rule), Some(id), "{reply}");
+        assert_eq!(label("x", "are you sure about that?", reply), Some(Label::Admitted), "{reply}");
+    }
+}
+
+#[test]
 fn humbled_when_the_ai_corrects_you() {
     let v = classify(&turn("Done.", "this tool has no ui right?", "Actually it does. There's a web UI flag."));
     assert_eq!(v.label, Some(Label::Humbled));
