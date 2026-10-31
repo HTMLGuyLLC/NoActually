@@ -1,5 +1,5 @@
 // The UI's state: one object, read anywhere, changed only through the named setters below.
-import type { Filter, Meta, ModelRow, ReportCardsStatus, ReportCardTool, Stats, SyncStatus, UpdateStatus, Verdict } from "./api";
+import type { Filter, Meta, ModelRow, ReportCardsStatus, ReportCardTool, Stats, SyncStatus, UpdateChannel, UpdateStatus, Verdict } from "./api";
 import { localIsoDate } from "./format";
 
 export const TABS = ["score", "improve", "learn", "settings"] as const;
@@ -175,6 +175,9 @@ export function setUpdate(update: UpdateStatus): void {
 }
 export function setAutoUpdate(auto: boolean): void {
   if (s.update) s.update = { ...s.update, auto };
+}
+export function setUpdateChannel(channel: UpdateChannel): void {
+  if (s.update) s.update = { ...s.update, channel };
 }
 export function setLaterFor(version: string | null): void {
   s.laterFor = version;

@@ -1,6 +1,7 @@
 //! Update checks. One thread asks GitHub Releases for `latest.json` a minute after launch and
 //! every few hours, if the person allows it. A new version is only announced; nothing is
-//! downloaded or installed until they click "Restart to update".
+//! downloaded or installed until they click "Restart to update". The stable channel reads the
+//! address in `tauri.conf.json`; the beta channel reads [`BETA_ENDPOINT`].
 
 use crate::{lock, App};
 use serde::Serialize;
@@ -19,6 +20,23 @@ const INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 /// Settings key. Anything but "off" means on, so automatic checks start enabled.
 pub const AUTO_KEY: &str = "updates.auto";
 
+/// Settings key. Anything but "beta" means stable, so people get full releases unless they ask.
+pub const CHANNEL_KEY: &str = "updates.channel";
+pub const STABLE: &str = "stable";
+pub const BETA: &str = "beta";
+/// Where the beta channel's `latest.json` lives: a release that holds only that file, which
+/// `scripts/publish-release.sh` replaces. It names the newest release, beta or not.
+const BETA_ENDPOINT: &str = "https://github.com/HTMLGuyLLC/NoActually/releases/download/beta-channel/latest.json";
+
+/// The channel a saved setting means.
+pub fn channel(setting: Option<&str>) -> &'static str {
+    if setting == Some(BETA) {
+        BETA
+    } else {
+        STABLE
+    }
+}
+
 pub fn auto_enabled(setting: Option<&str>) -> bool {
     setting != Some("off")
 }
@@ -35,6 +53,7 @@ pub fn menu_text(available: Option<&str>) -> String {
 pub struct UpdateStatus {
     pub current: String,
     pub auto: bool,
+    pub channel: String,
     pub checking: bool,
     pub installing: bool,
     /// The newer version on offer, if any.
@@ -62,8 +81,17 @@ impl Updates {
     }
 
     pub fn status(&self, app: &App) -> UpdateStatus {
-        let auto = auto_enabled(lock(&app.reader).get_setting(AUTO_KEY).ok().flatten().as_deref());
-        UpdateStatus { auto, ..lock(&self.status).clone() }
+        let reader = lock(&app.reader);
+        let auto = auto_enabled(reader.get_setting(AUTO_KEY).ok().flatten().as_deref());
+        let channel = channel(reader.get_setting(CHANNEL_KEY).ok().flatten().as_deref()).to_string();
+        UpdateStatus { auto, channel, ..lock(&self.status).clone() }
+    }
+
+    /// Forgets what the old channel offered, so a beta isn't left waiting after a move to stable.
+    pub fn forget_offer(&self, handle: &AppHandle) {
+        *lock(&self.pending) = None;
+        lock(&self.status).available = None;
+        changed(handle, self);
     }
 }
 
@@ -72,10 +100,21 @@ fn changed(handle: &AppHandle, updates: &Updates) {
     let _ = handle.emit("update-changed", ());
 }
 
-fn check(handle: &AppHandle, updates: &Updates) {
+/// Asks the channel's address for the newest version.
+async fn newest(handle: &AppHandle, channel: &str) -> tauri_plugin_updater::Result<Option<Update>> {
+    let updater = if channel == BETA {
+        handle.updater_builder().endpoints(vec![BETA_ENDPOINT.parse()?])?.build()?
+    } else {
+        handle.updater()?
+    };
+    updater.check().await
+}
+
+fn check(handle: &AppHandle, app: &App, updates: &Updates) {
     lock(&updates.status).checking = true;
     changed(handle, updates);
-    let found = tauri::async_runtime::block_on(async { handle.updater()?.check().await });
+    let channel = updates.status(app).channel;
+    let found = tauri::async_runtime::block_on(newest(handle, &channel));
     {
         let mut status = lock(&updates.status);
         status.checking = false;
@@ -150,11 +189,11 @@ pub fn spawn(handle: AppHandle, app: Arc<App>, rx: mpsc::Receiver<Msg>) {
         let mut wait = FIRST_CHECK;
         loop {
             match rx.recv_timeout(wait) {
-                Ok(Msg::CheckNow) => check(&handle, &updates),
+                Ok(Msg::CheckNow) => check(&handle, &app, &updates),
                 // Development builds never check on their own: they'd offer to replace themselves.
                 Err(mpsc::RecvTimeoutError::Timeout) => {
                     if !cfg!(debug_assertions) && updates.status(&app).auto {
-                        check(&handle, &updates);
+                        check(&handle, &app, &updates);
                     }
                 }
                 Err(mpsc::RecvTimeoutError::Disconnected) => return,
@@ -173,6 +212,19 @@ mod tests {
         assert!(auto_enabled(None));
         assert!(auto_enabled(Some("on")));
         assert!(!auto_enabled(Some("off")));
+    }
+
+    #[test]
+    fn the_channel_is_stable_unless_beta_was_picked() {
+        assert_eq!(channel(None), STABLE);
+        assert_eq!(channel(Some("stable")), STABLE);
+        assert_eq!(channel(Some("nightly")), STABLE);
+        assert_eq!(channel(Some("beta")), BETA);
+    }
+
+    #[test]
+    fn the_beta_address_is_a_valid_url() {
+        assert!(BETA_ENDPOINT.parse::<tauri::Url>().is_ok());
     }
 
     #[test]

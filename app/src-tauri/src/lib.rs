@@ -432,6 +432,7 @@ pub fn run() {
             commands::open_share,
             commands::update_status,
             commands::set_auto_update,
+            commands::set_update_channel,
             commands::check_for_updates,
             commands::install_update,
             commands::log_error,

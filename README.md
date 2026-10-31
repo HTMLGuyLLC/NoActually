@@ -316,7 +316,7 @@ The other files are for special cases:
 - `-Linux-Ubuntu-Debian-amd64.deb` and `-Linux-Fedora-x86_64.rpm` install through your package manager.
 - `SHA256SUMS.txt` lets you verify a download.
 
-The app checks for new versions and shows **Restart to update** when one is ready. Nothing is downloaded or installed until you click it, and an update only installs if its signature matches the project's key. Turn the check off in Settings → General.
+The app checks for new versions and shows **Restart to update** when one is ready. Nothing is downloaded or installed until you click it, and an update only installs if its signature matches the project's key. Turn the check off in Settings → General. To get new versions first, set **Update channel** to **Beta** there. Betas may have bugs. Going back to Stable keeps your version until a newer full release comes out.
 
 ## For developers
 

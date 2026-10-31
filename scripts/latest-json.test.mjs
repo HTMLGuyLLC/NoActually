@@ -122,3 +122,20 @@ test("the command line reads `<id>\\t<name>` asset lists", () => {
     rmSync(dir, { recursive: true });
   }
 });
+
+test("version prints what a latest.json offers, and refuses one with none", () => {
+  const dir = mkdtempSync(join(tmpdir(), "latest-json-"));
+  try {
+    const script = new URL("./latest-json.mjs", import.meta.url).pathname;
+    const run = (body) => {
+      writeFileSync(join(dir, "latest.json"), body);
+      return spawnSync(process.execPath, [script, "version", join(dir, "latest.json")], { encoding: "utf8" });
+    };
+    const good = run(JSON.stringify({ version: "0.2.0" }));
+    assert.equal(good.status, 0, good.stderr);
+    assert.equal(good.stdout.trim(), "0.2.0");
+    assert.notEqual(run("{}").status, 0);
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
+});

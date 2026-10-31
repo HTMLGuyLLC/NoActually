@@ -107,6 +107,14 @@ function generalView({ autostart, menuBar, update, demo }: SettingsContext): Htm
         <span class="muted small" id="auto-update-help">Asks GitHub for the latest version number at launch and every 6 hours. Sends nothing about you.</span>
       </div>
       <div class="settings-row">
+        <label class="toggle" for="update-channel">Update channel</label>
+        <select id="update-channel" data-action="update-channel" aria-describedby="update-channel-help"${off}>
+          <option value="stable"${attr(update?.channel !== "beta", "selected")}>Stable</option>
+          <option value="beta"${attr(update?.channel === "beta", "selected")}>Beta</option>
+        </select>
+        <span class="muted small" id="update-channel-help">Stable gets full releases. Beta gets new versions first, and they may have bugs. Going back to Stable keeps your version until a newer full release comes out.</span>
+      </div>
+      <div class="settings-row">
         <button class="ghost" data-action="check-update"${off}>Check for app updates</button>
         <span class="muted small" id="update-line" aria-live="polite">${update ? updateLine(update) : ""}</span>
       </div>

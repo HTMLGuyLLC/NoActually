@@ -43,6 +43,7 @@ Nothing is read until the user allows it.
 
 `app/src-tauri/src/updater.rs` uses `tauri-plugin-updater`. One thread fetches `https://github.com/HTMLGuyLLC/NoActually/releases/latest/download/latest.json` a minute after launch and every 6 hours, while **Check for app updates automatically** (Settings → General) is on (setting `updates.auto`, default on). Development builds never check on their own.
 
+- **Update channel** (Settings → General, setting `updates.channel`) picks the address. Stable reads the address above, which GitHub keeps on the newest release that isn't a prerelease. Beta reads `releases/download/beta-channel/latest.json`, on a release that holds only that file. `scripts/publish-release.sh` copies each release's `latest.json` there, so beta also gets full releases. The updater never offers an older version, so going back to Stable keeps the installed version until a newer full release comes out.
 - The request is a plain GET with the plugin's user agent. No identifiers, stats or chat data are sent.
 - `latest.json` (written by `scripts/finish-release.sh`) holds the version, release date, and per platform a download URL on the same release plus a minisign signature.
 - A newer version shows a "Restart to update" banner in the scorecard window and a tray menu item. Nothing is downloaded until the user clicks one; then the plugin downloads the file, checks it against the public key in `tauri.conf.json` (`plugins.updater.pubkey`), installs it and restarts. It never restarts on its own.

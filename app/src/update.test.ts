@@ -6,6 +6,7 @@ import { updateBanner, updateLine } from "./update";
 const status = (over: Partial<UpdateStatus>): UpdateStatus => ({
   current: "0.1.0",
   auto: true,
+  channel: "stable",
   checking: false,
   installing: false,
   available: null,

@@ -373,6 +373,23 @@ pub fn set_auto_update(app: State<Arc<App>>, updates: State<Updates>, enabled: b
     Ok(())
 }
 
+/// Switches between stable and beta, and looks on the new channel straight away.
+#[tauri::command(async)]
+pub fn set_update_channel(
+    handle: AppHandle,
+    app: State<Arc<App>>,
+    updates: State<Updates>,
+    channel: String,
+) -> Res<()> {
+    if channel != updater::STABLE && channel != updater::BETA {
+        return Err("That isn't an update channel.".into());
+    }
+    lock(&app.writer).set_setting(updater::CHANNEL_KEY, &channel).map_err(err)?;
+    updates.forget_offer(&handle);
+    let _ = updates.tx.send(updater::Msg::CheckNow);
+    Ok(())
+}
+
 #[tauri::command]
 pub fn check_for_updates(updates: State<Updates>) {
     let _ = updates.tx.send(updater::Msg::CheckNow);

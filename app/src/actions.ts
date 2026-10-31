@@ -36,6 +36,7 @@ import {
   setReportCards,
   setSettingsPane,
   setTab,
+  setUpdateChannel,
   setView,
   state,
 } from "./state";
@@ -527,6 +528,16 @@ export const changeActions = {
   },
   "report-cards-reminders": (box) => saveCardsSetting(box, "reminders", (on) => api.reportCardsSetReminders(on)),
   quiz: (r) => r instanceof HTMLInputElement && judgeQuiz(r),
+  "update-channel": async (sel) => {
+    if (sel.value !== "stable" && sel.value !== "beta") return;
+    const before = state.update?.channel ?? "stable";
+    try {
+      await api.setUpdateChannel(sel.value);
+      setUpdateChannel(sel.value);
+    } catch {
+      sel.value = before;
+    }
+  },
   "period-pick": (sel) => {
     if (!isPeriod(sel.value)) return;
     setPeriod(sel.value);
