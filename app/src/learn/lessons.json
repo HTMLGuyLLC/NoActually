@@ -9,8 +9,8 @@
   "tracks": [
     {
       "id": "habits",
-      "title": "The 5 habits",
-      "blurb": "Five things a good prompt includes, whoever you hand it to.",
+      "title": "The 6 habits",
+      "blurb": "Six things a good prompt includes, whoever you hand it to.",
       "lessons": [
         {
           "id": "point-at-it",
@@ -195,6 +195,49 @@
               "options": ["spot", "done", "limits", "why"],
               "answer": "why",
               "explain": "Who asked for it, and what for? That shapes every small choice."
+            }
+          ]
+        },
+        {
+          "id": "say-what-you-know",
+          "title": "Context",
+          "reviewed": "2026-10",
+          "teaches": { "context": true },
+          "why": "What you already know saves the first wrong turn, and the second.",
+          "before": {
+            "text": "The search page is slow. Make it faster.",
+            "signals": []
+          },
+          "after": {
+            "text": "The search in searchProducts.ts is slow once a filter is on. I already tried adding an index and it changed nothing. It should return in under 200ms.",
+            "signals": ["spot", "done"]
+          },
+          "template": "<the task>. I already know <what you found>. I already tried <what didn't work>.",
+          "tips": [
+            "Say what you already tried and ruled out, and what happened, so nobody checks it twice.",
+            "Share facts the code can't show: what changed, and when it started.",
+            "Say facts about your setup and taste: “it's a Squarespace site”, “we use Tailwind”."
+          ],
+          "quiz": [
+            {
+              "kind": "sharper",
+              "question": "Which prompt is more specific?",
+              "options": [
+                "Fix the crash on empty carts.",
+                "Fix the crash in `cart.ts` on empty carts. It started after we added coupons, and it only happens when one is applied."
+              ],
+              "answer": 1,
+              "explain": "It says where to look and what changed, so the first guess is a good one."
+            },
+            {
+              "kind": "sharper",
+              "question": "Which prompt is more specific?",
+              "options": [
+                "The nightly import in `import.py` fails. I already checked the file format and it's fine, so look at the dates.",
+                "The nightly import fails."
+              ],
+              "answer": 0,
+              "explain": "It rules out the file format, so nobody spends time checking it again."
             }
           ]
         }

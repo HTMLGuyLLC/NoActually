@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import shipped from "../public/demo.json";
 import { demoCall, demoStats, isDemoData, judge } from "./api.demo";
 import { periodSince } from "./state";
-import { hallEntry, meta, progress, prompts, row, stats } from "./test/fixtures";
+import { hallEntry, meta, progress, prompts, row, stats, week } from "./test/fixtures";
 
 const base = stats({
   corrections: 100,
@@ -14,7 +14,17 @@ const base = stats({
   weekly: [{ week: "2026-10-19", messages: 40, corrections: 12, continued: 10, landed: 8, humbled: 0, categories: {}, steering: {} }],
   hall_of_fame: [hallEntry({ id: 1, model: "Claude Opus 5" }), hallEntry({ id: 2, model: "GPT Astra 6" })],
 });
-const data = { meta, stats: base, progress: progress() };
+const recent = {
+  day: "2026-10-27",
+  graded_day: "2026-10-28",
+  source: "claude-code",
+  grade: "B",
+  missing: "finish",
+  extra_cost: 0.3,
+  extra_tokens: 1000,
+  extra_minutes: 4,
+};
+const data = { meta, stats: base, progress: progress(), recent_report_cards: [recent] };
 
 describe("demoStats", () => {
   it("returns the sample as is with no filter", () => {
@@ -148,6 +158,26 @@ describe("isDemoData", () => {
     expect(isDemoData({ ...data, stats: { ...base, overall: { ...base.overall, verdict: "maybe" } } })).toBe(false);
     expect(isDemoData(null)).toBe(false);
   });
+
+  it("rejects a demo without the report card pieces", () => {
+    const { recent_report_cards: _recent, ...noRecent } = data;
+    expect(isDemoData(noRecent)).toBe(false);
+    expect(isDemoData({ ...data, meta: { ...meta, habits: undefined } })).toBe(false);
+    expect(isDemoData({ ...data, progress: { ...data.progress, weeks: [{ ...week("2026-10-05"), report_cards: undefined }] } })).toBe(false);
+  });
+
+  it("has report cards to show in every piece of Improve", () => {
+    if (!isDemoData(shipped)) throw new Error("not demo data");
+    const weeks = shipped.progress.weeks;
+    expect(weeks.filter((w) => w.report_cards.graded > 0).length).toBeGreaterThan(5);
+    expect(weeks.some((w) => w.report_cards.graded >= 1 && w.report_cards.graded < shipped.meta.min_card_week)).toBe(true); // a hollow dot
+    expect(weeks.some((w) => w.report_cards.graded > 0 && w.report_cards.extra_cost == null)).toBe(true); // an unpriced week
+    expect(weeks.every((w) => (w.report_cards.extra_cost == null) === (w.report_cards.priced === 0))).toBe(true);
+    expect(weeks.some((w) => w.report_cards.priced > 0 && w.report_cards.priced < w.report_cards.graded)).toBe(true); // a partly priced week
+    expect(shipped.progress.bests.report_card).not.toBeNull();
+    expect(shipped.progress.insights.report_cards?.habit).not.toBeNull();
+    expect(shipped.recent_report_cards).toHaveLength(5);
+  });
 });
 
 describe("demoCall", () => {
@@ -195,6 +225,10 @@ describe("demoCall", () => {
     });
     afterEach(() => vi.unstubAllGlobals());
 
+    it("answers the recent report cards", async () => {
+      expect(await demoCall("recent_report_cards", { filter: {} })).toEqual([recent]);
+    });
+
     it("answers progress, and shows the goal set during the visit", async () => {
       expect((await demoCall("progress", { filter: {} })).goal).toBeNull();
       const goal = await demoCall("set_goal", { kind: { kind: "habit", signal: "why" }, target: 40 });
@@ -216,6 +250,41 @@ describe("demoCall", () => {
       expect(await demoCall("set_learned", { id: "b", done: true })).toEqual(["a", "b"]);
       expect(await demoCall("set_learned", { id: "a", done: true })).toEqual(["b", "a"]);
       expect(await demoCall("set_learned", { id: "b", done: false })).toEqual(["a"]);
+    });
+
+    it("shows report cards on in Claude Code with the day its latest card was graded, and Codex not installed", async () => {
+      expect(await demoCall("report_cards_status", { look: false })).toEqual({
+        claude_code: { installed_tool: true, on: true, last_card_day: "2026-10-28", problem: null, left_out: 0, unavailable: null },
+        codex: { installed_tool: false, on: false, last_card_day: null, problem: null, left_out: 0, unavailable: null },
+        tips: false,
+        tip_activity: { active: 0, tips: 0, blocked: false },
+        reminders: true,
+        translocated: false,
+      });
+    });
+
+    it("remembers report card choices for the visit and changes nothing else", async () => {
+      const look = { look: false };
+      expect(await demoCall("report_cards_turn_off", { tool: "claude_code" })).toBeNull();
+      expect((await demoCall("report_cards_status", look)).claude_code.on).toBe(false);
+      await demoCall("report_cards_turn_on", { tool: "claude_code" });
+      expect((await demoCall("report_cards_status", look)).claude_code.on).toBe(true);
+      await demoCall("report_cards_turn_on", { tool: "codex" });
+      expect((await demoCall("report_cards_status", look)).codex).toEqual({
+        installed_tool: false,
+        on: false,
+        last_card_day: null,
+        problem: null,
+        left_out: 0,
+        unavailable: null,
+      });
+      await demoCall("report_cards_set_tips", { on: true });
+      expect((await demoCall("report_cards_status", look)).tips).toBe(true);
+      await demoCall("report_cards_set_tips", { on: false });
+      await demoCall("report_cards_set_reminders", { on: false });
+      expect((await demoCall("report_cards_status", look)).reminders).toBe(false);
+      await demoCall("report_cards_set_reminders", { on: true });
+      expect(await demoCall("report_cards_delete_history", undefined)).toBe(0);
     });
 
     it("remembers the menu bar setting", async () => {

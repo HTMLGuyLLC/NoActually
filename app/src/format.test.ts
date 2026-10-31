@@ -1,5 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ago, errorText, filterLabel, fmtDay, isFiltered, last, listNames, localIsoDate, plural, shortSourceName, subjectLabel, subjectText } from "./format";
+import {
+  ago,
+  errorText,
+  filterLabel,
+  fmtDay,
+  isFiltered,
+  last,
+  listNames,
+  localIsoDate,
+  money,
+  plural,
+  shortSourceName,
+  subjectLabel,
+  subjectText,
+} from "./format";
 import { meta } from "./test/fixtures";
 
 describe("ago", () => {
@@ -136,5 +150,18 @@ describe("browser support", () => {
       expect(text, `${file} uses .at(`).not.toMatch(/\.at\(/);
       expect(text, `${file} uses .roundRect(`).not.toMatch(/\.roundRect\(/);
     }
+  });
+});
+
+describe("money", () => {
+  it("shows cents under $100 and whole dollars from there", () => {
+    expect(money(0.15)).toBe("$0.15");
+    expect(money(4.2)).toBe("$4.20");
+    expect(money(0)).toBe("$0.00");
+    expect(money(99.994)).toBe("$99.99");
+    expect(money(99.999)).toBe("$100");
+    expect(money(120.4)).toBe("$120");
+    expect(money(1234.5)).toBe("$1,235");
+    expect(money(1_000_000)).toBe("$1,000,000");
   });
 });

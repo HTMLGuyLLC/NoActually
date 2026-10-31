@@ -1,24 +1,29 @@
 // The browser demo's stand-in for the Rust side: sample numbers from public/demo.json, read-only.
-import type { ArgsOf, Command, Filter, Goal, GoalStatus, Meta, Overall, Progress, Prompts, ResultOf, SourceInfo, Stats } from "./api";
+import type { ArgsOf, Command, Filter, Goal, GoalStatus, Meta, Overall, Progress, Prompts, RecentReportCard, ResultOf, SourceInfo, Stats } from "./api";
 import { isFiltered } from "./format";
 import { modelName } from "./picker/picker";
 import { periodSince } from "./state";
 
-export type DemoData = { meta: Meta; stats: Stats; progress: Progress };
+export type DemoData = { meta: Meta; stats: Stats; progress: Progress; recent_report_cards: RecentReportCard[] };
 
 const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
 
 /** A light check that demo.json has the shape the UI reads, so a stale file fails loudly, not oddly. */
 export function isDemoData(x: unknown): x is DemoData {
-  if (!isRecord(x) || !isRecord(x.meta) || !isRecord(x.stats) || !isRecord(x.progress)) return false;
+  if (!isRecord(x) || !isRecord(x.meta) || !isRecord(x.stats) || !isRecord(x.progress) || !Array.isArray(x.recent_report_cards)) return false;
   const { meta, stats, progress } = x;
   return (
     Array.isArray(meta.tiers) &&
     Array.isArray(meta.categories) &&
     Array.isArray(meta.sources) &&
+    Array.isArray(meta.habits) &&
+    typeof meta.min_card_week === "number" &&
     isRecord(stats.overall) &&
     (stats.overall.verdict === "no" || stats.overall.verdict === "hmm") &&
     Array.isArray(progress.weeks) &&
+    progress.weeks.every((w) => isRecord(w) && isRecord(w.report_cards)) &&
+    isRecord(progress.bests) &&
+    isRecord(progress.insights) &&
     typeof stats.corrections === "number" &&
     Array.isArray(stats.models) &&
     Array.isArray(stats.weekly) &&
@@ -180,7 +185,13 @@ const demoSources: SourceInfo[] = [
 type Handlers = { [C in Command]: (args: ArgsOf<C>) => ResultOf<C> | Promise<ResultOf<C>> };
 
 /** The demo keeps what you set in Learn and Improve for the visit, so trying them feels real. */
-const visit: { learned: string[]; goal: GoalStatus | null | undefined; menuBar: boolean } = { learned: [], goal: undefined, menuBar: true };
+const visit: { learned: string[]; goal: GoalStatus | null | undefined; menuBar: boolean; cards: { claude: boolean; tips: boolean; reminders: boolean } } = {
+  learned: [],
+  goal: undefined,
+  menuBar: true,
+  // Report cards: on in Claude Code, and Codex isn't here.
+  cards: { claude: true, tips: false, reminders: true },
+};
 
 const fresh = (goal: Goal): GoalStatus => ({ goal, weeks: [], met: 0, streak: 0, needed: goal.kind === "tier" ? 0 : 4, done: false, need: null, score: null });
 
@@ -223,6 +234,7 @@ const handlers: Handlers = {
     const p = (await demoData()).progress;
     return visit.goal === undefined ? p : { ...p, goal: visit.goal };
   },
+  recent_report_cards: async () => (await demoData()).recent_report_cards,
   set_goal: ({ kind, target }) => {
     const now = new Date();
     const local = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -248,6 +260,37 @@ const handlers: Handlers = {
     visit.menuBar = enabled;
     return null;
   },
+  report_cards_status: async () => {
+    const days = (await demoData()).recent_report_cards.filter((c) => c.source === "claude-code").map((c) => c.graded_day);
+    return {
+      claude_code: { installed_tool: true, on: visit.cards.claude, last_card_day: days.sort().pop() ?? null, problem: null, left_out: 0, unavailable: null },
+      codex: { installed_tool: false, on: false, last_card_day: null, problem: null, left_out: 0, unavailable: null },
+      tips: visit.cards.tips,
+      tip_activity: { active: visit.cards.tips ? 6 : 0, tips: visit.cards.tips ? 14 : 0, blocked: false },
+      reminders: visit.cards.reminders,
+      translocated: false,
+    };
+  },
+  // The demo changes nothing on your computer; it only remembers the choice for the visit.
+  report_cards_turn_on: ({ tool }) => {
+    if (tool === "claude_code") visit.cards.claude = true;
+    return null;
+  },
+  report_cards_turn_off: ({ tool }) => {
+    if (tool === "claude_code") visit.cards.claude = false;
+    return null;
+  },
+  report_cards_set_tips: ({ on }) => {
+    visit.cards.tips = on;
+    return null;
+  },
+  report_cards_set_reminders: ({ on }) => {
+    visit.cards.reminders = on;
+    return null;
+  },
+  report_cards_delete_history: () => 0,
+  log_error: () => null,
+  open_log_folder: () => null,
 };
 
 export async function demoCall<C extends Command>(cmd: C, args: ArgsOf<C>): Promise<ResultOf<C>> {

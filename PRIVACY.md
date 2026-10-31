@@ -1,10 +1,12 @@
 # Privacy
 
-No, Actually... runs on your computer. Your chats are not sent anywhere.
+*Last updated 2026-10-30. No, Actually... is made by HTMLGuy LLC. Questions: [GitHub Discussions](https://github.com/HTMLGuyLLC/NoActually/discussions).*
+
+No, Actually... runs on your computer. The app doesn't send your chats anywhere.
 
 ## What it reads
 
-Only sources you allow. On first launch the app lists each AI tool it detects, with the exact path it would read. Every source is off until you tap **Allow**. You can also set a backfill window (everything, since a date, or none), pause a source, or revoke it.
+Only sources you allow. On first launch the app lists each AI tool it detects, with the exact path it would read. Every source is off until you tap **Allow**. You can also set a backfill window (everything, since a date, or none), pause a source, or revoke it. While a source is paused, revoked or forgotten, the report card hooks stay out of its chats too.
 
 macOS may show its own "access data from other apps" prompt for some sources. Saying no there only means that source can't be read.
 
@@ -19,6 +21,9 @@ macOS may show its own "access data from other apps" prompt for some sources. Sa
 | Goal weeks and trophies | Each finished week's count, percent and result; finished goals and the day | Never | Forever (kept even after Forget, since they're totals across sources) |
 | Lessons done | The ids of lessons you marked done | Never | Forever |
 | Correction / humbled events | Time, source, model, label, category, matched rule ids | Per retention level | Per TTL |
+| Report cards | Day, start and end time, source, hashed chat id, model, letter grade, follow-up counts, which habits were missing, tokens, minutes | Never | Until you Forget the source or delete report card history |
+| Tips | Day, time, source, hashed chat id, model, which habit, how much was redone | Never | Until you Forget the source or delete report card and tip history |
+| Chats that got the tip instructions | Hashed chat id, source, day | Never | Until you Forget the source or delete report card and tip history |
 | File checkpoints | Path, byte offset, size, modified time | Never | Until you forget the source |
 | Message fingerprints | Short hashes of message ids, so copies are never counted twice | Never | Until you forget the source |
 
@@ -41,9 +46,33 @@ Stored text has emails, URLs, keys, numbers and home paths removed. This is done
 ## What never leaves your machine
 
 - No telemetry, analytics or crash reporting
-- The only network use is checking for app updates (below) and opening a share link when you click it
+- The only network use by the app itself is checking for app updates (below), opening a share link when you click it, and, with report cards on, asking GitHub with `git` whether a new version of the plugin exists before moving to it. With report cards on, Claude Code also downloads the plugin from GitHub (see Report cards)
 - Share cards are rendered locally
 - Fonts are bundled, not fetched
+
+## Report cards (optional)
+
+Report cards are off until you turn them on in **Settings → Report cards**. What turning them on does:
+
+- Adds a small plugin to your AI tool. Claude Code downloads it from GitHub, pinned to the app's version. After an app update, Claude Code downloads the matching plugin from GitHub. No, Actually... itself still sends nothing.
+- With report cards on, a small check runs after each AI reply and reads the end of that chat on your computer. It uses no AI, sends nothing and saves nothing.
+- When you ask for a report card, your AI reads a short summary of the chat that the app makes on your computer. The report card is written inside your AI tool, by the provider that already has the chat, and it uses your tokens. The app only reads the card's small block of numbers from your local chat history and keeps the numbers.
+- If you turn on **Give me tips as I work** (Claude Code only, off by default), a small check gives your AI the tip instructions when a chat starts, which adds about 480 tokens to that chat. Settings shows those instructions word for word. Tips are part of your AI's replies, so they go wherever a reply goes. The app stores the habit each tip was about and how much was redone, never the words.
+- Small marker files beside the database hold these settings: `report-cards-tips`, `report-cards-tips-off`, and `source-stopped-…` for a source you paused, revoked or forgot, and `report-cards-problem` for a plugin problem Settings needs to keep showing. They hold no chat data.
+- To find Claude Code again after a restart, the app saves its location (a file path, in `report-cards-claude` beside the database). It is only used to run `claude plugin` commands to add, check and remove the plugin.
+- A small secret file, `report-cards.key`, sits in the app data folder. It stops a block of numbers that was copied or pasted from somewhere else (another chat, a web page, a file) from being counted. It does not stop text injected into the same chat, which could still fake that chat's own report card.
+
+Files written outside the app's own folder while report cards are on:
+
+| Tool | Where | What |
+|---|---|---|
+| Claude Code | Claude Code's plugin folder | The plugin, installed and removed by Claude Code itself |
+| Codex | `~/.agents/skills/grade-me/` | A skill and a small script |
+| Codex | `~/.codex/hooks.json` | Two entries, added to the file you have. A dated copy of the file is saved beside it each time the app changes it (`hooks.json.bak-…`) |
+
+**Turn report cards off before you uninstall the app.** Turning them off removes the plugin (Claude Code) or those files and entries (Codex). The history stays until you delete it. Uninstalling the app on its own leaves them in place. Chats already open keep any tips they were told to give, so tell your AI "no more tips" in those. Codex's dated `hooks.json.bak-…` copies stay, because they're your safety copies, and you can delete them.
+
+**Turn report cards off before you install an older version.** Versions before report cards don't know these hooks, so each reply would open the app.
 
 A future global board would be a separate opt-in that sends numbers only.
 
@@ -59,11 +88,12 @@ To offer new versions, the app downloads one small public file, `latest.json`, f
 ## How to delete your data
 
 - **Forget a source** in the app: deletes that source's events, aggregates and checkpoints. (Revoke only stops reading.) Goal weeks already finished stay, as totals.
-- **Delete everything:** quit the app and delete the three `noactually.db*` files (`noactually.db`, `-wal`, `-shm`) in the app data folder for `app.noactually` (macOS: `~/Library/Application Support/app.noactually/`, Windows: `%APPDATA%\app.noactually\`, Linux: `~/.local/share/app.noactually/`).
+- **Delete report cards and tips:** click **Delete report card and tip history** in Settings to remove all of them. **Forget** on a source removes that source's report cards and tips too. Tips stop while Claude Code is paused, revoked or forgotten, and start again when you allow it. Turning report cards off removes the plugin but keeps the history until you delete it.
+- **Delete everything:** first turn report cards off in **Settings → Report cards** (that removes what they added to Claude Code and Codex), then quit the app and delete the whole app data folder for `app.noactually` (macOS: `~/Library/Application Support/app.noactually/`, Windows: `%APPDATA%\app.noactually\`, Linux: `~/.local/share/app.noactually/`). It holds the database (`noactually.db`, `-wal` and `-shm`) and a few small report-card files: `report-cards.key`, `cli-path`, `report-cards-claude` and the on/off switch files (`report-cards-tips`, `report-cards-tips-off`, `source-stopped-…`, `report-cards-problem`, `report-cards-quiet`, and `report-cards-repin` while a plugin update is unfinished). Deleting only the database leaves those behind.
 - Deleted text is overwritten in the database, not just unlinked, and the write-ahead log is truncated after Forget and after text ages out.
 
 ## Logs
 
-The app keeps a small log for troubleshooting (macOS: `~/Library/Logs/app.noactually/`, up to about 2 MB). It records counts, timings and errors. Errors can name history files by path, which includes your project folder names. Logs never contain chat text.
+The app keeps a small log for troubleshooting (macOS: `~/Library/Logs/app.noactually/`, Windows: `%LOCALAPPDATA%\app.noactually\logs\`, Linux: `~/.local/share/app.noactually/logs/`, up to about 2 MB). It records counts, timings and errors. Errors can name history files by path, which includes your project folder names. Logs never contain chat text.
 
 Uninstalling the app does not remove the database. Delete it yourself.

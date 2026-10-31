@@ -10,7 +10,7 @@ Anyone who uses AI chat: ChatGPT, Claude, Codex, Claude Code. Developers come fi
 
 ## Principles
 
-- **Deterministic.** Every label comes from fixed text rules. The same history always gives the same score, and anyone can read the rules in [`crates/engine/src/rules.rs`](../crates/engine/src/rules.rs). No AI judges your chats.
+- **Deterministic.** Every label comes from fixed text rules. The same history always gives the same score, and anyone can read the rules in [`crates/engine/src/rules.rs`](../crates/engine/src/rules.rs). No AI judges your chats for the score. Optional report cards come from your own AI, are labeled as such, and never change the score.
 - **Local-first.** Raw chats never leave the machine. Nothing is shared unless you click Share. Share cards show numbers; Hall of fame cards also quote a short, redacted snippet of one correction, which you can edit before sharing.
 - **Asks first.** Nothing is read until you allow a source.
 - **Open source, MIT.** Trust comes from being able to read exactly what the app looks at.

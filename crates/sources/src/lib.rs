@@ -19,8 +19,11 @@ mod jsonl;
 mod pair;
 #[cfg(any(test, feature = "test-support"))]
 pub mod testing;
+mod view;
 
+pub use claude_code::has_tip_rules;
 pub use pair::{pair, Event};
+pub use view::{ChatView, PromptView, Sealed, SealedTask};
 
 use chrono::{DateTime, Utc};
 use std::path::{Path, PathBuf};
@@ -93,7 +96,62 @@ pub struct FileScan {
     pub turns: Vec<SourceTurn>,
     /// Where the next pass should resume. Only ever past turns that are complete.
     pub checkpoint: u64,
+    /// Record blocks found in AI replies, in file order. A pass that re-reads a reply (after a
+    /// checkpoint rewind) can report its blocks again; whoever stores them dedupes.
+    pub cards: Vec<CardSeen>,
+    /// Tips found in AI replies, in file order. Like blocks, a re-read reply reports its tip again.
+    pub tips: Vec<TipSeen>,
+    /// Each time this pass saw the chat being given the tip rules.
+    pub rules: Vec<RulesSeen>,
 }
+
+/// A record block (a fenced `noactually` block) found in an AI reply. Not yet validated.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CardSeen {
+    /// The adapter's id.
+    pub source: &'static str,
+    /// The chat the reply belongs to, as the tool names it.
+    pub session: String,
+    /// The tool's own id for the reply, if it gave one.
+    pub key: Option<String>,
+    /// When the reply was written, if the tool said.
+    pub ts: Option<DateTime<Utc>>,
+    /// Where the reply starts in the file.
+    pub pos: u64,
+    /// The text between the fences, as written.
+    pub body: String,
+}
+
+/// A tip an AI ended a reply with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TipSeen {
+    /// The chat the reply belongs to, as the tool names it.
+    pub session: String,
+    /// The tool's own id for the reply, if it gave one.
+    pub key: Option<String>,
+    /// When the reply was written.
+    pub ts: DateTime<Utc>,
+    /// Where the reply starts in the file.
+    pub pos: u64,
+    /// The raw model id, if the tool recorded one.
+    pub model: Option<String>,
+    /// What the tip says.
+    pub tip: engine::Tip,
+}
+
+/// A chat being given the tip rules: what makes its tasks count toward "6 of 40 tasks needed a tip".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RulesSeen {
+    /// The chat, as the tool names it.
+    pub session: String,
+    /// When it got them.
+    pub ts: DateTime<Utc>,
+}
+
+/// How a person asks Codex for a report card. Codex's skill is `grade-me`, called with a `$`.
+pub const GRADE_SKILL_CODEX: &str = "$grade-me";
+/// How a person asks Claude Code for a report card: the `grade` plugin's `me` skill.
+pub const GRADE_COMMAND: &str = "/grade:me";
 
 /// How a source's files arrive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -121,6 +179,23 @@ pub trait Source: Send + Sync {
     fn scan(&self, path: &Path, from: u64, finalize: bool) -> Result<FileScan>;
     /// Append-only sources resume from a byte offset; others are re-read whole when they change.
     fn append_only(&self, path: &Path) -> bool;
+    /// True when this source's chats can carry a report card: the tool can run the `grade` plugin or
+    /// skill, and the app can turn it on. The one list of such sources.
+    fn gradable(&self) -> bool {
+        false
+    }
+    /// The whole chat in `path` with every prompt, what it cost and any report cards. `None` for
+    /// sources that can't say.
+    fn view(&self, path: &Path) -> Option<Result<ChatView>> {
+        self.view_from(path, 0, true)
+    }
+    /// The chat in `path` from byte offset `from` (the start of a line) to its end, with every prompt
+    /// and any report cards. `usage` also counts tokens, which costs more; without it every prompt
+    /// has none, and nothing before `from` is read but a rollout's first line. This is how a hook
+    /// can decide without the length of a chat slowing it down. `None` for sources that can't.
+    fn view_from(&self, _path: &Path, _from: u64, _usage: bool) -> Option<Result<ChatView>> {
+        None
+    }
 }
 
 /// Every adapter, in display order.
@@ -144,9 +219,10 @@ pub fn claude_code_at(root: PathBuf) -> Box<dyn Source> {
     Box::new(claude_code::ClaudeCode::code_at(root))
 }
 
-/// The home folder. `None` when the OS can't say, so a source never reads a relative path.
+/// The home folder. `None` when the OS can't say, so a source never reads a relative path. The standard
+/// library's answer, because on Windows it goes by `USERPROFILE`, the same as the tools whose files we read.
 pub(crate) fn home() -> Option<PathBuf> {
-    dirs::home_dir().filter(|p| p.is_absolute())
+    std::env::home_dir().filter(|p| p.is_absolute())
 }
 
 /// Per-user app data: ~/Library/Application Support, %APPDATA%, or ~/.local/share.

@@ -6,25 +6,40 @@
 //! [`Tier`] and [`Answer`] turn a 28-day score, from tasks plus corrections, into the headline.
 //! [`read_prompt`] reads the same turn for how you prompt: a new task, steering, or neither, and a
 //! prompt's [`Signals`].
+//! Report cards: [`parse_card`] reads the record block a report card ends with, [`message_key`]
+//! names a message the way the store and the digest both do, and [`price`] turns tokens into dollars.
+//! Tips: [`parse_tip`] reads the line an AI ends a reply with, and [`TIP_RULES`] is what it's told.
 //!
 //! Tests: each module keeps its unit tests inline in `mod tests`; the rule book's behavior
 //! suite lives in `src/tests.rs` because it exercises the whole crate.
 
 #![warn(missing_docs)]
 
+mod card;
+mod key;
 mod model;
+mod pricing;
 mod prompt;
 mod redact;
 mod rules;
 mod tier;
+mod tip;
 
+pub use card::{
+    find_cards, habit_bit, habit_bits, habit_name, habit_plain, has_card, parse_card, seal, tasks_overlap, Card,
+    CardError, CardTask, LetterGrade, Waste, HABITS,
+};
+pub(crate) use key::SHORT_ID;
+pub use key::{key_hash, message_key, short_id};
 pub use model::{normalize_model, Model};
-pub use prompt::{check, read_prompt, Check, Grade, Prompt, Signal, Signals, Steer};
+pub use pricing::{price, Price, Usage, PRICES_AS_OF};
+pub use prompt::{check, is_signoff, read_prompt, Check, Grade, Prompt, Signal, Signals, Steer};
 pub use redact::{redact, snippet, SNIPPET_CHARS};
 pub use tier::{
     Answer, CorrectionTier, PromptTier, Score, Tier, UnknownTier, Window, CORRECTION_PROOF, DIRECTION_WEIGHT,
     HUMBLED_BASE, HUMBLED_COST, MIN_PROMPTS, WINDOW_DAYS,
 };
+pub use tip::{is_tip_rules, is_tip_stop, parse_tip, strip_tip, Tip, HAD_TO_ASK, TIP_RULES, TIP_STOP};
 
 use serde::{Deserialize, Serialize};
 

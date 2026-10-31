@@ -36,7 +36,7 @@ Nothing is read until the user allows it.
 - First launch lists every **detected** source with the exact path it would read and what it reads ("your messages and the AI's replies, to count corrections"). Each is off until the user taps **Allow**.
 - Per source: allow/revoke, backfill window (everything, since a date, or none), pause.
 - **Revoke** stops reading and keeps scores. **Forget** also deletes that source's events, aggregates and checkpoints.
-- Nothing leaves the machine. Share cards render locally. The only network use is the update check (see [Updates](#updates)) and opening a share URL the user taps. A future global board is a separate opt-in that sends numbers only.
+- Nothing leaves the machine. Share cards render locally. The app's only network use is the update check (see [Updates](#updates)) and opening a share URL the user taps. (With report cards on, Claude Code itself downloads the plugin from GitHub; see [Report cards](#report-cards).) A future global board is a separate opt-in that sends numbers only.
 - macOS may show its own "access data from other apps" prompt for some sources. Declining it only means that source can't be read.
 
 ## Updates
@@ -61,8 +61,11 @@ The `noactually` binary shares the engine and database with the app:
 | `import <source> <path>` | Add an export file or folder (`chatgpt-export`, `claude-ai-export`) |
 | `sync` | Read anything new from allowed sources |
 | `stats [--source S] [--provider P] [--family F] [--version V] [--since YYYY-MM-DD] [--json]` | Print the scorecard, optionally from a start date instead of the last 28 days |
+| `stats --report-cards [--source S] [--provider P] [--family F] [--version V] [--since YYYY-MM-DD] [--json]` | Report cards instead of the scorecard, with the same filters (all history unless `--since`): graded tasks and their grades, % A or B, redone work per graded task, extra cost (priced tasks only, with the date the prices were last checked), extra minutes, the habit left out most, and the last 5 cards. `--json` prints one object with a fixed set of keys; a number that can't be worked out is `null` |
 | `check "<prompt>"` | Grade a draft prompt with the same rules as your history. Nothing is saved |
 | `retention <full\|snippet\|category> [--full-days N] [--snippet-days N]` | Set how correction text is kept |
+
+`digest --session <id>` (or `--transcript <path>`) and `hook <session-start\|stop\|codex-prompt\|codex-stop>` are hidden helper commands, left out of `--help`: the `grade` plugin and the Codex hooks run them to give the model a chat summary and to say a word after a reply. They print nothing and succeed on any error, and the desktop app runs them from its own executable.
 
 **Database location.** One function, `store::default_db_path()`, picks the file for both the CLI and the app: `app.noactually/noactually.db` in your OS app-data folder. Set `NOACTUALLY_DB=/path/to/file.db` to use another database (development, demos, tests). `WA_DB` is still read as a deprecated fallback.
 
@@ -78,8 +81,32 @@ The `noactually` binary shares the engine and database with the app:
 | Lessons done | The ids of lessons marked done | Never | Forever |
 | Settings and milestones | Retention, update and menu bar choices, and the tiers already announced | Never | Forever |
 | Correction / humbled events | Time, source, model, label, category, matched rule ids | Per retention level | Per TTL |
+| Report cards | Day, start and end time, source, hashed chat id, model, letter grade, follow-up counts, which habits were missing (bitmask), tokens, minutes. Not a score table: rebuilds keep it | Never | Until the source is forgotten or the user clears report card history |
+| Tips, chats that got the rules | `tips`: day, time, source, hashed chat id, model, habit (bitmask), `redid` (25 to 100, or 0 for "had to ask"). `tip_chats`: hashed chat id, source, day. Score tables, so a rebuild keeps them in step with tasks | Never | Until the source is forgotten or the history is deleted |
 | File checkpoints | Path, byte offset, size, modified time | Never | Until the source is forgotten |
 | Message fingerprints | Short hashes of message ids (dedupe) | Never | Until the source is forgotten |
+
+### Report cards
+
+Optional. The score never reads them. Plan: [`docs/plans/prompt-feedback.md`](plans/prompt-feedback.md).
+
+1. The user types `/grade:me` (Codex: `$grade-me`). The user's own AI writes the card and a small `noactually` record block into the chat.
+2. The transcript holds both. The adapter looks for the fence in AI messages only. The whole reply that holds a block that reads as a card is hidden from the engine (a quoted example that doesn't parse is scored as before), so a card can't trip a correction rule, and the `/grade:me` prompt and any "Stop hook feedback" message never count as the person's messages.
+3. When a block appears, the whole chat is re-read once. That checks the block's seal (a per-chat HMAC keyed by `report-cards.key`), checks every id against the chat's prompts, and measures rounds, tokens and minutes from the transcript.
+4. The numbers go into the `report_cards` table. Block text is never kept.
+5. A rules rebuild keeps the table (transcripts expire, so these rows are the history). Writes are idempotent. Forget deletes the source's rows, and a Settings button clears all of them.
+
+**Switching it on and off** (`app/src-tauri/src/report_cards*.rs`, Settings → Report cards). Turning on needs the tool's own source allowed first (Cowork doesn't stand in for Claude Code); the command checks it as well as the window. Only the main window may change anything.
+
+- *Claude Code:* the app runs Claude Code's own `claude plugin` commands against the marketplace pinned to the app's tag (`HTMLGuyLLC/NoActually#v<version>`). Afterwards, and at every launch of a release build for someone who has turned report cards on (a `noactually` marketplace in Claude Code's `known_marketplaces.json`, a file the app only reads, or an unfinished move; anyone else is not asked anything), it finds the installed plugin (the folder named by `installPath` in `claude plugin list --json`, and no other: Claude Code's cache layout is its own, and a guess could check a different copy than the one that runs) and holds it to an allowlist. The folder may contain only `.claude-plugin/` (`plugin.json`, `icon.png`), `bin/na`, `hooks/hooks.json`, `skills/me/SKILL.md` and the marker file `.orphaned_at`, and each file must match the copy built into the app byte for byte (line endings aside; the icon exactly). Anything else, a link included, uninstalls the plugin. A plugin whose list entry names no folder can't be checked; it is kept, and the log says so. The launch check moves the pin to a new release only for a marketplace added from exactly that repo at a `v` tag, never for another `noactually` marketplace (the README's unpinned one, a local folder). Removing a marketplace uninstalls its plugin, so a move that fails puts the old tag back and installs the plugin again (switching it off again if it was off), and writes `report-cards-repin` beside the database. That file keeps the next launch retrying even when the plugin is gone for now, keeps Settings saying the update failed, and is cleared when a move finishes or the person turns report cards on or off.
+- *Windows:* Turn on for Claude Code is refused unless Git for Windows' `bash.exe` is found (`CLAUDE_CODE_GIT_BASH_PATH`, then the `bash.exe` beside the `git.exe` on `PATH`, then the usual Program Files and per-user folders), because Claude Code runs the plugin's shell shim with it. Turn on for Codex is refused: its skill and hooks aren't set up for Windows yet. The row says why instead of showing Turn on.
+- *Codex:* a skill in `~/.agents/skills/grade-me/` (first line after the front matter says it is ours; a `grade-me` skill without that line is refused and never removed) and two entries in `~/.codex/hooks.json`. Every change to an existing hooks file first saves a `hooks.json.bak-YYYYMMDD-HHMMSS` copy. Turning off removes only our folder, never `~/.agents` or `~/.agents/skills`. At every launch of a release build, if the skill carries our mark, the skill and shim are rewritten when they differ from what this version would write, and the `command` of our hook entries when it differs (nothing else about them, and a hook the person removed is not put back); a hooks file that changes is copied first, and a skill without our mark is never touched.
+- *Files beside the database:* `report-cards-tips` (give tips as you work, Claude Code; its date says when it went on), `report-cards-tips-off` (tips were turned off, so chats that come back are told to stop) and `report-cards-quiet` (no one-line reminders from the hooks) and `source-stopped-<id>` (a paused, revoked or forgotten source: the hooks and digest stay out of its chats), and `report-cards-problem` (a plugin problem Settings keeps showing across restarts). Before a plugin move, the app runs `git ls-remote` on the new tag and keeps the current plugin if it can't be reached. Extra files in an installed plugin disable it at launch, and any other difference uninstalls it. Their presence is the setting; they are created without touching anything already there. `report-cards-claude` holds the absolute path where `claude` was last found by Turn on or Look again (owner-only). All other writes go through a randomly named temporary file opened with `create_new`, then a rename.
+- *A custom database location:* the plugin's shim looks for `cli-path` in the default app data folder only, and the app writes `cli-path` (and the files above) beside the database it is using. With `NOACTUALLY_DB` pointing somewhere else the shim finds no helper and the hooks quietly do nothing, so report cards only work with the default database location.
+- *Finding the tools:* `claude` is looked for first at the path saved in `report-cards-claude`, if it still exists and can be run, on every launch. Otherwise `claude` and `codex` are looked for once per run (the usual folders, which include version managers' folders such as nvm, Volta, fnm, asdf and Bun, and on macOS the Claude desktop app's own copy, newest version first; then `PATH`) and the path is remembered. A login shell is asked only when the person presses Turn on, Turn off or Look again, never on a plain status check or at launch.
+- *Logs:* output from `claude` goes to the log cut to about 1 KB, with `user:password@` taken out of any link.
+
+The command line has `stats --report-cards` for these numbers, and the helper commands the plugin runs (`digest`, `hook`); see [Command line](#command-line).
 
 ### Retention levels for correction text
 

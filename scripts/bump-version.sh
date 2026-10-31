@@ -3,6 +3,7 @@
 #   - Cargo.toml          [workspace.package] version (the source of truth)
 #   - app/package.json    version
 #   - app/src-tauri/tauri.conf.json   version, if that file still has one
+#   - plugins/grade/.claude-plugin/plugin.json   the report card plugin's version
 #   - Cargo.lock          refreshed for the new workspace version
 #   - CHANGELOG.md        the Unreleased entries move under "## [X.Y.Z] - <today>", and the
 #                         compare links at the bottom are updated
@@ -53,6 +54,7 @@ bump_json() {
 }
 bump_json "$ROOT/app/package.json"
 bump_json "$ROOT/app/src-tauri/tauri.conf.json"
+bump_json "$ROOT/plugins/grade/.claude-plugin/plugin.json"
 
 (cd "$ROOT" && { cargo update -w --offline || cargo update -w; })
 

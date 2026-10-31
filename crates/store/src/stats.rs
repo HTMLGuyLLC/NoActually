@@ -66,7 +66,7 @@ impl Filter {
                 args.push(v.clone());
             }
         }
-        // Every table this filters (daily, events, tasks) has a local `day`.
+        // Every table this filters (daily, events, tasks, tips) has a local `day`.
         if let Some(since) = self.since {
             sql.push_str(" AND day >= ?");
             args.push(since.to_string());
@@ -264,7 +264,7 @@ pub struct Tip {
 /// The daily / events rows one filter selects.
 pub(crate) struct View<'a> {
     pub(crate) conn: &'a Connection,
-    /// `AND …` clause; works on `daily`, `events` and `tasks` (same column names).
+    /// `AND …` clause; works on `daily`, `events`, `tasks` and `tips` (same column names).
     pub(crate) clause: String,
     pub(crate) args: Vec<String>,
 }

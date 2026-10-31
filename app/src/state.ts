@@ -1,5 +1,5 @@
 // The UI's state: one object, read anywhere, changed only through the named setters below.
-import type { Filter, Meta, ModelRow, Stats, SyncStatus, UpdateStatus, Verdict } from "./api";
+import type { Filter, Meta, ModelRow, ReportCardsStatus, ReportCardTool, Stats, SyncStatus, UpdateStatus, Verdict } from "./api";
 import { localIsoDate } from "./format";
 
 export const TABS = ["score", "improve", "learn", "settings"] as const;
@@ -10,9 +10,29 @@ export const isTab = (x: unknown): x is Tab => TABS.some((t) => t === x);
 export const SCORE_VIEWS = ["overview", "corrections", "prompts", "hall"] as const;
 export type ScoreView = (typeof SCORE_VIEWS)[number];
 export const isScoreView = (x: unknown): x is ScoreView => SCORE_VIEWS.some((v) => v === x);
-export const SETTINGS_PANES = ["sources", "general", "privacy"] as const;
+export const SETTINGS_PANES = ["general", "sources", "report-cards", "privacy"] as const;
 export type SettingsPane = (typeof SETTINGS_PANES)[number];
 export const isSettingsPane = (x: unknown): x is SettingsPane => SETTINGS_PANES.some((v) => v === x);
+
+/** A report cards control that runs a command: a tool's Turn on or Turn off, or Delete report card and tip history. */
+export type ReportCardsBusy = ReportCardTool | "delete";
+
+/** Settings → Report cards: what was last read, and what's happening now. */
+export type ReportCardsState = {
+  /** Where each tool stands, as last read; null until the first read finishes. */
+  status: ReportCardsStatus | null;
+  /** Why the last read failed, in plain words ("" when it didn't). */
+  statusError: string;
+  /** The control whose command is running. */
+  busy: ReportCardsBusy | null;
+  /** What went wrong with a control, in plain words, shown beside it. */
+  error: { control: ReportCardsBusy | "tips" | "reminders"; text: string } | null;
+  /** What happened last ("Done. Start a new Claude Code chat…"), shown beside the control that did it. */
+  note: { control: ReportCardsBusy; text: string } | null;
+};
+
+/** Nothing read yet and nothing running. */
+export const emptyReportCards = (): ReportCardsState => ({ status: null, statusError: "", busy: null, error: null, note: null });
 
 /** How far back the scorecard's counts look. The score and tiers follow the chosen period too. */
 export const PERIODS = ["7d", "28d", "90d", "all"] as const;
@@ -50,6 +70,7 @@ export type AppState = {
   view: ScoreView;
   /** Settings: which sub-tab is open. */
   settingsPane: SettingsPane;
+  reportCards: ReportCardsState;
   filter: Filter;
   /** Every model, from the last unfiltered stats; the picker lists these even while narrowed. */
   allModels: ModelRow[];
@@ -84,7 +105,8 @@ export type AppState = {
 const initial = (): AppState => ({
   tab: "score",
   view: "overview",
-  settingsPane: "sources",
+  settingsPane: "general",
+  reportCards: emptyReportCards(),
   filter: {},
   allModels: [],
   allModelsScope: "",
@@ -108,12 +130,17 @@ export const state: Readonly<AppState> = s;
 
 /** The small window under the menu bar icon. */
 export const isGlance = typeof location !== "undefined" && location.hash === "#glance";
+/** macOS draws the main window's buttons over the page (`titleBarStyle` in tauri.conf.json). Other systems ignore that setting and keep their own bar. */
+export const hasOverlayTitleBar = (inApp: boolean, glance: boolean, userAgent: string): boolean => inApp && !glance && userAgent.includes("Macintosh");
 
 export function setTab(tab: Tab): void {
   s.tab = tab;
 }
 export function setSettingsPane(pane: SettingsPane): void {
   s.settingsPane = pane;
+}
+export function setReportCards(patch: Partial<ReportCardsState>): void {
+  s.reportCards = { ...s.reportCards, ...patch };
 }
 export function setView(view: ScoreView): void {
   s.view = view;
@@ -125,11 +152,19 @@ export function setAllModels(models: ModelRow[], scope = ""): void {
   s.allModels = models;
   s.allModelsScope = scope;
 }
+/** A check can finish in a blink, and "Checking…" has to stay long enough to read, or people keep clicking. */
+const MIN_CHECKING_MS = 2000;
+let checkingSince = 0;
+
+/** How long "Checking…" should stay up yet, in milliseconds. */
+export const checkingLeft = (now = Date.now()): number => Math.max(0, checkingSince + MIN_CHECKING_MS - now);
+
 export function setStatus(status: SyncStatus): void {
   s.status = status;
 }
 /** A check started: only the status line changes. */
-export function setSyncing(): void {
+export function setSyncing(now = Date.now()): void {
+  checkingSince = now;
   s.status = { ...s.status, syncing: true };
 }
 export function setCurrent(stats: Stats): void {

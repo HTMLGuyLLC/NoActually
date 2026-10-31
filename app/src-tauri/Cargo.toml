@@ -24,10 +24,14 @@ tauri-build.workspace = true
 engine.workspace = true
 sources.workspace = true
 store.workspace = true
+# The report-card helper commands (`hook`, `digest`) run from this executable (see main.rs).
+cli = { path = "../../crates/cli", package = "noactually-cli" }
 serde.workspace = true
 # Used by the code `tauri::generate_context!` expands to.
 serde_json.workspace = true
 chrono.workspace = true
+# The home folder, for the Codex files report cards add.
+dirs.workspace = true
 log.workspace = true
 tauri.workspace = true
 tauri-plugin-notification.workspace = true
@@ -39,6 +43,9 @@ tauri-plugin-log.workspace = true
 tauri-plugin-opener.workspace = true
 tauri-plugin-updater.workspace = true
 notify.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

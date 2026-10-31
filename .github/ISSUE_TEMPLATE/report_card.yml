@@ -1,0 +1,48 @@
+name: Disputed report card grade
+description: A report card gave a grade that seems wrong.
+labels: [report-cards]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not paste private content, and never paste a whole chat.** Redact names, emails, URLs, keys, file paths and anything else personal.
+        Keep only the few words of your message that matter.
+  - type: dropdown
+    id: grade
+    attributes:
+      label: Letter you got
+      options: [A, B, C, D, F]
+    validations:
+      required: true
+  - type: textarea
+    id: missing
+    attributes:
+      label: What the card said was missing
+      description: The habits or details it said your message left out.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it seems wrong
+      description: What your message did include, in your own words, redacted.
+    validations:
+      required: true
+  - type: input
+    id: tool
+    attributes:
+      label: AI tool
+      placeholder: Claude Code, Codex...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version
+  - type: checkboxes
+    id: redacted
+    attributes:
+      label: Privacy
+      options:
+        - label: I removed all private content from this report, and I did not paste a whole chat.
+          required: true

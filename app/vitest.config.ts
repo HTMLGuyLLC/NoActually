@@ -5,6 +5,8 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
     environment: "node",
+    // Tests that read the stylesheet's own text (its colors) get it; every other CSS file is left empty.
+    css: { include: [/src\/style\.css/] },
     restoreMocks: true,
     coverage: {
       provider: "v8",

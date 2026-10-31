@@ -1,0 +1,28 @@
+#!/bin/sh
+# Runs the No, Actually... app as the report card helper. The app writes its own path to a
+# `cli-path` file on every launch. Without the app this does nothing, quietly: report cards still
+# work (graded by eye), and a missing helper never blocks anyone's work.
+
+for dir in \
+  "$HOME/Library/Application Support/app.noactually" \
+  "${XDG_DATA_HOME:-$HOME/.local/share}/app.noactually"; do
+  if [ -r "$dir/cli-path" ]; then
+    exe=$(head -n 1 "$dir/cli-path")
+    [ -n "$exe" ] && [ -x "$exe" ] && exec "$exe" "$@"
+  fi
+done
+
+# Windows (Git Bash): the app data folder is under %APPDATA%.
+if [ -n "${APPDATA:-}" ] && command -v cygpath >/dev/null 2>&1; then
+  dir="$(cygpath -u "$APPDATA")/app.noactually"
+  if [ -r "$dir/cli-path" ]; then
+    exe=$(cygpath -u "$(head -n 1 "$dir/cli-path" | tr -d '\r')")
+    [ -n "$exe" ] && [ -x "$exe" ] && exec "$exe" "$@"
+  fi
+fi
+
+# Built from source: the `noactually` command line tool on PATH does the same job.
+if command -v noactually >/dev/null 2>&1; then
+  exec noactually "$@"
+fi
+exit 0

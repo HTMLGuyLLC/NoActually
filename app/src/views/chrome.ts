@@ -39,20 +39,20 @@ export function coverage(s: Pick<Stats, "first_day" | "last_day" | "messages"> |
 }
 
 /**
- * The sync status (hover or focus it to see what the numbers cover) and, beside it, a separate
- * "check now" button. Tooltips are the app's own (`data-tip`), mirrored for screen readers.
+ * The sync status: a dot that turns into an arrow to check now, and text that shows what the numbers
+ * cover (hover, focus or click it; it stays open until Escape, a click elsewhere or leaving it). Tooltips are the app's own (`data-tip`), mirrored for screen readers.
  */
 export function statusPillView(status: SyncStatus, demo: boolean, covers = ""): Html {
   if (status.last_error)
-    return html`<span class="sync-pill"><button class="sync-bad" data-action="sync-now" data-id="top" data-tip="${status.last_error}">Couldn't check. Retry</button></span>`;
+    return html`<span class="sync-pill"><button class="sync-bad" data-action="sync-now" data-id="top" data-tip="${status.last_error}">Couldn't check. Retry<span class="sr-only">. ${status.last_error}</span></button></span>`;
   const checked = status.syncing ? "Checking…" : demo ? "Demo data" : `Checked ${ago(status.last_sync)}`;
   const text = covers
-    ? html`<span class="sync-text" tabindex="0" data-tip="${covers}">${checked}<span class="sr-only">. Showing ${covers}</span></span>`
+    ? html`<button class="sync-text" data-action="sync-tip" data-tip="${covers}" aria-expanded="false">${checked}<span class="sr-only">. Showing ${covers}</span></button>`
     : html`<span class="sync-text">${checked}</span>`;
-  const refresh = status.syncing
-    ? ""
-    : html`<button class="sync-now" data-action="sync-now" data-id="top" data-tip="Check now" aria-label="Check for new chats now">${REFRESH}</button>`;
-  return html`<span class="sync-pill"><i class="dot${status.syncing ? " live" : ""}"></i>${text}${refresh}</span>`;
+  const dot = status.syncing
+    ? html`<i class="dot live"></i>`
+    : html`<button class="sync-now" data-action="sync-now" data-id="top" data-tip="Check now" aria-label="Check for new chats now"><i class="dot"></i>${REFRESH}</button>`;
+  return html`<span class="sync-pill">${dot}${text}</span>`;
 }
 
 /** Set up once and rarely visited: icons only, so the main sections have room. */
@@ -66,7 +66,7 @@ export function headerView(tab: Tab, status: SyncStatus, demo: boolean, covers =
   const tabs = html`${TABS.filter((t) => !UTILITY.includes(t)).map(button)}<span class="nav-gap" aria-hidden="true"></span>${UTILITY.map(button)}`;
   // The logo goes home: the scorecard's overview.
   const home = html`<button class="home" data-action="home" data-tip="Go to the scorecard">${wordmarkView()}<span class="sr-only">, go to the scorecard</span></button>`;
-  return html`<header class="top">${home}<div class="top-right"><nav aria-label="Main">${tabs}</nav>${statusPillView(status, demo, covers)}</div></header>`;
+  return html`<header class="top">${home}${statusPillView(status, demo, covers)}<nav aria-label="Main">${tabs}</nav></header>`;
 }
 
 /** A tier ladder, top tier first. Your tier's row carries your number ("88 · 80–89"), so no

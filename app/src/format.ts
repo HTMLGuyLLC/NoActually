@@ -32,6 +32,9 @@ export const subjectLabel = (filter: Filter, meta: Meta): string => (isFiltered(
 /** Who the questions ask about, in plain words: "AI", or the model the picker narrowed to. */
 export const subjectText = (filter: Filter, meta: Meta): string => (isFiltered(filter) ? filterLabel(filter, meta) : "AI");
 
+/** US dollars as a person reads them: "$0.15", "$4.20", "$120", "$1,234". */
+export const money = (n: number): string => (n >= 99.995 ? `$${num(Math.round(n))}` : `$${n.toFixed(2)}`);
+
 /** "1 task", "37 times": a count with its noun. */
 export const plural = (n: number, one: string, many = `${one}s`): string => `${num(n)} ${n === 1 ? one : many}`;
 

@@ -115,13 +115,25 @@ In-app updates are signed with a Tauri updater key. Its public half is in `app/s
 
 `pnpm tauri build` fails without the key because `bundle.createUpdaterArtifacts` is on. To build locally without it, add `-c '{"bundle":{"createUpdaterArtifacts":false}}'`.
 
+### One-time setup: protect release tags
+
+The app installs the report card plugin from `HTMLGuyLLC/NoActually#v<version>`, so a moved tag would change what installed apps run. Two tag rulesets in the repo's Settings → Rules cover `v*` tags:
+
+- **Lock release tags**: nobody can move or delete one, admins included.
+- **Only admins create release tags**: only repository admins can push a new one.
+
+The app also compares the installed plugin with the copy built into it and removes a plugin that doesn't match.
+
+If something goes wrong after a tag is pushed, release the next patch version rather than moving the tag. Only a tag whose release was never published may be redone: turn off **Lock release tags**, fix the tag, and turn the ruleset back on.
+
 ### Each release
 
 1. Make sure `main` is green and `CHANGELOG.md` has the user-facing changes under **Unreleased**.
-2. Run `just bump 0.2.0` (`scripts/bump-version.sh 0.2.0`). It sets the version in `Cargo.toml` (the source of truth), `app/package.json` and, if present, `app/src-tauri/tauri.conf.json`, refreshes `Cargo.lock`, and moves the Unreleased notes under a dated `## [0.2.0]` heading with updated compare links. Commit it on a branch (`git switch -c release-0.2.0 && git commit -am "release: v0.2.0"`) and merge it with a pull request once CI is green (`main` only takes pull requests).
+2. Run `just bump 0.2.0` (`scripts/bump-version.sh 0.2.0`). It sets the version in `Cargo.toml` (the source of truth), `app/package.json`, the report card plugin's `plugins/grade/.claude-plugin/plugin.json` and, if present, `app/src-tauri/tauri.conf.json`, refreshes `Cargo.lock`, and moves the Unreleased notes under a dated `## [0.2.0]` heading with updated compare links. Commit it on a branch (`git switch -c release-0.2.0 && git commit -am "release: v0.2.0"`) and merge it with a pull request once CI is green (`main` only takes pull requests).
 3. Tag the merged commit on `main` and push the tag: `git switch main && git pull && git tag v0.2.0 && git push origin v0.2.0`. The Release workflow checks the tag against the Cargo version, then builds Windows and Linux into a draft release, with signed update files and a `latest.json` for them.
 4. On a Mac with the Developer ID certificate and the updater key, check out the tag and run `just release-mac` (`scripts/release-macos.sh`). It refuses to run on a dirty tree or when HEAD isn't the tagged commit (`--force` skips the tag check). It builds a universal app, signs it, notarizes and staples both the app and the DMG, and makes the signed update file (`No-Actually-0.2.0-Mac-Update-universal.app.tar.gz` + `.sig`).
 5. Run `scripts/finish-release.sh v0.2.0`. It renames the files to plain names people can pick from ("No-Actually-0.2.0-Mac-universal.dmg", "-Windows-Setup-x64.exe", "-x86_64.AppImage"…), setting both the asset name and the label tauri-action v1 adds; uploads the Mac DMG and update file; rewrites `latest.json` so every entry points at the renamed files and adds the Mac entries (`darwin-universal`, `darwin-aarch64`, `darwin-x86_64`); and writes `SHA256SUMS.txt`. It refuses to write a `latest.json` that points at a file missing from the release.
-6. Check the draft and publish it (`gh release edit v0.2.0 -R HTMLGuyLLC/NoActually --draft=false`). Installed apps see the update only once it's published, because they read `releases/latest/download/latest.json`.
+6. Smoke-test report cards from the tag on one machine: Settings → Report cards → Turn on for Claude Code, start a new chat, do a small task, then type `/grade:me` and check the card and that it appears under Improve. Install the previous release first and update to this one with report cards on, so the plugin move runs too. Turn it off again.
+7. Check the draft and publish it (`gh release edit v0.2.0 -R HTMLGuyLLC/NoActually --draft=false`). Installed apps see the update only once it's published, because they read `releases/latest/download/latest.json`.
 
 If the `APPLE_*` secrets are set in the repo, the Release workflow also signs and notarizes macOS, and step 4 isn't needed.

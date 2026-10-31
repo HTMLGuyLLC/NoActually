@@ -7,6 +7,8 @@
   /* Text on a --pen fill (the pinned tag). */
   --on-pen: #ffffff;
   --ok: #2f9e44;
+  /* Report card grades A to F: red to ink in five even steps of lightness, each at least 3:1 against the chart's surface. */
+  --grade-a: #ee4b41; --grade-b: #d2433d; --grade-c: #af3938; --grade-d: #812c33; --grade-f: #141a2e;
   /* Small green text (--ok is 3.4:1 on white); the dark theme's --ok is already light enough. */
   --ok-text: #237a34;
   /* Shadows and the dialog backdrop: the ink's hue, never pure black. */
@@ -24,6 +26,7 @@
     --paper: #0f1320; --surface: #171c2c; --ink: #eef1f8; --muted: #9aa3bd; --rule: #2a3147;
     --pen: #ff5a4f; --pen-soft: #3a1c1e; --hl: #6b5f12; --ai: #8ea6ff; --ai-soft: #1d2747;
     --pen-text: #ff5a4f; --on-pen: #0f1320; --ok: #51cf66; --ok-text: #51cf66;
+    --grade-a: #f2483e; --grade-b: #f49291; --grade-c: #f5bdbe; --grade-d: #f7dde0; --grade-f: #f8f9fd;
     --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%239aa3bd' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     color-scheme: dark;
   }
@@ -31,6 +34,9 @@
 
 * { box-sizing: border-box }
 html, body { margin: 0 }
+/* Keep the scrollbar's space on short pages too, so the centered page doesn't shift between tabs. */
+html:not(.is-glance) { scrollbar-gutter: stable }
+@supports not (scrollbar-gutter: stable) { html:not(.is-glance) { overflow-y: scroll } }
 body { background: var(--paper); color: var(--ink); font: 400 15px/1.55 var(--body); -webkit-font-smoothing: antialiased }
 .is-glance body { background: var(--surface) }
 h1, h2 { font-family: var(--display); text-wrap: balance; margin: 0 }
@@ -43,15 +49,26 @@ p { margin: 0 }
 .mono, .n { font-family: var(--mono); font-variant-numeric: tabular-nums }
 .head { display: grid; gap: 6px; margin-bottom: 14px }
 .head p { max-width: 64ch }
+/* macOS draws its window buttons over the page, so this strip holds them and moves the window. */
+.drag-strip { display: none }
+.mac-bar .drag-strip { display: block; position: fixed; inset: 0 0 auto; height: 44px; background: var(--paper); z-index: 30 }
+/* The logo and menu sit level with the window buttons (`trafficLightPosition` in tauri.conf.json). */
+.mac-bar .wrap { padding-top: 12px }
+.mac-bar .home { margin-left: 72px }
+.mac-bar .home, .mac-bar .top .sync-pill, .mac-bar .top nav { position: relative; z-index: 31 }
+.mac-bar .top .tab { height: 28px; padding-block: 0 }
+.mac-bar .top .tab.icon-only { width: 28px; height: 28px; padding: 6px }
+/* Keeps a focused control from scrolling under the strip. */
+html.mac-bar { scroll-padding-top: 52px }
 /* Read by screen readers, not shown. */
 .sr-only, .top .tab.icon-only .tab-name { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0 }
 
 button { font: 600 13px/1 var(--body); color: var(--paper); background: var(--ink); border: 1.5px solid var(--ink); border-radius: 999px; padding: 9px 14px; cursor: pointer }
 button.ghost { background: transparent; color: var(--ink) }
-button.danger { background: transparent; color: var(--pen); border-color: var(--pen) }
+button.danger { background: transparent; color: var(--pen-text); border-color: var(--pen) }
 button.small { padding: 7px 12px; font-size: 12.5px }
 button:hover { filter: brightness(1.15) }
-button:disabled { opacity: .55; cursor: default }
+button:disabled, button[aria-disabled="true"] { opacity: .55; cursor: default }
 button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, .models-scroll:focus-visible { outline: 3px solid var(--ai); outline-offset: 2px }
 /* Headings take focus only so a redraw doesn't drop it on <body>; no ring for that. */
 [tabindex="-1"]:focus { outline: none }
@@ -61,11 +78,12 @@ select { appearance: none; -webkit-appearance: none; padding: 0 38px 0 14px; cur
   background-image: var(--chevron); background-repeat: no-repeat; background-position: right 13px center; background-size: 12px }
 select:hover, input[type="number"]:hover { border-color: var(--muted) }
 .action-error { flex-basis: 100%; color: var(--pen-text); font-size: 13px }
+.action-note { flex-basis: 100% }
 
-.top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap }
-/* The menu, with the sync status as a quiet line under it. */
-.top-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px }
-.top-right .sync-pill { font-size: 11.5px; padding-right: 10px }
+.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: -16px }
+/* One line: the logo with its sync status beside it, then the menu at the far end. */
+.top .sync-pill { font-size: 11.5px; margin-left: 8px }
+.top nav { margin-left: auto }
 /* Logo: the icon's mark (check in the text color, red underline) and an ink wordmark. */
 .brand { display: inline-flex; align-items: center; gap: .32em; font: 800 21px/1 var(--display); letter-spacing: -0.025em; color: var(--ink) }
 .brand.small { font-size: 15px }
@@ -84,25 +102,41 @@ nav { display: flex; gap: 6px }
 .home { background: none; border: 0; padding: 0; border-radius: 8px; cursor: pointer }
 .home:hover { filter: none; opacity: .85 }
 .sync-pill { display: inline-flex; align-items: center; gap: 7px; font: 500 12px var(--body); color: var(--muted); background: transparent; border: 0; padding: 0 }
-.sync-text { border-radius: 6px; cursor: default }
-.sync-text[data-tip]:hover, .sync-text[data-tip]:focus-visible { color: var(--ink) }
-.sync-now { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; background: transparent; color: var(--muted); border: 1px solid var(--rule) }
-.sync-now:hover { filter: none; color: var(--ink); border-color: var(--muted) }
-.sync-now .refresh { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
-.sync-bad { background: none; border: 0; padding: 0; color: var(--pen-text); text-decoration: underline; font: inherit }
+/* Extra padding makes a taller target without moving the line. */
+.sync-text { background: none; border: 0; padding: 5px 0; margin-block: -5px; color: inherit; font: inherit; border-radius: 6px }
+.sync-text:hover { filter: none }
+.sync-text[data-tip]:hover, .sync-text[data-tip]:focus-visible, .sync-text[aria-expanded="true"] { color: var(--ink) }
+/* A bigger target than the dot it holds, without moving the text away from the dot. */
+.sync-now { display: inline-grid; place-items: center; width: 24px; height: 24px; margin-right: -8px; padding: 0; border-radius: 50%; background: transparent; color: var(--muted); border: 0 }
+.sync-now:hover { filter: none; color: var(--ink) }
+.sync-now .refresh { display: none; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
+.sync-now:hover .dot, .sync-now:focus-visible .dot { display: none }
+.sync-now:hover .refresh, .sync-now:focus-visible .refresh { display: block }
+/* Touch has no hover to reveal the arrow, so it shows all the time. */
+@media (hover: none) {
+  .sync-now .dot { display: none }
+  .sync-now .refresh { display: block }
+}
+.sync-bad { background: none; border: 0; padding: 5px 0; margin-block: -5px; color: var(--pen-text); text-decoration: underline; font: inherit }
 
 /* The app's own tooltips: a small card under the control, on hover or keyboard focus. */
 [data-tip] { position: relative }
 /* A hovered button's filter traps its tooltip in its own layer; lift that layer over the row below. */
-[data-tip]:hover, [data-tip]:focus-visible { z-index: 40 }
-[data-tip]:hover::after, [data-tip]:focus-visible::after {
+[data-tip]:hover, [data-tip]:focus-visible, [data-tip][aria-expanded="true"] { z-index: 40 }
+[data-tip]:hover::after, [data-tip]:focus-visible::after, [data-tip][aria-expanded="true"]::after {
   content: attr(data-tip); position: absolute; top: calc(100% + 8px); right: 0; z-index: 40 }
 /* One look for both: CSS tooltips on controls, and the chart marks' card (charttip.ts). */
-[data-tip]:hover::after, [data-tip]:focus-visible::after, .chart-tip {
+[data-tip]:hover::after, [data-tip]:focus-visible::after, [data-tip][aria-expanded="true"]::after, .chart-tip {
   pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: 10px;
   padding: 7px 10px; font: 500 12px/1.3 var(--body); letter-spacing: 0; text-transform: none; white-space: nowrap;
   box-shadow: 0 12px 28px -12px rgba(var(--shade), .45) }
 .chart-tip { position: fixed; top: 0; left: 0; z-index: 60; white-space: pre-line; max-width: min(300px, calc(100vw - 24px)); line-height: 1.5 }
+/* The status sits on the left of the header, so its tooltips open rightward and wrap. */
+.sync-text[data-tip]::after, .sync-now[data-tip]::after, .sync-bad[data-tip]::after { left: 0; right: auto; width: max-content; white-space: normal; max-width: min(300px, calc(100vw - 48px)) }
+/* Touch leaves :hover stuck on after a tap, so only the open state shows the status text's tooltip there. */
+@media (hover: none) {
+  .sync-text[data-tip]:hover:not(:focus-visible):not([aria-expanded="true"])::after { display: none }
+}
 /* Marks with a breakdown look clickable; the pinned one stays lit. */
 svg [data-tip] { cursor: pointer }
 svg .tip-pinned, svg [data-tip]:hover { opacity: 1; filter: brightness(1.12) }
@@ -111,7 +145,7 @@ svg .tip-pinned, svg [data-tip]:hover { opacity: 1; filter: brightness(1.12) }
 svg [data-tip]::after { content: none }
 svg [data-tip]:focus-visible { outline: 3px solid var(--ai); outline-offset: 2px }
 /* Escape hides the CSS tooltips until the pointer moves (charttip.ts). */
-.tips-off [data-tip]:hover::after, .tips-off [data-tip]:focus-visible::after { display: none }
+.tips-off [data-tip]:hover::after, .tips-off [data-tip]:focus-visible::after, .tips-off [data-tip][aria-expanded="true"]::after { display: none }
 /* Labeled tabs don't need one until their names are hidden on narrow windows. */
 .top .tab:not(.icon-only)[data-tip]::after { display: none }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok) }
@@ -141,9 +175,7 @@ svg [data-tip]:focus-visible { outline: 3px solid var(--ai); outline-offset: 2px
   .views-row { flex-wrap: nowrap }
   .views-row .views.period { display: none }
   .period-select { display: block; flex: none }
-  .top { align-items: flex-start }
-  .top-right { align-items: flex-start }
-  .top-right .sync-pill { padding: 0 0 0 10px }
+  .top nav { margin-left: 0 }
 }
 
 .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 18px; padding: clamp(20px, 4vw, 36px);
@@ -188,6 +220,10 @@ svg [data-tip]:focus-visible { outline: 3px solid var(--ai); outline-offset: 2px
 .chart .seg { stroke: var(--surface); stroke-width: 1.5 }
 .seg.s0 { fill: var(--pen); background: var(--pen) } .seg.s1 { fill: var(--ink); background: var(--ink); opacity: .75 }
 .seg.s2 { fill: var(--ai); background: var(--ai) } .seg.s3 { fill: var(--muted); background: var(--muted); opacity: .75 }
+/* Report card grades need five, and no opacity: fading a fill would take it under 3:1 against the surface. */
+.seg.ga { fill: var(--grade-a); background: var(--grade-a) } .seg.gb { fill: var(--grade-b); background: var(--grade-b) }
+.seg.gc { fill: var(--grade-c); background: var(--grade-c) } .seg.gd { fill: var(--grade-d); background: var(--grade-d) }
+.seg.gf { fill: var(--grade-f); background: var(--grade-f) }
 .chart-key { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted) }
 .chart-key li { display: inline-flex; align-items: center; gap: 6px }
 .chart-key i { width: 10px; height: 10px; border-radius: 2px; display: inline-block }
@@ -291,6 +327,11 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .source.on .status { color: var(--pen-text) }
 .src-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap }
 
+.how-to { margin: 14px 0 6px }
+.toggle input[aria-disabled="true"] { opacity: .55 }
+.tip-rules { flex-basis: 100%; font-size: 13px }
+.tip-rules summary { cursor: pointer }
+.tip-rules pre { margin: 8px 0 0; padding: 12px; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; font-family: inherit; white-space: pre-wrap; overflow-wrap: anywhere }
 .settings-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 0; border-bottom: 1px solid var(--rule) }
 .toggle { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer }
 .toggle input { width: 18px; height: 18px; accent-color: var(--pen) }
@@ -349,10 +390,10 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .pick-count b { color: var(--ink); font-weight: 600 }
 
 /* Share dialog: one button per network, each saying whether you'll need to paste. */
-.share-dialog { width: min(560px, calc(100vw - 32px)); border: 1px solid var(--rule); border-radius: 18px; padding: 22px; background: var(--surface); color: var(--ink);
+.share-dialog, .confirm-dialog { width: min(560px, calc(100vw - 32px)); border: 1px solid var(--rule); border-radius: 18px; padding: 22px; background: var(--surface); color: var(--ink);
   box-shadow: 0 30px 80px -20px rgba(var(--shade), .5) }
-.share-dialog[open] { display: grid; gap: 12px }
-.share-dialog::backdrop { background: rgba(var(--shade), .55) }
+.share-dialog[open], .confirm-dialog[open] { display: grid; gap: 12px }
+.share-dialog::backdrop, .confirm-dialog::backdrop { background: rgba(var(--shade), .55) }
 .sd-head { display: flex; justify-content: space-between; align-items: center }
 .sd-close { background: none; border: 0; color: var(--muted); font-size: 26px; line-height: 1; padding: 2px 6px; min-width: 32px; min-height: 32px }
 .sd-close:hover { filter: none; color: var(--ink) }
@@ -366,6 +407,8 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .share-guide.paste { color: var(--ink); background: color-mix(in srgb, var(--hl) 55%, transparent); border: 1px solid color-mix(in srgb, var(--hl) 90%, var(--ink) 10%) }
 .share-guide kbd { font: 600 12px var(--mono); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--muted); background: var(--surface) }
 .sd-foot { display: flex; gap: 8px; justify-content: flex-end }
+.confirm-dialog h2 { font-size: 20px }
+.confirm-list { margin: 0; padding-left: 20px; display: grid; gap: 8px }
 
 /* Learn: the prompt checker, tracks of lessons, and the lesson page. */
 .checker textarea { width: 100%; min-height: 9em; resize: vertical; margin: 14px 0 10px; font: 400 15px/1.5 var(--body); color: var(--ink);
@@ -441,6 +484,15 @@ button.link:hover { filter: none }
 .trophies { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px }
 .trophies li { padding: 10px 14px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface) }
 .insights { margin: 0; padding-left: 18px; display: grid; gap: 10px; max-width: 70ch }
+.recap-cards { margin-top: 8px; font-size: 14px }
+/* Improve's report cards: the charts, the latest cards as quiet rows, and a note on how much they cover. */
+.cards-block { display: grid; gap: 18px }
+.cards-block h3 { margin: 0; font: 800 17px/1.2 var(--display) }
+.recent-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px }
+.recent-cards li { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 9px 12px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); font-size: 14px }
+.recent-cards .rc-day { font: 600 12px/1.6 var(--mono); min-width: 4.5em }
+.card-hint { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; padding: 8px 12px; border: 1px dashed var(--rule); border-radius: 10px; font-size: 14px }
+.card-hint button.ghost { margin-left: auto; padding: 4px 9px; min-width: 32px; min-height: 32px; font-size: 15px; line-height: 1; border-color: var(--rule); color: var(--muted) }
 
 /* Four tabs don't fit beside the logo on narrow windows: show icons, keep names for screen readers. */
 @media (max-width: 720px) {
@@ -466,7 +518,7 @@ button.link:hover { filter: none }
   .recap { padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--rule) }
   .part { grid-template-columns: 1fr 3em } .part .bar-bg { grid-column: 1 / -1; grid-row: 2 }
   .stats { grid-template-columns: repeat(2, 1fr) }
-  .stat:nth-child(3) { border-left: 0; padding-left: 0 }
+  .stat:nth-child(odd) { border-left: 0; padding-left: 0 }
 }
 @media (max-width: 520px) { .share-grid { grid-template-columns: repeat(2, 1fr) } }
 
@@ -477,7 +529,7 @@ button.link:hover { filter: none }
   .no.still { animation: none }
   .model-pick svg { transition: transform .15s ease-out }
   .picker-pop { animation: pop .14s ease-out }
-  .share-dialog[open] { animation: pop .16s ease-out }
+  .share-dialog[open], .confirm-dialog[open] { animation: pop .16s ease-out }
   .dot.live { animation: pulse 1s ease-in-out infinite alternate }
   @keyframes scrawl { from { transform: rotate(-14deg) scale(1.25); opacity: .2 } }
   @keyframes pop { from { opacity: 0; transform: translateY(-4px) } }

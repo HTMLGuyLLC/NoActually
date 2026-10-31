@@ -21,6 +21,8 @@ export type Tier = { id: string; name: string; floor: number };
 /** A tier answered in a word (prompt and correction tiers): its answer, and a line on what it means. */
 export type PromptTier = Tier & { verdict: string; blurb: string };
 export type Titled = { id: string; title: string };
+/** A habit by the name a report card gives it (`finish`), and the prompt signal that measures it (`done`). */
+export type Habit = { id: string; signal: string | null; title: string; hint: string; plain: string };
 export type Meta = {
   /** Overall tiers, ascending by floor (an overall score, 0 to 100). */
   tiers: Tier[];
@@ -33,7 +35,8 @@ export type Meta = {
   /** Fewest tasks corrections are counted against (so a thin month isn't wiped out). */
   humbled_base: number;
   categories: Titled[];
-  sources: { id: string; name: string }[];
+  /** `gradable`: its chats can carry a report card. */
+  sources: { id: string; name: string; gradable: boolean }[];
   /** Ascending by floor. */
   prompt_tiers: PromptTier[];
   /** "Do you correct it?" tiers, by judgment, ascending. */
@@ -44,6 +47,8 @@ export type Meta = {
   prompt_window_days: number;
   /** What a prompt can carry, in display order. */
   signals: (Titled & { hint: string })[];
+  /** What a report card can say you left out: the signals, then Context (`signal` is null: only a report card can tell). */
+  habits: Habit[];
   /** Signals a prompt needs to be specific. */
   sharp_signals: number;
   /** Lowest first. */
@@ -54,6 +59,14 @@ export type Meta = {
   min_week: number;
   /** Weeks a habit or steering goal must be met. */
   goal_weeks: number;
+  /** Graded tasks a week needs to be a solid point on the report card charts. */
+  min_card_week: number;
+  /** What your AI is told when tips are on, word for word. */
+  tip_rules: string;
+  /** Graded tasks a week needs to be a personal best. */
+  min_card_best: number;
+  /** Graded tasks on each side of the "since you started" comparison. */
+  min_card_half: number;
 };
 
 export type Verdict = "no" | "hmm";
@@ -165,7 +178,45 @@ export type Stats = {
   hall_of_fame: HallEntry[];
   prompts: Prompts;
 };
+/** One week of report cards. The maps are empty until a task is graded. */
+export type ReportCardWeek = {
+  graded: number;
+  /** Graded tasks per letter grade, "A" to "F". */
+  grades: Record<string, number>;
+  /** Extra back-and-forth, summed. */
+  avoidable: number;
+  /** Tokens redone because of it (never shown as a count), and what that cost at list prices (null when no model had a price). */
+  extra_tokens: number;
+  extra_cost: number | null;
+  /** Of `graded`, the tasks whose model has a price: the ones `extra_cost` adds up. A cost per task divides by this. */
+  priced: number;
+  extra_minutes: number;
+  /** Graded tasks that missed each habit, by name. */
+  missing: Record<string, number>;
+  /** Tasks started that week in tools that can carry a report card. */
+  gradable_tasks: number;
+};
+/** One of the latest report cards. */
+export type RecentReportCard = {
+  /** The day the task started. */
+  day: string;
+  /** The day the card was written, in local time: when it is "from". Settings' "last report card" is by this day. */
+  graded_day: string;
+  source: string;
+  grade: string;
+  /** The first habit this card says was missed, or null. */
+  missing: string | null;
+  extra_cost: number | null;
+  /** Tokens redone. Never shown as a count (the app speaks in minutes, and the CLI's `--json` has the numbers); more than 0 means some work was redone. */
+  extra_tokens: number;
+  /** Minutes of work redone. Every card has it, priced or not. */
+  extra_minutes: number;
+};
+/** First against latest graded tasks, over all history: percent A or B, and the habit that dropped most. */
+export type CardTrend = { first_ab: number; last_ab: number; habit: { habit: string; first: number; last: number } | null };
 /** One week of history (the week's Monday, local time). */
+/** Tips your AI gave, and the tasks in chats that had the rules. */
+export type TipWeek = { tips: number; tasks: number };
 export type HistoryWeek = {
   week: string;
   messages: number;
@@ -179,6 +230,8 @@ export type HistoryWeek = {
   grades: Record<string, number>;
   steering: Record<string, number>;
   steered: Record<string, number>;
+  report_cards: ReportCardWeek;
+  tips: TipWeek;
 };
 export type GoalKind = { kind: "habit"; signal: string } | { kind: "steer"; steer: string } | { kind: "tier"; tier: string };
 /** `target` is a percent: a floor for a habit, a ceiling for steering, unused for a tier. */
@@ -206,12 +259,18 @@ export type Progress = {
   /** Every goal you could pick now, with targets from your own numbers (all AI). */
   options: Goal[];
   trophies: Trophy[];
-  bests: { landed: [number, string] | null; sharp: [number, string] | null; goal_streak: number };
+  /** `report_card`: the best share of graded tasks that got an A or B in a week, and its Monday. */
+  bests: { landed: [number, string] | null; sharp: [number, string] | null; goal_streak: number; report_card: [number, string] | null };
   insights: {
     signals: Tip[];
     /** [steer id, its share of the steering that was on you]. */
     steer: [string, number] | null;
     models: { family: string; landed: number; continued: number }[];
+    report_cards: CardTrend | null;
+    /** The tip you get most, once there are enough tips to say. */
+    top_tip: { habit: string; tips: number; of: number } | null;
+    /** Last full week against the week before, once both have enough tasks. */
+    tip_trend: { latest: TipWeek; before: TipWeek } | null;
   };
 };
 /** A draft prompt, graded like your history. `signals` is a bit mask, in `Meta.signals` order. */
@@ -263,6 +322,7 @@ export type Commands = {
   check_for_updates: { args: undefined; result: null };
   install_update: { args: undefined; result: null };
   progress: { args: { filter: Filter }; result: Progress };
+  recent_report_cards: { args: { filter: Filter }; result: RecentReportCard[] };
   set_goal: { args: { kind: GoalKind; target: number }; result: Goal };
   clear_goal: { args: undefined; result: null };
   check_prompt: { args: { text: string }; result: Check };
@@ -270,6 +330,14 @@ export type Commands = {
   set_learned: { args: { id: string; done: boolean }; result: string[] };
   get_menu_bar: { args: undefined; result: MenuBar };
   set_menu_bar: { args: { enabled: boolean }; result: null };
+  report_cards_status: { args: { look: boolean }; result: ReportCardsStatus };
+  report_cards_turn_on: { args: { tool: ReportCardTool }; result: null };
+  report_cards_turn_off: { args: { tool: ReportCardTool }; result: null };
+  report_cards_set_tips: { args: { on: boolean }; result: null };
+  report_cards_set_reminders: { args: { on: boolean }; result: null };
+  report_cards_delete_history: { args: undefined; result: number };
+  log_error: { args: { message: string }; result: null };
+  open_log_folder: { args: undefined; result: null };
 };
 export type Command = keyof Commands;
 export type ArgsOf<C extends Command> = Commands[C]["args"];
@@ -305,6 +373,7 @@ export const api = {
   checkForUpdates: () => call("check_for_updates", undefined),
   installUpdate: () => call("install_update", undefined),
   progress: (filter: Filter) => call("progress", { filter }),
+  recentReportCards: (filter: Filter) => call("recent_report_cards", { filter }),
   setGoal: (kind: GoalKind, target: number) => call("set_goal", { kind, target }),
   clearGoal: () => call("clear_goal", undefined),
   checkPrompt: (text: string) => call("check_prompt", { text }),
@@ -312,4 +381,45 @@ export const api = {
   setLearned: (id: string, done: boolean) => call("set_learned", { id, done }),
   getMenuBar: () => call("get_menu_bar", undefined),
   setMenuBar: (enabled: boolean) => call("set_menu_bar", { enabled }),
+  /** `look`: also search through the login shell for a tool that isn't in the usual places (the "Look again" button). */
+  reportCardsStatus: (look = false) => call("report_cards_status", { look }),
+  reportCardsTurnOn: (tool: ReportCardTool) => call("report_cards_turn_on", { tool }),
+  reportCardsTurnOff: (tool: ReportCardTool) => call("report_cards_turn_off", { tool }),
+  reportCardsSetTips: (on: boolean) => call("report_cards_set_tips", { on }),
+  reportCardsSetReminders: (on: boolean) => call("report_cards_set_reminders", { on }),
+  /** How many report cards went. */
+  reportCardsDeleteHistory: () => call("report_cards_delete_history", undefined),
+  /** Adds a line to the app's log file. */
+  logError: (message: string) => call("log_error", { message }),
+  openLogFolder: () => call("open_log_folder", undefined),
+};
+
+/** The tools report cards can be turned on in. */
+export type ReportCardTool = "claude_code" | "codex";
+export const REPORT_CARD_TOOLS: readonly ReportCardTool[] = ["claude_code", "codex"];
+export type ReportCardToolStatus = {
+  /** The tool itself is on this computer. */
+  installed_tool: boolean;
+  /** Everything report cards add to it is in place. */
+  on: boolean;
+  /** The day its latest report card was written (YYYY-MM-DD, local time), if it has one. */
+  last_card_day: string | null;
+  /** Something the app couldn't do for it behind the scenes, in plain words. */
+  problem: string | null;
+  /** Report cards written in this tool that the app couldn't count. */
+  left_out: number;
+  /** Why report cards can't be turned on in it on this computer (Windows without Git, Codex on Windows), in plain words. */
+  unavailable: string | null;
+};
+export type ReportCardsStatus = {
+  claude_code: ReportCardToolStatus;
+  codex: ReportCardToolStatus;
+  /** "Give me tips as I work" is on. */
+  tips: boolean;
+  /** Chats with the rules used this week, and whether chats are starting without them. */
+  tip_activity: { active: number; tips: number; blocked: boolean };
+  /** "Remind me after a task" is on. */
+  reminders: boolean;
+  /** The app is running from a temporary copy macOS made, so report cards can't find it once it's closed. */
+  translocated: boolean;
 };

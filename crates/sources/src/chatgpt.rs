@@ -55,7 +55,9 @@ fn events(conv: &Value) -> Vec<Event> {
             }
             Some("assistant") => {
                 let model = msg["metadata"]["model_slug"].as_str().or(conv["default_model_slug"].as_str());
-                out.push(Event::Ai { text, model: model.map(str::to_string), pos });
+                let ts = msg["create_time"].as_f64().and_then(epoch_ts);
+                let key = msg["id"].as_str().map(|id| format!("chatgpt:{id}"));
+                out.push(Event::Ai { text, model: model.map(str::to_string), ts, key, pos });
             }
             _ => {}
         }

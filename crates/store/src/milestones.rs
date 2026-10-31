@@ -2,9 +2,11 @@
 //! decisions plus the stored baseline they're measured from; the app only shows what [`crossed`]
 //! returns.
 
-use crate::progress::floor_pct;
-use crate::{put_setting, GoalWeek, Result, Stats, Store, GOAL_WEEKS};
-use engine::{PromptTier, Tier, WINDOW_DAYS};
+use crate::progress::{card_weeks, floor_pct};
+use crate::stats::{monday_of, View};
+use crate::{put_setting, GoalWeek, Result, Stats, Store, GOAL_WEEKS, MIN_CARD_BEST};
+use chrono::{Duration, NaiveDate};
+use engine::{LetterGrade, PromptTier, Tier, WINDOW_DAYS};
 
 /// Correction totals worth announcing.
 pub const COUNTS: [i64; 9] = [1, 10, 25, 50, 100, 250, 500, 1000, 2500];
@@ -16,6 +18,8 @@ const TOTAL_KEY: &str = "milestone.total";
 const TIER_KEY: &str = "milestone.score_tier";
 const STREAK_KEY: &str = "milestone.streak";
 const PROMPT_TIER_KEY: &str = "milestone.prompt_tier";
+/// How many straight-A's weeks there were at the last check (not a date: weeks can come and go).
+const STRAIGHT_AS_KEY: &str = "milestone.straight_as";
 
 /// The numbers milestones are measured on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -126,6 +130,19 @@ pub fn goal_milestones(newly_met: &[GoalWeek], met: i64, finished: bool) -> Vec<
         .collect()
 }
 
+/// The popup for a first straight-A's week. `prev` is how many there were at the last check and
+/// `weeks` all there are now (Monday and graded tasks, oldest first). Only the first ever is news.
+/// It says "last week" when that's the week, which it nearly always is: a sync follows each week's end.
+pub fn straight_as(prev: i64, weeks: &[(NaiveDate, i64)], today: NaiveDate) -> Option<Milestone> {
+    let (week, _) = weeks.last().filter(|_| prev == 0)?;
+    let when = if *week + Duration::days(7) == monday_of(today) {
+        "last week".to_string()
+    } else {
+        format!("the week of {}", week.format("%b %-d"))
+    };
+    Some(Milestone { title: "Straight A's!".into(), body: format!("Every report card {when} was an A.") })
+}
+
 /// Saved instead of a tier id while unranked, so the first ranking is measured from "none".
 const UNRANKED: &str = "none";
 
@@ -147,6 +164,40 @@ fn best_tier<T: Copy + Ord + std::str::FromStr>(
 }
 
 impl Store {
+    /// Finished weeks (before `today`'s) with enough graded tasks, all of them an A, oldest first, as
+    /// (Monday, graded tasks). Across all AI, since the milestone is about you.
+    pub fn straight_a_weeks(&self, today: NaiveDate) -> Result<Vec<(NaiveDate, i64)>> {
+        let this_week = monday_of(today);
+        Ok(card_weeks(&View::all(self.conn()))?
+            .into_iter()
+            .filter(|(week, w)| *week < this_week && w.graded >= MIN_CARD_BEST)
+            .filter(|(_, w)| w.count(LetterGrade::A) == w.graded)
+            .map(|(week, w)| (week, w.graded))
+            .collect())
+    }
+
+    /// Checks for a first straight-A's week and records the baseline, like [`Store::advance_milestones`]:
+    /// the first time report cards appear (an upgrade, a backfill) it only records what's already
+    /// there. Returns the popup, if there is one. Call it after each sync. `announce` is false when
+    /// the history was just read in bulk (a first sync, a source just allowed, a rebuild): the
+    /// baseline still moves, so the old weeks that came in are never news later, but nothing is
+    /// returned.
+    pub fn advance_card_milestones(&self, today: NaiveDate, announce: bool) -> Result<Vec<Milestone>> {
+        let weeks = self.straight_a_weeks(today)?;
+        let saved: Option<i64> = self.get_setting(STRAIGHT_AS_KEY)?.and_then(|v| v.parse().ok());
+        let now = weeks.len() as i64;
+        let Some(prev) = saved else {
+            // Nothing to measure from until a first report card exists.
+            let any: bool = self.conn().query_row("SELECT EXISTS(SELECT 1 FROM report_cards)", [], |r| r.get(0))?;
+            if any {
+                self.set_setting(STRAIGHT_AS_KEY, &now.to_string())?;
+            }
+            return Ok(vec![]);
+        };
+        self.set_setting(STRAIGHT_AS_KEY, &prev.max(now).to_string())?;
+        Ok(straight_as(prev, &weeks, today).filter(|_| announce).into_iter().collect())
+    }
+
     /// Records `now` as the milestone baseline and returns the previous one, or `None` the first
     /// time (nothing to compare against, so nothing to announce).
     pub fn advance_milestones(&self, now: &Snapshot) -> Result<Option<Snapshot>> {

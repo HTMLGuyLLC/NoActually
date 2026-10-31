@@ -1,10 +1,24 @@
 // Improve: are you getting better? Last week at a glance, the one goal you're working on, how your
 // numbers trend, your personal bests and trophies, and what your own history says works.
-import type { Goal, GoalKind, GoalStatus, GoalWeek, HistoryWeek, Meta, Progress, Stats } from "../api";
-import { fmtDay, last, plural } from "../format";
-import { type Html, html, raw } from "../html";
+import type {
+  Goal,
+  GoalKind,
+  GoalStatus,
+  GoalWeek,
+  HistoryWeek,
+  Meta,
+  Progress,
+  RecentReportCard,
+  ReportCardTool,
+  ReportCardWeek,
+  SourceInfo,
+  Stats,
+} from "../api";
+import { fmtDay, last, money, plural } from "../format";
+import { type Html, html, num, raw } from "../html";
 import { lessonFor } from "../learn/lessons";
-import { floorPercent, signalNoun, steerTitle, tierName, tierOf } from "../meta";
+import { floorPercent, habitTitle, signalNoun, sourceName, steerTitle, tierName, tierOf } from "../meta";
+import { TOOL_WORDS } from "../report-cards";
 import { RANGES, type Range } from "../state";
 import { chartBox, lineChart, type Point, sparkline, stackChart } from "./charts";
 
@@ -18,10 +32,27 @@ export type ImproveContext = {
   /** The model picker, beside the range. */
   picker?: Html;
   filtered: boolean;
+  /** The latest report cards, newest first. */
+  recent: RecentReportCard[];
+  /** A source that can carry a report card is allowed. */
+  canGrade: boolean;
+  /** The "get a report card" line was dismissed. */
+  hintDismissed: boolean;
+  /** A tool report cards are already on in, if any: the line then says how to ask instead of how to set up. */
+  cardsOn: ReportCardTool | null;
 };
+
+/** Whether a source that can carry a report card is allowed, so the empty state may suggest one. */
+export const canGrade = (meta: Meta, sources: SourceInfo[]): boolean =>
+  sources.some((s) => s.state?.allowed && meta.sources.some((m) => m.id === s.id && m.gradable));
 
 /** Fewer messages than this in a week and its correction rate is too noisy to put on the line. */
 const RATE_MIN_MESSAGES = 50;
+
+/** Letter grades, best first. */
+const LETTERS = ["A", "B", "C", "D", "F"];
+/** Report card grades step from red (A) to ink (F) in five even lightness steps, each clear against the chart (see `--grade-*`). */
+const LETTER_SEG: Record<string, string> = { A: "ga", B: "gb", C: "gc", D: "gd", F: "gf" };
 
 /** Vague is muted: blue means the AI. */
 const GRADE_SEG: Record<string, string> = { sharp: "s0", solid: "s1", thin: "s3" };
@@ -38,13 +69,26 @@ const RANGE_TITLES: Record<Range, string> = { "12w": "12 weeks", "6m": "6 months
 const RANGE_WEEKS: Record<Range, number> = { "12w": 12, "6m": 26, all: Number.POSITIVE_INFINITY };
 
 /** One point on the charts: a week, or a month when weeks are too sparse to read. */
-export type Bucket = Omit<HistoryWeek, "week"> & { label: string };
+export type Bucket = Omit<HistoryWeek, "week" | "tips"> & { label: string };
 
 const add = (a: Record<string, number>, b: Record<string, number>) => {
   const out = { ...a };
   for (const [k, v] of Object.entries(b)) out[k] = (out[k] ?? 0) + v;
   return out;
 };
+
+/** Two buckets of report cards as one. Cost stays unknown only while neither has a price; the priced tasks add up too. */
+const addCards = (a: ReportCardWeek, b: ReportCardWeek): ReportCardWeek => ({
+  graded: a.graded + b.graded,
+  grades: add(a.grades, b.grades),
+  avoidable: a.avoidable + b.avoidable,
+  extra_tokens: a.extra_tokens + b.extra_tokens,
+  extra_cost: a.extra_cost == null && b.extra_cost == null ? null : (a.extra_cost ?? 0) + (b.extra_cost ?? 0),
+  priced: a.priced + b.priced,
+  extra_minutes: a.extra_minutes + b.extra_minutes,
+  missing: add(a.missing, b.missing),
+  gradable_tasks: a.gradable_tasks + b.gradable_tasks,
+});
 
 /**
  * The range's weeks as chart points. When a typical week has fewer than `minWeek` tasks, weeks
@@ -77,6 +121,7 @@ export function buckets(weeks: HistoryWeek[], range: Range, minWeek: number): { 
             grades: add(m.grades, w.grades),
             steering: add(m.steering, w.steering),
             steered: add(m.steered, w.steered),
+            report_cards: addCards(m.report_cards, w.report_cards),
           }
         : { ...w, label: fmtDay(`${key}-01`, { month: "short", year: "2-digit" }) },
     );
@@ -85,6 +130,12 @@ export function buckets(weeks: HistoryWeek[], range: Range, minWeek: number): { 
 }
 
 const pctOf = (n: number, total: number) => (total > 0 ? floorPercent(n, total) : null);
+
+/** One tenth: "0.8". */
+const tenth = (v: number) => String(Math.round(v * 10) / 10);
+
+/** What a week's number of avoidable rounds per task is called, as the CLI words it: "0.6 follow-ups that redid work per task", "1 follow-up…". */
+const redidPerTask = (v: number) => `${tenth(v)} ${tenth(v) === "1" ? "follow-up" : "follow-ups"} that redid work per task`;
 
 /** Each follow-up kind as a verb phrase (for "…in 15% of tasks or fewer") and as an "-ing" phrase (for "without …"). */
 const STEER_PHRASE: Record<string, [string, string]> = {
@@ -194,12 +245,69 @@ function goalView(p: Progress, meta: Meta, filtered: boolean): Html {
   </section>`;
 }
 
+/** Graded tasks that got an A or B. */
+const goodOf = (c: ReportCardWeek) => (c.grades.A ?? 0) + (c.grades.B ?? 0);
+
+/** What the extra back-and-forth cost per task ("$0.15"), over the tasks that have a price; null when none do or it rounds to nothing. */
+function costPerTask(c: ReportCardWeek): string | null {
+  const each = c.extra_cost != null && c.priced ? c.extra_cost / c.priced : 0;
+  return each >= 0.005 ? money(each) : null;
+}
+
+/** Whole minutes of redone work per graded task; every card has minutes, priced or not. */
+const minutesPerTask = (c: ReportCardWeek): number => (c.graded ? Math.round(c.extra_minutes / c.graded) : 0);
+
+/** Said when follow-ups redid work but it came to no whole minute: that is not the same as nothing redone. */
+const UNDER_A_MINUTE = "under a minute extra";
+
+/** What a week's redone work took per graded task: about so many minutes, or under a minute if follow-ups redid work and it rounds to none. Empty when nothing was redone. */
+function minutesWords(c: ReportCardWeek): string {
+  const minutes = minutesPerTask(c);
+  if (minutes) return `about ${plural(minutes, "extra minute")} per task`;
+  return c.avoidable > 0 ? `${UNDER_A_MINUTE} per task` : "";
+}
+
+/** Dollar figures are what the work would cost per token, not what a subscription charges. */
+const PAYG = "at pay-as-you-go prices";
+/** Said once under the recent cards, in place of on every row, when any of them shows dollars. */
+const DOLLARS_NOTE = `Dollars are ${PAYG}. On a subscription this came out of your usage limit, not your wallet.`;
+
+/** "Report cards: 4 of 6 tasks A or B (up from 2 of 5) · about 2 extra minutes per task." Only when both weeks have enough graded tasks. */
+function cardLine(latest: ReportCardWeek, before: ReportCardWeek, meta: Meta): string {
+  if (latest.graded < meta.min_card_week || before.graded < meta.min_card_week) return "";
+  const [now, then] = [goodOf(latest), goodOf(before)];
+  // Shares, not counts: 3 of 6 is the same as 2 of 4.
+  const diff = now * before.graded - then * latest.graded;
+  const change = diff > 0 ? "up from" : diff < 0 ? "down from" : "same as";
+  const minutes = minutesWords(latest);
+  return `Report cards: ${now} of ${latest.graded} tasks A or B (${change} ${then} of ${before.graded})${minutes ? ` · ${minutes}` : ""}.`;
+}
+
+/** "Last week, 6 of 40 tasks got a tip (down from 9 of 38 the week before)." and the tip you get most, each only when there's enough to say. */
+function tipsView(p: Progress, meta: Meta): Html | "" {
+  const { tip_trend: trend, top_tip: top } = p.insights;
+  const lines: string[] = [];
+  if (trend) {
+    const { latest: now, before: then } = trend;
+    // Shares, not counts: 3 of 30 is the same as 2 of 20.
+    const diff = now.tips * then.tasks - then.tips * now.tasks;
+    const change = diff > 0 ? "up from" : diff < 0 ? "down from" : "same as";
+    lines.push(`Last week, ${now.tips} of ${now.tasks} tasks got a tip (${change} ${then.tips} of ${then.tasks} the week before).`);
+  }
+  const plain = meta.habits.find((h) => h.id === top?.habit)?.plain;
+  if (top && plain) lines.push(`Your most common tip: ${plain} (${top.tips} of your last ${top.of}).`);
+  return lines.length ? html`<div class="tip-lines">${lines.map((l) => html`<p>${l}</p>`)}</div>` : "";
+}
+
 /** Last full week against the week before: what moved. */
 function recapView(weeks: HistoryWeek[], meta: Meta): Html | "" {
   const done = weeks.slice(0, -1); // the last one is this week, still under way
   const latest = last(done);
   const before = last(done, 2);
-  if (!latest || !before || latest.tasks < meta.min_week) return "";
+  if (!latest || !before) return "";
+  const cards = cardLine(latest.report_cards, before.report_cards, meta);
+  const rows = latest.tasks >= meta.min_week;
+  if (!rows && !cards) return "";
   const landed = (w: HistoryWeek) => pctOf(w.landed, w.continued);
   const sharp = (w: HistoryWeek) => pctOf(w.grades.sharp ?? 0, w.tasks);
   // Fewer corrections isn't worse (it may be getting things right), so that row's change isn't colored.
@@ -212,9 +320,14 @@ function recapView(weeks: HistoryWeek[], meta: Meta): Html | "" {
     return html`<div class="recap-row"><span>${name}</span><b>${a ?? "–"}${a != null ? unit : ""}</b><span class="delta${neutral || !diff ? "" : diff > 0 ? " up" : " down"}">${arrow}</span></div>`;
   };
   return html`<section class="recap"><div class="eyebrow">Last week · ${fmtDay(latest.week)}</div>
-    ${row("Clear the first time", landed(latest), landed(before))}
+    ${
+      rows
+        ? html`${row("Clear the first time", landed(latest), landed(before))}
     ${row("Specific prompts", sharp(latest), sharp(before))}
-    ${row("Corrections", latest.corrections, before.corrections, "", true)}
+    ${row("Corrections", latest.corrections, before.corrections, "", true)}`
+        : ""
+    }
+    ${cards ? html`<p class="recap-cards">${cards}</p>` : ""}
     <p class="muted small">Compared with the week before.</p>
   </section>`;
 }
@@ -254,12 +367,12 @@ function trendsView(ctx: ImproveContext): Html {
   const rateNow = last(rate.filter((r) => r.value != null));
   const messages = sum(points.map((b) => b.messages));
   const average = messages ? (100 * sum(points.map((b) => b.corrections))) / messages : null;
-  const one = (v: number) => String(Math.round(v * 10) / 10);
   const rateSummary =
     rateNow?.value != null && average != null
-      ? `Corrections per 100 messages: ${one(rateNow.value)} in the latest ${per} (${rateNow.label}), ${one(average)} on average.`
+      ? `Corrections per 100 messages: ${tenth(rateNow.value)} in the latest ${per} (${rateNow.label}), ${tenth(average)} on average.`
       : "Not enough messages yet to show a rate.";
   const totalSteer = steerSeries.reduce((t, s) => t + s.values.reduce((a, v) => a + v, 0), 0);
+  const reportCards = cardsView(ctx, points, per);
   return html`
     <section><div class="head"><h2>Prompts clear the first time</h2><p class="muted">Per ${per}. Hollow dots had fewer than ${meta.min_week} prompts with a follow-up, so they're left off the line.</p></div>
       ${chartBox("Prompts clear the first time chart, scrolls sideways", lineChart({ id: "landed", label: `Percent of prompts clear the first time, per ${per}`, summary: landedSummary, points: landed, bands, unit: "%", min: landedFloor(landed) }))}</section>
@@ -270,7 +383,83 @@ function trendsView(ctx: ImproveContext): Html {
     <section class="split">
       <div><div class="head"><h2>Why you followed up</h2></div>${chartBox("Why you followed up chart, scrolls sideways", stackChart({ id: "steering", label: `Follow-ups by reason, per ${per}`, summary: `${plural(totalSteer, "follow-up")} over ${points.length} ${per}s. ${latest(steerSeries)}`, labels, series: steerSeries, width: HALF, height: 220 }))}</div>
       <div><div class="head"><h2>Corrections per 100 messages</h2><p class="muted">Hollow dots had fewer than ${RATE_MIN_MESSAGES} messages, so they're left off the line.</p></div>${chartBox("Corrections per 100 messages chart, scrolls sideways", lineChart({ id: "rate", label: `Corrections per 100 messages, per ${per}`, summary: rateSummary, points: rate, max: rateMax, width: HALF, height: 220, weakNote: `fewer than ${RATE_MIN_MESSAGES} messages` }))}</div>
-    </section>`;
+    </section>
+    ${reportCards}`;
+}
+
+/** A recent card shows dollars when its model has a price and the redone work came to a cent or two. */
+const hasDollars = (c: RecentReportCard): boolean => c.extra_cost != null && c.extra_cost >= 0.005;
+
+/**
+ * What a recent card's redone work took: minutes first, and dollars only when the model has a price.
+ * A card has no count of follow-ups, but work redone shows as tokens: some redone with no whole minute is "under a minute", not nothing.
+ */
+function extraView(c: RecentReportCard): Html {
+  const minutes = c.extra_minutes > 0 ? `about ${plural(c.extra_minutes, "extra minute")}` : c.extra_tokens > 0 ? UNDER_A_MINUTE : "";
+  const dollars = c.extra_cost != null && hasDollars(c) ? `about ${money(c.extra_cost)}` : "";
+  if (!minutes && !dollars) return html`<span class="muted">Nothing redone</span>`;
+  return html`${minutes ? html`<span class="muted">${minutes}</span>` : ""}${dollars ? html`<span class="muted">${dollars}</span>` : ""}`;
+}
+
+/** The last few report cards, one line each: when it was graded, where, grade, what was left out, what it took. Dollars are explained once, below. */
+function recentView(recent: RecentReportCard[], meta: Meta): Html {
+  const list = html`<ul class="recent-cards">${recent.map(
+    (c) =>
+      html`<li><span class="rc-day">${fmtDay(c.graded_day)}</span><span>${sourceName(meta, c.source)}</span><span>Grade <b>${c.grade}</b></span>${c.missing ? html`<span>Left out: ${habitTitle(meta, c.missing).toLowerCase()}</span>` : html`<span class="muted">Nothing left out</span>`}${extraView(c)}</li>`,
+  )}</ul>`;
+  return recent.some(hasDollars) ? html`${list}<p class="muted small">${DOLLARS_NOTE}</p>` : list;
+}
+
+/** "Your report cards": the grades over time, the follow-ups that redid work per graded task, the tip lines, the latest cards, and how much they cover. With no graded task in the range, the tip lines alone, if there are any. */
+function cardsView(ctx: ImproveContext, points: Bucket[], per: string): Html | "" {
+  const { meta, recent } = ctx;
+  const sum = (f: (c: ReportCardWeek) => number) => points.reduce((t, b) => t + f(b.report_cards), 0);
+  const graded = sum((c) => c.graded);
+  const tips = tipsView(ctx.progress, meta);
+  if (!graded) return tips && html`<section class="cards-block"><div class="head"><h2>Your tips</h2></div>${tips}</section>`;
+  const labels = points.map((b) => b.label);
+  const gradeSeries = LETTERS.map((g) => ({ title: g, values: points.map((b) => b.report_cards.grades[g] ?? 0), seg: LETTER_SEG[g] }));
+  const rate = (c: ReportCardWeek) => c.avoidable / c.graded;
+  /** What a week's follow-ups that redid work took per task: minutes always, dollars only where there's a price. */
+  const tookPerTask = (c: ReportCardWeek) => {
+    const cost = costPerTask(c);
+    return [minutesWords(c), cost ? `about ${cost} per task ${PAYG}` : ""].filter(Boolean);
+  };
+  const rounds: Point[] = points.map((b) => {
+    const c = b.report_cards;
+    return {
+      label: b.label,
+      value: c.graded ? rate(c) : null,
+      weak: c.graded < meta.min_card_week,
+      tip: c.graded ? [`${b.label}: ${redidPerTask(rate(c))}`, plural(c.graded, "report card"), ...tookPerTask(c)].join(" · ") : "",
+    };
+  });
+  const solid = points.filter((b) => b.report_cards.graded >= meta.min_card_week);
+  const [from, to] = [solid[0], last(solid)];
+  const roundsSummary =
+    from && to
+      ? `Follow-ups that redid work per graded task went from ${tenth(rate(from.report_cards))} (${from.label}) to ${tenth(rate(to.report_cards))} (${to.label}).${tookPerTask(
+          to.report_cards,
+        )
+          .map((t) => ` ${t[0]?.toUpperCase()}${t.slice(1)}.`)
+          .join("")}`
+      : "Not enough report cards yet to show a trend.";
+  const latest = `Latest ${per} (${last(labels) ?? ""}): ${gradeSeries.map((s) => `${s.title} ${last(s.values) ?? 0}`).join(", ")}.`;
+  const roundsMax = Math.max(1, ...rounds.map((r) => Math.ceil(r.value ?? 0)));
+  const gradable = Math.max(
+    graded,
+    sum((c) => c.gradable_tasks),
+  );
+  return html`<section class="cards-block">
+    <div class="head"><h2>Your report cards</h2><p class="muted">A means nothing had to be redone. A letter grade looks at the whole task; a prompt grade looks at your first message only.</p></div>
+    <div class="split">
+      <div><div class="head"><h3>Report card grades</h3></div>${chartBox("Report card grades chart, scrolls sideways", stackChart({ id: "cards", label: `Report cards by letter grade, per ${per}`, summary: `${plural(graded, "report card")} over ${points.length} ${per}s. ${latest}`, labels, series: gradeSeries, width: HALF, height: 220 }))}</div>
+      <div><div class="head"><h3>Follow-ups that redid work, per task</h3><p class="muted">Per ${per}. Hollow dots had fewer than ${meta.min_card_week} report cards, so they're left off the line.</p></div>${chartBox("Follow-ups that redid work, per task, chart, scrolls sideways", lineChart({ id: "card-rounds", label: `Follow-ups that redid work, per task, per ${per}`, summary: roundsSummary, points: rounds, max: roundsMax, width: HALF, height: 220, weakNote: `fewer than ${meta.min_card_week} report cards` }))}</div>
+    </div>
+    ${tips}
+    ${recent.length ? html`<div><div class="head"><h3>Recent report cards</h3></div>${recentView(recent, meta)}</div>` : ""}
+    <p class="muted small">From ${num(graded)} of ${num(gradable)} tasks in tools that support report cards. You choose which tasks to grade, so these may not be typical.</p>
+  </section>`;
 }
 
 /** Personal bests are across all AI; with a model picked, they say so. */
@@ -311,6 +500,14 @@ function insightsView(p: Progress, meta: Meta): Html {
       html`<li>Your most common follow-up is <b>“${steerTitle(meta, id)}”</b> (${share}%).${l ? html` <button class="link" data-action="open-lesson" data-id="${l.id}">${l.title} →</button>` : ""}</li>`,
     );
   }
+  const rc = i.report_cards;
+  if (rc) {
+    items.push(html`<li>Report cards A or B: <b>${rc.first_ab}% → ${rc.last_ab}%</b> since you started.</li>`);
+    if (rc.habit)
+      items.push(
+        html`<li>You used to leave out the ${habitTitle(meta, rc.habit.habit).toLowerCase()} in <b>${rc.habit.first} of ${meta.min_card_half}</b> graded tasks. Now ${rc.habit.last} of ${meta.min_card_half}.</li>`,
+      );
+  }
   const [best, worst] = i.models;
   if (best && worst)
     items.push(
@@ -318,6 +515,15 @@ function insightsView(p: Progress, meta: Meta): Html {
     );
   return html`<section><div class="head"><h2>What works for you</h2><p class="muted">From your own history, and only when there's enough of it to say.</p></div>
     ${items.length ? html`<ul class="insights">${items}</ul>` : html`<p class="muted">Not enough history yet. Keep going; these show up as your tasks add up.</p>`}</section>`;
+}
+
+/** Until you have a report card: one line on how to get one, that you can dismiss. Not while a model is picked, since the history shown is only that model's. */
+function cardHintView(ctx: ImproveContext): Html | "" {
+  if (!ctx.canGrade || ctx.hintDismissed || ctx.filtered || ctx.progress.weeks.some((w) => w.report_cards.graded > 0)) return "";
+  const ask = ctx.cardsOn
+    ? html`Type ${TOOL_WORDS[ctx.cardsOn].command} after your next task.`
+    : html`Get a letter grade on how you asked, in Claude Code or Codex. <button class="link" data-action="go-settings" data-id="report-cards">Set up</button>`;
+  return html`<p class="card-hint">${ask}<button class="ghost small" data-action="dismiss-card-hint" aria-label="Dismiss this tip about report cards"><span aria-hidden="true">×</span></button></p>`;
 }
 
 function rangeNav(range: Range): Html {
@@ -335,7 +541,7 @@ export function improveView(ctx: ImproveContext): Html {
     <section class="improve-top">${goalView(p, meta, ctx.filtered)}${recapView(p.weeks, meta) || html`<section class="recap"><div class="eyebrow">Last week</div><p class="muted small">Your weekly recap shows up once a full week has ${meta.min_week}+ tasks.</p></section>`}</section>
     ${bestsView(p, ctx.filtered)}
     ${trophiesView(p, meta)}
-    <div class="head trends-head"><h2>How ${ctx.subject} and you are trending</h2><div class="filters">${ctx.picker ?? ""}${rangeNav(ctx.range)}</div></div>
-    ${empty ? html`<p class="muted">No history yet. Your charts start with your first tasks.</p>` : trendsView(ctx)}
+    <div class="head trends-head"><h2 id="trends-heading">How ${ctx.subject} and you are trending</h2><div class="filters">${ctx.picker ?? ""}${rangeNav(ctx.range)}</div></div>
+    ${empty ? html`<p class="muted">No history yet. Your charts start with your first tasks.</p>` : html`${cardHintView(ctx)}${trendsView(ctx)}`}
     ${insightsView(p, meta)}`;
 }

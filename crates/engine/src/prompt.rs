@@ -215,6 +215,17 @@ pub enum Prompt {
     Other,
 }
 
+impl Prompt {
+    /// True for the first request of a chat: the task that starts it, which the chat itself makes
+    /// (rule `task.first`), not a later message that opens a new task.
+    pub fn is_first_request(&self) -> bool {
+        matches!(self, Prompt::Task { rules, .. } if rules.first() == Some(&FIRST_REQUEST))
+    }
+}
+
+/// The rule that starts a chat's first task.
+const FIRST_REQUEST: &str = "task.first";
+
 /// Reads one message. `verdict` is [`crate::classify`]'s for the same turn: a correction is steering.
 /// `has_task` says whether this chat already has a task; until it does, the first real request
 /// (not a hello or a question) is the prompt, wherever it falls.
@@ -242,7 +253,7 @@ pub fn read_prompt(turn: &Turn, verdict: &Verdict, has_task: bool) -> Prompt {
         if first(&CHATTER, t).is_some() || is_question(t) {
             return Prompt::Other;
         }
-        return prompt(t, "task.first");
+        return prompt(t, FIRST_REQUEST);
     }
     if let Some(m) = first(&NEW_TASK, head) {
         return prompt(t, m.rule);
@@ -268,7 +279,7 @@ pub fn check(text: &str) -> Check {
     let norm = normalize_quotes(text.trim());
     let t = norm.as_str();
     let not_a_prompt = t.is_empty() || first(&CHATTER, t).is_some() || is_question(t);
-    let (signals, mut rules) = carried(t, "task.first");
+    let (signals, mut rules) = carried(t, FIRST_REQUEST);
     rules.remove(0);
     Check { signals, grade: Grade::of(signals), rules, not_a_prompt }
 }
@@ -329,6 +340,23 @@ static CHATTER: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         r"^(?:hi|hello|hey|yo|thanks?|thank you|thx|ok|okay|k|yes|yep|yeah|no|nope|sure|y|n|continue|go on|keep going|go ahead|proceed|resume|carry on|do it|go|lgtm|ship it|test|testing|ping|\.)\W*$",
     )]
 });
+
+/// One sign-off word or phrase.
+const SIGNOFF_WORD: &str = r"(?:thanks?(?: you)?(?: so much| a lot)?|thx|ty|perfect|great|awesome|looks good(?: to me)?|lgtm|that works|works now|nice work|great work|great job)";
+
+/// A whole message that closes a task: "thanks", "perfect, thank you!", "lgtm". Not "yes", "ok" or
+/// "sure", which usually answer the AI mid-task, and not "commit it", which is more work. Report
+/// cards use it to spot the end of a task; scoring never does, so it needs no rules rebuild.
+static SIGNOFF: LazyLock<Vec<Rule>> =
+    LazyLock::new(|| vec![rule("signoff", &format!(r"^\W*{SIGNOFF_WORD}(?:\W+{SIGNOFF_WORD})*\W*$"))]);
+
+/// A message longer than this (in bytes) is never just a sign-off, so it skips the regex.
+const SIGNOFF_BYTES: usize = 200;
+
+/// True when `text` is only a sign-off.
+pub fn is_signoff(text: &str) -> bool {
+    text.len() <= SIGNOFF_BYTES && first(&SIGNOFF, normalize_quotes(text.trim()).as_str()).is_some()
+}
 
 static QUESTION: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![rule_unless(
@@ -488,7 +516,9 @@ static DONE: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![
         rule_unless(
             "prompt.done.should",
-            r"\b(?:should|must|needs? to|has to)\b",
+            // A word has to follow, and a whole one: "we need to f" is a sentence still being typed, and
+            // would tick this until "fix" unticks it.
+            r"\b(?:should|must|needs? to|has to)\s+(?:\w{3}|\w{2}\s+\S)",
             // "should I…?" asks; "should be fine" shrugs. Neither gives a finish line.
             // "has to do with" and "needs to be fixed" say nothing about the result either, and
             // "you should fix it" names the job, not what done looks like.

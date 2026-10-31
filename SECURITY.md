@@ -12,8 +12,9 @@ We aim to acknowledge reports within 7 days, and will keep you updated until the
 
 In scope:
 
-- Anything that makes the app read a source the user has not allowed
-- Any network call other than the update check described in PRIVACY.md and opening a share link the user clicks
+- Anything that makes the app or its hooks read a source the user has not allowed
+- Any network call other than the update check described in PRIVACY.md, opening a share link the user clicks, and the plugin download and version check when report cards are on
+- Ways to make the app accept a report card plugin that isn't its own
 - Ways to make the app install an update not signed with the project's updater key
 - Correction text kept longer, or at a higher level, than the retention setting allows
 - Redaction bypasses (secrets, emails, URLs, home paths surviving in stored text)

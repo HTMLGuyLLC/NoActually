@@ -1,0 +1,7 @@
+# The report card plugin ships byte-for-byte: the app compares the installed files with the copies
+# built into it, and the shim must keep its Unix line endings to run. Shell scripts likewise.
+plugins/** text=auto eol=lf
+*.sh text eol=lf
+# The tip instructions are built into the app and sent word for word, so they stay the same on every system.
+crates/engine/src/tip_rules.txt text eol=lf
+*.png binary
