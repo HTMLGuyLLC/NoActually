@@ -234,6 +234,11 @@ describe("hall entries", () => {
     expect(m).toContain("Leave out names, secrets");
     expect(m).toContain(">Pin it<");
   });
+
+  it("keeps the report link after the actions", () => {
+    const m = hallView([hallEntry()]).value;
+    expect(m.indexOf(">Pin it<")).toBeLessThan(m.indexOf("Counted wrong?"));
+  });
 });
 
 describe("noChatsView", () => {

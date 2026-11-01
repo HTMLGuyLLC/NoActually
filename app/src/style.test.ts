@@ -16,6 +16,14 @@ const contrast = (a: number[], b: number[]) => (Math.max(lum(a), lum(b)) + 0.05)
 /** The declarations of the first rule whose selector is exactly `selector`. */
 const rule = (selector: string) => css.match(new RegExp(`^${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\{([^}]*)\\}`, "m"))?.[1] ?? "";
 
+describe("page spacing", () => {
+  it("passes the page's gap through main to every section", () => {
+    expect(rule(".wrap")).toContain("gap: 36px");
+    expect(rule("main")).toContain("display: grid");
+    expect(rule("main")).toContain("gap: inherit");
+  });
+});
+
 describe("light theme text", () => {
   // Red text sits on these; plain --pen is under 4.5:1 on the pale ones.
   const pairs: [string, string, string][] = [

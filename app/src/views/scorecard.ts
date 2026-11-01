@@ -237,8 +237,8 @@ export function hallView(entries: HallEntry[]): Html {
         ${e.ai ? html`<div class="ai-said"><b>${e.model || shortSourceName(e.source_name)}:</b> ${e.ai}</div>` : ""}
         <div class="correction-actions">
           ${shareButton("share-correction", "Share", { id: e.id, ghost: true, small: true })}
-          <button class="link small" data-action="counted-wrong" data-tip="${COUNTED_WRONG_HINT}">Counted wrong?</button>
           <button class="ghost small" data-action="pin" data-id="${e.id}" data-pinned="${String(e.pinned)}">${e.pinned ? "Unpin" : "Pin it"}</button>
+          <button class="link small" data-action="counted-wrong" data-tip="${COUNTED_WRONG_HINT}">Counted wrong?</button>
         </div>
       </article>`,
   )}</div>`;
