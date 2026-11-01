@@ -4,7 +4,7 @@ use crate::jsonl::{for_each_line, open_at};
 use crate::view::{build, Cut, Sample};
 use crate::{
     contains, file_name, home, pair_from, parse_ts, walk, ChatView, Error, Event, FileScan, Kind, Result, Source,
-    GRADE_SKILL_CODEX,
+    GRADE_SKILL_CODEX, MAX_READ_BYTES,
 };
 use engine::Usage;
 use serde_json::Value;
@@ -139,7 +139,9 @@ impl Source for Codex {
             if from > 0 && !is_zst(path) { Self::read_resumed(path, from)? } else { Self::read(path, from, false)? };
         // Compressed files are finished sessions: read whole, always final.
         let from = if is_zst(path) { 0 } else { from };
-        Ok(pair_from(self.id(), &rollout.session, rollout.events, from, end, finalize || is_zst(path)))
+        let mut scan = pair_from(self.id(), &rollout.session, rollout.events, from, end, finalize || is_zst(path));
+        scan.skipped_lines = rollout.skipped;
+        Ok(scan)
     }
 }
 
@@ -149,13 +151,7 @@ impl Codex {
         // Read from the top: the lines before `from` were already emitted, but they carry the
         // session's metadata and current model. (A scan that resumes uses [`Codex::read_resumed`].)
         let reader: Box<dyn BufRead> = if is_zst(path) {
-            let file = std::fs::File::open(path).map_err(Error::io(path))?;
-            let mut raw = Vec::new();
-            ruzstd::decoding::StreamingDecoder::new(file)
-                .map_err(|source| Error::Zstd { path: path.to_path_buf(), source })?
-                .read_to_end(&mut raw)
-                .map_err(Error::io(path))?;
-            Box::new(std::io::Cursor::new(raw))
+            Box::new(std::io::Cursor::new(unpack(path, MAX_READ_BYTES)?))
         } else {
             Box::new(open_at(path, 0)?)
         };
@@ -205,6 +201,22 @@ impl Codex {
     }
 }
 
+/// Decompresses a `.zst` rollout, or says it unpacks to more than `limit` bytes (a small file can
+/// hold a very large one) without unpacking past that.
+fn unpack(path: &Path, limit: u64) -> Result<Vec<u8>> {
+    let file = std::fs::File::open(path).map_err(Error::io(path))?;
+    let mut raw = Vec::new();
+    ruzstd::decoding::StreamingDecoder::new(file)
+        .map_err(|source| Error::Zstd { path: path.to_path_buf(), source })?
+        .take(limit + 1)
+        .read_to_end(&mut raw)
+        .map_err(Error::io(path))?;
+    if raw.len() as u64 > limit {
+        return Err(Error::TooBig { path: path.to_path_buf(), limit });
+    }
+    Ok(raw)
+}
+
 /// How far back from a resume point to look for the model the rollout last named.
 const MODEL_WINDOW: u64 = 256 * 1024;
 
@@ -225,6 +237,8 @@ struct Rollout {
     samples: Vec<Sample>,
     /// Where grade requests were dropped.
     cuts: Vec<Cut>,
+    /// New lines that looked wanted but weren't JSON.
+    skipped: usize,
 }
 
 /// Codex's running totals as [`Usage`]. Its input counts cached and cache-written tokens too, and
@@ -254,6 +268,7 @@ impl Rollout {
             events: Vec::new(),
             samples: Vec::new(),
             cuts: Vec::new(),
+            skipped: 0,
         }
     }
 
@@ -264,7 +279,11 @@ impl Rollout {
         if !(meta || counts || (fresh && contains(buf, b"\"message\""))) {
             return;
         }
-        let Ok(v) = serde_json::from_slice::<Value>(buf) else { return };
+        let Ok(v) = serde_json::from_slice::<Value>(buf) else {
+            // Lines before `from` are read again every pass, so only new ones are counted.
+            self.skipped += usize::from(fresh);
+            return;
+        };
         let payload = &v["payload"];
         match v["type"].as_str() {
             Some("event_msg") if counts && payload["type"] == "token_count" => {
@@ -415,6 +434,32 @@ mod tests {
         std::fs::write(&p, b"not zstd").unwrap();
         let err = Codex.scan(&p, 0, false).err().unwrap().to_string();
         assert!(err.contains("rollout-2026-09-01-old.jsonl.zst"), "{err}");
+    }
+
+    #[test]
+    fn a_rollout_that_unpacks_past_the_cap_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("rollout-big.jsonl.zst");
+        std::fs::write(&p, zstd(&[b'a'; 1000])).unwrap();
+        assert_eq!(unpack(&p, 1000).unwrap().len(), 1000);
+        let err = unpack(&p, 999).unwrap_err();
+        assert!(matches!(err, Error::TooBig { .. }));
+        assert!(err.to_string().contains("rollout-big.jsonl.zst: too large to read"), "{err}");
+    }
+
+    #[test]
+    fn lines_that_do_not_parse_are_counted_not_lost_silently() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("rollout-x.jsonl");
+        let body = opening()
+            + "{\"payload\":{\"type\":\"message\" cut off\n"
+            + &msg("user", "input_text", "hello", "u1")
+            + "not json at all, but it says \"message\"\n";
+        std::fs::write(&p, body).unwrap();
+        let scan = Codex.scan(&p, 0, true).unwrap();
+        assert_eq!(scan.turns.len(), 2, "the good lines still read");
+        assert_eq!(scan.skipped_lines, 2);
+        assert_eq!(Codex.scan(&p, 0, true).unwrap().skipped_lines, 2, "same count on a re-read");
     }
 
     fn counts(ts: &str, input: u64, cached: u64, output: u64, reasoning: u64) -> String {

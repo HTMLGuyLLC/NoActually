@@ -1,4 +1,4 @@
-use crate::Result;
+use crate::{Error, Result};
 use rusqlite::Connection;
 
 /// Each entry runs once, in order. Never edit a shipped migration; append a new one.
@@ -189,6 +189,15 @@ SELECT * FROM report_cards a WHERE NOT EXISTS (
         OR (b.session = a.session AND b.start_ts < a.end_ts AND a.start_ts < b.end_ts))
 );
 ",
+    // 12: A rebuild records every chat it read, because a fork can claim all of a chat's messages and
+    // leave it with no `sessions` row. `seen` learns its chat so a rebuild can restore only the keys
+    // of chats it didn't read. Rows from before this are NULL.
+    r"
+CREATE TABLE rebuild_read (id TEXT PRIMARY KEY, source TEXT NOT NULL) WITHOUT ROWID;
+ALTER TABLE seen ADD COLUMN session TEXT;
+ALTER TABLE kept_seen ADD COLUMN session TEXT;
+CREATE INDEX kept_events_seen_key ON kept_events (seen_key);
+",
 ];
 
 /// Sets connection pragmas and applies any migrations the database hasn't had. Each migration
@@ -200,6 +209,9 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     let version: usize = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
+    if version > MIGRATIONS.len() {
+        return Err(Error::NewerDatabase { found: version, known: MIGRATIONS.len() });
+    }
     for (i, sql) in MIGRATIONS.iter().enumerate().skip(version) {
         // Immediate, and checked again inside: the app and a command can open an old file together.
         let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
@@ -220,6 +232,18 @@ mod tests {
 
     fn user_version(conn: &Connection) -> usize {
         conn.pragma_query_value(None, "user_version", |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn a_database_from_a_newer_version_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("t.db");
+        let mut conn = Connection::open(&path).unwrap();
+        migrate(&mut conn).unwrap();
+        conn.pragma_update(None, "user_version", MIGRATIONS.len() + 1).unwrap();
+        let err = migrate(&mut conn).unwrap_err();
+        assert!(matches!(err, Error::NewerDatabase { .. }), "{err}");
+        assert!(err.to_string().contains("Update the app"), "{err}");
     }
 
     #[test]

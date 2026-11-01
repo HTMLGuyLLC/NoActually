@@ -131,6 +131,83 @@ jobs:
       - name: actionlint
         uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2
 
+  # Prints a notice only. The evals use a Claude plan, so they run by hand (scripts/report-card-evals/run.mjs).
+  report-card-evals:
+    name: report card evals reminder
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Remind to run the evals
+        env:
+          BASE: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags origin "$BASE"
+          changed=$(git diff --name-only "origin/$BASE...HEAD" -- plugins/grade/skills/me/SKILL.md crates/engine/src/tip_rules.txt)
+          if [ -n "$changed" ]; then
+            echo "::notice title=Run the report card evals::These files steer the AI's report cards and tips: $(echo "$changed" | tr '\n' ' '). Run 'node scripts/report-card-evals/run.mjs' by hand and note the result in the pull request."
+          fi
+
+  self-check:
+    name: app self-check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install Linux system deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev build-essential xvfb
+
+      - name: Rust toolchain
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: app/package.json
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      # The app crate reads app/dist at compile time.
+      - name: Build frontend
+        run: |
+          pnpm --dir app install --frozen-lockfile
+          pnpm --dir app build
+
+      - name: Build the app
+        run: cargo build --locked -p noactually-app
+
+      # Starts the built binary far enough to prove it runs on this OS, then exits non-zero if not.
+      # Linux has no display on a runner, so it gets a virtual one.
+      - name: Self-check
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a target/debug/noactually-app --self-check
+          else
+            target/debug/noactually-app --self-check
+          fi
+
   deny:
     name: cargo-deny
     runs-on: ubuntu-24.04
@@ -236,7 +313,7 @@ jobs:
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [rust, frontend, scripts, deny, msrv, wasm, coverage, version]
+    needs: [rust, frontend, scripts, self-check, deny, msrv, wasm, coverage, version]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { finishLatest, plainName } from "./latest-json.mjs";
+import { finishLatest, missingPlatforms, plainName, REQUIRED } from "./latest-json.mjs";
 
 const REPO = "HTMLGuyLLC/NoActually";
 const dl = (file) => `https://github.com/${REPO}/releases/download/v0.2.0/${file}`;
@@ -74,7 +74,7 @@ test("the local Mac build replaces a CI Mac entry", () => {
 });
 
 test("works with no CI file (Mac only)", () => {
-  const out = finishLatest({ latest: null, version: "0.2.0", tag: "v0.2.0", repo: REPO, assets, mac, now: new Date("2026-11-02T03:04:05.678Z") });
+  const out = finishLatest({ latest: null, version: "0.2.0", tag: "v0.2.0", repo: REPO, assets, mac, allowMissing: true, now: new Date("2026-11-02T03:04:05.678Z") });
   assert.equal(out.pub_date, "2026-11-02T03:04:05Z");
   assert.deepEqual(Object.keys(out.platforms).filter((t) => !t.startsWith("darwin")), []);
 });
@@ -115,7 +115,10 @@ test("the command line reads `<id>\\t<name>` asset lists", () => {
     writeFileSync(join(dir, "assets.txt"), "42\tNo-Actually-0.2.0-x86_64.AppImage\nNo-Actually-0.2.0-Mac-universal.dmg\n");
     const script = new URL("./latest-json.mjs", import.meta.url).pathname;
     const args = ["finish", "--version", "0.2.0", "--tag", "v0.2.0", "--repo", REPO, "--assets", join(dir, "assets.txt"), "--in", join(dir, "in.json")];
-    const r = spawnSync(process.execPath, [script, ...args], { encoding: "utf8" });
+    const strict = spawnSync(process.execPath, [script, ...args], { encoding: "utf8" });
+    assert.notEqual(strict.status, 0, "a platform is missing");
+    assert.match(strict.stderr, /missing platforms: windows-x86_64/);
+    const r = spawnSync(process.execPath, [script, ...args, "--allow-missing"], { encoding: "utf8" });
     assert.equal(r.status, 0, r.stderr);
     assert.equal(JSON.parse(r.stdout).platforms["linux-x86_64"].url, dl("No-Actually-0.2.0-x86_64.AppImage"));
   } finally {
@@ -135,6 +138,37 @@ test("version prints what a latest.json offers, and refuses one with none", () =
     assert.equal(good.status, 0, good.stderr);
     assert.equal(good.stdout.trim(), "0.2.0");
     assert.notEqual(run("{}").status, 0);
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
+});
+
+test("a release must list every platform, unless --allow-missing", () => {
+  const base = { latest: ci, version: "0.2.0", tag: "v0.2.0", repo: REPO, assets };
+  assert.deepEqual(missingPlatforms(finishLatest({ ...base, mac }).platforms), []);
+  const noLinux = { ...ci, platforms: { "windows-x86_64": ci.platforms["windows-x86_64"] } };
+  assert.throws(() => finishLatest({ ...base, latest: noLinux, mac }), /missing platforms: linux-x86_64/);
+  assert.throws(() => finishLatest({ ...base, mac: null }), /missing platforms: darwin-universal/, "no Mac update");
+  const out = finishLatest({ ...base, mac: null, allowMissing: true });
+  assert.ok(!("darwin-universal" in out.platforms) && "linux-x86_64" in out.platforms);
+  assert.deepEqual(missingPlatforms(undefined), REQUIRED);
+});
+
+test("check passes a complete latest.json and fails one with a platform missing", () => {
+  const dir = mkdtempSync(join(tmpdir(), "latest-json-"));
+  try {
+    const script = new URL("./latest-json.mjs", import.meta.url).pathname;
+    const check = (body, ...flags) => {
+      writeFileSync(join(dir, "latest.json"), JSON.stringify(body));
+      return spawnSync(process.execPath, [script, "check", join(dir, "latest.json"), ...flags], { encoding: "utf8" });
+    };
+    const full = finishLatest({ latest: ci, version: "0.2.0", tag: "v0.2.0", repo: REPO, assets, mac });
+    assert.equal(check(full).status, 0);
+    const { "linux-x86_64": _gone, ...rest } = full.platforms;
+    const partial = check({ ...full, platforms: rest });
+    assert.equal(partial.status, 1);
+    assert.match(partial.stderr, /missing platforms: linux-x86_64/);
+    assert.equal(check({ ...full, platforms: rest }, "--allow-missing").status, 0);
   } finally {
     rmSync(dir, { recursive: true });
   }

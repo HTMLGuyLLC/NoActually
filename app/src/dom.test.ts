@@ -48,6 +48,28 @@ describe("focus across a redraw", () => {
     expect(focusKey(root.querySelector("span"))).toBeNull();
   });
 
+  it("keys the rest by field name, chart tip or label, and escapes what it quotes", () => {
+    root.innerHTML = `<input name="level" type="radio" value="full"><input name="full-days"><button aria-label="Close &quot;x&quot;">x</button><svg><circle data-tip="Week of Oct 5&#10;3 corrections" tabindex="0"></circle></svg>`;
+    const [radio, days, close] = root.querySelectorAll("input, button");
+    expect(focusKey(radio ?? null)).toBe('input[name="level"][value="full"]');
+    expect(focusKey(days ?? null)).toBe('input[name="full-days"]');
+    expect(focusKey(close ?? null)).toBe('button[aria-label="Close \\"x\\""]');
+    const mark = root.querySelector("circle");
+    expect(focusKey(mark)).toBe('[data-tip="Week of Oct 5\\a 3 corrections"]');
+    expect(root.querySelector(focusKey(mark) ?? "")).toBe(mark);
+  });
+
+  it("keeps focus on a mark with a tip and a form field through a background redraw", () => {
+    const markup = `<i data-tip="Oct 5: 3" tabindex="0"></i><i data-tip="Oct 12: 4" tabindex="-1"></i><input name="full-days">`;
+    root.innerHTML = markup;
+    root.querySelectorAll("i")[1]?.focus();
+    redraw(markup);
+    expect(document.activeElement?.getAttribute("data-tip")).toBe("Oct 12: 4");
+    must<HTMLInputElement>("input").focus();
+    redraw(markup);
+    expect((document.activeElement as HTMLInputElement).name).toBe("full-days");
+  });
+
   it("puts focus back on the same control after the markup is replaced", () => {
     root.innerHTML = page(`<button data-action="tab" data-id="sources">Sources</button>`);
     must<HTMLButtonElement>('[data-id="sources"]').focus();

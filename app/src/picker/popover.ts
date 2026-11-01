@@ -82,11 +82,17 @@ export function openPicker(trigger: HTMLElement, opts: PickerOptions): HTMLEleme
               <span class="pick-name"><b>${i.label}</b>${searching || i.depth === 0 ? html`<span class="pick-path">${i.path}</span>` : ""}</span>
               <span class="pick-count">${pickStatView(i, opts.stat)}</span></li>`,
           )}`
-        : html`<li class="pick-empty" role="presentation">No model matches “${input.value}”</li>`
+        : html`<li class="pick-empty" role="presentation">${searching ? html`No model matches “${input.value}”` : "No models yet"}</li>`
     ).value;
     highlight(current, true);
-    // Announced only for a search; opening with the full list says nothing.
-    status.textContent = searching ? (shown.length ? `${shown.length} ${shown.length === 1 ? "model matches" : "models match"}` : "No models match") : "";
+    // A search says how many match; an empty list says so even without one. Opening with the full list says nothing.
+    status.textContent = shown.length
+      ? searching
+        ? `${shown.length} ${shown.length === 1 ? "model matches" : "models match"}`
+        : ""
+      : searching
+        ? "No models match"
+        : "No models yet";
   };
 
   // Keep the popover under its trigger if the page itself scrolls or resizes.

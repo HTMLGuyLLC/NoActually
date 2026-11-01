@@ -44,10 +44,14 @@ describe("lineChart", () => {
     expect(line(points, { weakNote: "fewer than 50 messages" })).toContain("Oct 12: 20 (fewer than 50 messages)");
   });
 
-  it("makes every dot focusable, labeled with its tooltip text", () => {
+  it("labels every dot with its tooltip text, and makes the chart one tab stop", () => {
     const m = line(points);
-    expect(count(m, 'tabindex="0" role="img" aria-label="')).toBe(3);
+    expect(count(m, 'role="img" aria-label="')).toBe(3);
+    // Only the first dot takes Tab; the arrow keys reach the rest (charttip.ts).
+    expect(count(m, 'tabindex="0"')).toBe(1);
+    expect(count(m, 'tabindex="-1"')).toBe(2);
     expect(m).toContain('data-tip="Oct 5: 50" tabindex="0" role="img" aria-label="Oct 5: 50"');
+    expect(m).toContain('data-tip="Oct 12: 20 (too few tasks to count)" tabindex="-1"');
   });
 
   it("shows a non-whole midline value with one decimal", () => {
@@ -56,9 +60,9 @@ describe("lineChart", () => {
     expect(line([{ label: "a", value: 1 }], { max: 4 })).toContain(">2</text>");
   });
 
-  it("wraps the scrolling box so the keyboard can reach it", () => {
+  it("wraps the scrolling box as a named region, leaving the tab stop to the first mark", () => {
     expect(chartBox("Trend chart", lineChart({ id: "x", label: "x", summary: "s", points: [] })).value).toBe(
-      '<div class="chart" tabindex="0" role="region" aria-label="Trend chart"><p class="muted">No weeks yet.</p></div>',
+      '<div class="chart" role="region" aria-label="Trend chart"><p class="muted">No weeks yet.</p></div>',
     );
   });
 
@@ -140,11 +144,13 @@ describe("stackChart", () => {
     expect(m).not.toContain("Nov: Added");
   });
 
-  it("makes each segment, or each whole bar when it has a tip, focusable with a label", () => {
+  it("labels each segment, or each whole bar when it has a tip, and makes the chart one tab stop", () => {
     expect(chart()).toContain('data-tip="Oct: Added 3" tabindex="0" role="img" aria-label="Oct: Added 3"');
+    expect(count(chart(), 'tabindex="0"')).toBe(1);
     const m = chart({ tips: ["Oct\n4 total", "Nov\n2 total"] });
     expect(m).toContain('<g class="bar-group" data-tip="Oct\n4 total" tabindex="0" role="img" aria-label="Oct\n4 total">');
-    expect(count(m, 'tabindex="0"')).toBe(2);
+    expect(m).toContain('<g class="bar-group" data-tip="Nov\n2 total" tabindex="-1" role="img" aria-label="Nov\n2 total">');
+    expect(count(m, 'tabindex="0"')).toBe(1);
   });
 
   it("keys the series by name, and labels the picture with a summary id", () => {

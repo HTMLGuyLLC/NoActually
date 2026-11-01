@@ -2,7 +2,8 @@
 // pseudo-element can't hang off an SVG shape, so bars and dots share this one card. Hover shows
 // it; a click pins it (so it works by tap too) until you click elsewhere or press Escape. Keyboard
 // focus on a mark shows it too. Marks carry the same text as their aria-label, and screen readers
-// also get each chart's text summary.
+// also get each chart's text summary. A chart is one tab stop: the arrow keys, Home and End move along
+// its marks, and the mark you leave on is the one Tab returns to.
 
 /** Space between the pointer and the card, and between the card and the window's edge. */
 const GAP = 12;
@@ -17,6 +18,8 @@ export function bindChartTips(root: HTMLElement): void {
   let pinned: Element | null = null;
 
   const markOf = (t: EventTarget | null) => (t instanceof Element ? t.closest<SVGElement>("svg [data-tip]") : null);
+  /** The marks of the chart `mark` is in, in the order they are drawn. */
+  const marksOf = (mark: Element) => [...(mark.closest("svg")?.querySelectorAll<SVGElement>("[data-tip][tabindex]") ?? [])];
   const place = (x: number, y: number) => {
     const { width, height } = tip.getBoundingClientRect();
     const left = Math.min(Math.max(GAP, x - width / 2), window.innerWidth - width - GAP);
@@ -50,7 +53,29 @@ export function bindChartTips(root: HTMLElement): void {
   });
   root.addEventListener("focusin", (e) => {
     const mark = markOf(e.target);
-    if (mark && !pinned) showAt(mark);
+    if (!mark) return;
+    // The focused mark becomes the chart's tab stop.
+    for (const m of marksOf(mark)) m.setAttribute("tabindex", m === mark ? "0" : "-1");
+    if (!pinned) showAt(mark);
+  });
+  root.addEventListener("keydown", (e) => {
+    const mark = markOf(e.target);
+    if (!mark || e.altKey || e.ctrlKey || e.metaKey) return;
+    const marks = marksOf(mark);
+    const at = marks.indexOf(mark);
+    const next =
+      e.key === "ArrowRight" || e.key === "ArrowDown"
+        ? at + 1
+        : e.key === "ArrowLeft" || e.key === "ArrowUp"
+          ? at - 1
+          : e.key === "Home"
+            ? 0
+            : e.key === "End"
+              ? marks.length - 1
+              : null;
+    if (next === null) return;
+    e.preventDefault();
+    marks[Math.min(marks.length - 1, Math.max(0, next))]?.focus();
   });
   root.addEventListener("focusout", (e) => {
     if (!pinned && !markOf(e.relatedTarget)) tip.hidden = true;

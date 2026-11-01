@@ -18,18 +18,31 @@ export function say(el: Element | null, text: string): void {
   if (el) el.textContent = text;
 }
 
+/** A value as a quoted selector string (quotes, backslashes and line breaks escaped). */
+const quoted = (v: string) => `"${v.replace(/["\\]/g, "\\$&").replace(/\n/g, "\\a ")}"`;
+
 /**
- * A selector that finds "the same control" after a redraw: its id, or its action and the thing
- * it acts on. Null when the element has neither.
+ * A selector that finds "the same control" after a redraw: its id, or its action and the thing it
+ * acts on, or (for the rest) its field name, label or chart tip. Null when the element has none.
  */
 export function focusKey(el: Element | null): string | null {
-  if (!(el instanceof HTMLElement)) return null;
+  if (!(el instanceof HTMLElement || el instanceof SVGElement)) return null;
   if (el.id) return `#${CSS.escape(el.id)}`;
-  const action = el.dataset.action;
-  if (!action) return null;
-  const id = el.dataset.id;
-  const quoted = (v: string) => `"${v.replace(/["\\]/g, "\\$&")}"`;
-  return `[data-action=${quoted(action)}]${id === undefined ? "" : `[data-id=${quoted(id)}]`}`;
+  const action = el instanceof HTMLElement ? el.dataset.action : undefined;
+  if (action) {
+    const id = el instanceof HTMLElement ? el.dataset.id : undefined;
+    return `[data-action=${quoted(action)}]${id === undefined ? "" : `[data-id=${quoted(id)}]`}`;
+  }
+  const tag = el.tagName.toLowerCase();
+  const name = el.getAttribute("name");
+  if (name) {
+    const value = el.getAttribute("value");
+    return `${tag}[name=${quoted(name)}]${el.getAttribute("type") === "radio" && value ? `[value=${quoted(value)}]` : ""}`;
+  }
+  const tip = el.getAttribute("data-tip");
+  if (tip) return `[data-tip=${quoted(tip)}]`;
+  const label = el.getAttribute("aria-label");
+  return label ? `${tag}[aria-label=${quoted(label)}]` : null;
 }
 
 /** What had focus inside `root`, so `restoreFocus` can put it back after `root` is redrawn. */

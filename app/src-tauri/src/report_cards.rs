@@ -708,10 +708,11 @@ pub fn spawn_launch_check() {
     });
 }
 
-/// A program's output for the log: cut short, and with any `user:password@` taken out of a link in it.
+/// A program's output for the log: cut short, with any `user:password@` taken out of a link in it and
+/// the home folder written as `~`.
 pub(crate) fn for_log(text: &str) -> String {
     const LIMIT: usize = 1024;
-    let clean = without_credentials(text.trim());
+    let clean = crate::shorten_home_in(&without_credentials(text.trim()), std::env::home_dir().as_deref());
     if clean.len() <= LIMIT {
         return clean;
     }

@@ -1079,3 +1079,184 @@ fn a_message_waits_for_the_ai_to_finish_and_gets_its_later_admission() {
     let r = sync(&mut s, &all).unwrap();
     assert_eq!((r.messages, r.corrections), (1, 1), "counted once, with what it found");
 }
+
+fn corrections_in_daily(s: &Store) -> i64 {
+    let q = "SELECT coalesce(sum(n), 0) FROM daily WHERE kind <> 'message'";
+    s.conn.query_row(q, [], |r| r.get(0)).unwrap()
+}
+
+#[test]
+fn a_rebuild_doesnt_count_a_forked_chat_twice() {
+    let dir = tempfile::tempdir().unwrap();
+    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let opening = cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts);
+    let all = claude_code(&dir);
+    let mut s = Store::open_in_memory().unwrap();
+    s.allow("claude-code", None).unwrap();
+    // The original is read first, then a fork that sorts before it copies its messages.
+    write_settled(&dir.path().join("z-original.jsonl"), opening.clone());
+    sync(&mut s, &all).unwrap();
+    write_settled(&dir.path().join("a-fork.jsonl"), opening + &cc_correction("u2", &ts));
+    sync(&mut s, &all).unwrap();
+    let (before, daily) = (kept_counts(&s), corrections_in_daily(&s));
+    assert_eq!(before.1, 2);
+
+    for _ in 0..2 {
+        s.set_setting("rules_version", "1").unwrap();
+        assert!(sync(&mut s, &all).unwrap().rescored);
+        let after = kept_counts(&s);
+        assert_eq!((after.0, after.1, after.3), (before.0, before.1, before.3), "the original adds nothing");
+        assert_eq!(after.2, 1, "and the fork is the one chat that holds them");
+        assert_eq!(corrections_in_daily(&s), daily);
+        let copies: i64 =
+            s.conn.query_row("SELECT count(*) - count(DISTINCT seen_key) FROM events", [], |r| r.get(0)).unwrap();
+        assert_eq!(copies, 0);
+    }
+}
+
+#[test]
+fn a_day_read_again_takes_the_new_message_count() {
+    let dir = tempfile::tempdir().unwrap();
+    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    write_settled(&dir.path().join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts));
+    let all = claude_code(&dir);
+    let mut s = Store::open_in_memory().unwrap();
+    s.allow("claude-code", None).unwrap();
+    sync(&mut s, &all).unwrap();
+    let messages = |s: &Store| -> i64 {
+        s.conn.query_row("SELECT sum(n) FROM daily WHERE kind = 'message'", [], |r| r.get(0)).unwrap()
+    };
+    let before = messages(&s);
+    // Counted under a name the new rules no longer give: it must not be added on top.
+    s.conn.execute("UPDATE daily SET family = 'Old name' WHERE kind = 'message'", []).unwrap();
+    s.set_setting("rules_version", "1").unwrap();
+    sync(&mut s, &all).unwrap();
+    assert_eq!(messages(&s), before);
+}
+
+#[test]
+fn a_rebuild_never_keeps_more_text_than_a_correction_had() {
+    let dir = tempfile::tempdir().unwrap();
+    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    write_settled(&dir.path().join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts));
+    let all = claude_code(&dir);
+    let mut s = Store::open_in_memory().unwrap();
+    s.set_retention(Retention { level: Level::Category, ..Retention::default() }).unwrap();
+    s.allow("claude-code", None).unwrap();
+    sync(&mut s, &all).unwrap();
+
+    s.set_retention(Retention { level: Level::Full, ..Retention::default() }).unwrap();
+    s.set_setting("rules_version", "1").unwrap();
+    sync(&mut s, &all).unwrap();
+    let (level, snip): (String, Option<String>) =
+        s.conn.query_row("SELECT level, human_snip FROM events", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+    assert_eq!((level.as_str(), snip), ("category", None));
+}
+
+#[test]
+fn stored_text_is_redacted_again_once_when_redaction_improves() {
+    let dir = tempfile::tempdir().unwrap();
+    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    write_settled(&dir.path().join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts));
+    let all = claude_code(&dir);
+    let mut s = Store::open_in_memory().unwrap();
+    s.allow("claude-code", None).unwrap();
+    sync(&mut s, &all).unwrap();
+    s.conn.execute("UPDATE events SET human_snip = 'mail pat@example.com', pinned = 1", []).unwrap();
+    s.set_setting(REDACTION_KEY, "1").unwrap();
+    sync(&mut s, &all).unwrap();
+    let snip: String = s.conn.query_row("SELECT human_snip FROM events", [], |r| r.get(0)).unwrap();
+    assert_eq!(snip, "mail [email]");
+    assert_eq!(s.get_setting(REDACTION_KEY).unwrap(), Some(engine::REDACTION_VERSION.to_string()));
+}
+
+#[test]
+fn a_rebuild_cut_short_counts_as_rescored_when_it_finishes() {
+    let mut s = Store::open_in_memory().unwrap();
+    s.set_setting(REBUILDING_KEY, "1").unwrap();
+    assert!(s.rebuild_due().unwrap());
+    assert!(sync(&mut s, &[]).unwrap().rescored);
+    assert!(!s.rebuild_due().unwrap());
+}
+
+#[test]
+fn a_pass_stops_writing_a_source_forgotten_from_another_process() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut s = Store::open_in_memory().unwrap();
+    s.allow("claude-code", None).unwrap();
+    assert!(s.still_allowed("claude-code").unwrap());
+    s.forget("claude-code").unwrap();
+    assert!(!s.still_allowed("claude-code").unwrap());
+    assert_eq!(sync(&mut s, &claude_code(&dir)).unwrap().files_read, 0);
+}
+
+#[test]
+fn a_backup_is_made_daily_and_goes_when_text_is_deleted() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join(DB_FILE);
+    let s = Store::open(&db).unwrap();
+    let backup = db.with_file_name(BACKUP_FILE);
+    s.backup_if_due().unwrap();
+    assert!(backup.exists());
+    assert!(Store::open(&backup).is_ok(), "it's a working database");
+    let made = std::fs::metadata(&backup).unwrap().modified().unwrap();
+    s.backup_if_due().unwrap();
+    assert_eq!(std::fs::metadata(&backup).unwrap().modified().unwrap(), made, "once a day");
+    s.flush_deleted().unwrap();
+    assert!(!backup.exists(), "it would still hold what was deleted");
+}
+
+#[test]
+fn a_pinned_correction_a_fork_read_again_counts_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let opening = cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts);
+    let (original, fork) = (dir.path().join("z-original.jsonl"), dir.path().join("a-fork.jsonl"));
+    let all = claude_code(&dir);
+    let mut s = Store::open_in_memory().unwrap();
+    s.allow("claude-code", None).unwrap();
+    write_settled(&original, opening.clone());
+    sync(&mut s, &all).unwrap();
+    write_settled(&fork, opening);
+    sync(&mut s, &all).unwrap();
+    s.conn.execute("UPDATE events SET pinned = 1", []).unwrap();
+    let daily = corrections_in_daily(&s);
+
+    std::fs::remove_file(&original).unwrap();
+    s.set_setting("rules_version", "1").unwrap();
+    sync(&mut s, &all).unwrap();
+    assert_eq!(corrections_in_daily(&s), daily, "the fork brought it back, so the pin doesn't add it again");
+}
+
+#[test]
+fn the_backup_outlives_the_cleaning_of_stored_text_before_a_rebuild() {
+    let dir = tempfile::tempdir().unwrap();
+    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let chats = dir.path().join("chats");
+    std::fs::create_dir(&chats).unwrap();
+    write_settled(&chats.join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts));
+    let all: Vec<Box<dyn Source>> = vec![sources::claude_code_at(dir.path().to_path_buf())];
+    let db = dir.path().join(DB_FILE);
+    let mut s = Store::open(&db).unwrap();
+    s.allow("claude-code", None).unwrap();
+    sync(&mut s, &all).unwrap();
+    s.conn.execute("UPDATE events SET human_snip = 'mail pat@example.com'", []).unwrap();
+    s.set_setting(REDACTION_KEY, "1").unwrap();
+    s.set_setting("rules_version", "1").unwrap();
+    assert!(sync(&mut s, &all).unwrap().rescored);
+    assert!(db.with_file_name(BACKUP_FILE).exists());
+}
+
+#[test]
+fn a_file_that_cant_be_read_is_tried_again_only_when_it_changes() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("conversations.json");
+    std::fs::write(&file, "not json").unwrap();
+    let all = sources::all();
+    let mut s = Store::open_in_memory().unwrap();
+    s.import("chatgpt-export", &file.to_string_lossy()).unwrap();
+    assert_eq!(sync(&mut s, &all).unwrap().errors.len(), 1);
+    assert_eq!(sync(&mut s, &all).unwrap().errors.len(), 0, "the same bytes fail the same way");
+    std::fs::write(&file, "still not json!").unwrap();
+    assert_eq!(sync(&mut s, &all).unwrap().errors.len(), 1);
+}

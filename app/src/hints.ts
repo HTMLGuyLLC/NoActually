@@ -21,3 +21,24 @@ export function dismiss(hint: Hint): void {
     // Storage is blocked: the tip returns next time.
   }
 }
+
+const RESCORED_KEY = "noactually.rescored.seen";
+
+/** Whether the rescored line for a rebuild at `stamp` (RFC 3339) is still new: only a later one than the last dismissed shows. */
+export function rescoredUnseen(stamp: string | null): boolean {
+  if (!stamp) return false;
+  try {
+    const seen = localStorage.getItem(RESCORED_KEY);
+    return !seen || new Date(stamp).getTime() > new Date(seen).getTime();
+  } catch {
+    return true;
+  }
+}
+
+export function dismissRescored(stamp: string): void {
+  try {
+    localStorage.setItem(RESCORED_KEY, stamp);
+  } catch {
+    // Storage is blocked: the line returns next time.
+  }
+}

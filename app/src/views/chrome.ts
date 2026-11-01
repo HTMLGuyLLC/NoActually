@@ -1,6 +1,6 @@
 // The frame around every page: wordmark, sync status and tabs.
 import type { Stats, SyncStatus } from "../api";
-import { ago, fmtDay } from "../format";
+import { ago, fmtDay, plural } from "../format";
 import { type Html, html, raw } from "../html";
 import { TABS, type Tab } from "../state";
 
@@ -11,7 +11,7 @@ const MARK = raw(
 
 export const wordmarkView = (cls = "brand"): Html => html`<span class="${cls}">${MARK}<span>No, Actually...</span></span>`;
 
-const TAB_TITLES: Record<Tab, string> = { score: "Scorecard", improve: "Improve", learn: "Learn", settings: "Settings" };
+export const TAB_TITLES: Record<Tab, string> = { score: "Scorecard", improve: "Improve", learn: "Learn", settings: "Settings" };
 
 /** Small line icons beside each tab's name (decoration: the name is the label). */
 export const svg = (d: string) => raw(`<svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`);
@@ -45,6 +45,9 @@ export function coverage(s: Pick<Stats, "first_day" | "last_day" | "messages"> |
 export function statusPillView(status: SyncStatus, demo: boolean, covers = ""): Html {
   if (status.last_error)
     return html`<span class="sync-pill"><button class="sync-bad" data-action="sync-now" data-id="top" data-tip="${status.last_error}">Couldn't check. Retry<span class="sr-only">. ${status.last_error}</span></button></span>`;
+  // The counts are being rebuilt from the start, so there is nothing to check now and nothing to cover.
+  if (status.rebuilding)
+    return html`<span class="sync-pill"><i class="dot live"></i><span class="sync-text" role="status">Recounting your history…</span></span>`;
   const checked = status.syncing ? "Checking…" : demo ? "Demo data" : `Checked ${ago(status.last_sync)}`;
   const text = covers
     ? html`<button class="sync-text" data-action="sync-tip" data-tip="${covers}" aria-expanded="false">${checked}<span class="sr-only">. Showing ${covers}</span></button>`
@@ -52,7 +55,12 @@ export function statusPillView(status: SyncStatus, demo: boolean, covers = ""): 
   const dot = status.syncing
     ? html`<i class="dot live"></i>`
     : html`<button class="sync-now" data-action="sync-now" data-id="top" data-tip="Check now" aria-label="Check for new chats now"><i class="dot"></i>${REFRESH}</button>`;
-  return html`<span class="sync-pill">${dot}${text}</span>`;
+  // Chats the app couldn't read are counted out silently otherwise; the log says which and why.
+  const skipped =
+    status.files_with_errors > 0
+      ? html`<button class="sync-bad" data-action="open-log-folder" data-tip="Open the log folder to see which" aria-label="${plural(status.files_with_errors, "chat")} couldn't be read. Open the log folder to see which.">${plural(status.files_with_errors, "chat")} couldn't be read</button>`
+      : "";
+  return html`<span class="sync-pill">${dot}${text}${skipped}</span>`;
 }
 
 /** Set up once and rarely visited: icons only, so the main sections have room. */

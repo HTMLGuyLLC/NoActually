@@ -484,23 +484,32 @@ fn marketplace_verdict(env: &Env, exe: &Path) -> Verdict {
     let meta = match std::fs::symlink_metadata(&file) {
         Ok(meta) => meta,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            log::warn!("report cards: couldn't find the marketplace file at {}, so it wasn't checked", file.display());
+            log::warn!(
+                "report cards: couldn't find the marketplace file at {}, so it wasn't checked",
+                crate::home_short(&file)
+            );
             return Verdict::Unchecked;
         }
         Err(e) => {
-            log::warn!("report cards: couldn't look at the marketplace file {}: {e}", file.display());
+            log::warn!("report cards: couldn't look at the marketplace file {}: {e}", crate::home_short(&file));
             return Verdict::Different;
         }
     };
     if !meta.is_file() || meta.len() > MARKETPLACE_FILE_LIMIT {
-        log::warn!("report cards: the downloaded marketplace file {} isn't a small plain file", file.display());
+        log::warn!(
+            "report cards: the downloaded marketplace file {} isn't a small plain file",
+            crate::home_short(&file)
+        );
         return Verdict::Different;
     }
     let manifest = std::fs::read_to_string(&file).ok().and_then(|text| serde_json::from_str::<Value>(&text).ok());
     if manifest.as_ref().is_some_and(entry_is_ours) {
         Verdict::Same
     } else {
-        log::warn!("report cards: the downloaded marketplace file {} doesn't list this app's plugin", file.display());
+        log::warn!(
+            "report cards: the downloaded marketplace file {} doesn't list this app's plugin",
+            crate::home_short(&file)
+        );
         Verdict::Different
     }
 }

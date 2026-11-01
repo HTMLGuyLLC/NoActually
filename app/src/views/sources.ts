@@ -46,8 +46,8 @@ function sourceRow(s: SourceInfo): Html {
   const hint =
     s.kind === "import"
       ? s.id === "chatgpt-export"
-        ? "Get it in ChatGPT: Settings → Data controls → Export data."
-        : "Get it on claude.ai: Settings → Privacy → Export data."
+        ? "Get it in ChatGPT: Settings → Data controls → Export data. It arrives as a zip by email. Unzip it, then choose conversations.json. If it has several, add each one."
+        : "Get it on claude.ai: Settings → Privacy → Export data. It arrives as a zip by email. Unzip it, then choose conversations.json. If it has several, add each one."
       : "";
   return html`<div class="source${st?.allowed ? " on" : ""}">
       <div class="src-main"><b>${s.name}</b><span class="status">${label}</span>

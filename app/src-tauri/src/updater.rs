@@ -17,6 +17,12 @@ pub enum Msg {
 
 const FIRST_CHECK: Duration = Duration::from_secs(60);
 const INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+/// How long a check for a new version may take. One stalled request would otherwise block the only
+/// update worker for good.
+const CHECK_TIMEOUT: Duration = Duration::from_secs(30);
+/// How long the download of an update may take, start to end. A stalled one would otherwise leave
+/// the app "installing" until it's restarted.
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 /// Settings key. Anything but "off" means on, so automatic checks start enabled.
 pub const AUTO_KEY: &str = "updates.auto";
 
@@ -102,11 +108,9 @@ fn changed(handle: &AppHandle, updates: &Updates) {
 
 /// Asks the channel's address for the newest version.
 async fn newest(handle: &AppHandle, channel: &str) -> tauri_plugin_updater::Result<Option<Update>> {
-    let updater = if channel == BETA {
-        handle.updater_builder().endpoints(vec![BETA_ENDPOINT.parse()?])?.build()?
-    } else {
-        handle.updater()?
-    };
+    let builder = handle.updater_builder().timeout(CHECK_TIMEOUT);
+    let updater =
+        if channel == BETA { builder.endpoints(vec![BETA_ENDPOINT.parse()?])?.build()? } else { builder.build()? };
     updater.check().await
 }
 
@@ -130,29 +134,47 @@ fn check(handle: &AppHandle, app: &App, updates: &Updates) {
             }
             Err(e) => {
                 log::warn!("update check failed: {e}");
-                status.last_error = Some(e.to_string());
+                // A background check failing isn't news while an update is already waiting.
+                if status.available.is_none() {
+                    status.last_error = Some(e.to_string());
+                }
             }
         }
     }
     changed(handle, updates);
 }
 
+/// An install ended badly: the status keeps why, and no install is running any more. Every failure
+/// path goes through here, so the window and the tray read the same `last_error`.
+fn install_failed(status: &mut UpdateStatus, message: &str) {
+    status.installing = false;
+    status.last_error = Some(message.to_string());
+}
+
 /// Downloads and installs the waiting update, then restarts. Only ever started by a click.
 pub async fn install(handle: AppHandle) -> Result<(), String> {
     let updates = handle.state::<Updates>();
-    let Some(update) = lock(&updates.pending).clone() else { return Err("No update is waiting.".into()) };
+    let Some(mut update) = lock(&updates.pending).clone() else {
+        let message = "No update is waiting.";
+        install_failed(&mut lock(&updates.status), message);
+        changed(&handle, &updates);
+        return Err(message.into());
+    };
     {
         let mut status = lock(&updates.status);
         if status.installing {
             return Ok(());
         }
         status.installing = true;
+        status.last_error = None;
     }
+    // The check's short timeout was copied onto the update; a download needs longer.
+    update.timeout = Some(DOWNLOAD_TIMEOUT);
     changed(&handle, &updates);
     log::info!("installing update {}", update.version);
     // On Windows this hands over to the installer, which closes the app and reopens it.
     // On Windows the installer closes the app mid-call, so remember the window first.
-    crate::save_main_placement(&handle);
+    crate::save_main_placement_before_exit(&handle);
     match update.download_and_install(|_, _| {}, || {}).await {
         Ok(()) => {
             handle.request_restart();
@@ -160,10 +182,7 @@ pub async fn install(handle: AppHandle) -> Result<(), String> {
         }
         Err(e) => {
             log::warn!("update install failed: {e}");
-            let mut status = lock(&updates.status);
-            status.installing = false;
-            status.last_error = Some(e.to_string());
-            drop(status);
+            install_failed(&mut lock(&updates.status), &e.to_string());
             changed(&handle, &updates);
             Err(e.to_string())
         }
@@ -176,7 +195,10 @@ pub fn on_menu(handle: &AppHandle) {
     if lock(&updates.pending).is_some() {
         let handle = handle.clone();
         tauri::async_runtime::spawn(async move {
-            let _ = install(handle).await;
+            // The failure is already in `last_error` (and `update-changed` fired) for the window to show.
+            if let Err(e) = install(handle).await {
+                log::warn!("update from the tray failed: {e}");
+            }
         });
     } else {
         let _ = updates.tx.send(Msg::CheckNow);
@@ -225,6 +247,21 @@ mod tests {
     #[test]
     fn the_beta_address_is_a_valid_url() {
         assert!(BETA_ENDPOINT.parse::<tauri::Url>().is_ok());
+    }
+
+    #[test]
+    fn the_timeouts_are_bounded() {
+        assert_eq!(CHECK_TIMEOUT, Duration::from_secs(30));
+        assert_eq!(DOWNLOAD_TIMEOUT, Duration::from_secs(600));
+        assert!(DOWNLOAD_TIMEOUT > CHECK_TIMEOUT, "a download can't be cut at the check's limit");
+    }
+
+    #[test]
+    fn a_failed_install_stops_installing_and_keeps_why() {
+        let mut status = UpdateStatus { installing: true, ..Default::default() };
+        install_failed(&mut status, "request timed out");
+        assert!(!status.installing);
+        assert_eq!(status.last_error.as_deref(), Some("request timed out"));
     }
 
     #[test]

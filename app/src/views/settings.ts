@@ -1,6 +1,7 @@
 // Settings: sources, launch and updates, report cards, and what's kept for the Hall of fame, as sub-tabs.
 import {
   isLevel,
+  LEVELS,
   type Level,
   type MenuBar,
   REPORT_CARD_TOOLS,
@@ -8,6 +9,7 @@ import {
   type ReportCardToolStatus,
   type Retention,
   type SourceInfo,
+  type Stats,
   type SyncStatus,
   type UpdateStatus,
 } from "../api";
@@ -34,6 +36,22 @@ const days = (value: string, fallback: number) => {
   return Math.min(RETENTION_MAX_DAYS, Math.max(RETENTION_MIN_DAYS, Math.round(n)));
 };
 
+/** Whether saving `next` keeps less than `saved` does, so older text will be deleted for good. */
+export function tightens(saved: Retention, next: Retention): boolean {
+  // LEVELS runs from the most kept to the least.
+  const keeps = (l: Level) => LEVELS.length - LEVELS.indexOf(l);
+  return keeps(next.level) < keeps(saved.level) || next.full_days < saved.full_days || next.snippet_days < saved.snippet_days;
+}
+
+/**
+ * How many of the Hall of fame's corrections on screen lose their text under `next`, when that can be told
+ * (only "category only" drops all text); null when it depends on dates the screen doesn't have.
+ */
+export function goneByCount(s: Pick<Stats, "hall_of_fame"> | null, next: Retention): number | null {
+  if (!s || next.level !== "category") return null;
+  return s.hall_of_fame.filter((e) => !e.pinned && !!(e.human || e.ai)).length;
+}
+
 /** Reads the privacy form: a known level, and whole days clamped to 1–3650 (blank or nonsense means the default). */
 export function parseRetention(f: RetentionFields): Retention {
   if (!isLevel(f.level)) throw new Error("Pick what to keep first.");
@@ -51,12 +69,14 @@ export type SettingsContext = {
   /** What your AI is told when tips are on. */
   tipRules: string;
   update: UpdateStatus | null;
+  /** Popup notifications on (default: on). */
+  popups?: boolean;
   demo: boolean;
 };
 
 const attr = (on: boolean, name: string) => (on ? raw(` ${name}`) : "");
 
-const PANE_TITLES: Record<SettingsPane, string> = { sources: "Sources", general: "General", "report-cards": "Report cards", privacy: "Privacy" };
+export const PANE_TITLES: Record<SettingsPane, string> = { sources: "Sources", general: "General", "report-cards": "Report cards", privacy: "Privacy" };
 const PANE_ICONS: Record<SettingsPane, Html> = {
   // Folders stacked: where the history comes from.
   sources: svg("M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"),
@@ -87,7 +107,7 @@ export function settingsView(ctx: SettingsContext): Html {
   return html`<h1 class="sr-only">Settings</h1><div class="views-row">${nav}</div><div class="view-body"><h2 class="sr-only">${PANE_TITLES[ctx.pane]}</h2>${body}</div>`;
 }
 
-function generalView({ autostart, menuBar, update, demo }: SettingsContext): Html {
+function generalView({ autostart, menuBar, update, popups = true, demo }: SettingsContext): Html {
   const off = attr(demo, "disabled");
   // Without a tray there's nothing to keep running in, so the toggle is locked.
   const trayOff = attr(demo || !menuBar.available, "disabled");
@@ -101,6 +121,10 @@ function generalView({ autostart, menuBar, update, demo }: SettingsContext): Htm
       <div class="settings-row">
         <label class="toggle"><input id="autostart" data-action="autostart" type="checkbox" aria-describedby="autostart-help"${attr(autostart, "checked")}${off}/><span>Launch at login</span></label>
         <span class="muted small" id="autostart-help">${inTray ? "Starts quietly in the menu bar so new corrections are counted." : "Opens the app when you log in."}</span>
+      </div>
+      <div class="settings-row">
+        <label class="toggle"><input id="popups" data-action="popups" type="checkbox" aria-describedby="popups-help"${attr(popups, "checked")}${off}/><span>Show popups</span></label>
+        <span class="muted small" id="popups-help">A system notification when you reach a goal or a milestone. Off: nothing pops up, and your scorecard keeps counting.</span>
       </div>
       <div class="settings-row">
         <label class="toggle"><input id="auto-update" data-action="auto-update" type="checkbox" aria-describedby="auto-update-help"${attr(!!update?.auto, "checked")}${off}/><span>Check for app updates automatically</span></label>
@@ -124,6 +148,10 @@ function generalView({ autostart, menuBar, update, demo }: SettingsContext): Htm
           : html`<div class="settings-row">
         <button class="ghost" data-action="open-log-folder">Show log folder</button>
         <span class="muted small">Where the app writes what went wrong. Handy to attach when you ask for help.</span>
+      </div>
+      <div class="settings-row">
+        <button class="ghost" data-action="open-notices">Licenses</button>
+        <span class="muted small">The open-source licenses of what this app is built with.</span>
       </div>`
       }
     </section>`;

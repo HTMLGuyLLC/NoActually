@@ -81,6 +81,7 @@ impl Fx {
             entrypoint: None,
             claude_projects: Some(dir.path().join("projects")),
             codex_sessions: Some(dir.path().join("sessions")),
+            debug: false,
         };
         Fx { dir, env }
     }
@@ -279,7 +280,7 @@ fn what_the_store_says_a_card_cost_is_the_digests_arithmetic() {
         + &thanks();
     let path = fx.chat(&body);
     let digest = fx.digest(&path).unwrap(); // makes the key
-                                            // The second prompt redid half of round one, the third all of rounds one and two.
+                                            // The second prompt redid half of round one, the third the rest of it and all of round two.
     let task = json!({"at":id("1"),"to":id("4"),"waste":[[id("2"),50],[id("3"),100]]});
     let block = json!({"v":1,"k":fx.seal(),"tasks":[task]});
     let carded = body + &reply("c", 12, &format!("Report card: C\n\n```noactually\n{block}\n```\n"), (0, 0, 0, 1));
@@ -288,9 +289,9 @@ fn what_the_store_says_a_card_cost_is_the_digests_arithmetic() {
     // The digest's side: each round's own price, times the share of it that was redone.
     let view = chat::for_path(&path, None).unwrap().chat(None).unwrap().view;
     let round = |i: usize| digest::round_cost(&view.prompts[i]).unwrap();
-    let from_digest = round(0) * 0.5 + (round(0) + round(1));
+    let from_digest = round(0) + round(1);
     assert!(digest.contains("$0.14"));
-    assert!((from_digest - 0.30).abs() < 1e-9, "1.5 × $0.14 + $0.09: {from_digest}");
+    assert!((from_digest - 0.23).abs() < 1e-9, "$0.14 + $0.09, each round counted once: {from_digest}");
 
     // The store's side.
     let mut db = store::Store::open(fx.env.db.as_ref().unwrap()).unwrap();
@@ -304,7 +305,7 @@ fn what_the_store_says_a_card_cost_is_the_digests_arithmetic() {
     let recent = db.recent_report_cards(&store::Filter::default(), 5).unwrap();
     assert!((recent[0].extra_cost.unwrap() - from_digest).abs() < 1e-9);
     // And the tokens are the ones the digest's rounds add up to.
-    assert_eq!(recent[0].extra_tokens, Usage { input: 35_000, output: 12_500, ..Usage::default() }.shown());
+    assert_eq!(recent[0].extra_tokens, Usage { input: 30_000, output: 10_000, ..Usage::default() }.shown());
 }
 
 #[test]

@@ -269,9 +269,10 @@ describe("improveView history", () => {
     expect(m).toContain("How AI and you are trending");
   });
 
-  it("makes the charts reachable by keyboard, and states their latest values", () => {
+  it("names the charts as regions, one tab stop each, and states their latest values", () => {
     const m = view(progress({ weeks: weeks(10) }));
-    expect(count(m, 'class="chart" tabindex="0" role="region"')).toBe(4);
+    expect(count(m, 'class="chart" role="region"')).toBe(4);
+    expect(m).not.toContain('class="chart" tabindex');
     expect(m).toMatch(/Prompts by grade over 10 weeks\. Latest week \(.+\): .*Specific \d+/);
     expect(m).toMatch(/Corrections per 100 messages: [\d.]+ in the latest week \(.+\), [\d.]+ on average\./);
     expect(m).toContain("Hollow dots had fewer than 50 messages");
@@ -593,7 +594,7 @@ describe("improveView report cards", () => {
     expect(m).toContain('aria-describedby="cards-summary"');
     expect(m).toContain('id="cards-summary"');
     expect(m).toContain('aria-label="Report cards by letter grade, per week"');
-    expect(m).toContain('class="chart" tabindex="0" role="region" aria-label="Report card grades chart, scrolls sideways"');
+    expect(m).toContain('class="chart" role="region" aria-label="Report card grades chart, scrolls sideways"');
     expect(m).toContain("50 report cards over 10 weeks. Latest week (");
     expect(m).toMatch(/: A 2, B 2, C 1, D 0, F 0\./);
     const key = block(m).match(/<ul class="chart-key">.*?<\/ul>/s)?.[0] ?? "";

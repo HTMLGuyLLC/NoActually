@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "No, Actually...",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "identifier": "app.noactually",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -59,7 +59,11 @@
       "minimumSystemVersion": "12.0"
     },
     "copyright": "© 2026 HTMLGuy LLC. MIT License.",
-    "longDescription": "No, Actually... reads your AI chat history on your computer, grades how clearly you prompt, counts the moments you corrected the AI, and turns them into a private, deterministic scorecard. The app itself sends no chat content or stats, and only checks GitHub for updates, which you can turn off. If you turn on optional report cards, Claude Code downloads a small plugin from GitHub, a small helper on your computer reads the end of each chat after a reply, and your AI reads a short summary of that chat."
+    "resources": {
+      "../../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
+      "../../LICENSE": "LICENSE"
+    },
+    "longDescription": "No, Actually... reads your AI chat history on your computer, grades how clearly you prompt, counts the moments you corrected the AI, and turns them into a private, deterministic scorecard. The app itself sends no chat content or stats, and only checks GitHub for updates, which you can turn off. If you turn on optional report cards, the app also checks GitHub for the plugin version, Claude Code downloads a small plugin from GitHub, a small helper on your computer reads the end of each chat after a reply, and your AI reads a short summary of that chat."
   },
   "plugins": {
     "updater": {

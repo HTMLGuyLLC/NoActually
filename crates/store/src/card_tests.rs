@@ -253,9 +253,10 @@ fn each_follow_up_redoes_a_share_of_the_work_before_it() {
     lab.sync();
     let r = &stored(&lab.store)[0];
     assert_eq!((r.grade.as_str(), r.avoidable, r.rounds, r.missing), ("C", 2, 3, 0));
-    // All of the first round, and a quarter of the first two (rounded down per kind): the follow-up's own round isn't counted.
-    assert_eq!(r.tokens, opus(Usage { input: 17, cache_write: 125, cache_read: 1750, output: 82 }));
-    assert_eq!(r.minutes, 15, "(10 × 100% + 20 × 25%) minutes");
+    // All of the first round, and a quarter of the second (rounded down per kind): the first round
+    // can't be redone twice, and the follow-up's own round isn't counted.
+    assert_eq!(r.tokens, opus(Usage { input: 15, cache_write: 100, cache_read: 1500, output: 70 }));
+    assert_eq!(r.minutes, 13, "(10 × 100% + 10 × 25%) minutes, rounded once");
 }
 
 #[test]
@@ -1375,15 +1376,15 @@ fn each_rounds_tokens_are_kept_under_the_model_that_answered_it() {
     lab.write("chat1", &(body + &card("c1", &t(40), &lab.seal("chat1"), &[changed_models()])));
     lab.sync();
     let r = &stored(&lab.store)[0];
-    // The second prompt redid all of round one (Opus). The third redid half of rounds one and two:
-    // half of Opus's, and half of Sonnet's.
-    let opus_tokens = Usage { input: 10 + 5, cache_write: 100 + 50, cache_read: 1000 + 500, output: 50 + 25 };
+    // The second prompt redid all of round one (Opus). The third redid half of round two (Sonnet):
+    // round one has nothing left to redo.
+    let opus_tokens = Usage { input: 10, cache_write: 100, cache_read: 1000, output: 50 };
     let sonnet_tokens = Usage { input: 10, cache_write: 0, cache_read: 1000, output: 40 };
     assert_eq!(
         r.tokens,
         [("claude-opus-5-5".to_string(), opus_tokens), ("claude-sonnet-5-5".to_string(), sonnet_tokens)].into()
     );
-    assert_eq!(r.minutes, 20, "(10 minutes × 100% + 20 × 50%)");
+    assert_eq!(r.minutes, 15, "(10 minutes × 100% + 10 × 50%)");
     assert_eq!(
         (r.family.as_str(), r.version.as_str()),
         ("Claude Opus", "5.5"),
@@ -1421,7 +1422,7 @@ fn a_task_with_any_unpriced_round_is_left_out_of_the_cost_but_not_the_tokens() {
 fn minutes_are_summed_in_seconds_and_rounded_once_at_the_end() {
     let mut lab = Lab::new();
     let sec = |s: u32| format!("2026-10-05T12:{:02}:{:02}Z", s / 60, s % 60);
-    // Four prompts 40 seconds apart. The two follow-ups redo 40 s and then 80 s of work.
+    // Four prompts 40 seconds apart. The two follow-ups redo round one, then round two.
     let body = cc_user("s1", &sec(0), "build the settings page with tabs")
         + &reply("sr1", &sec(10), "Built it.", (1, 1, 1, 1))
         + &cc_user("s2", &sec(40), "use tailwind for the styles")
@@ -1433,7 +1434,7 @@ fn minutes_are_summed_in_seconds_and_rounded_once_at_the_end() {
     let both = json!({"at":id("s1"),"to":id("s4"),"waste":[[id("s2"),100],[id("s3"),100]]});
     lab.write("chat1", &(body + &card("c1", &t(40), &lab.seal("chat1"), &[both])));
     lab.sync();
-    assert_eq!(stored(&lab.store)[0].minutes, 2, "40 s + 80 s = 120 s; a minute per round would have said 0");
+    assert_eq!(stored(&lab.store)[0].minutes, 1, "40 s + 40 s = 80 s; a minute per round would have said 0");
 }
 
 #[test]

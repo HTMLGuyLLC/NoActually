@@ -6,6 +6,7 @@ import {
   correctionShareText,
   promptShareText,
   QUOTE_CLIP,
+  quoteClip,
   SHARE_HOSTS,
   SHARE_URL,
   SHARE_URL_SHORT,
@@ -19,13 +20,13 @@ describe("shareText", () => {
   it("brags with the score and its tier, numbers only, and links to the project", () => {
     const t = shareText(stats(), "Claude Opus 5.5", "Sharp-eyed");
     expect(t).toBe(
-      `Could Claude Opus 5.5 replace me? No. My score is 86 (Sharp-eyed): 83% of my prompts were clear the first time, and I corrected it 41 times to its 2 in the last 28 days. What's yours? ${SHARE_URL}`,
+      `Could Claude Opus 5.5 replace me? No. My score is 86 (Sharp-eyed): 83% of my prompts were clear the first time. I corrected it 41 times in the last 28 days, and it corrected me 2 times. What's yours? ${SHARE_URL}`,
     );
   });
 
   it("handles the singular", () => {
     const s = stats({ overall: overall({ corrections: 1, humbled: 1 }) });
-    expect(shareText(s, "AI", "Sharp-eyed")).toContain("I corrected it 1 time to its 1 in the last 28 days.");
+    expect(shareText(s, "AI", "Sharp-eyed")).toContain("I corrected it 1 time in the last 28 days, and it corrected me 1 time.");
   });
 
   it("follows the verdict, never re-deriving it from the score", () => {
@@ -141,6 +142,24 @@ describe("correctionShareText", () => {
     expect(t).toContain(`“${"a".repeat(QUOTE_CLIP - 1)}…”`);
   });
 
+  it("cuts both quotes shorter when two long ones and a long model name would be over X and Bluesky", () => {
+    const e = { model: "Claude Opus 5.5 (extended thinking)", human: "h".repeat(300), ai: "a".repeat(300) };
+    const t = correctionShareText(e);
+    expect(quoteClip(e)).toBeLessThan(QUOTE_CLIP);
+    expect(t.length).toBeLessThanOrEqual(300);
+    // X counts a link as 23 characters.
+    expect(t.length - SHARE_URL.length + 23).toBeLessThanOrEqual(280);
+    // Both shrink together, so neither side is favoured.
+    const n = quoteClip(e);
+    expect(t).toContain(`“${"h".repeat(n - 1)}…”`);
+    expect(t).toContain(`“${"a".repeat(n - 1)}…”`);
+  });
+
+  it("keeps the full clip when the post already fits, and never goes below a floor", () => {
+    expect(quoteClip({ model: "GPT", human: "h".repeat(300), ai: "a".repeat(300) })).toBe(QUOTE_CLIP);
+    expect(quoteClip({ model: "m".repeat(400), human: "h".repeat(300), ai: "a".repeat(300) })).toBe(20);
+  });
+
   it("works when only the category was kept", () => {
     expect(correctionShareText({ model: "", human: null, ai: null })).toBe(`I corrected my AI. Could AI replace me? No, actually. ${SHARE_URL}`);
   });
@@ -167,5 +186,18 @@ describe("corrections share", () => {
     ]);
     const low = { ...tier, blurb: "Most of its slips get past you." };
     expect(correctionLines({ corrections: 1, humbled: 4, judgment: 20 }, low)[1]).toBe("Judgment 20 of 100. Most of its slips get past you.");
+  });
+});
+
+describe("quotes with emoji", () => {
+  it("never cuts one in half, so the links can always be built", () => {
+    const text = `${"a".repeat(88)}😀 and more`;
+    const cut = clip(text, 90);
+    expect(cut).toContain("😀");
+    expect(() => shareTargets(cut)).not.toThrow();
+  });
+
+  it("drops half an emoji left by an edit", () => {
+    expect(shareTargets("hi \ud83d there")[0]?.href).toContain("hi%20%20there");
   });
 });

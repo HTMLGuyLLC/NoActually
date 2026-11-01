@@ -18,6 +18,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::{Local, NaiveDate};
 use engine::Answer;
 use std::ffi::OsString;
+use std::io::{BufRead, IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use store::{Filter, Level, Retention, Store};
@@ -30,7 +31,7 @@ USAGE
   noactually pause <source>              Stop reading for now (keeps consent and scores)
   noactually resume <source>             Start reading again after a pause (never allows a source)
   noactually revoke <source>             Stop reading (keeps scores)
-  noactually forget <source>             Stop reading and delete everything from it
+  noactually forget <source> [--yes]     Stop reading and delete everything from it. Asks first; --yes skips the question
   noactually import <source> <path>      Import an export file or folder (chatgpt-export, claude-ai-export)
   noactually sync [--json]               Read anything new from allowed sources. Exits 1 if any file was skipped
   noactually stats [filters] [--json]    Scorecard. Filters: --source --provider --family --version --since
@@ -40,6 +41,8 @@ USAGE
   noactually check <prompt> [--json]     What a draft prompt includes, graded like your history (nothing is saved)
   noactually retention <full|snippet|category> [--full-days N] [--snippet-days N]
 
+  noactually --help | --version          This text, or the version. `<command> --help` prints this text too
+
 Data lives in NOACTUALLY_DB, or app.noactually/noactually.db in your app data folder (shared with the desktop app).
 Nothing is read until you allow a source. Nothing leaves this machine.";
 
@@ -47,12 +50,13 @@ Nothing is read until you allow a source. Nothing leaves this machine.";
 #[derive(Debug, PartialEq)]
 enum Command {
     Help,
+    Version,
     Sources { json: bool },
     Allow { id: String, since: Option<NaiveDate>, from_now: bool },
     Pause { id: String },
     Resume { id: String },
     Revoke { id: String },
-    Forget { id: String },
+    Forget { id: String, yes: bool },
     Import { id: String, path: PathBuf },
     Sync { json: bool },
     Stats { filter: Filter, json: bool, report_cards: bool },
@@ -103,12 +107,29 @@ impl<'a> Args<'a> {
     }
 }
 
+/// `a`, unless it has a word that is no option: `sync now` should say so, not sync.
+fn no_positional(a: Args<'_>) -> Result<Args<'_>> {
+    match a.positional.first() {
+        Some(word) => bail!("unexpected '{word}'\n\n{HELP}"),
+        None => Ok(a),
+    }
+}
+
 /// Parses the arguments after the program name.
 fn parse_args(args: &[String]) -> Result<Command> {
     let Some((cmd, rest)) = args.split_first() else { return Ok(Command::Help) };
+    // Asking for help must never run anything. `check` takes the whole rest as its prompt, so only
+    // its first word can ask.
+    let asks_help = |a: &String| a == "--help" || a == "-h";
+    if matches!(cmd.as_str(), "--help" | "-h" | "help") || (cmd.as_str() != "check" && rest.iter().any(asks_help)) {
+        return Ok(Command::Help);
+    }
+    if matches!(cmd.as_str(), "--version" | "-V" | "version") {
+        return Ok(Command::Version);
+    }
     Ok(match cmd.as_str() {
-        "sources" => Command::Sources { json: Args::split(rest, &[], &["--json"])?.has("--json") },
-        "sync" => Command::Sync { json: Args::split(rest, &[], &["--json"])?.has("--json") },
+        "sources" => Command::Sources { json: no_positional(Args::split(rest, &[], &["--json"])?)?.has("--json") },
+        "sync" => Command::Sync { json: no_positional(Args::split(rest, &[], &["--json"])?)?.has("--json") },
         "allow" => {
             let a = Args::split(rest, &["--since"], &["--from-now"])?;
             let since =
@@ -122,7 +143,10 @@ fn parse_args(args: &[String]) -> Result<Command> {
         "pause" => Command::Pause { id: Args::split(rest, &[], &[])?.arg(0, "source")? },
         "resume" => Command::Resume { id: Args::split(rest, &[], &[])?.arg(0, "source")? },
         "revoke" => Command::Revoke { id: Args::split(rest, &[], &[])?.arg(0, "source")? },
-        "forget" => Command::Forget { id: Args::split(rest, &[], &[])?.arg(0, "source")? },
+        "forget" => {
+            let a = Args::split(rest, &[], &["--yes", "-y"])?;
+            Command::Forget { id: a.arg(0, "source")?, yes: a.has("--yes") || a.has("-y") }
+        }
         "import" => {
             let a = Args::split(rest, &[], &[])?;
             Command::Import { id: a.arg(0, "source")?, path: a.arg(1, "path")?.into() }
@@ -215,6 +239,10 @@ fn command(args: &[String]) -> Result<bool> {
         println!("{HELP}");
         return Ok(true);
     }
+    if cmd == Command::Version {
+        println!("noactually {}", env!("CARGO_PKG_VERSION"));
+        return Ok(true);
+    }
     if store::legacy_db_env_in_use() {
         eprintln!("note: {} is deprecated; set {} instead.", store::LEGACY_DB_ENV, store::DB_ENV);
     }
@@ -222,11 +250,41 @@ fn command(args: &[String]) -> Result<bool> {
     execute(cmd, &mut store, &sources::all())
 }
 
+/// Deletes a source, once the person has confirmed it.
+fn forget(store: &mut Store, all: &[Box<dyn sources::Source>], id: &str, yes: bool) -> Result<()> {
+    known(all, id)?;
+    let stdin = std::io::stdin();
+    if !confirm_forget(id, yes, stdin.is_terminal(), &mut stdin.lock())? {
+        println!("Cancelled. Nothing was deleted.");
+        return Ok(());
+    }
+    store.forget(id)?;
+    println!("Deleted everything from that source.");
+    Ok(())
+}
+
+/// True when the person agreed to delete everything from `id`: `--yes`, or a "y" at the prompt.
+/// With neither (input isn't a terminal and no `--yes`) it refuses rather than guess.
+fn confirm_forget(id: &str, yes: bool, interactive: bool, input: &mut impl BufRead) -> Result<bool> {
+    if yes {
+        return Ok(true);
+    }
+    if !interactive {
+        bail!("refusing to delete everything from {id} without confirmation. Run it in a terminal, or add --yes.");
+    }
+    eprint!("Delete everything from {id}, including its scores? This can't be undone. [y/N] ");
+    let _ = std::io::stderr().flush();
+    let mut line = String::new();
+    input.read_line(&mut line).context("couldn't read your answer")?;
+    Ok(matches!(line.trim().to_lowercase().as_str(), "y" | "yes"))
+}
+
 /// Runs one command. `Ok(false)` means it ran but only in part: a sync that had to skip files.
 fn execute(cmd: Command, store: &mut Store, all: &[Box<dyn sources::Source>]) -> Result<bool> {
     let mut complete = true;
     match cmd {
         Command::Help => println!("{HELP}"),
+        Command::Version => println!("noactually {}", env!("CARGO_PKG_VERSION")),
         Command::Sources { json } => print_sources(store, all, json)?,
         Command::Allow { id, since, from_now } => {
             let src = known(all, &id)?;
@@ -255,11 +313,7 @@ fn execute(cmd: Command, store: &mut Store, all: &[Box<dyn sources::Source>]) ->
             store.revoke(&id)?;
             println!("Stopped reading. Scores so far are kept.");
         }
-        Command::Forget { id } => {
-            known(all, &id)?;
-            store.forget(&id)?;
-            println!("Deleted everything from that source.");
-        }
+        Command::Forget { id, yes } => forget(store, all, &id, yes)?,
         Command::Import { id, path } => {
             known(all, &id)?;
             let path = std::fs::canonicalize(&path).with_context(|| format!("can't find {}", path.display()))?;
@@ -625,6 +679,54 @@ mod tests {
         let helper = helper_args(&[os("digest"), os("--transcript"), bad.clone()]).unwrap();
         assert_eq!(helper[2], "x\u{fffd}\u{fffd}", "inside a helper command it is lossy text, so it finds nothing");
         let _ = run_os([os("digest"), os("--transcript"), bad]); // prints nothing, succeeds
+    }
+
+    #[test]
+    fn help_and_version_never_run_a_command() {
+        for line in
+            ["--help", "-h", "help", "sync --help", "sync -h", "sync --json --help", "forget codex --help", "stats -h"]
+        {
+            assert_eq!(parse(line).unwrap(), Command::Help, "{line}");
+        }
+        for line in ["--version", "-V", "version"] {
+            assert_eq!(parse(line).unwrap(), Command::Version, "{line}");
+        }
+        assert_eq!(
+            parse("check --help me").unwrap(),
+            Command::Check { text: "--help me".into(), json: false },
+            "a prompt is a prompt"
+        );
+        assert!(err("sync now").starts_with("unexpected 'now'"));
+        assert!(err("sources extra").starts_with("unexpected 'extra'"));
+    }
+
+    #[test]
+    fn forget_needs_a_yes() {
+        assert_eq!(parse("forget codex").unwrap(), Command::Forget { id: "codex".into(), yes: false });
+        assert_eq!(parse("forget codex --yes").unwrap(), Command::Forget { id: "codex".into(), yes: true });
+        assert_eq!(parse("forget -y codex").unwrap(), Command::Forget { id: "codex".into(), yes: true });
+        let ask = |yes, tty, typed: &str| confirm_forget("codex", yes, tty, &mut typed.as_bytes());
+        assert!(ask(true, false, "").unwrap(), "--yes needs no terminal");
+        assert!(ask(false, true, "y\n").unwrap());
+        assert!(ask(false, true, " YES \n").unwrap());
+        assert!(!ask(false, true, "n\n").unwrap());
+        assert!(!ask(false, true, "\n").unwrap(), "enter alone is no");
+        assert!(!ask(false, true, "").unwrap(), "closed input is no");
+        let e = ask(false, false, "y\n").unwrap_err().to_string();
+        assert!(e.contains("--yes"), "{e}");
+    }
+
+    #[test]
+    fn forget_deletes_only_when_confirmed() {
+        let mut s = Store::open_in_memory().unwrap();
+        let all = sources::all();
+        execute(Command::Allow { id: "codex".into(), since: None, from_now: false }, &mut s, &all).unwrap();
+        // The test's stdin isn't a terminal, so without --yes it refuses.
+        let refused = execute(Command::Forget { id: "codex".into(), yes: false }, &mut s, &all).unwrap_err();
+        assert!(refused.to_string().contains("--yes"), "{refused}");
+        assert!(s.source_state("codex").unwrap().unwrap().allowed, "nothing was deleted");
+        execute(Command::Forget { id: "codex".into(), yes: true }, &mut s, &all).unwrap();
+        assert!(s.source_state("codex").unwrap().is_none(), "--yes deleted it");
     }
 
     #[test]

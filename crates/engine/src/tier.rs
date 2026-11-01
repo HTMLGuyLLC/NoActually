@@ -336,8 +336,9 @@ pub struct Window {
 }
 
 /// The corrections that fully show you check its work over `days`: [`CORRECTION_PROOF`] over
-/// [`WINDOW_DAYS`] or longer, and a share of that in a shorter window, so the same habits earn the
-/// same tier in any window. Always at least one.
+/// [`WINDOW_DAYS`] or longer, and a share of that in a shorter window: the proof scales down under
+/// 28 days and stays at [`CORRECTION_PROOF`] beyond, so the same habits do not earn the same tier
+/// in every window. Always at least one.
 pub fn correction_proof(days: i64) -> i64 {
     ((CORRECTION_PROOF * days + WINDOW_DAYS - 1) / WINDOW_DAYS).clamp(1, CORRECTION_PROOF)
 }

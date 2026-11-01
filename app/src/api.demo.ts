@@ -213,8 +213,15 @@ const demoSources: SourceInfo[] = [
 type Handlers = { [C in Command]: (args: ArgsOf<C>) => ResultOf<C> | Promise<ResultOf<C>> };
 
 /** The demo keeps what you set in Learn and Improve for the visit, so trying them feels real. */
-const visit: { learned: string[]; goal: GoalStatus | null | undefined; menuBar: boolean; cards: { claude: boolean; tips: boolean; reminders: boolean } } = {
+const visit: {
+  learned: string[];
+  goal: GoalStatus | null | undefined;
+  menuBar: boolean;
+  cards: { claude: boolean; tips: boolean; reminders: boolean };
+  popups: boolean;
+} = {
   learned: [],
+  popups: true,
   goal: undefined,
   menuBar: true,
   // Report cards: on in Claude Code, and Codex isn't here.
@@ -246,7 +253,7 @@ const handlers: Handlers = {
   set_retention: () => null,
   pin: () => null,
   sync_now: () => null,
-  sync_status: () => ({ syncing: false, last_sync: new Date().toISOString(), last_error: null, files_with_errors: 0 }),
+  sync_status: () => ({ syncing: false, last_sync: new Date().toISOString(), last_error: null, files_with_errors: 0, rebuilding: false }),
   get_autostart: () => false,
   set_autostart: () => null,
   save_share_card: () => null,
@@ -330,6 +337,14 @@ const handlers: Handlers = {
   report_cards_delete_history: () => 0,
   log_error: () => null,
   open_log_folder: () => null,
+  // Remembered for the visit only, like the other choices.
+  get_popups: () => visit.popups,
+  set_popups: ({ enabled }) => {
+    visit.popups = enabled;
+    return null;
+  },
+  rescored_notice: () => null,
+  open_notices: () => null,
 };
 
 export async function demoCall<C extends Command>(cmd: C, args: ArgsOf<C>): Promise<ResultOf<C>> {

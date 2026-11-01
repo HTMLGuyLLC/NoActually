@@ -1,6 +1,6 @@
 # Plan: `/grade:me`, a report card on how you prompted
 
-Status: approved and built (2026-10-30), not yet released. Where later sections disagree with earlier ones,
+Status: history. This is how the feature was planned, not what shipped: some of it was never built, and `docs/ARCHITECTURE.md` describes the app as it is. Where later sections disagree with earlier ones,
 "Decisions made while building" wins, and "Revision (2026-10-30): tips as you work" wins over both. That revision replaced
 automatic grading, so anything below about automatic cards or `report_cards_set_auto` is history.
 

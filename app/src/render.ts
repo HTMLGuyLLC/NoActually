@@ -1,10 +1,11 @@
 // Draws the current view into #app, keeping keyboard focus where it was.
 import { api, demo, REPORT_CARD_TOOLS } from "./api";
-import { captureFocus, must, restoreFocus } from "./dom";
+import { captureFocus, must, restoreFocus, say } from "./dom";
 import { ago, errorText, isFiltered, listNames, subjectText } from "./format";
-import { isDismissed } from "./hints";
+import { isDismissed, rescoredUnseen } from "./hints";
 import { type Html, html } from "./html";
 import { refreshCheck } from "./learn/checker";
+import { report } from "./log";
 import { closePicker } from "./picker/popover";
 import { createScheduler, isUserBusy } from "./scheduler";
 import {
@@ -16,17 +17,27 @@ import {
   setLastPromptTier,
   setLastVerdict,
   setMeta,
+  setReading,
   setReportCards,
   state,
 } from "./state";
-import { updateBanner, updateLine } from "./update";
-import { coverage, headerView, statusPillView } from "./views/chrome";
-import { emptyGlanceView, glanceView } from "./views/glance";
+import { readingDoneNotice, rescoredNotice, updateBanner, updateLine } from "./update";
+import { coverage, headerView, statusPillView, TAB_TITLES } from "./views/chrome";
+import { emptyGlanceView, glanceErrorView, glanceRebuildingView, glanceView } from "./views/glance";
 import { canGrade, improveView } from "./views/improve";
 import { learnView } from "./views/learn";
-import { modelPicker, noChatsView, onboardingView, scorecardView } from "./views/scorecard";
-import { settingsView } from "./views/settings";
+import { modelPicker, noChatsView, onboardingView, rebuildingView, scorecardView, VIEW_TITLES } from "./views/scorecard";
+import { PANE_TITLES, settingsView } from "./views/settings";
 import { watchingNames } from "./views/sources";
+
+/** A read that is only an extra: a failure (or a missing answer) is the fallback, never an error page. */
+const soft = async <T>(read: () => Promise<T>, fallback: T): Promise<T> => {
+  try {
+    return await read();
+  } catch {
+    return fallback;
+  }
+};
 
 export const root: HTMLElement = must("#app");
 
@@ -55,6 +66,8 @@ async function view(): Promise<Html> {
   // Only the scorecard's counts follow its period; everything else reads all of history.
   const scorecard = !isGlance && state.tab === "score";
   const since = scorecard ? periodSince(state.period) : null;
+  // While the counts are rebuilt they are partly empty: show a holding page, never half a score.
+  if (state.status.rebuilding && (isGlance || state.tab === "score")) return isGlance ? glanceRebuildingView() : holding();
   const s = await api.stats(since ? { ...state.filter, since } : state.filter);
   setCurrent(s);
   // The picker's counts cover the same window as the page. A filtered page can't supply them, so a
@@ -81,11 +94,12 @@ async function view(): Promise<Html> {
   let body: Html;
   if (state.tab === "settings") {
     // Sources lead Settings: you set them up once, beside the other privacy controls.
-    const [sources, retention, autostart, menuBar] = await Promise.all([
+    const [sources, retention, autostart, menuBar, popups] = await Promise.all([
       api.sources(),
       api.retention(),
       api.getAutostart().catch(() => false),
       api.getMenuBar(),
+      soft(() => api.getPopups(), true),
     ]);
     body = settingsView({
       pane: state.settingsPane,
@@ -97,6 +111,7 @@ async function view(): Promise<Html> {
       reportCards: state.reportCards,
       tipRules: meta.tip_rules,
       update: state.update,
+      popups,
       demo,
     });
   } else if (state.tab === "learn") {
@@ -129,7 +144,12 @@ async function view(): Promise<Html> {
       cardsOn: REPORT_CARD_TOOLS.find((t) => cards?.[t].on) ?? null,
     });
   } else if (s.messages) {
+    setReading("off");
+    // Nothing new will come to someone who only imported an export: say to add a newer one.
+    const importOnly =
+      s.overall.to_rank > 0 && (await soft(() => api.sources(), [])).some((x) => x.kind === "import" && x.state?.allowed) && !(await watching());
     body = scorecardView(s, {
+      importOnly,
       meta,
       filter: state.filter,
       view: state.view,
@@ -142,12 +162,26 @@ async function view(): Promise<Html> {
     setLastVerdict(s.overall.verdict);
     setLastPromptTier(s.prompts.tier);
     setLastCorrectionTier(s.overall.correction_tier);
-  } else if ((await api.stats({ since: periodSince("all") })).messages) {
+  } else {
+    const all = await api.stats({ since: periodSince("all") });
     // Nothing in this period or for this model, but there is history: keep the pickers so it can be widened.
-    body = noChatsView({ filter: state.filter, meta, period: state.period });
-  } else body = onboardingView(await watching());
+    if (all.messages) body = noChatsView({ filter: state.filter, meta, period: state.period, view: state.view, lastDay: all.last_day });
+    else body = onboardingView(await watching(), state.reading === "reading" || state.status.syncing);
+  }
+  return page(body);
+}
+
+/** The holding page for the scorecard, with the frame around it. */
+function holding(): Html {
+  return html`<div class="wrap">${headerView(state.tab, state.status, demo)}<main id="main" tabindex="-1">${rebuildingView()}</main></div>`;
+}
+
+/** The frame around a page: skip link, header, the update and notice lines, and the page itself in `main`. */
+async function page(body: Html): Promise<Html> {
   const banner = state.update ? updateBanner(state.update, state.laterFor) : "";
-  return html`<div class="wrap">${headerView(state.tab, state.status, demo, coverage(state.current))}<div id="update-slot">${banner}</div>${body}</div>`;
+  const stamp = await soft(() => api.rescoredNotice(), null);
+  const notice = state.reading === "done" && state.tab !== "score" ? readingDoneNotice() : rescoredUnseen(stamp) && stamp ? rescoredNotice(stamp) : "";
+  return html`<div class="wrap"><button class="skip-link" data-action="skip-to-main">Skip to content</button>${headerView(state.tab, state.status, demo, coverage(state.current))}<div id="update-slot">${banner}</div>${notice ? html`<div id="notice-slot">${notice}</div>` : ""}<main id="main" tabindex="-1">${body}</main></div>`;
 }
 
 /** Bar widths are set through CSSOM, not inline style attributes, so the CSP needs no 'unsafe-inline'. */
@@ -162,12 +196,36 @@ async function draw(): Promise<void> {
   try {
     markup = await view();
   } catch (e) {
-    markup = html`<div class="wrap">${headerView(state.tab, state.status, demo, coverage(state.current))}<section class="empty"><h1 class="q">Something went wrong.</h1><p class="muted mono small">${errorText(e)}</p><div class="src-actions"><button data-action="retry">Try again</button>${demo ? "" : html`<button class="ghost" data-action="open-log-folder">Show log folder</button>`}</div></section></div>`;
+    report(e);
+    // The glance has no header or log folder to offer: its own small page, with a retry and the full app.
+    markup = isGlance
+      ? glanceErrorView(errorText(e))
+      : html`<div class="wrap">${headerView(state.tab, state.status, demo, coverage(state.current))}<main id="main" tabindex="-1"><section class="empty"><h1 class="q">Something went wrong.</h1><p class="muted mono small">${errorText(e)}</p><div class="src-actions"><button data-action="retry">Try again</button>${demo ? "" : html`<button class="ghost" data-action="open-log-folder">Show log folder</button>`}</div></section></main></div>`;
   }
   root.innerHTML = markup.value;
   applyBarWidths(root);
   restoreFocus(root, focus);
+  announcePage();
   if (state.tab === "learn" && !isGlance) await refreshCheck(root);
+}
+
+/** The page last announced, so a background redraw says nothing and only a move to another page does. */
+let announced = "";
+
+/** Says the page's name in a live region when it changes (the tabs swap content in place, which a screen reader can't see). */
+function announcePage(): void {
+  if (isGlance) return;
+  const name =
+    state.tab === "score"
+      ? `Scorecard, ${VIEW_TITLES[state.view]}`
+      : state.tab === "settings"
+        ? `Settings, ${PANE_TITLES[state.settingsPane]}`
+        : TAB_TITLES[state.tab];
+  if (name === announced) return;
+  const first = announced === "";
+  announced = name;
+  // Not at launch: the window's own title is read then.
+  if (!first) say(document.getElementById("announce"), name);
 }
 
 export const scheduler = createScheduler({ isBusy: () => isUserBusy(root), draw });

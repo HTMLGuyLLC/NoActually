@@ -33,7 +33,7 @@ const view = (cards: Partial<ReportCardsState> = {}, pane: "report-cards" | "gen
   settingsView({
     pane,
     sources,
-    status: { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 },
+    status: { syncing: false, last_sync: null, last_error: null, files_with_errors: 0, rebuilding: false },
     retention: { level: "snippet", full_days: 30, snippet_days: 365 },
     autostart: false,
     menuBar: { enabled: true, available: true },

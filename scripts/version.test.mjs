@@ -76,3 +76,16 @@ test("check fails when a version differs", () => {
     }
   }
 });
+
+const BUMP = new URL("./bump-version.sh", import.meta.url).pathname;
+
+test("bump-version.sh refuses anything but X.Y.Z, before it touches a file", () => {
+  for (const v of ["0.6.0-beta.1", "1.2", "v1.2.3", "1.2.3-rc1", "1.2.3+build", "latest"]) {
+    const r = spawnSync("bash", [BUMP, v], { encoding: "utf8" });
+    assert.equal(r.status, 1, v);
+    assert.match(r.stderr, /isn't a version like 1\.2\.3/, v);
+  }
+  const none = spawnSync("bash", [BUMP], { encoding: "utf8" });
+  assert.notEqual(none.status, 0);
+  assert.match(none.stderr, /usage: scripts\/bump-version\.sh X\.Y\.Z/);
+});

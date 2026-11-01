@@ -17,7 +17,7 @@ type ScoreLike = Pick<Stats, "overall">;
 export function shareText(s: ScoreLike, who: string, tier: string, when = PERIOD_WHEN["28d"]) {
   const o = s.overall;
   const answer = o.verdict === "no" ? "No." : "Hmm.";
-  return `Could ${who} replace me? ${answer} My score is ${o.score} (${tier}): ${o.direction}% of my prompts were clear the first time, and I corrected it ${plural(o.corrections, "time")} to its ${o.humbled} ${when}. What's yours? ${SHARE_URL}`;
+  return `Could ${who} replace me? ${answer} My score is ${o.score} (${tier}): ${o.direction}% of my prompts were clear the first time. I corrected it ${plural(o.corrections, "time")} ${when}, and it corrected me ${plural(o.humbled, "time")}. What's yours? ${SHARE_URL}`;
 }
 
 /** The prompts score, ready to post: the tier's answer and how many prompts were clear the first time. Numbers only. */
@@ -46,7 +46,9 @@ export type ShareTarget = {
  * score that's numbers and the project link; for a correction it's the redacted, clipped snippet,
  * which the share dialog shows (and lets the person edit) before anything opens.
  */
-export function shareTargets(text: string, url = SHARE_URL): ShareTarget[] {
+export function shareTargets(rawText: string, url = SHARE_URL): ShareTarget[] {
+  // A half of an emoji, from an edit or an older cut, would make encoding throw.
+  const text = rawText.replace(/\p{Cs}/gu, "");
   const t = encodeURIComponent(text);
   const u = encodeURIComponent(url);
   // Networks that take one text field get the link inside the text (it already ends with it).
@@ -101,16 +103,44 @@ export type CorrectionLike = { model: string; human: string | null; ai: string |
 
 export function clip(s: string, n: number) {
   const t = s.replace(/\s+/g, " ").trim();
-  return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t;
+  const chars = [...t]; // whole characters, so an emoji is never cut in half
+  return chars.length > n
+    ? `${chars
+        .slice(0, n - 1)
+        .join("")
+        .trimEnd()}…`
+    : t;
 }
 
 /** The longest quote, in chars, in the post text and on the card image alike, so the image never shows more than the box. */
 export const QUOTE_CLIP = 90;
 
-/** A single correction, ready to post. Quotes are the (redacted, possibly edited) snippets, clipped to `QUOTE_CLIP`. */
-export function correctionShareText(e: CorrectionLike, url = SHARE_URL) {
+/** The fewest characters a quote is cut to, however long the rest of the post is. */
+const QUOTE_FLOOR = 20;
+/** The longest post X takes (a link counts as `X_LINK`), and Bluesky (a link counts in full). */
+const X_LIMIT = 280;
+const X_LINK = 23;
+const BLUESKY_LIMIT = 300;
+
+const quoted = (e: CorrectionLike, n: number, url: string) => {
   const who = e.model || "my AI";
-  const you = e.human ? ` Me: “${clip(e.human, QUOTE_CLIP)}”` : "";
-  const ai = e.ai ? ` ${who}: “${clip(e.ai, QUOTE_CLIP)}”` : "";
+  const you = e.human ? ` Me: “${clip(e.human, n)}”` : "";
+  const ai = e.ai ? ` ${who}: “${clip(e.ai, n)}”` : "";
   return `I corrected ${who}.${you}${ai} Could AI replace me? No, actually. ${url}`;
+};
+
+/**
+ * How many characters each quote keeps: `QUOTE_CLIP`, or fewer when two long quotes and a long model name
+ * would push the post over what X and Bluesky take. Both quotes shrink together. The card image uses it too.
+ */
+export function quoteClip(e: CorrectionLike, url = SHARE_URL): number {
+  const fits = (t: string) => t.length <= BLUESKY_LIMIT && t.length - url.length + X_LINK <= X_LIMIT;
+  let n = QUOTE_CLIP;
+  while (n > QUOTE_FLOOR && !fits(quoted(e, n, url))) n--;
+  return n;
+}
+
+/** A single correction, ready to post. Quotes are the (redacted, possibly edited) snippets, clipped to `quoteClip`. */
+export function correctionShareText(e: CorrectionLike, url = SHARE_URL) {
+  return quoted(e, quoteClip(e, url), url);
 }

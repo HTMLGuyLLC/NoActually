@@ -14,7 +14,7 @@ body:
       options:
         - Counted as a correction, but should not be
         - Not counted, but should be
-        - Wrong label
+        - Wrong category
     validations:
       required: true
   - type: textarea
@@ -31,8 +31,16 @@ body:
   - type: dropdown
     id: expected
     attributes:
-      label: Label you expected
-      options: [Confirmed, Admitted, Claimed, Humbled, None (not a correction)]
+      label: Category you expected
+      description: The names the app shows under "What you correct".
+      options:
+        - Made it up
+        - Ignored instructions
+        - Misread you
+        - Missed something
+        - Still broken
+        - Flat-out wrong
+        - None (not a correction)
     validations:
       required: true
   - type: input
@@ -45,8 +53,8 @@ body:
   - type: input
     id: rule
     attributes:
-      label: Rule id
-      description: If the app shows one for this message, paste it here.
+      label: Rule id (optional)
+      description: Only if the app shows one for this message. Leave it empty if you can't find it.
   - type: input
     id: version
     attributes:

@@ -4,6 +4,41 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-11-01
+
+### Added
+
+- A daily backup of your database beside it. It's removed whenever text is deleted, so it never outlives what you deleted.
+- **Show popups** switch and a **Licenses** button in Settings. Third-party license notices now ship with the app.
+- After a rules update, the app says so inside the app too, not only in a popup.
+- `noactually --version`, `sync --help`, and `NOACTUALLY_DEBUG` for finding out why a report card came back empty. `forget` asks first, or takes `--yes`.
+
+### Changed
+
+- Your score can move slightly in this update: "I didn't catch that bug" counts as the AI admitting a miss again, and "I should have enough context now" no longer does. History is re-read once (rules version 12).
+- While history is being re-read, the app says "Recounting your history…" instead of showing partial numbers.
+- Redaction catches more: names like `SECRET_KEY`, `pwd=`, `--password x`, `curl -u`, escaped JSON, cookies and more API key formats. Folders under your home folder are removed too. Text you already stored gets cleaned once.
+- Rework minutes and cost can't exceed what a round really took, however many follow-ups touched it.
+- The share dialog puts the redaction warning first, and starts in the quote box. Long quotes are shortened to fit X and Bluesky.
+- Scorecard wording: "You corrected it 43 times. It corrected you once."
+- Saving Privacy says what will go before it deletes anything, and a double-click no longer passes a confirm.
+- Import-only users are pointed to a newer export, and imports that aren't chat exports are refused with a reason.
+- A database from a newer version is refused with a message, rather than risked.
+
+### Fixed
+
+- A rules update could count a forked chat twice, and could inflate daily message counts.
+- A chat's first message could still count as a correction on a chat in progress.
+- A rules update could bring back correction text you'd chosen not to keep.
+- A failed update now says why. It also times out instead of hanging.
+- If the database can't open, the app now says so and points to the log and backup, rather than showing nothing.
+- Closing the app during a long read no longer freezes the window.
+- Files that couldn't be read now show in the status pill, and a change in a tool's file format is logged.
+- First run ends on your scorecard. Dragging a selection out of a quote box no longer closes the dialog.
+- Goal popups are no longer lost on busy passes.
+- Keyboard and screen reader fixes: a main landmark, a skip link, one tab stop per chart, announced tab changes, and focus kept through a background sync. Light theme contrast fixed.
+- Older macOS versions without native dialogs can now share and turn on report cards.
+
 ## [0.5.4] - 2026-11-01
 
 ### Changed
@@ -26,7 +61,7 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 - The database and its folder are now private to your account on Mac and Linux.
 - A count popup can't repeat after Forget or a rebuild. The "left out" report card count no longer grows when chats are read again.
 
-## [0.5.3] - 2026-10-31
+## [0.5.3] - 2026-11-01
 
 ### Fixed
 
@@ -206,7 +241,8 @@ First release.
 - Per-source consent: nothing is read until you allow it, and Forget deletes a source's data
 - `noactually` command-line tool (`sources`, `allow`, `sync`, `stats`)
 
-[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.4...HEAD
+[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.5...HEAD
+[0.5.5]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.1...v0.5.2

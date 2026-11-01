@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { emptyReportCards } from "../state";
 import { HOSTILE, hallEntry, meta, overall, row, source, stats } from "../test/fixtures";
 import { headerView, statusPillView } from "./chrome";
-import { emptyGlanceView, glanceView } from "./glance";
-import { chartSummary, chartView, hallView, noChatsView, onboardingView, scorecardView } from "./scorecard";
-import { parseRetention, settingsView } from "./settings";
+import { emptyGlanceView, glanceErrorView, glanceRebuildingView, glanceView } from "./glance";
+import { chartSummary, chartView, hallView, noChatsView, onboardingView, rebuildingView, scorecardView } from "./scorecard";
+import { goneByCount, parseRetention, settingsView, tightens } from "./settings";
 import { allowArgs, sourcesView, watchingNames } from "./sources";
 
 const ctx = { meta, filter: {}, still: false };
@@ -147,7 +147,7 @@ describe("overview hero", () => {
     const m = hero();
     expect(m).not.toContain('class="eyebrow"'); // the picker and the sentence already say the window
     expect(m).toContain(
-      "Score <b>86</b>. <b>83%</b> of your prompts were clear the first time, and you corrected it <b>41 times</b> to its 2 in the last 28 days.",
+      "Score <b>86</b>. <b>83%</b> of your prompts were clear the first time. You corrected it <b>41 times</b> in the last 28 days. It corrected you 2 times.",
     );
     expect(m).toContain("Your tier is Sharp-eyed, score 86.");
     expect(m).not.toContain("Irreplaceable at 90. You&#39;re at 86."); // the row says it
@@ -308,30 +308,30 @@ describe("onboarding and glance", () => {
 
 describe("chrome", () => {
   it("marks the current tab for assistive tech", () => {
-    const m = headerView("settings", { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 }, false).value;
+    const m = headerView("settings", { syncing: false, last_sync: null, last_error: null, files_with_errors: 0, rebuilding: false }, false).value;
     expect(m).toContain('data-id="settings" data-tip="Settings" aria-current="page"');
     expect(m.match(/aria-current/g)).toHaveLength(1);
   });
 
   it("gives every tab an icon and makes the logo a way home", () => {
-    const m = headerView("settings", { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 }, false).value;
+    const m = headerView("settings", { syncing: false, last_sync: null, last_error: null, files_with_errors: 0, rebuilding: false }, false).value;
     expect(m.match(/class="tab-icon"/g)).toHaveLength(4);
     expect(m).toContain('<button class="home" data-action="home"');
   });
 
   it("escapes a sync error in the retry pill", () => {
-    const m = statusPillView({ syncing: false, last_sync: null, last_error: HOSTILE, files_with_errors: 0 }, false).value;
+    const m = statusPillView({ syncing: false, last_sync: null, last_error: HOSTILE, files_with_errors: 0, rebuilding: false }, false).value;
     expect(m).toContain("Couldn't check. Retry");
     safe(m);
   });
 
   it("says Demo data in the demo, and Checking while syncing", () => {
-    expect(statusPillView({ syncing: false, last_sync: null, last_error: null, files_with_errors: 0 }, true).value).toContain("Demo data");
-    expect(statusPillView({ syncing: true, last_sync: null, last_error: null, files_with_errors: 0 }, false).value).toContain("Checking…");
+    expect(statusPillView({ syncing: false, last_sync: null, last_error: null, files_with_errors: 0, rebuilding: false }, true).value).toContain("Demo data");
+    expect(statusPillView({ syncing: true, last_sync: null, last_error: null, files_with_errors: 0, rebuilding: false }, false).value).toContain("Checking…");
   });
 });
 
-const status = { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 };
+const status = { syncing: false, last_sync: null, last_error: null, files_with_errors: 0, rebuilding: false };
 
 describe("sourcesView", () => {
   it("checks for new chats from Sources, and leaves app updates to General", () => {
@@ -372,7 +372,9 @@ describe("sourcesView", () => {
   });
 
   it("explains how to get an export", () => {
-    expect(sourcesView([source({ id: "chatgpt-export", kind: "import", roots: [] })], status).value).toContain("Settings → Data controls → Export data.");
+    expect(sourcesView([source({ id: "chatgpt-export", kind: "import", roots: [] })], status).value).toContain(
+      "Settings → Data controls → Export data. It arrives as a zip by email. Unzip it, then choose conversations.json.",
+    );
   });
 
   it("escapes names and paths", () => {
@@ -431,7 +433,7 @@ describe("settingsView", () => {
   const base = {
     pane: "general" as const,
     sources: [source()],
-    status: { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 },
+    status: { syncing: false, last_sync: null, last_error: null, files_with_errors: 0, rebuilding: false },
     retention: { level: "snippet" as const, full_days: 30, snippet_days: 365 },
     autostart: true,
     menuBar: { enabled: true, available: true },
@@ -515,12 +517,12 @@ describe("scorecard period picker", () => {
       scorecardView(stats({ overall: overall({ corrections: 37 }) }), { meta, filter: {}, still: true, period }).value;
     const week = view("7d");
     expect(week).toContain('data-action="period" data-id="7d" aria-current="true"');
-    expect(week).toContain("you corrected it <b>37 times</b> to its 2 in the last 7 days.");
+    expect(week).toContain("You corrected it <b>37 times</b> in the last 7 days. It corrected you 2 times.");
     // Everything follows the period, the score included: no disclaimer needed.
     expect(week).not.toContain('<div class="eyebrow">');
     expect(week).not.toContain("always uses");
     expect(view("all")).toContain("across all time.");
-    expect(view("all")).toContain("<b>37 times</b> to its 2 across all time.");
+    expect(view("all")).toContain("<b>37 times</b> across all time. It corrected you 2 times.");
   });
 });
 
@@ -540,11 +542,11 @@ describe("status and refresh", () => {
     const covers = coverage(stats({ first_day: "2026-08-01", last_day: "2026-10-29", messages: 7485 }));
     const day = (iso: string) => new Date(`${iso}T00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
     expect(covers).toBe(`${day("2026-08-01")} – ${day("2026-10-29")} · ${(7485).toLocaleString()} messages`);
-    const m = statusPillView({ syncing: false, last_sync: null, last_error: null, files_with_errors: 0 }, false, covers).value;
+    const m = statusPillView({ syncing: false, last_sync: null, last_error: null, files_with_errors: 0, rebuilding: false }, false, covers).value;
     expect(m).toContain('data-action="sync-now"');
     expect(m).toContain('data-tip="Check now"');
     expect(m).toContain('<i class="dot"></i><svg class="refresh"');
-    expect(statusPillView({ syncing: true, last_sync: null, last_error: null, files_with_errors: 0 }, false, covers).value).not.toContain(
+    expect(statusPillView({ syncing: true, last_sync: null, last_error: null, files_with_errors: 0, rebuilding: false }, false, covers).value).not.toContain(
       'data-action="sync-now"',
     );
     expect(m).not.toContain("title=");
@@ -612,5 +614,122 @@ describe("hall of fame awards", () => {
     expect(m).toContain(`aria-label="Next ${AWARDS.just_wrong?.name} entry"`);
     expect(m).toContain('<span aria-hidden="true">×9</span><span class="sr-only">9 times</span>');
     expect(m).toContain('<span class="sr-only">2 times</span>');
+  });
+});
+
+describe("the pill, rebuilding and unreadable chats", () => {
+  const ok = { syncing: false, last_sync: null, last_error: null, files_with_errors: 0, rebuilding: false };
+
+  it("says it is recounting, with no check-now button and no coverage", () => {
+    const m = statusPillView({ ...ok, rebuilding: true }, false, "Oct 2 – Oct 29 · 20 messages").value;
+    expect(m).toContain("Recounting your history…");
+    expect(m).not.toContain("sync-now");
+    expect(m).not.toContain("20 messages");
+  });
+
+  it("counts chats it couldn't read, with the way to the log folder", () => {
+    const m = statusPillView({ ...ok, files_with_errors: 3 }, false).value;
+    expect(m).toContain('data-action="open-log-folder"');
+    expect(m).toContain(">3 chats couldn't be read<");
+    expect(m).toContain("Open the log folder");
+    expect(statusPillView({ ...ok, files_with_errors: 1 }, false).value).toContain(">1 chat couldn't be read<");
+    expect(statusPillView(ok, false).value).not.toContain("open-log-folder");
+  });
+
+  it("keeps the failed-check retry ahead of both", () => {
+    const m = statusPillView({ ...ok, last_error: "disk full", files_with_errors: 3, rebuilding: true }, false).value;
+    expect(m).toContain("Couldn't check. Retry");
+  });
+
+  it("holds the scorecard and the glance with one line, no numbers and no buttons to share", () => {
+    expect(rebuildingView().value).toContain("Recounting your history…");
+    expect(rebuildingView().value).not.toContain("<button");
+    expect(glanceRebuildingView().value).toContain("Recounting your history…");
+    expect(glanceRebuildingView().value).not.toContain("share");
+  });
+});
+
+describe("the first read, English and the glance's error", () => {
+  it("says it is reading your history, not that all is set", () => {
+    const m = onboardingView("Claude Code", true).value;
+    expect(m).toContain("Reading your history…");
+    expect(m).not.toContain("You're all set.");
+    expect(onboardingView("Claude Code", false).value).toContain("You're all set.");
+  });
+
+  it("says once in onboarding and once in the method text that scoring reads English", () => {
+    expect(onboardingView("").value).toContain("Scoring reads English.");
+    const m = scorecardView(stats(), { ...ctx, view: "prompts" }).value;
+    expect(m).toContain("Scoring reads English.");
+    expect(scorecardView(stats(), ctx).value).not.toContain("Scoring reads English.");
+  });
+
+  it("gives the glance an error page of its own, with Try again and Open app", () => {
+    const m = glanceErrorView("database is locked").value;
+    expect(m).toContain("database is locked");
+    expect(m).toContain('data-action="retry"');
+    expect(m).toContain('data-action="open-main"');
+    expect(m).not.toContain('data-action="tab"');
+    safe(glanceErrorView(HOSTILE).value);
+  });
+});
+
+describe("no chats in a period", () => {
+  it("has a heading, keeps the sections, and names the last chat", () => {
+    const m = noChatsView({ meta, filter: {}, period: "28d", view: "prompts", lastDay: "2026-10-02" }).value;
+    expect(m).toContain('<h1 class="q">No chats in the last 28 days.</h1>');
+    expect(m).toContain('aria-label="Scorecard sections"');
+    expect(m).toContain('data-action="view" data-id="prompts"');
+    expect(m).toContain("Last chat Oct 2, 2026.");
+  });
+
+  it("says the last chat is of any AI when a model is picked, and leaves it out when unknown", () => {
+    expect(noChatsView({ meta, filter: { family: "Claude" }, period: "all", lastDay: "2026-10-02" }).value).toContain("Last chat with any AI Oct 2, 2026.");
+    expect(noChatsView({ meta, filter: {}, period: "all" }).value).not.toContain("Last chat");
+  });
+});
+
+describe("someone who only imported an export", () => {
+  const unranked = { score: null, direction: null, judgment: null, tier: null, next_tier: null, correction_tier: null, verdict: "hmm" as const, to_rank: 4 };
+  const view = (importOnly: boolean, view: "overview" | "prompts" | "corrections" = "overview") =>
+    scorecardView(stats({ last_day: "2026-09-30", overall: overall(unranked), prompts: { ...stats().prompts, tier: null, to_rank: 4 } }), {
+      ...ctx,
+      importOnly,
+      view,
+    }).value;
+
+  it("gets the export's end date and a newer export, not more tasks", () => {
+    for (const v of ["overview", "prompts", "corrections"] as const) {
+      const m = view(true, v);
+      expect(m, v).toContain("Add a newer export");
+      expect(m, v).not.toContain("Give it");
+      expect(m, v).not.toContain("more tasks to get");
+    }
+    expect(view(true)).toContain("Your export ends <b>Sep 30</b>");
+  });
+
+  it("is told to give it more tasks as before when chats keep arriving", () => {
+    expect(view(false)).toContain("Give it <b>4 more tasks</b> with a follow-up to get a score.");
+    expect(view(false)).not.toContain("Add a newer export");
+  });
+});
+
+describe("keeping less in Privacy", () => {
+  const saved = { level: "snippet" as const, full_days: 30, snippet_days: 365 };
+
+  it("tells keeping less from keeping the same or more", () => {
+    expect(tightens(saved, saved)).toBe(false);
+    expect(tightens(saved, { ...saved, level: "category" })).toBe(true);
+    expect(tightens(saved, { ...saved, level: "full" })).toBe(false);
+    expect(tightens(saved, { ...saved, full_days: 10 })).toBe(true);
+    expect(tightens(saved, { ...saved, snippet_days: 400 })).toBe(false);
+    expect(tightens(saved, { ...saved, snippet_days: 30 })).toBe(true);
+  });
+
+  it("counts the Hall of fame entries that lose their text, only when it can tell", () => {
+    const s = stats({ hall_of_fame: [hallEntry(), hallEntry({ human: null, ai: null })] });
+    expect(goneByCount(s, { ...saved, level: "category" })).toBe(1);
+    expect(goneByCount(s, { ...saved, full_days: 5 })).toBeNull();
+    expect(goneByCount(null, { ...saved, level: "category" })).toBeNull();
   });
 });

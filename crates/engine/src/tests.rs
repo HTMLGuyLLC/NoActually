@@ -428,3 +428,39 @@ fn the_next_reply_wins_over_a_later_one() {
     assert_eq!(v.rules[0], "ai.youre_right");
     assert_eq!(v.ai_later, None);
 }
+
+#[test]
+fn didnt_catch_it_admits_but_didnt_hear_you_does_not() {
+    for reply in ["I didn't catch that bug earlier.", "I did not actually catch the typo in the key."] {
+        assert_eq!(rules::first(&rules::AI_ADMIT, reply).map(|m| m.rule), Some("ai.didnt_check"), "{reply}");
+        assert_eq!(label("x", "are you sure?", reply), Some(Label::Admitted), "{reply}");
+    }
+    for reply in [
+        "I didn't catch that. Can you say it again?",
+        "Sorry, I didn't catch that, could you repeat the file name?",
+        "I didn't catch what you meant, which file?",
+    ] {
+        let hit = rules::first(&rules::AI_ADMIT, reply).map(|m| m.rule);
+        assert_ne!(hit, Some("ai.didnt_check"), "{reply}");
+    }
+    assert_eq!(label("x", "are you sure?", "I didn't catch that, can you repeat it?"), None);
+}
+
+#[test]
+fn expecting_to_have_something_is_not_an_admission() {
+    for reply in [
+        "I should have enough context now, so I'll start.",
+        "I should have everything I need.",
+        "I should have access to the repo after the merge.",
+        "I should have it working soon.",
+        "I should have more time tomorrow.",
+        "My error handling now covers retries.",
+        "That is my bad habit with long names.",
+    ] {
+        assert_eq!(rules::first(&rules::AI_ADMIT, reply).map(|m| m.rule), None, "{reply}");
+        assert_eq!(label("x", "still not working", reply), Some(Label::Claimed), "{reply}");
+    }
+    for reply in ["I should have checked the config.", "I should have asked first.", "My bad, fixing it."] {
+        assert!(rules::first(&rules::AI_ADMIT, reply).is_some(), "{reply}");
+    }
+}

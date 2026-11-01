@@ -1,15 +1,31 @@
 #!/usr/bin/env bash
-# Finishes a draft GitHub release made by the Release workflow:
+# Finishes a draft GitHub release. scripts/start-release.sh creates the draft first (the Release
+# workflow's token can't create one) and the workflow fills it with the Windows and Linux builds:
 #   1. renames the CI-built files to plain names ("No-Actually-0.1.0-Windows-Setup-x64.exe")
 #   2. uploads the notarized Mac DMG and the Mac update file from scripts/release-macos.sh
 #   3. writes latest.json for in-app updates: the CI's Windows and Linux entries, pointed at the
 #      renamed files, plus the Mac entries (see scripts/latest-json.mjs)
 #   4. regenerates SHA256SUMS.txt from the exact files on the release
 #
-# Usage: scripts/finish-release.sh v0.1.0
+# It refuses to write a latest.json that leaves out a platform (Windows, Linux or Mac), so a missing
+# build can't ship silently. --allow-missing writes it anyway.
+#
+# Usage: scripts/finish-release.sh v0.1.0 [--allow-missing]
 set -euo pipefail
 
-TAG="${1:?usage: scripts/finish-release.sh vX.Y.Z}"
+USAGE="usage: scripts/finish-release.sh vX.Y.Z [--allow-missing]"
+ALLOW=()
+POS=()
+for arg in "$@"; do
+  case "$arg" in
+    --allow-missing) ALLOW=(--allow-missing) ;;
+    -*) echo "unknown option '$arg'. $USAGE" >&2; exit 1 ;;
+    *) POS+=("$arg") ;;
+  esac
+done
+[[ ${#POS[@]} -eq 1 ]] || { echo "$USAGE" >&2; exit 1; }
+TAG="${POS[0]}"
+[[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "'$TAG' isn't a release tag like v1.2.3." >&2; exit 1; }
 VERSION="${TAG#v}"
 REPO="HTMLGuyLLC/NoActually"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,7 +37,7 @@ WORK=""
 trap '[[ -z "$WORK" ]] || rm -rf "$WORK"' EXIT
 
 RID="$(gh api "repos/$REPO/releases" -q ".[] | select(.tag_name==\"$TAG\") | .id" | head -1)"
-[[ -n "$RID" ]] || { echo "No release for $TAG yet. Push the tag and let the Release workflow finish." >&2; exit 1; }
+[[ -n "$RID" ]] || { echo "No release for $TAG yet. Run scripts/start-release.sh $TAG and let the Release workflow finish." >&2; exit 1; }
 
 plain_name() { node "$ROOT/scripts/latest-json.mjs" plain-name "$1" "$VERSION"; }
 
@@ -47,7 +63,7 @@ if [[ -f "$UPDATE" && -f "$UPDATE.sig" ]]; then
   gh release upload "$TAG" -R "$REPO" "$UPDATE" --clobber
   MAC_ARGS=(--mac-file "$UPDATE" --mac-sig "$UPDATE.sig")
 else
-  echo "No Mac update file at $UPDATE; installed Mac apps won't be offered this version." >&2
+  echo "No Mac update file at $UPDATE; installed Mac apps won't be offered this version, and latest.json is refused without --allow-missing." >&2
 fi
 
 echo "Writing latest.json…"
@@ -64,7 +80,7 @@ else
 fi
 gh api "repos/$REPO/releases/$RID/assets" --paginate -q '.[] | "\(.id)\t\(.name)"' > "$WORK/assets.txt"
 node "$ROOT/scripts/latest-json.mjs" finish --version "$VERSION" --tag "$TAG" --repo "$REPO" \
-  --assets "$WORK/assets.txt" "${IN_ARGS[@]+"${IN_ARGS[@]}"}" "${MAC_ARGS[@]+"${MAC_ARGS[@]}"}" > "$WORK/latest.out.json"
+  --assets "$WORK/assets.txt" "${IN_ARGS[@]+"${IN_ARGS[@]}"}" "${MAC_ARGS[@]+"${MAC_ARGS[@]}"}" "${ALLOW[@]+"${ALLOW[@]}"}" > "$WORK/latest.out.json"
 mv "$WORK/latest.out.json" "$WORK/latest.json"
 gh release upload "$TAG" -R "$REPO" "$WORK/latest.json" --clobber
 rm -rf "$WORK"

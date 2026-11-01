@@ -6,9 +6,9 @@ import { type Html, html, num, raw } from "../html";
 import { categoryTitle, correctionTier, correctionTierRanges, tierName, tierOf, tierRanges } from "../meta";
 import { correctionRate, modelName } from "../picker/picker";
 import { PERIOD_WHEN, PERIODS, type Period, SCORE_VIEWS, type ScoreView } from "../state";
-import { chartBox } from "./charts";
+import { chartBox, markStops } from "./charts";
 import { answerWord, byAnswer, ladderView, sectionNav, shareButton, svg, tierBlurb, verdictMark } from "./chrome";
-import { promptsSummaryView, promptsView } from "./prompts";
+import { type ImportOnly, needMore, needMoreNote, promptsSummaryView, promptsView } from "./prompts";
 
 export type ScorecardContext = {
   meta: Meta;
@@ -25,10 +25,12 @@ export type ScorecardContext = {
   period?: Period;
   /** Hall of fame: the entry id each award shows (default: its best). */
   awardSlide?: Record<string, number>;
+  /** Only an imported export is read, so new chats will never come: "add a newer export", not "give it more tasks". */
+  importOnly?: boolean;
 };
 
 /** The context with its defaults filled in once, for the views below. */
-type Ctx = ScorecardContext & { period: Period; when: string; promptsStill: boolean; correctionsStill: boolean };
+type Ctx = ScorecardContext & { period: Period; when: string; promptsStill: boolean; correctionsStill: boolean; exported: ImportOnly };
 
 const PERIOD_TITLES: Record<Period, string> = { "7d": "7 days", "28d": "28 days", "90d": "90 days", all: "All time" };
 
@@ -43,7 +45,7 @@ function periodNav(period: Period): Html {
   )}</select>`;
 }
 
-const VIEW_TITLES: Record<ScoreView, string> = { overview: "Overview", prompts: "Prompting", corrections: "Corrections", hall: "Hall of fame" };
+export const VIEW_TITLES: Record<ScoreView, string> = { overview: "Overview", prompts: "Prompting", corrections: "Corrections", hall: "Hall of fame" };
 
 /** Line icons beside each section's name (decoration: the name is the label). */
 const VIEW_ICONS: Record<ScoreView, Html> = {
@@ -77,15 +79,14 @@ function answerView(o: Overall, meta: Meta, still: boolean): Html {
 }
 
 /** Why the answer is what it is: the two parts, or how far a score is. */
-function scoreBecause(o: Overall, when: string): Html {
-  if (o.score == null)
-    return html`Give it <b>${plural(o.to_rank, "more task")}</b> with a follow-up to get a score. A one-shot prompt can't need a follow-up, so it doesn't count.`;
-  return html`Score <b>${o.score}</b>. <b>${o.direction}%</b> of your prompts were clear the first time, and you corrected it <b>${plural(o.corrections, "time")}</b> to its ${num(o.humbled)} ${when}.`;
+function scoreBecause(o: Overall, when: string, exported: ImportOnly): Html {
+  if (o.score == null) return needMore(o.to_rank, "a score", exported);
+  return html`Score <b>${o.score}</b>. <b>${o.direction}%</b> of your prompts were clear the first time. You corrected it <b>${plural(o.corrections, "time")}</b> ${when}. ${o.humbled ? html`It corrected you ${plural(o.humbled, "time")}.` : "It never corrected you."}`;
 }
 
 /** The next tier's target ("Irreplaceable at 90. You're at 86."). */
-function scoreNote(o: Overall, meta: Meta): string {
-  if (o.score == null) return `${plural(o.to_rank, "more task")} to get a score`;
+function scoreNote(o: Overall, meta: Meta, exported: ImportOnly): string {
+  if (o.score == null) return needMoreNote(o.to_rank, "a score", exported);
   const next = tierOf(meta, o.next_tier);
   return next ? `${next.name} at ${next.floor}. You're at ${o.score}.` : "Top tier. Don't let it slip.";
 }
@@ -100,8 +101,14 @@ function partsView(o: Overall, meta: Meta): Html {
   </div>`;
 }
 
-function scoreLadderView(o: Overall, meta: Meta): Html {
-  return ladderView({ label: "Tiers", tiers: tierRanges(meta), on: o.tier, at: o.score == null ? null : String(o.score), unranked: scoreNote(o, meta) });
+function scoreLadderView(o: Overall, meta: Meta, exported: ImportOnly): Html {
+  return ladderView({
+    label: "Tiers",
+    tiers: tierRanges(meta),
+    on: o.tier,
+    at: o.score == null ? null : String(o.score),
+    unranked: scoreNote(o, meta, exported),
+  });
 }
 
 /** The headline: could it replace you? Both sides of working with AI, one score. */
@@ -110,11 +117,11 @@ function heroView(s: Stats, ctx: Ctx): Html {
   return html`<section class="card hero">
       <div>
         <h1 class="q">Could ${subjectText(ctx.filter, ctx.meta)} replace you?</h1>
-        <div class="verdict">${answerView(o, ctx.meta, ctx.still)}<div class="because">${scoreBecause(o, ctx.when)}</div></div>
+        <div class="verdict">${answerView(o, ctx.meta, ctx.still)}<div class="because">${scoreBecause(o, ctx.when, ctx.exported)}</div></div>
         ${partsView(o, ctx.meta)}
       </div>
       <div class="meter">
-        ${scoreLadderView(o, ctx.meta)}
+        ${scoreLadderView(o, ctx.meta, ctx.exported)}
         ${o.tier ? html`<div class="share">${shareButton("open-share", "Share your score")}</div>` : ""}
       </div>
     </section>`;
@@ -127,27 +134,27 @@ function correctionMark(o: Overall, meta: Meta, still: boolean): Html {
 }
 
 /** Why: who corrected whom, in one line. Counts come from `overall`, the window `when` names. */
-function correctionBecause(s: Stats, when: string): Html {
-  if (s.overall.judgment == null) return html`Give it <b>${plural(s.overall.to_rank, "more task")}</b> with a follow-up to get ranked.`;
+function correctionBecause(s: Stats, when: string, exported: ImportOnly): Html {
+  if (s.overall.judgment == null) return needMore(s.overall.to_rank, "ranked", exported);
   const { corrections, humbled } = s.overall;
   if (!corrections) return html`You haven't corrected it ${when}, so there's no proof yet that you check its work.`;
   return html`You corrected it <b>${plural(corrections, "time")}</b> ${when}. ${humbled ? html`It corrected you ${plural(humbled, "time")}.` : "It never corrected you."}`;
 }
 
 /** The next correction tier's target ("Hawk-eyed at 90. You're at 88."). */
-function correctionNote(o: Overall, meta: Meta): string {
-  if (o.judgment == null) return `${plural(o.to_rank, "more task")} to get ranked`;
+function correctionNote(o: Overall, meta: Meta, exported: ImportOnly): string {
+  if (o.judgment == null) return needMoreNote(o.to_rank, "ranked", exported);
   const next = correctionTier(meta, o.next_correction_tier);
   return next ? `Next: ${answerWord(next)}, at ${next.floor}. You're at ${o.judgment}.` : "Top tier. Keep checking.";
 }
 
-function correctionLadderView(o: Overall, meta: Meta): Html {
+function correctionLadderView(o: Overall, meta: Meta, exported: ImportOnly): Html {
   return ladderView({
     label: "Correction tiers",
     tiers: byAnswer(correctionTierRanges(meta)),
     on: o.correction_tier,
     at: o.judgment == null ? null : String(o.judgment),
-    unranked: correctionNote(o, meta),
+    unranked: correctionNote(o, meta, exported),
   });
 }
 
@@ -157,8 +164,8 @@ function correctsSummaryView(s: Stats, ctx: Ctx): Html {
   const tier = correctionTier(ctx.meta, o.correction_tier);
   return html`<article class="card mini corrections">
       <h2 class="q">Do you correct it?</h2>
-      <div class="verdict">${correctionMark(o, ctx.meta, ctx.correctionsStill)}<div class="because">${correctionBecause(s, ctx.when)}</div></div>
-      ${tierBlurb(tier)}${o.judgment == null ? "" : html`<p class="hand-note">${correctionNote(o, ctx.meta)}</p>`}
+      <div class="verdict">${correctionMark(o, ctx.meta, ctx.correctionsStill)}<div class="because">${correctionBecause(s, ctx.when, ctx.exported)}</div></div>
+      ${tierBlurb(tier)}${o.judgment == null ? "" : html`<p class="hand-note">${correctionNote(o, ctx.meta, ctx.exported)}</p>`}
       <div class="share">${tier ? shareButton("share-corrections") : ""}<button class="ghost" data-action="view" data-id="corrections">See corrections</button></div>
     </article>`;
 }
@@ -193,13 +200,15 @@ export function chartView(s: Stats, meta: Meta): Html {
   for (let g = 0; g <= max; g += step) {
     grid.push(html`<line x1="${L}" x2="${W - R}" y1="${y(g)}" y2="${y(g)}" class="grid"/><text x="${L - 8}" y="${y(g) + 4}" text-anchor="end">${g}</text>`);
   }
+  const stop = markStops();
   const bars = weeks.map((w, i) => {
     const x = L + i * bw + bw * 0.18;
     const bwid = bw * 0.64;
     const barTop = y(w.corrections);
     // The busiest week gets a label, not a color: more corrections isn't better, so no week stands out as the good one.
     const busiest = w.corrections > 0 && w.corrections === peak && weeks.findIndex((v) => v.corrections === peak) === i;
-    return html`<rect x="${x}" y="${barTop}" width="${bwid}" height="${y(0) - barTop}" rx="3" class="bar" data-tip="${correctionWeekTip(w, meta)}"></rect>${
+    const tip = correctionWeekTip(w, meta);
+    return html`<rect x="${x}" y="${barTop}" width="${bwid}" height="${y(0) - barTop}" rx="3" class="bar" data-tip="${tip}" tabindex="${stop()}" role="img" aria-label="${tip}"></rect>${
       busiest ? html`<text x="${x + bwid / 2}" y="${barTop - 6}" text-anchor="middle" class="peak-label">Most: ${w.corrections}</text>` : ""
     }${i % 2 === 0 ? html`<text x="${x + bwid / 2}" y="${H - 10}" text-anchor="middle">${fmtDay(w.week)}</text>` : ""}`;
   });
@@ -228,7 +237,7 @@ export function hallView(entries: HallEntry[]): Html {
         ${e.ai ? html`<div class="ai-said"><b>${e.model || shortSourceName(e.source_name)}:</b> ${e.ai}</div>` : ""}
         <div class="correction-actions">
           ${shareButton("share-correction", "Share", { id: e.id, ghost: true, small: true })}
-          <button class="link small" data-action="counted-wrong" title="${COUNTED_WRONG_HINT}">Counted wrong?</button>
+          <button class="link small" data-action="counted-wrong" data-tip="${COUNTED_WRONG_HINT}">Counted wrong?</button>
           <button class="ghost small" data-action="pin" data-id="${e.id}" data-pinned="${String(e.pinned)}">${e.pinned ? "Unpin" : "Pin it"}</button>
         </div>
       </article>`,
@@ -246,7 +255,7 @@ function overviewView(s: Stats, ctx: Ctx): Html {
     ${heroView(s, ctx)}
     <section class="duo">
       ${correctsSummaryView(s, ctx)}
-      ${promptsSummaryView(s.prompts, ctx.meta, ctx.promptsStill, ctx.when)}
+      ${promptsSummaryView(s.prompts, ctx.meta, ctx.promptsStill, ctx.when, ctx.exported)}
     </section>
     ${statsView(s)}`;
 }
@@ -281,11 +290,11 @@ function correctionsView(s: Stats, ctx: Ctx): Html {
     <section class="card corrections">
       <div>
         <h1 class="q">Do you correct ${subjectText(ctx.filter, ctx.meta)}?</h1>
-        <div class="verdict">${correctionMark(s.overall, meta, ctx.correctionsStill)}<div class="because">${correctionBecause(s, ctx.when)}</div></div>
+        <div class="verdict">${correctionMark(s.overall, meta, ctx.correctionsStill)}<div class="because">${correctionBecause(s, ctx.when, ctx.exported)}</div></div>
         ${tierBlurb(correctionTier(meta, s.overall.correction_tier))}
       </div>
       <div class="meter">
-        ${correctionLadderView(s.overall, meta)}
+        ${correctionLadderView(s.overall, meta, ctx.exported)}
         ${correctionTier(meta, s.overall.correction_tier) ? html`<div class="share">${shareButton("share-corrections", "Share your score")}</div>` : ""}
       </div>
     </section>
@@ -378,6 +387,7 @@ export function scorecardView(s: Stats, input: ScorecardContext): Html {
     when: PERIOD_WHEN[period],
     promptsStill: input.promptsStill ?? false,
     correctionsStill: input.correctionsStill ?? false,
+    exported: input.importOnly ? { end: s.last_day } : null,
   };
   const { meta } = ctx;
   const view = ctx.view ?? "overview";
@@ -385,7 +395,7 @@ export function scorecardView(s: Stats, input: ScorecardContext): Html {
     view === "corrections"
       ? correctionsView(s, ctx)
       : view === "prompts"
-        ? promptsView(s.prompts, meta, ctx.promptsStill, subjectText(ctx.filter, meta), ctx.period, s.weekly)
+        ? promptsView(s.prompts, meta, ctx.promptsStill, subjectText(ctx.filter, meta), ctx.period, s.weekly, ctx.exported)
         : view === "hall"
           ? hallSection(s, ctx)
           : overviewView(s, ctx);
@@ -394,18 +404,40 @@ export function scorecardView(s: Stats, input: ScorecardContext): Html {
     <div class="view-body">${body}</div>`;
 }
 
-/** A period or model with no chats, while other history exists: the filters stay so it can be widened. */
-export function noChatsView(ctx: Pick<ScorecardContext, "filter" | "meta" | "period">): Html {
+/** A period or model with no chats, while other history exists: the sections and filters stay so it can be widened. */
+export function noChatsView(ctx: Pick<ScorecardContext, "filter" | "meta" | "period" | "view"> & { lastDay?: string | null }): Html {
   const period = ctx.period ?? "28d";
   const filtered = isFiltered(ctx.filter);
   const text = `No chats ${filtered ? `with ${subjectText(ctx.filter, ctx.meta)} ` : ""}${PERIOD_WHEN[period]}.`;
   const label = period === "all" ? "Show all AI" : filtered ? "Show all time and all AI" : "Show all time";
-  return html`<div class="views-row"><div class="filters">${modelPicker(ctx)}${periodNav(period)}</div></div>
-    <section class="empty"><p>${text}</p><button data-action="widen">${label}</button></section>`;
+  const last = ctx.lastDay
+    ? html`<p class="muted">Last chat${filtered ? " with any AI" : ""} ${fmtDay(ctx.lastDay, { month: "short", day: "numeric", year: "numeric" })}.</p>`
+    : "";
+  return html`<div class="views-row">${viewsNav(ctx.view ?? "overview")}<div class="filters">${modelPicker(ctx)}${periodNav(period)}</div></div>
+    <section class="empty"><h1 class="q">${text}</h1>${last}<button data-action="widen">${label}</button></section>`;
 }
 
-/** Shown before there's anything to score. `watching` names the sources being read right now. */
-export function onboardingView(watching: string): Html {
+/** Shown while the counts are rebuilt from the start: no half-finished numbers, and nothing to share. */
+export function rebuildingView(): Html {
+  return html`<section class="empty" role="status"><span class="eyebrow"><i class="dot live"></i> Recounting</span>
+    <h1 class="q">Recounting your history…</h1>
+    <p>Your scorecard comes back here in a moment.</p></section>`;
+}
+
+/** The note about English, once in onboarding and once in the scorecard's method text. */
+export const ENGLISH_NOTE = "Scoring reads English.";
+
+/**
+ * Shown before there's anything to score. `watching` names the sources being read right now; `reading` is
+ * true while a history is being taken in, so it doesn't say "all set" before it is.
+ */
+export function onboardingView(watching: string, reading = false): Html {
+  if (watching && reading) {
+    return html`<section class="empty" role="status"><span class="eyebrow"><i class="dot live"></i> Reading ${watching}</span>
+      <h1 class="q">Reading your history…</h1>
+      <p>A long history can take a minute. Your scorecard shows up here when it's done.</p>
+      <button class="ghost" data-action="go-settings" data-id="sources">Manage sources</button></section>`;
+  }
   if (watching) {
     // Allowed, but nothing counted yet (picked "From now on", or the tool has no history yet).
     return html`<section class="empty"><span class="eyebrow"><i class="dot live"></i> Watching ${watching}</span>
@@ -414,6 +446,6 @@ export function onboardingView(watching: string): Html {
       <button class="ghost" data-action="go-settings" data-id="sources">Manage sources</button></section>`;
   }
   return html`<section class="empty"><h1 class="q">Let's see if AI could replace you.</h1>
-    <p>No, Actually... grades your prompts and counts the times you corrected your AI, privately, on this computer. Pick which tools it may read.</p>
+    <p>No, Actually... grades your prompts and counts the times you corrected your AI, privately, on this computer. Pick which tools it may read. ${ENGLISH_NOTE}</p>
     <button data-action="go-settings" data-id="sources">Choose sources</button></section>`;
 }

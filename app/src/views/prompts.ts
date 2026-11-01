@@ -7,11 +7,28 @@ import { PERIOD_WHEN, type Period } from "../state";
 import { chartBox, stackChart } from "./charts";
 import { answerWord, byAnswer, ladderView, shareButton, tierBlurb, verdictMark } from "./chrome";
 
+/** Someone who only imported an export gets no new chats: `end` is the last day it covers. Null for everyone else. */
+export type ImportOnly = { end: string | null } | null;
+
+/**
+ * What it takes to get a score or a ranking: more chats, or, for someone who only imported an export,
+ * a newer export (more chats will never come).
+ */
+export function needMore(toRank: number, goal: "a score" | "ranked", exported: ImportOnly): Html {
+  if (exported) {
+    const ends = exported.end ? html`Your export ends <b>${fmtDay(exported.end)}</b>, and` : html`Your export`;
+    return html`${ends} has too few tasks with a follow-up to get ${goal === "ranked" ? "ranked" : "a score"}. <b>Add a newer export</b> to get ${goal === "ranked" ? "ranked" : "one"}.`;
+  }
+  return html`Give it <b>${plural(toRank, "more task")}</b> with a follow-up to get ${goal}. A one-shot prompt can't need a follow-up, so it doesn't count.`;
+}
+
+/** The short form, under a ladder: "4 more tasks to get ranked", or "Add a newer export to get ranked". */
+export const needMoreNote = (toRank: number, goal: "a score" | "ranked", exported: ImportOnly): string =>
+  exported ? `Add a newer export to get ${goal === "ranked" ? "ranked" : "a score"}` : `${plural(toRank, "more task")} to get ${goal}`;
+
 /** "86% of your prompts in the last 28 days were clear the first time…", or how many more it takes to get ranked. */
-function becauseLine(b: Prompts, meta: Meta, when: string): Html {
-  return promptTier(meta, b.tier)
-    ? html`<b>${landedPct(b)}%</b> of your prompts ${when} were clear the first time.`
-    : html`Give it <b>${plural(b.to_rank, "more task")}</b> with a follow-up to get ranked. A one-shot prompt can't need a follow-up, so it doesn't count.`;
+function becauseLine(b: Prompts, meta: Meta, when: string, exported: ImportOnly): Html {
+  return promptTier(meta, b.tier) ? html`<b>${landedPct(b)}%</b> of your prompts ${when} were clear the first time.` : needMore(b.to_rank, "ranked", exported);
 }
 
 /** The verdict word, hand-written, with a screen-reader version. */
@@ -21,11 +38,11 @@ function markView(b: Prompts, meta: Meta, still: boolean): Html {
 }
 
 /** The overview's half: the verdict, the tier, and a way to the details. */
-export function promptsSummaryView(b: Prompts, meta: Meta, still: boolean, when = PERIOD_WHEN["28d"]): Html {
+export function promptsSummaryView(b: Prompts, meta: Meta, still: boolean, when = PERIOD_WHEN["28d"], exported: ImportOnly = null): Html {
   const tier = promptTier(meta, b.tier);
   const body = b.tasks
-    ? html`<div class="verdict">${markView(b, meta, still)}<div class="because">${becauseLine(b, meta, when)}</div></div>
-        ${tierBlurb(tier)}${tier ? html`<p class="hand-note">${ladderNote(b, meta)}</p>` : ""}`
+    ? html`<div class="verdict">${markView(b, meta, still)}<div class="because">${becauseLine(b, meta, when, exported)}</div></div>
+        ${tierBlurb(tier)}${tier ? html`<p class="hand-note">${ladderNote(b, meta, exported)}</p>` : ""}`
     : html`<p class="muted">No tasks yet. The first message of each chat is its prompt.</p>`;
   return html`<article class="card mini prompts">
       <h2 class="q">Do you make it guess?</h2>
@@ -34,13 +51,13 @@ export function promptsSummaryView(b: Prompts, meta: Meta, still: boolean, when 
     </article>`;
 }
 
-function verdictView(b: Prompts, meta: Meta, still: boolean, subject: string, period: Period): Html {
+function verdictView(b: Prompts, meta: Meta, still: boolean, subject: string, period: Period, exported: ImportOnly): Html {
   const when = PERIOD_WHEN[period];
   return html`
     <h1 class="q">Do you make ${subject} guess?</h1>
     <div class="verdict">
       ${markView(b, meta, still)}
-      <div class="because">${becauseLine(b, meta, when)}</div>
+      <div class="because">${becauseLine(b, meta, when, exported)}</div>
     </div>
     ${tierBlurb(promptTier(meta, b.tier))}`;
 }
@@ -53,20 +70,20 @@ function gradesView(b: Prompts, meta: Meta): Html {
   return html`<div class="grades">
     <div class="grade-bar" role="img" aria-label="Your prompts: ${label}">${parts.map((p) => html`<i class="g-${p.id}" data-w="${p.pct}"></i>`)}</div>
     <ul class="grade-key">${parts.map((p) => html`<li><i class="g-${p.id}" aria-hidden="true"></i>${p.title} <b>${p.pct}%</b></li>`)}</ul>
-    <p class="muted small">Specific prompts include ${meta.sharp_signals}+ of the ${meta.signals.length} things below. Questions aren't graded.</p>
+    <p class="muted small">Specific prompts include ${meta.sharp_signals}+ of the ${meta.signals.length} things below. Questions aren't graded. Scoring reads English.</p>
   </div>`;
 }
 
 /** The next tier's target ("Architect at 90%. You're at 86%."), or how far a ranking is. */
-function ladderNote(b: Prompts, meta: Meta): string {
-  if (!b.tier) return `${plural(b.to_rank, "more task")} to get ranked`;
+function ladderNote(b: Prompts, meta: Meta, exported: ImportOnly): string {
+  if (!b.tier) return needMoreNote(b.to_rank, "ranked", exported);
   const next = promptTier(meta, b.next_tier);
   return next ? `Next: ${answerWord(next)}, at ${next.floor}%. You're at ${landedPct(b)}%.` : "Top tier. Don't let it slip.";
 }
 
-function promptLadderView(b: Prompts, meta: Meta): Html {
+function promptLadderView(b: Prompts, meta: Meta, exported: ImportOnly): Html {
   return html`
-    ${ladderView({ label: "Prompt tiers", tiers: byAnswer(promptTierRanges(meta)), on: b.tier, at: b.tier ? `${landedPct(b)}%` : null, unranked: ladderNote(b, meta) })}
+    ${ladderView({ label: "Prompt tiers", tiers: byAnswer(promptTierRanges(meta)), on: b.tier, at: b.tier ? `${landedPct(b)}%` : null, unranked: ladderNote(b, meta, exported) })}
     ${b.tier ? html`<div class="share">${shareButton("share-prompts", "Share your score")}</div>` : ""}`;
 }
 
@@ -137,15 +154,23 @@ function weeksView(weekly: WeekRow[], meta: Meta): Html {
 
 /** The Prompts section: verdict card, then what prompts carry and where steering went. `subject` is who
  * the question asks about ("it" by default). */
-export function promptsView(b: Prompts, meta: Meta, still: boolean, subject = "it", period: Period = "28d", weekly: WeekRow[] = []): Html {
+export function promptsView(
+  b: Prompts,
+  meta: Meta,
+  still: boolean,
+  subject = "it",
+  period: Period = "28d",
+  weekly: WeekRow[] = [],
+  exported: ImportOnly = null,
+): Html {
   if (!b.tasks) {
     return html`<section class="card prompts"><div><h1 class="q">Do you make ${subject} guess?</h1>
       <p class="muted">No tasks yet. The first message of each chat is its prompt, so start a chat and ask for something.</p></div></section>`;
   }
   return html`
     <section class="card prompts">
-      <div>${verdictView(b, meta, still, subject, period)}</div>
-      <div class="meter">${promptLadderView(b, meta)}</div>
+      <div>${verdictView(b, meta, still, subject, period, exported)}</div>
+      <div class="meter">${promptLadderView(b, meta, exported)}</div>
     </section>
     <section><div class="head"><h2>Prompts per week</h2><p class="muted">Prompts with a follow-up. A one-shot prompt can't need more from you, so it doesn't count.</p></div>${chartBox("Prompts per week chart, scrolls sideways", weeksView(weekly, meta))}</section>
     <section class="split">

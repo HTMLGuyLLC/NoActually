@@ -306,6 +306,18 @@ describe("demoCall", () => {
       await demoCall("set_menu_bar", { enabled: false });
       expect(await demoCall("get_menu_bar", undefined)).toEqual({ enabled: false, available: true });
     });
+
+    it("remembers the popups choice, and has no rescored notice", async () => {
+      expect(await demoCall("get_popups", undefined)).toBe(true);
+      await demoCall("set_popups", { enabled: false });
+      expect(await demoCall("get_popups", undefined)).toBe(false);
+      expect(await demoCall("rescored_notice", undefined)).toBeNull();
+      expect(await demoCall("open_notices", undefined)).toBeNull();
+    });
+
+    it("is never rebuilding", async () => {
+      expect(await demoCall("sync_status", undefined)).toMatchObject({ rebuilding: false });
+    });
   });
 });
 

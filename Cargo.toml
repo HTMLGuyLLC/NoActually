@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/engine", "crates/sources", "crates/store", "crates/cli", "app/src-tauri"]
 
 [workspace.package]
-version = "0.5.4"
+version = "0.5.5"
 edition = "2021"
 # Oldest Rust that builds the whole workspace, app included. CI's `msrv` job checks it.
 rust-version = "1.90"
@@ -27,7 +27,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
 rayon = "1"
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled", "fallible_uint"] }
 sha2 = "0.10"
 getrandom = "0.4"
 anyhow = "1"

@@ -3341,6 +3341,10 @@ fn the_log_gets_a_short_piece_with_no_passwords_in_it() {
         for_log("git clone ssh://git:tok@h.example:22/x and http://u@a.b/c?d=1"),
         "git clone ssh://h.example:22/x and http://a.b/c?d=1"
     );
+    if let Some(home) = std::env::home_dir().filter(|h| h.is_absolute() && h.parent().is_some()) {
+        let line = for_log(&format!("can't read {}/.claude/x.json", home.display()));
+        assert_eq!(line, "can't read ~/.claude/x.json", "the home folder isn't logged");
+    }
     assert_eq!(for_log("https://github.com/x/y and no creds"), "https://github.com/x/y and no creds");
     assert_eq!(for_log("see mail@example.com"), "see mail@example.com", "an address isn't a link");
     // Credentials past the cut are gone too: the text is cleaned first.

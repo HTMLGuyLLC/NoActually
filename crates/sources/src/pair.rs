@@ -79,7 +79,7 @@ pub fn pair_from(
     end: u64,
     finalize: bool,
 ) -> FileScan {
-    let mut scan = pair(source, session, events, end, finalize);
+    let mut scan = pair_at(source, session, events, from, end, finalize);
     if from > 0 {
         for st in &mut scan.turns {
             st.turn.prev_ai.get_or_insert_with(AiMsg::default);
@@ -95,7 +95,20 @@ pub fn pair_from(
 /// reply before it, so the next pass re-reads that reply as context and emits the turn exactly
 /// once. A pass that ends on a reply also resumes at that reply, so the next message still knows
 /// what it answered. `end` is the byte offset after the last whole line read.
-pub fn pair(source: &'static str, session: &str, mut events: Vec<Event>, end: u64, finalize: bool) -> FileScan {
+pub fn pair(source: &'static str, session: &str, events: Vec<Event>, end: u64, finalize: bool) -> FileScan {
+    pair_at(source, session, events, 0, end, finalize)
+}
+
+/// [`pair`] for a read that began at byte `from`: a message held with no reply in view rewinds
+/// to `from`, not to itself, so the next pass still knows it began at the file's start (or not).
+fn pair_at(
+    source: &'static str,
+    session: &str,
+    mut events: Vec<Event>,
+    from: u64,
+    end: u64,
+    finalize: bool,
+) -> FileScan {
     let tips = read_tips(session, &events);
     // A tip on its own is no reply: what came before it is still what the person answered.
     events.retain(|e| !matches!(e, Event::Ai { text, .. } if only_a_tip(text)));
@@ -144,12 +157,12 @@ pub fn pair(source: &'static str, session: &str, mut events: Vec<Event>, end: u6
                 last_ai = Some((i, ev));
                 last_real = real(ev).or(last_real.take());
             }
-            Event::Human { text, ts, key, pos } => {
+            Event::Human { text, ts, key, .. } => {
                 let after = &events[i + 1..];
                 let until = after.iter().position(|e| matches!(e, Event::Human { .. }));
                 if until.is_none() && !finalize {
                     // Report cards in the replies still get read below.
-                    held = Some(last_ai.map_or(*pos, |(_, e)| e.pos()));
+                    held = Some(last_ai.map_or(from, |(_, e)| e.pos()));
                     continue;
                 }
                 let next = after.first();
@@ -377,6 +390,19 @@ mod tests {
         // One block that reads is enough, whatever else the reply quotes.
         let mixed = format!("{}{}", block("not json"), block(VALID));
         assert!(holds_card(&mixed));
+    }
+
+    #[test]
+    fn a_held_first_message_reads_the_same_in_two_passes_as_in_one() {
+        // A non-chat line (pos 0..5) comes before the first message, and no reply is in view yet.
+        let first = pair_from("t", "s", vec![h("no, that's wrong", 5)], 0, 30, false);
+        assert!(first.turns.is_empty());
+        assert_eq!(first.checkpoint, 0, "held at the start of the read, not at the message");
+        let events = vec![h("no, that's wrong", 5), a("Sorry.", 30), h("two", 40), a("r2", 50)];
+        let whole = pair_from("t", "s", events.clone(), 0, 60, false);
+        let second = pair_from("t", "s", events, first.checkpoint, 60, false);
+        assert_eq!(second.turns[0].turn.prev_ai.is_none(), whole.turns[0].turn.prev_ai.is_none());
+        assert!(second.turns[0].turn.prev_ai.is_none(), "still the chat's first message");
     }
 
     #[test]

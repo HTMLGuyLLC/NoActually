@@ -7,6 +7,10 @@
 //!
 //! None of them may ever get in the way. On any error or missing data they print nothing and
 //! succeed. They write nothing, except `report-cards.key` the first time a digest needs a seal.
+//!
+//! The one exception to "print nothing" is opt-in: with `NOACTUALLY_DEBUG` set, the helper writes
+//! a short reason code to stderr (never stdout, so never into the chat) when it has nothing to say.
+//! The hooks and the skill ignore stderr, so debugging stays out of the person's way.
 
 mod chat;
 mod digest;
@@ -41,6 +45,8 @@ pub const QUIET_FILE: &str = "report-cards-quiet";
 
 /// Env var that points `digest --session` and the Stop hook at another Claude Code projects folder.
 const CLAUDE_PROJECTS_ENV: &str = "NOACTUALLY_CLAUDE_PROJECTS";
+/// Set to anything but empty or `0` to have the helper say, on stderr, why it printed nothing.
+const DEBUG_ENV: &str = "NOACTUALLY_DEBUG";
 /// Env var that points the Codex hooks at another sessions folder.
 const CODEX_SESSIONS_ENV: &str = "NOACTUALLY_CODEX_SESSIONS";
 /// Set by Claude Code: which app a chat runs in.
@@ -64,6 +70,8 @@ pub(crate) struct Env {
     pub claude_projects: Option<PathBuf>,
     /// Where Codex rollouts are looked up, instead of the real folder.
     pub codex_sessions: Option<PathBuf>,
+    /// True when [`DEBUG_ENV`] is set: say why there is no output, on stderr.
+    pub debug: bool,
 }
 
 impl Env {
@@ -74,7 +82,17 @@ impl Env {
             entrypoint: var(ENTRYPOINT_ENV).map(|v| v.to_string_lossy().into_owned()),
             claude_projects: var(CLAUDE_PROJECTS_ENV).map(PathBuf::from),
             codex_sessions: var(CODEX_SESSIONS_ENV).map(PathBuf::from),
+            debug: var(DEBUG_ENV).is_some_and(|v| v != "0"),
         }
+    }
+
+    /// Records why the helper has nothing to print, when debugging is on, and returns `None` so a
+    /// caller can write `return env.because("reason")`. Always stderr, one line, a code and no chat text.
+    pub fn because<T>(&self, code: &str) -> Option<T> {
+        if self.debug {
+            eprintln!("noactually helper: {code}");
+        }
+        None
     }
 
     /// True when Claude Code says this chat is in an app a person chats in.
@@ -175,14 +193,22 @@ pub(crate) fn parse(args: &[String]) -> Option<Request> {
 pub(crate) fn main(args: &[String]) -> ExitCode {
     // A broken helper must never put anything in front of the person, a panic message included.
     std::panic::set_hook(Box::new(|_| {}));
-    let Some(request) = parse(args) else { return ExitCode::SUCCESS };
+    let env = Env::from_process();
+    let Some(request) = parse(args) else {
+        let _: Option<()> = env.because("bad-arguments");
+        return ExitCode::SUCCESS;
+    };
     if matches!(request, Request::Hook(_)) {
-        std::thread::spawn(|| {
+        let debug = env.debug;
+        std::thread::spawn(move || {
             std::thread::sleep(HOOK_TIMEOUT);
+            if debug {
+                eprintln!("noactually helper: hook-timeout");
+            }
             std::process::exit(0);
         });
     }
-    let out = std::panic::catch_unwind(|| handle(&request, &Env::from_process(), read_stdin)).ok().flatten();
+    let out = std::panic::catch_unwind(|| handle(&request, &env, read_stdin)).unwrap_or_else(|_| env.because("panic"));
     if let Some(out) = out {
         // A closed pipe is not worth a message.
         let mut stdout = std::io::stdout().lock();
@@ -200,13 +226,18 @@ pub(crate) fn handle(request: &Request, env: &Env, stdin: impl FnOnce() -> Strin
     match request {
         Request::Digest(target) => {
             let found = match target {
-                Target::Session(_) if env.stopped(CLAUDE_CODE) => return None,
-                Target::Session(id) if session_id_ok(id) => find_claude(env, id)?,
-                Target::Session(_) => return None,
+                Target::Session(_) if env.stopped(CLAUDE_CODE) => return env.because("source-stopped"),
+                Target::Session(id) if session_id_ok(id) => match find_claude(env, id) {
+                    Some(found) => found,
+                    None => return env.because("chat-not-found"),
+                },
+                Target::Session(_) => return env.because("bad-session-id"),
                 Target::Transcript { path, source } => {
-                    let found = for_path(path, source.as_deref())?;
+                    let Some(found) = for_path(path, source.as_deref()) else {
+                        return env.because("transcript-unreadable");
+                    };
                     if env.stopped(found.source.id()) {
-                        return None;
+                        return env.because("source-stopped");
                     }
                     found
                 }
@@ -214,8 +245,10 @@ pub(crate) fn handle(request: &Request, env: &Env, stdin: impl FnOnce() -> Strin
             digest_of(&found, env, true)
         }
         Request::Hook(hook) => {
-            let input: serde_json::Value = serde_json::from_str(&stdin()).ok()?;
-            hook::run(*hook, &input, env)
+            let Ok(input) = serde_json::from_str::<serde_json::Value>(&stdin()) else {
+                return env.because("bad-hook-input");
+            };
+            hook::run(*hook, &input, env).or_else(|| env.because("nothing-to-say"))
         }
     }
 }
@@ -225,8 +258,9 @@ pub(crate) fn handle(request: &Request, env: &Env, stdin: impl FnOnce() -> Strin
 /// by reading it from the top, whatever its length; without, the rows show no cost and the read is
 /// the tail alone, which is how a hook (with a couple of seconds) gets a digest of a very long chat.
 fn digest_of(found: &Found, env: &Env, usage: bool) -> Option<String> {
-    let secret = env.secret(true)?;
-    let chat = found.chat_from(Some(&secret), tail_start(&found.path, digest::READ_TAIL)?, usage)?;
+    let Some(secret) = env.secret(true) else { return env.because("no-seal-key") };
+    let Some(start) = tail_start(&found.path, digest::READ_TAIL) else { return env.because("transcript-unreadable") };
+    let Some(chat) = found.chat_from(Some(&secret), start, usage) else { return env.because("chat-unreadable") };
     Some(digest::render(&chat, &engine::seal(&secret, &chat.view.session), usage))
 }
 

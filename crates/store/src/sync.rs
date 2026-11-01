@@ -26,6 +26,8 @@ pub struct SyncReport {
     pub errors: Vec<String>,
     /// Scores were rebuilt because the rules changed since they were counted.
     pub rescored: bool,
+    /// Lines the readers wanted but couldn't parse. Many of these mean a tool changed its format.
+    pub skipped_lines: usize,
 }
 
 struct Job {
@@ -37,7 +39,13 @@ struct Job {
 /// Reads every allowed, unpaused source among `all`. Per-file problems land in
 /// [`SyncReport::errors`]; only database-wide failures return `Err`.
 pub fn sync(store: &mut Store, all: &[Box<dyn Source>]) -> Result<SyncReport> {
-    let mut report = SyncReport { rescored: store.ensure_rules_current()?, ..SyncReport::default() };
+    // In this order: cleaning stored text removes the backup that still holds the old text.
+    store.redact_stored_text()?;
+    store.backup_if_due()?;
+    // One cut short by a quit finishes here, and its numbers change just the same.
+    let resumed = store.rebuild_pending()?;
+    let rescored = store.ensure_rules_current()? || resumed;
+    let mut report = SyncReport { rescored, ..SyncReport::default() };
     let now = SystemTime::now();
     for state in store.source_states()? {
         if !state.allowed || state.paused {
@@ -65,10 +73,23 @@ pub fn sync(store: &mut Store, all: &[Box<dyn Source>]) -> Result<SyncReport> {
                 })
                 .collect();
             for (job, read) in scans {
+                if !store.still_allowed(&state.id)? {
+                    break;
+                }
                 // The panic itself is logged by the hook; its message may hold chat text, so it isn't repeated here.
                 let read = read.map_err(|_| format!("{}: reading it failed unexpectedly", job.path.display()));
                 let saved = read.and_then(|(scan, chat)| {
-                    let scan = scan.map_err(|e| e.to_string())?;
+                    let scan = scan.map_err(|e| {
+                        // Reading it again won't help until the file changes.
+                        if matches!(
+                            e,
+                            sources::Error::Json { .. } | sources::Error::Zstd { .. } | sources::Error::TooBig { .. }
+                        ) {
+                            store.remember_unreadable(&job.path.to_string_lossy(), &state.id, job.pass.meta);
+                        }
+                        e.to_string()
+                    })?;
+                    report.skipped_lines += scan.skipped_lines;
                     // A file that can't be read again keeps its checkpoint, so its cards aren't lost.
                     let chat = chat.transpose().map_err(|e| e.to_string())?;
                     // One file failing to save (a locked database, say) must not stop the rest.

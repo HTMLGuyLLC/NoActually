@@ -1,6 +1,6 @@
 # Privacy
 
-*Last updated 2026-10-31. No, Actually... is made by HTMLGuy LLC. Questions: [GitHub Discussions](https://github.com/HTMLGuyLLC/NoActually/discussions).*
+*Last updated 2026-11-01. No, Actually... is made by HTMLGuy LLC. Questions: [GitHub Discussions](https://github.com/HTMLGuyLLC/NoActually/discussions).*
 
 No, Actually... runs on your computer. The app doesn't send your chats anywhere.
 
@@ -20,12 +20,14 @@ macOS may show its own "access data from other apps" prompt for some sources. Sa
 | Your goal | What it asks for (a signal, a kind of follow-up or a tier), its target percent and start day | Never | Until you drop it |
 | Goal weeks and trophies | Each finished week's count, percent and result; finished goals and the day | Never | Forever (kept even after Forget, since they're totals across sources) |
 | Lessons done | The ids of lessons you marked done | Never | Forever |
-| Correction / humbled events | Time, source, model, label, category, matched rule ids | Per retention level | Per TTL |
+| Correction / humbled events | Time, source, hashed chat id, model, label, category, matched rule ids | Per retention level | Per TTL |
 | Report cards | Day, start and end time, source, hashed chat id, model, letter grade, follow-up counts, which habits were missing, tokens, minutes | Never | Until you Forget the source or delete report card history |
 | Tips | Day, time, source, hashed chat id, model, which habit, how much was redone | Never | Until you Forget the source or delete report card and tip history |
 | Chats that got the tip instructions | Hashed chat id, source, day | Never | Until you Forget the source or delete report card and tip history |
+| Sources | Which sources you allowed, the paths of files you imported (which can include your username), and when you allowed them | Never | Until you forget the source |
 | File checkpoints | Path, byte offset, size, modified time | Never | Until you forget the source |
-| Message fingerprints | Short hashes of message ids, so copies are never counted twice | Never | Until you forget the source |
+| Message fingerprints | Short hashes of message ids and the hashed chat id, so copies are never counted twice | Never | Until you forget the source |
+| A backup of the database | `noactually-backup.db`, a copy of all of the above, beside the database and readable only by you | Same as the database | Replaced about once a day. Removed whenever text is deleted or ages out, then written again without it |
 
 ## Retention levels
 
@@ -92,8 +94,8 @@ To offer new versions, the app downloads one small public file, `latest.json`, f
 - **Forget a source** in the app: deletes that source's events, aggregates and checkpoints, pinned corrections included. (Revoke only stops reading, and keeps your scores.) Finished goal weeks and trophies stay, as totals across sources.
 - **Delete report cards and tips:** click **Delete report card and tip history** in Settings to remove all of them. **Forget** on a source removes that source's report cards and tips too. Tips stop while Claude Code is paused, revoked or forgotten, and start again when you allow it. Turning report cards off removes the plugin but keeps the history until you delete it.
 - **Delete everything:** first turn report cards off in **Settings → Report cards** (that removes what they added to Claude Code and Codex) and turn off **Launch at login** in **Settings → General**, then quit the app and delete the whole app data folder for `app.noactually` (macOS: `~/Library/Application Support/app.noactually/`, Windows: `%APPDATA%\app.noactually\`, Linux: `~/.local/share/app.noactually/`). It holds the database (`noactually.db`, `-wal` and `-shm`) and a few small report-card files: `report-cards.key`, `cli-path`, `report-cards-claude` and the on/off switch files (`report-cards-tips`, `report-cards-tips-off`, `source-allowed-…`, `source-stopped-…`, `report-cards-problem`, `report-cards-quiet`, and `report-cards-repin` while a plugin update is unfinished). Deleting only the database leaves those behind. Then delete the log folder (see Logs). Uninstalling the app does not remove any of this.
-- Deleted text is overwritten in the database, not just unlinked, and the write-ahead log is truncated after Forget and after text ages out.
+- Deleted text is overwritten in the database, not just unlinked, the write-ahead log is truncated, and the backup is removed after Forget and after text ages out.
 
 ## Logs
 
-The app keeps a small log for troubleshooting (macOS: `~/Library/Logs/app.noactually/`, Windows: `%LOCALAPPDATA%\app.noactually\logs\`, Linux: `~/.local/share/app.noactually/logs/`, up to about 2 MB). It records the app version, your system, counts, timings and errors. Errors can name history files by path, which includes your project folder names. Forget doesn't clear the log, so those names stay until the log rolls over or you delete it. Logs never contain chat text.
+The app keeps a small log for troubleshooting (macOS: `~/Library/Logs/app.noactually/`, Windows: `%LOCALAPPDATA%\app.noactually\logs\`, Linux: `~/.local/share/app.noactually/logs/`, up to about 4 MB). It records the app version, your system, counts, timings and errors. Errors can name history files by path, which includes your project folder names. Forget doesn't clear the log, so those names stay until the log rolls over or you delete it. Logs never contain chat text.

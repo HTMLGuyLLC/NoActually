@@ -1,6 +1,7 @@
 // Small SVG charts for the Improve tab. Every chart gets a text summary for screen readers, and
-// series differ by lightness and a gap between segments as well as color. Each bar and dot is
-// keyboard-focusable and carries its tooltip text as its label.
+// series differ by lightness and a gap between segments as well as color. Each bar and dot carries its
+// tooltip text as its label. A chart is one tab stop: its first mark takes Tab, and the arrow keys move
+// along the rest (charttip.ts).
 import { type Html, html } from "../html";
 
 export type Point = {
@@ -26,8 +27,17 @@ const every = (count: number, width: number) => Math.max(1, Math.ceil(count / (w
 /** A gridline label: whole numbers as they are, others with one decimal (2.5, not 3). */
 const gridNum = (g: number) => String(Math.round(g * 10) / 10);
 
-/** Wraps a chart so the box that scrolls sideways can be reached and scrolled with the keyboard. */
-export const chartBox = (label: string, body: Html): Html => html`<div class="chart" tabindex="0" role="region" aria-label="${label}">${body}</div>`;
+/**
+ * The tab order of a chart's marks: the first takes Tab, the rest only take focus from the arrow keys, so a
+ * chart of twenty marks is one stop, not twenty. Focusing a mark scrolls the box that holds it.
+ */
+export const markStops = () => {
+  let n = 0;
+  return () => (n++ === 0 ? "0" : "-1");
+};
+
+/** Wraps a chart so a screen reader can find it by name. Its marks (the box scrolls sideways) take the keyboard. */
+export const chartBox = (label: string, body: Html): Html => html`<div class="chart" role="region" aria-label="${label}">${body}</div>`;
 
 /** An x-axis label; the last one hangs left so it isn't cut off at the edge. */
 const xLabel = (x: number, y: number, text: string, last: boolean) => html`<text x="${x}" y="${y}" text-anchor="${last ? "end" : "middle"}">${text}</text>`;
@@ -70,11 +80,12 @@ export function lineChart(o: {
   const path = strong.map(({ p, i }, k) => `${k ? "L" : "M"}${x(i).toFixed(1)},${y(p.value ?? 0).toFixed(1)}`).join(" ");
   const step = every(n, W);
   const weakNote = o.weakNote ?? "too few tasks to count";
+  const stop = markStops();
   const dots = o.points.map((p, i) => {
     const label = i % step === 0 || i === n - 1 ? xLabel(x(i), H - 10, p.label, i === n - 1 && n > 1) : "";
     if (p.value == null) return label;
     const tip = `${p.tip ?? `${p.label}: ${Math.round(p.value)}${unit}`}${p.weak ? ` (${weakNote})` : ""}`;
-    return html`<circle cx="${x(i)}" cy="${y(p.value)}" r="${p.weak ? 4 : 4.5}" class="${p.weak ? "dot-weak" : "dot-strong"}" data-tip="${tip}" tabindex="0" role="img" aria-label="${tip}"></circle>${label}`;
+    return html`<circle cx="${x(i)}" cy="${y(p.value)}" r="${p.weak ? 4 : 4.5}" class="${p.weak ? "dot-weak" : "dot-strong"}" data-tip="${tip}" tabindex="${stop()}" role="img" aria-label="${tip}"></circle>${label}`;
   });
   return html`<svg viewBox="0 0 ${W} ${H}" role="group" aria-label="${o.label}" aria-describedby="${o.id}-summary">${grid}${bands}${path ? html`<path d="${path}" class="trend"/>` : ""}${dots}</svg>
     <p class="sr-only" id="${o.id}-summary">${o.summary}</p>`;
@@ -102,6 +113,7 @@ export function stackChart(o: {
   const bw = (W - L - R) / n;
   const y = (v: number) => T + (H - T - B) * (1 - v / max);
   const step = every(n, W);
+  const stop = markStops();
   const bars = o.labels.map((label, i) => {
     let acc = 0;
     const segs = o.series.map((s, si) => {
@@ -109,13 +121,13 @@ export function stackChart(o: {
       if (!v) return "";
       const top = y(acc + v);
       const tip = `${label}: ${s.title} ${v}`;
-      const own = o.tips ? "" : html` data-tip="${tip}" tabindex="0" role="img" aria-label="${tip}"`;
+      const own = o.tips ? "" : html` data-tip="${tip}" tabindex="${stop()}" role="img" aria-label="${tip}"`;
       const seg = html`<rect x="${L + i * bw + bw * 0.18}" y="${top}" width="${bw * 0.64}" height="${y(acc) - top}" class="seg ${s.seg ?? `s${si}`}"${own}></rect>`;
       acc += v;
       return seg;
     });
     const tip = o.tips?.[i];
-    const bar = tip ? html`<g class="bar-group" data-tip="${tip}" tabindex="0" role="img" aria-label="${tip}">${segs}</g>` : segs;
+    const bar = tip ? html`<g class="bar-group" data-tip="${tip}" tabindex="${stop()}" role="img" aria-label="${tip}">${segs}</g>` : segs;
     return html`${bar}${i % step === 0 || i === n - 1 ? xLabel(L + i * bw + bw / 2, H - 10, label, false) : ""}`;
   });
   const grid = [0, max].map(
