@@ -4,6 +4,8 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-11-01
+
 ### Added
 
 - A daily backup of your database beside it. It's removed whenever text is deleted, so it never outlives what you deleted.
@@ -239,7 +241,8 @@ First release.
 - Per-source consent: nothing is read until you allow it, and Forget deletes a source's data
 - `noactually` command-line tool (`sources`, `allow`, `sync`, `stats`)
 
-[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.4...HEAD
+[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.5...HEAD
+[0.5.5]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.1...v0.5.2
