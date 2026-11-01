@@ -335,6 +335,10 @@ const handlers: Handlers = {
     return null;
   },
   report_cards_delete_history: () => 0,
+  // The demo has nothing to delete and must not act as if it did, so this changes nothing and says so.
+  delete_everything: () => {
+    throw new Error("This is the demo, so nothing was deleted.");
+  },
   log_error: () => null,
   open_log_folder: () => null,
   // Remembered for the visit only, like the other choices.

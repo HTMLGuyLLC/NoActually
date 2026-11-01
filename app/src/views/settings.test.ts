@@ -29,7 +29,13 @@ const allowed = (id: string, over: Partial<SourceInfo> = {}): SourceInfo =>
   source({ id, state: { id, allowed: true, paused: false, backfill_since: null, granted_at: null, start_after: null, paths: [] }, ...over });
 const BOTH = [allowed("claude-code"), allowed("codex")];
 
-const view = (cards: Partial<ReportCardsState> = {}, pane: "report-cards" | "general" = "report-cards", sources: SourceInfo[] = BOTH, demo = false) =>
+const view = (
+  cards: Partial<ReportCardsState> = {},
+  pane: "report-cards" | "general" | "privacy" = "report-cards",
+  sources: SourceInfo[] = BOTH,
+  demo = false,
+  deleteAll = { busy: false, error: "" },
+) =>
   settingsView({
     pane,
     sources,
@@ -38,6 +44,7 @@ const view = (cards: Partial<ReportCardsState> = {}, pane: "report-cards" | "gen
     autostart: false,
     menuBar: { enabled: true, available: true },
     reportCards: { ...emptyReportCards(), ...cards },
+    deleteAll,
     tipRules: "Be <kind> to them.",
     update: null,
     demo,
@@ -435,5 +442,32 @@ describe("Settings → Report cards", () => {
       "Deleted 3 report cards.",
     );
     expect(dom(view({ status: status(), note: { control: "codex", text: "Done." } })).querySelector("#report-cards-note")?.textContent).toBe("");
+  });
+});
+
+describe("delete everything", () => {
+  const privacy = (deleteAll = { busy: false, error: "" }) => dom(view({}, "privacy", BOTH, false, deleteAll));
+  const del = (el: HTMLElement) => button(el, '[data-action="delete-everything"]');
+
+  it("says what it does and that it can't be undone, in Privacy only", () => {
+    const help = privacy().querySelector("#delete-everything-help")?.textContent;
+    expect(help).toContain("can't be undone");
+    expect(help).toContain("Launch at login");
+    expect(del(privacy())?.textContent).toBe("Delete everything");
+    expect(del(privacy())?.className).toBe("danger");
+    expect(del(dom(view({}, "general")))).toBeFalsy();
+  });
+
+  it("shows it working", () => {
+    const b = del(privacy({ busy: true, error: "" }));
+    expect(b?.textContent).toBe("Deleting…");
+    expect(b?.getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("shows why it stopped as an alert, as text", () => {
+    const el = privacy({ busy: false, error: "<img src=x onerror=alert(1)>" });
+    expect(el.querySelector('[role="alert"]')?.textContent).toBe("<img src=x onerror=alert(1)>");
+    expect(el.querySelector("img")).toBeNull();
+    expect(privacy().querySelector('[role="alert"]')).toBeNull();
   });
 });

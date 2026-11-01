@@ -16,7 +16,7 @@ import {
 import { fmtDay, plural } from "../format";
 import { EMPTY, type Html, html, raw } from "../html";
 import { TOOL_WORDS } from "../report-cards";
-import { type ReportCardsState, SETTINGS_PANES, type SettingsPane } from "../state";
+import { type DeleteAllState, type ReportCardsState, SETTINGS_PANES, type SettingsPane } from "../state";
 import { updateLine } from "../update";
 import { sectionNav, svg } from "./chrome";
 import { sourcesView } from "./sources";
@@ -75,6 +75,7 @@ export type SettingsContext = {
   autostart: boolean;
   menuBar: MenuBar;
   reportCards: ReportCardsState;
+  deleteAll: DeleteAllState;
   /** What your AI is told when tips are on. */
   tipRules: string;
   update: UpdateStatus | null;
@@ -291,7 +292,7 @@ function reportCardsView(rc: ReportCardsState, sources: SourceInfo[], tipRules: 
     </section>`;
 }
 
-function privacyView({ retention: r }: SettingsContext): Html {
+function privacyView({ retention: r, deleteAll }: SettingsContext): Html {
   const opt = (level: Level, title: string, body: string) =>
     html`<label class="level${r.level === level ? " on" : ""}"><input type="radio" name="level" value="${level}" data-action="level"${attr(
       r.level === level,
@@ -311,6 +312,11 @@ function privacyView({ retention: r }: SettingsContext): Html {
         <button data-action="save-privacy">Save</button><span id="privacy-status" class="muted small" role="status" aria-live="polite"></span>
       </div>
       <p class="muted small">Pinned corrections keep their text until you unpin them.</p>
+      <div class="settings-row">
+        <button class="danger" data-action="delete-everything" aria-describedby="delete-everything-help"${attr(deleteAll.busy, 'aria-disabled="true"')}>${deleteAll.busy ? "Deleting…" : "Delete everything"}</button>
+        <span class="muted small" id="delete-everything-help">Turns off report cards and Launch at login, deletes all your data and the logs, and quits. This can't be undone. Your chats in your AI tools aren't touched.</span>
+        ${deleteAll.error ? html`<span class="action-error" role="alert">${deleteAll.error}</span>` : ""}
+      </div>
       <p class="muted small fine-print">For fun, not a measure of job performance. Not affiliated with or endorsed by Anthropic, OpenAI or any other AI company. Product names are their owners' trademarks.</p>
     </section>`;
 }

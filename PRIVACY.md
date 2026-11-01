@@ -87,7 +87,7 @@ To offer new versions, the app downloads one small public file, `latest.json`, f
 - The request carries no identifiers: no account, install id, stats or chat data. It's a plain HTTPS GET with the updater's standard user agent (`tauri-plugin-updater/<version>`). Like any download, GitHub sees your IP address.
 - `latest.json` only lists the newest version number and where to download it. If it's newer than yours, you see "Restart to update" in the scorecard and the menu bar menu.
 - Nothing is downloaded or installed until you click it. The update file comes from the same GitHub release, and the app installs it only if its signature matches the project's key built into the app.
-- Turn it off in **Settings → General → Check for app updates automatically**. With it off, the app only checks when you click **Check for app updates** on that page or **Check for updates** in the menu bar menu.
+- Turn it off in **Settings → General → Check for app updates automatically**. With it off, the app only checks when you click **Check for app updates** on that page or in the menu bar menu.
 
 ## How to delete your data
 

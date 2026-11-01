@@ -21,6 +21,7 @@ use std::fs;
 use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 use store::TipActivity;
@@ -458,7 +459,8 @@ fn require_source(tool: Tool, allowed: bool) -> Res<()> {
 
 /// Only the scorecard window changes report cards; the small window under the menu bar icon never does.
 fn main_window_only(window: &tauri::Window) -> Res<()> {
-    only_main(window.label())
+    only_main(window.label())?;
+    still_open()
 }
 
 fn only_main(label: &str) -> Res<()> {
@@ -486,6 +488,28 @@ fn turn_off(env: &Env, tool: Tool) -> Res<()> {
         Tool::ClaudeCode => claude::turn_off(env).and_then(|()| set_tips(env, false)),
         Tool::Codex => codex::turn_off(env),
     }
+}
+
+/// Turns report cards off in every tool, for Delete everything, stopping at the first that fails and
+/// naming it. Turning off is safe to repeat, so the tools don't have to be asked whether they're on,
+/// which can itself fail. A tool that isn't on this computer has nothing to take out, unless Claude
+/// Code's files still list the plugin but its command can't be found: that can't be removed from
+/// here, and going on would leave its hooks in place.
+fn turn_off_everywhere(env: &Env) -> Res<()> {
+    for tool in [Tool::ClaudeCode, Tool::Codex] {
+        let done = match tool {
+            Tool::ClaudeCode if env.claude.is_none() => claude::turn_off_absent(env),
+            _ => turn_off(env, tool),
+        };
+        done.map_err(|why| format!("Report cards couldn't be turned off in {}. {why}", tool.name()))?;
+        forget_launch_problem(tool);
+    }
+    Ok(())
+}
+
+/// [`turn_off_everywhere`] on the real folders and tools, found the way a click on Turn off finds them.
+pub(crate) fn turn_off_on_this_computer() -> Res<()> {
+    turn_off_everywhere(&Env::system(true)?)
 }
 
 /// Makes an empty file at `file` if there is nothing there. Whatever is there already (a file with
@@ -528,9 +552,31 @@ fn set_reminders(env: &Env, on: bool) -> Res<()> {
 }
 
 /// One change at a time: two clicks, or a click during the launch check, never interleave.
-fn exclusive() -> MutexGuard<'static, ()> {
+pub(crate) fn exclusive() -> MutexGuard<'static, ()> {
     static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
     ONE_AT_A_TIME.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Set by Delete everything once the database is closed. Nothing here writes beside the database from
+/// then on, so a click or the launch check can't put back a file about to be deleted.
+static SHUT: AtomicBool = AtomicBool::new(false);
+
+/// See [`SHUT`].
+pub(crate) fn shut() {
+    SHUT.store(true, Ordering::Relaxed);
+}
+
+/// Fails once [`SHUT`] is set.
+fn still_open() -> Res<()> {
+    refuse_if(SHUT.load(Ordering::Relaxed))
+}
+
+fn refuse_if(shut: bool) -> Res<()> {
+    if shut {
+        Err("That can't be done while your data is being deleted.".into())
+    } else {
+        Ok(())
+    }
 }
 
 /// What the launch check couldn't do this run, until the next launch tries again.
@@ -589,6 +635,7 @@ pub async fn report_cards_turn_on(window: tauri::Window, app: State<'_, Arc<App>
             state.map_err(|e| plain("check which sources are allowed", &e))?.is_some_and(|s| s.allowed),
         )?;
         let _one = exclusive();
+        still_open()?;
         turn_on(&Env::system(true)?, tool, &plugin_source())?;
         forget_launch_problem(tool);
         Ok(())
@@ -601,6 +648,7 @@ pub async fn report_cards_turn_off(window: tauri::Window, tool: Tool) -> Res<()>
     main_window_only(&window)?;
     blocking(move || {
         let _one = exclusive();
+        still_open()?;
         turn_off(&Env::system(true)?, tool)?;
         forget_launch_problem(tool);
         Ok(())
@@ -653,6 +701,7 @@ const RETRY_EVERY: Duration = Duration::from_secs(60 * 60);
 /// `retry` it only does anything if a move was left unfinished (see `claude::Pending`).
 fn check_plugin(env: impl FnOnce() -> Res<Env>, version: &str, retry: bool) -> Res<Option<claude::Launch>> {
     let _one = exclusive();
+    still_open()?;
     let env = env()?;
     Ok(if retry { claude::retry_pending(&env, version) } else { Some(claude::launch_check(&env, version)) })
 }
@@ -675,6 +724,7 @@ fn note_check(found: Res<Option<claude::Launch>>, version: &str) {
 /// its own like a pass of the plugin check. `env` is made once it has its turn.
 fn refresh_codex(env: impl FnOnce() -> Res<Env>) -> Res<bool> {
     let _one = exclusive();
+    still_open()?;
     codex::refresh(&env()?)
 }
 
@@ -712,7 +762,7 @@ pub fn spawn_launch_check() {
 /// the home folder written as `~`.
 pub(crate) fn for_log(text: &str) -> String {
     const LIMIT: usize = 1024;
-    let clean = crate::shorten_home_in(&without_credentials(text.trim()), std::env::home_dir().as_deref());
+    let clean = crate::logging::shorten_home_in(&without_credentials(text.trim()), std::env::home_dir().as_deref());
     if clean.len() <= LIMIT {
         return clean;
     }

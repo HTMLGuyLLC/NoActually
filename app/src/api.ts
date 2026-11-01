@@ -344,6 +344,7 @@ export type Commands = {
   report_cards_set_tips: { args: { on: boolean }; result: null };
   report_cards_set_reminders: { args: { on: boolean }; result: null };
   report_cards_delete_history: { args: undefined; result: number };
+  delete_everything: { args: undefined; result: null };
   log_error: { args: { message: string }; result: null };
   open_log_folder: { args: undefined; result: null };
   get_popups: { args: undefined; result: boolean };
@@ -408,6 +409,8 @@ export const api = {
   reportCardsSetReminders: (on: boolean) => call("report_cards_set_reminders", { on }),
   /** How many report cards went. */
   reportCardsDeleteHistory: () => call("report_cards_delete_history", undefined),
+  /** Turns report cards and Launch at login off, deletes the data and the logs, and quits. Only comes back if it stopped. */
+  deleteEverything: () => call("delete_everything", undefined),
   /** Adds a line to the app's log file. */
   logError: (message: string) => call("log_error", { message }),
   openLogFolder: () => call("open_log_folder", undefined),

@@ -486,6 +486,12 @@ impl Store {
         Ok(Self { conn })
     }
 
+    /// Closes the connection, and says so if SQLite couldn't. Dropping a [`Store`] closes it too, but
+    /// silently. The last connection to close removes the `-wal` and `-shm` files.
+    pub fn close(self) -> Result<()> {
+        self.conn.close().map_err(|(_, e)| e.into())
+    }
+
     // ---- settings ----------------------------------------------------------------------
 
     /// The retention settings, or the defaults if never set. A saved value that can't be read

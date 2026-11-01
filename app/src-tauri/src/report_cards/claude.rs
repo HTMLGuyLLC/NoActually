@@ -486,19 +486,22 @@ fn marketplace_verdict(env: &Env, exe: &Path) -> Verdict {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             log::warn!(
                 "report cards: couldn't find the marketplace file at {}, so it wasn't checked",
-                crate::home_short(&file)
+                crate::logging::home_short(&file)
             );
             return Verdict::Unchecked;
         }
         Err(e) => {
-            log::warn!("report cards: couldn't look at the marketplace file {}: {e}", crate::home_short(&file));
+            log::warn!(
+                "report cards: couldn't look at the marketplace file {}: {e}",
+                crate::logging::home_short(&file)
+            );
             return Verdict::Different;
         }
     };
     if !meta.is_file() || meta.len() > MARKETPLACE_FILE_LIMIT {
         log::warn!(
             "report cards: the downloaded marketplace file {} isn't a small plain file",
-            crate::home_short(&file)
+            crate::logging::home_short(&file)
         );
         return Verdict::Different;
     }
@@ -508,7 +511,7 @@ fn marketplace_verdict(env: &Env, exe: &Path) -> Verdict {
     } else {
         log::warn!(
             "report cards: the downloaded marketplace file {} doesn't list this app's plugin",
-            crate::home_short(&file)
+            crate::logging::home_short(&file)
         );
         Verdict::Different
     }
@@ -544,6 +547,15 @@ pub(super) fn turn_off(env: &Env) -> Res<()> {
     remove_all(env.claude.as_deref().ok_or(NOT_INSTALLED)?)?;
     Pending::clear(env);
     forget_problem(env);
+    Ok(())
+}
+
+/// [`turn_off`] when the `claude` command can't be found: fine unless Claude Code's own files say the
+/// plugin is still there, since only that command can take it out.
+pub(super) fn turn_off_absent(env: &Env) -> Res<()> {
+    if recorded_on(env) {
+        return Err("Claude Code's files list the plugin, but its command wasn't found. Press Look again in Settings → Report cards, then try again.".into());
+    }
     Ok(())
 }
 

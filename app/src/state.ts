@@ -34,6 +34,14 @@ export type ReportCardsState = {
 /** Nothing read yet and nothing running. */
 export const emptyReportCards = (): ReportCardsState => ({ status: null, statusError: "", busy: null, error: null, note: null });
 
+/** Settings → Privacy → Delete everything. There's no "done": it ends with the app quitting. */
+export type DeleteAllState = {
+  /** It's running. */
+  busy: boolean;
+  /** Why it stopped, in the app's words ("" when it didn't). */
+  error: string;
+};
+
 /** How far back the scorecard's counts look. The score and tiers follow the chosen period too. */
 export const PERIODS = ["7d", "28d", "90d", "all"] as const;
 export type Period = (typeof PERIODS)[number];
@@ -77,6 +85,7 @@ export type AppState = {
   /** Settings: which sub-tab is open. */
   settingsPane: SettingsPane;
   reportCards: ReportCardsState;
+  deleteAll: DeleteAllState;
   filter: Filter;
   /** Every model, from the last unfiltered stats; the picker lists these even while narrowed. */
   allModels: ModelRow[];
@@ -114,6 +123,7 @@ const initial = (): AppState => ({
   view: "overview",
   settingsPane: "general",
   reportCards: emptyReportCards(),
+  deleteAll: { busy: false, error: "" },
   filter: {},
   allModels: [],
   allModelsScope: "",
@@ -149,6 +159,9 @@ export function setSettingsPane(pane: SettingsPane): void {
 }
 export function setReportCards(patch: Partial<ReportCardsState>): void {
   s.reportCards = { ...s.reportCards, ...patch };
+}
+export function setDeleteAll(next: DeleteAllState): void {
+  s.deleteAll = next;
 }
 export function setView(view: ScoreView): void {
   s.view = view;

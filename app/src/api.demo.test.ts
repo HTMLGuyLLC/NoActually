@@ -299,6 +299,14 @@ describe("demoCall", () => {
       expect(await demoCall("report_cards_delete_history", undefined)).toBe(0);
     });
 
+    it("deletes nothing when Delete everything is pressed, and says so", async () => {
+      const look = { look: false };
+      await demoCall("report_cards_set_tips", { on: true });
+      await expect(demoCall("delete_everything", undefined)).rejects.toThrow("nothing was deleted");
+      expect((await demoCall("report_cards_status", look)).tips).toBe(true);
+      await demoCall("report_cards_set_tips", { on: false });
+    });
+
     it("remembers the menu bar setting", async () => {
       expect(await demoCall("get_menu_bar", undefined)).toEqual({ enabled: true, available: true });
       await demoCall("set_menu_bar", { enabled: false });

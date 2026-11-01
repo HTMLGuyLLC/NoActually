@@ -71,8 +71,9 @@ pub(super) fn installed(env: &Env) -> bool {
 // ---- the skill ------------------------------------------------------------------------------
 
 /// What replaces the line that runs the digest command: Codex has no such lines, so its prompt hook
-/// puts the summary in the request instead.
-const SUMMARY_LINE: &str = "Look for the chat summary No, Actually... added to this request; it starts with \"noactually digest v1\". If there isn't one, the app isn't running.";
+/// puts the summary in the request instead. With the app off the hook stays silent, so Codex never
+/// sees `no-app`: no summary is the skill's empty case, and the skill says to stop there.
+const SUMMARY_LINE: &str = "Look for the chat summary No, Actually... added to this request; it starts with \"noactually digest v1\". If there isn't one, the summary is empty, even if the app is off or not installed: in Codex it never reads `no-app`.";
 /// What replaces the line with the slash command's argument, which Codex doesn't fill in.
 fn request_line() -> String {
     format!("Request: whatever the person typed after {GRADE_SKILL_CODEX} (nothing, or \"all\").")
@@ -407,7 +408,7 @@ fn read_hooks(path: &Path) -> Res<Option<Json>> {
         return Ok(Some(Json::Obj(Vec::new())));
     }
     serde_json::from_str(&text).map(Some).map_err(|e| {
-        log::warn!("report cards: {} isn't JSON: {e}", crate::home_short(path));
+        log::warn!("report cards: {} isn't JSON: {e}", crate::logging::home_short(path));
         BAD_HOOKS.to_string()
     })
 }

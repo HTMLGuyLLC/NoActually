@@ -33,6 +33,7 @@ const api = vi.hoisted(() => ({
   rescoredNotice: vi.fn(),
   openNotices: vi.fn(),
   importExport: vi.fn(),
+  deleteEverything: vi.fn(),
 }));
 vi.mock("./api", async (importOriginal) => ({ ...(await importOriginal<typeof import("./api")>()), api, demo: false }));
 
@@ -790,6 +791,81 @@ describe("the log", () => {
     // The line carries the stack too.
     expect(api.logError).toHaveBeenCalledWith(expect.stringContaining("Pick a goal first"));
     shout.mockRestore();
+  });
+});
+
+describe("delete everything", () => {
+  const del = '[data-action="delete-everything"]';
+  const open = async () => {
+    state.setDeleteAll({ busy: false, error: "" });
+    state.setSettingsPane("privacy");
+    state.setTab("settings");
+    await render();
+  };
+  const again = async () => {
+    later();
+    await click(del);
+  };
+  beforeEach(() => {
+    holdClock();
+  });
+
+  it("takes a second click, and says plainly that it can't be undone", async () => {
+    await open();
+    api.deleteEverything.mockReturnValueOnce(new Promise(() => {}));
+    await click(del);
+    expect(api.deleteEverything).not.toHaveBeenCalled();
+    expect(btn(del).textContent).toBe("Click again to delete everything. This can't be undone");
+    await again();
+    expect(api.deleteEverything).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a double-click", async () => {
+    await open();
+    await click(del);
+    await click(del);
+    expect(api.deleteEverything).not.toHaveBeenCalled();
+    expect(btn(del).dataset.confirm).toBe("yes");
+  });
+
+  it("does nothing if the second click never comes", async () => {
+    await open();
+    await click(del);
+    btn(del).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await settle();
+    expect(btn(del).textContent).toBe("Delete everything");
+    await click(del);
+    expect(api.deleteEverything).not.toHaveBeenCalled();
+    btn(del).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+
+  it("stays on Deleting… until the app quits, and can't be run twice", async () => {
+    await open();
+    api.deleteEverything.mockResolvedValueOnce(null);
+    await click(del);
+    await again();
+    expect(btn(del).textContent).toBe("Deleting…");
+    expect(btn(del).getAttribute("aria-disabled")).toBe("true");
+    await again();
+    await again();
+    expect(api.deleteEverything).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows why it stopped, and the button comes back to try again", async () => {
+    await open();
+    api.deleteEverything.mockRejectedValueOnce("Nothing was deleted. Report cards couldn't be turned off in Codex.");
+    await click(del);
+    await again();
+    expect(root.querySelector('[role="alert"]')?.textContent).toBe("Nothing was deleted. Report cards couldn't be turned off in Codex.");
+    expect(btn(del).textContent).toBe("Delete everything");
+    expect(btn(del).hasAttribute("aria-disabled")).toBe(false);
+
+    api.deleteEverything.mockReturnValueOnce(new Promise(() => {}));
+    await click(del);
+    await again();
+    expect(api.deleteEverything).toHaveBeenCalledTimes(2);
+    expect(root.querySelector('[role="alert"]')).toBeNull();
+    state.setDeleteAll({ busy: false, error: "" });
   });
 });
 

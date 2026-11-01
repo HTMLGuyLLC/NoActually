@@ -114,6 +114,7 @@ async function settingsBody(meta: Meta): Promise<Html> {
     autostart,
     menuBar,
     reportCards: state.reportCards,
+    deleteAll: state.deleteAll,
     tipRules: meta.tip_rules,
     update: state.update,
     popups,

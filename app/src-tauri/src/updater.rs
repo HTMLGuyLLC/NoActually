@@ -5,6 +5,7 @@
 
 use crate::{lock, App};
 use serde::Serialize;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 use tauri::menu::MenuItem;
@@ -13,6 +14,8 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 
 pub enum Msg {
     CheckNow,
+    /// Ends the update thread: no more checks until the next launch.
+    Stop,
 }
 
 const FIRST_CHECK: Duration = Duration::from_secs(60);
@@ -51,7 +54,7 @@ pub fn auto_enabled(setting: Option<&str>) -> bool {
 pub fn menu_text(available: Option<&str>) -> String {
     match available {
         Some(v) => format!("Restart to update to {v}"),
-        None => "Check for updates".into(),
+        None => "Check for app updates".into(),
     }
 }
 
@@ -72,6 +75,8 @@ pub struct Updates {
     pub tx: mpsc::Sender<Msg>,
     status: Mutex<UpdateStatus>,
     pending: Mutex<Option<Update>>,
+    /// No update may start any more (see [`Updates::stop`]).
+    stopped: AtomicBool,
     menu: MenuItem<Wry>,
 }
 
@@ -82,6 +87,7 @@ impl Updates {
             tx,
             status: Mutex::new(UpdateStatus { current, ..Default::default() }),
             pending: Mutex::new(None),
+            stopped: AtomicBool::new(false),
             menu,
         }
     }
@@ -99,7 +105,31 @@ impl Updates {
         lock(&self.status).available = None;
         changed(handle, self);
     }
+
+    /// Whether an update is being downloaded or installed right now.
+    pub fn installing(&self) -> bool {
+        lock(&self.status).installing
+    }
+
+    /// Stops updates for good, for Delete everything: an install finishing later would restart the
+    /// app, and a restart makes a new database. Refused while an install is running. The thread goes
+    /// too: with the database closed it would no longer see that checks were turned off.
+    pub fn stop(&self, handle: &AppHandle) -> Result<(), String> {
+        {
+            let status = lock(&self.status);
+            if status.installing {
+                return Err(INSTALLING.into());
+            }
+            self.stopped.store(true, Ordering::Relaxed);
+        }
+        self.forget_offer(handle);
+        let _ = self.tx.send(Msg::Stop);
+        Ok(())
+    }
 }
+
+/// Why updates can't be stopped right now.
+pub const INSTALLING: &str = "An update is installing. Wait for it to finish, then try again.";
 
 fn changed(handle: &AppHandle, updates: &Updates) {
     let _ = updates.menu.set_text(menu_text(lock(&updates.status).available.as_deref()));
@@ -165,6 +195,9 @@ pub async fn install(handle: AppHandle) -> Result<(), String> {
         if status.installing {
             return Ok(());
         }
+        if updates.stopped.load(Ordering::Relaxed) {
+            return Err("No update is waiting.".into());
+        }
         status.installing = true;
         status.last_error = None;
     }
@@ -174,7 +207,7 @@ pub async fn install(handle: AppHandle) -> Result<(), String> {
     log::info!("installing update {}", update.version);
     // On Windows this hands over to the installer, which closes the app and reopens it.
     // On Windows the installer closes the app mid-call, so remember the window first.
-    crate::save_main_placement_before_exit(&handle);
+    crate::window::save_main_placement_before_exit(&handle);
     match update.download_and_install(|_, _| {}, || {}).await {
         Ok(()) => {
             handle.request_restart();
@@ -218,7 +251,7 @@ pub fn spawn(handle: AppHandle, app: Arc<App>, rx: mpsc::Receiver<Msg>) {
                         check(&handle, &app, &updates);
                     }
                 }
-                Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                Ok(Msg::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => return,
             }
             wait = INTERVAL;
         }
@@ -266,7 +299,7 @@ mod tests {
 
     #[test]
     fn menu_offers_install_only_when_waiting() {
-        assert_eq!(menu_text(None), "Check for updates");
+        assert_eq!(menu_text(None), "Check for app updates");
         assert_eq!(menu_text(Some("0.2.0")), "Restart to update to 0.2.0");
     }
 }

@@ -28,6 +28,7 @@ import {
   type ReportCardsState,
   setAutoUpdate,
   setAwardSlide,
+  setDeleteAll,
   setDraft,
   setFilter,
   setLaterFor,
@@ -495,6 +496,19 @@ export const clickActions = {
       () => api.reportCardsDeleteHistory(),
       (n) => (n ? "Deleted your report card and tip history." : "There was no history to delete."),
     );
+  },
+  // On success the app quits, so the button stays on "Deleting…". A failure is kept in the state, because a redraw may replace the button meanwhile.
+  "delete-everything": async (b) => {
+    if (state.deleteAll.busy || !confirmed(b, "Click again to delete everything. This can't be undone")) return;
+    setDeleteAll({ busy: true, error: "" });
+    await render();
+    try {
+      await api.deleteEverything();
+    } catch (e) {
+      setDeleteAll({ busy: false, error: errorText(e) });
+      await render();
+      say(confirmNote(), errorText(e));
+    }
   },
   "save-privacy": async (b) => {
     const form = b.closest("section") ?? document;
