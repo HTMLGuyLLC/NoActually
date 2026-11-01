@@ -74,7 +74,7 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
 
       - name: Test
-        run: cargo test --locked --workspace
+        run: cargo test --locked --workspace --no-fail-fast
 
   frontend:
     name: frontend

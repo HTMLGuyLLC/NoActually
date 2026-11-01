@@ -372,10 +372,11 @@ mod tests {
 
     #[test]
     fn claude_config_dir_moves_the_folder_but_only_to_an_absolute_path() {
+        const ABSOLUTE: &str = if cfg!(windows) { r"C:\data\claude" } else { "/data/claude" };
         let home = Some(PathBuf::from("/home/me"));
         let var = |v: &'static str| move |k: &str| (k == "CLAUDE_CONFIG_DIR").then(|| OsString::from(v));
         assert_eq!(claude_dir_in(|_| None, home.clone()), Some("/home/me/.claude".into()));
-        assert_eq!(claude_dir_in(var("/data/claude"), home.clone()), Some("/data/claude".into()));
+        assert_eq!(claude_dir_in(var(ABSOLUTE), home.clone()), Some(ABSOLUTE.into()));
         assert_eq!(claude_dir_in(var(""), home.clone()), Some("/home/me/.claude".into()), "empty is unset");
         assert_eq!(claude_dir_in(var("relative"), home), Some("/home/me/.claude".into()));
         assert_eq!(claude_dir_in(|_| None, None), None);

@@ -563,7 +563,8 @@ mod tests {
         let home = Path::new("/home/me");
         let var = |v: &str| Some(std::ffi::OsString::from(v));
         assert_eq!(codex_dir_in(None, home), Path::new("/home/me/.codex"));
-        assert_eq!(codex_dir_in(var("/data/codex"), home), Path::new("/data/codex"));
+        let absolute = std::env::temp_dir().join("codex");
+        assert_eq!(codex_dir_in(var(&absolute.to_string_lossy()), home), absolute);
         assert_eq!(codex_dir_in(var(""), home), Path::new("/home/me/.codex"), "empty is unset");
         assert_eq!(codex_dir_in(var("codex"), home), Path::new("/home/me/.codex"), "never relative");
     }

@@ -594,10 +594,10 @@ mod panic_tests {
     fn the_home_folder_is_written_as_a_tilde_in_the_log() {
         let home = Some(Path::new("/Users/me"));
         let sep = std::path::MAIN_SEPARATOR;
-        let db = Path::new("/Users/me/Library/noactually.db");
-        assert_eq!(shorten_home(db, home), format!("~{sep}Library{sep}noactually.db"));
+        let db = Path::new("/Users/me").join("Library").join("noactually.db");
+        assert_eq!(shorten_home(&db, home), format!("~{sep}Library{sep}noactually.db"));
         assert_eq!(shorten_home(Path::new("/Users/me"), home), "~");
         assert_eq!(shorten_home(Path::new("/Users/mellow/x.db"), home), "/Users/mellow/x.db", "whole folders only");
-        assert_eq!(shorten_home(db, None), "/Users/me/Library/noactually.db");
+        assert_eq!(shorten_home(&db, None), db.display().to_string());
     }
 }
