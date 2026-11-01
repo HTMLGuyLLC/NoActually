@@ -492,7 +492,8 @@ mod tests {
             "hf_abcdefghijklmnopqrstuvwxyz",
             "gsk_abcdefghijklmnopqrstuvwxyz",
             "whsec_abcdefghijklmnop1234",
-            "ASIAABCDEFGHIJKLMNOP",
+            // Split so secret scanners don't take this made-up sample for a real key.
+            concat!("ASIA", "ABCDEFGHIJKLMNOP"),
             "SG.abcdefghijklmnopqrstuv.ABCDEFGHIJKLMNOPQRSTUV0123456789-_ab",
         ] {
             assert_eq!(redact(&format!("key {key} end")), "key [secret] end", "{key}");
