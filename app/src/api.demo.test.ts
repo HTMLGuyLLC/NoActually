@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import cases from "../../crates/engine/tests/score-cases.json";
 import shipped from "../public/demo.json";
 import { demoCall, demoStats, isDemoData, judge } from "./api.demo";
 import { periodSince } from "./state";
@@ -157,11 +158,8 @@ describe("isDemoData", () => {
   it("accepts the shipped demo.json", () => {
     expect(isDemoData(shipped)).toBe(true);
     if (!isDemoData(shipped)) return;
-    // Every hall entry carries the display strings Rust now sends (a correction of you has no category).
-    for (const h of shipped.stats.hall_of_fame) {
-      expect(h.source_name).toBeTruthy();
-      expect(Boolean(h.category_title)).toBe(Boolean(h.category));
-    }
+    // Every hall entry carries the display string Rust sends.
+    for (const h of shipped.stats.hall_of_fame) expect(h.source_name).toBeTruthy();
     expect(shipped.meta.tiers.map((t) => t.id)).toContain(shipped.stats.overall.tier);
   });
 
@@ -357,5 +355,21 @@ describe("withSince", () => {
       judge(meta, { continued: p.prompts.window_tasks, landed: p.prompts.window_landed, corrections: p.corrections, humbled: p.humbled, days: 2 }),
     );
     expect(withSince(meta, s, null)).toBe(s);
+  });
+});
+
+describe("judge against the shared score cases", () => {
+  // The Rust engine's own cases (crates/engine/tests/score-cases.json): the browser demo's stand-in must give the same answers.
+  it("has cases to run", () => {
+    expect(cases.cases.length).toBeGreaterThan(0);
+  });
+
+  it.each(cases.cases.map((c) => [c.name, c] as const))("%s", (_name, c) => {
+    const o = judge(meta, c.window);
+    // The label is not part of judge(): the glance words the verdict this way.
+    const label = o.verdict === "no" ? "No." : "Hmm.";
+    const { corrections, humbled, ...rest } = o;
+    expect({ ...rest, verdict_label: label }).toEqual(c.expected);
+    expect([corrections, humbled]).toEqual([c.window.corrections, c.window.humbled]);
   });
 });

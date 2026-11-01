@@ -1,5 +1,5 @@
 // Draws the current view into #app, keeping keyboard focus where it was.
-import { api, demo, REPORT_CARD_TOOLS } from "./api";
+import { api, demo, type Meta, REPORT_CARD_TOOLS, type Stats } from "./api";
 import { captureFocus, must, restoreFocus, say } from "./dom";
 import { ago, errorText, isFiltered, listNames, subjectText } from "./format";
 import { isDismissed, rescoredUnseen } from "./hints";
@@ -28,7 +28,7 @@ import { canGrade, improveView } from "./views/improve";
 import { learnView } from "./views/learn";
 import { modelPicker, noChatsView, onboardingView, rebuildingView, scorecardView, VIEW_TITLES } from "./views/scorecard";
 import { PANE_TITLES, settingsView } from "./views/settings";
-import { watchingNames } from "./views/sources";
+import { isImportOnly, watchingNames } from "./views/sources";
 
 /** A read that is only an extra: a failure (or a missing answer) is the fallback, never an error page. */
 const soft = async <T>(read: () => Promise<T>, fallback: T): Promise<T> => {
@@ -75,15 +75,7 @@ async function view(): Promise<Html> {
   const scope = since ?? "";
   if (!isFiltered(state.filter)) setAllModels(s.models, scope);
   else if (state.allModelsScope !== scope) setAllModels((await api.stats(since ? { since } : {})).models, scope);
-  if (isGlance) {
-    if (!s.messages) return emptyGlanceView(await watching(), meta.min_prompts);
-    // The goal is all-AI, like Improve's; the glance still draws if it can't be read.
-    const goal = await api.progress(state.filter).then(
-      (p) => p.goal,
-      () => null,
-    );
-    return glanceView(s, meta, goal);
-  }
+  if (isGlance) return glanceBody(s, meta);
 
   // Opening Settings → Report cards reads its status. That can take a moment (it asks Claude Code), so
   // the section draws first, with what it has, and again once the answer is in.
@@ -91,84 +83,105 @@ async function view(): Promise<Html> {
   if (onCards && !reportCardsShown) void readReportCards().then(scheduler.refresh);
   reportCardsShown = onCards;
 
-  let body: Html;
-  if (state.tab === "settings") {
-    // Sources lead Settings: you set them up once, beside the other privacy controls.
-    const [sources, retention, autostart, menuBar, popups] = await Promise.all([
-      api.sources(),
-      api.retention(),
-      api.getAutostart().catch(() => false),
-      api.getMenuBar(),
-      soft(() => api.getPopups(), true),
-    ]);
-    body = settingsView({
-      pane: state.settingsPane,
-      sources,
-      status: state.status,
-      retention,
-      autostart,
-      menuBar,
-      reportCards: state.reportCards,
-      tipRules: meta.tip_rules,
-      update: state.update,
-      popups,
-      demo,
-    });
-  } else if (state.tab === "learn") {
-    body = learnView({ meta, prompts: s.messages ? s.prompts : null, done: await api.learned(), lesson: state.lesson, draft: state.draft, demo });
-  } else if (state.tab === "improve") {
-    // The recent list and the setup tip are extras: Improve still draws without them.
-    const [progress, recent, sources] = await Promise.all([
-      api.progress(state.filter),
-      api.recentReportCards(state.filter).catch(() => []),
-      api.sources().catch(() => []),
-    ]);
-    // Reading it asks the AI tools, which can take seconds, so it never holds up a draw.
-    const cards = state.reportCards.status;
-    if (!cards && !cardsAsked) {
-      cardsAsked = true;
-      void readReportCards().then(render);
-    }
-    body = improveView({
-      meta,
-      stats: s,
-      progress,
-      range: state.range,
-      subject: subjectText(state.filter, meta),
-      picker: modelPicker({ filter: state.filter, meta }),
-      filtered: isFiltered(state.filter),
-      recent,
-      canGrade: canGrade(meta, sources),
-      noSource: sources.length > 0 && !sources.some((x) => x.state?.allowed),
-      hintDismissed: isDismissed("report-cards"),
-      cardsOn: REPORT_CARD_TOOLS.find((t) => cards?.[t].on) ?? null,
-    });
-  } else if (s.messages) {
-    setReading("off");
-    // Nothing new will come to someone who only imported an export: say to add a newer one.
-    const importOnly =
-      s.overall.to_rank > 0 && (await soft(() => api.sources(), [])).some((x) => x.kind === "import" && x.state?.allowed) && !(await watching());
-    body = scorecardView(s, {
-      importOnly,
-      meta,
-      filter: state.filter,
-      view: state.view,
-      period: state.period,
-      still: s.overall.verdict === state.lastVerdict,
-      promptsStill: s.prompts.tier === state.lastPromptTier,
-      correctionsStill: s.overall.correction_tier === state.lastCorrectionTier,
-      awardSlide: state.awardSlide,
-    });
-    setLastVerdict(s.overall.verdict);
-    setLastPromptTier(s.prompts.tier);
-    setLastCorrectionTier(s.overall.correction_tier);
-  } else {
-    const all = await api.stats({ since: periodSince("all") });
-    // Nothing in this period or for this model, but there is history: keep the pickers so it can be widened.
-    if (all.messages) body = noChatsView({ filter: state.filter, meta, period: state.period, view: state.view, lastDay: all.last_day });
-    else body = onboardingView(await watching(), state.reading === "reading" || state.status.syncing);
+  if (state.tab === "settings") return page(await settingsBody(meta));
+  if (state.tab === "learn") return page(await learnBody(meta, s));
+  if (state.tab === "improve") return page(await improveBody(meta, s));
+  return page(s.messages ? await scorecardBody(meta, s) : await emptyBody(meta));
+}
+
+/** The small window under the menu bar icon. */
+async function glanceBody(s: Stats, meta: Meta): Promise<Html> {
+  if (!s.messages) return emptyGlanceView(await watching(), meta.min_prompts);
+  // The goal is all-AI, like Improve's; the glance still draws if it can't be read.
+  const goal = await soft(async () => (await api.progress(state.filter)).goal, null);
+  return glanceView(s, meta, goal, isImportOnly(await soft(() => api.sources(), [])));
+}
+
+async function settingsBody(meta: Meta): Promise<Html> {
+  // Sources lead Settings: you set them up once, beside the other privacy controls.
+  const [sources, retention, autostart, menuBar, popups] = await Promise.all([
+    api.sources(),
+    api.retention(),
+    soft(() => api.getAutostart(), false),
+    api.getMenuBar(),
+    soft(() => api.getPopups(), true),
+  ]);
+  return settingsView({
+    pane: state.settingsPane,
+    sources,
+    status: state.status,
+    retention,
+    autostart,
+    menuBar,
+    reportCards: state.reportCards,
+    tipRules: meta.tip_rules,
+    update: state.update,
+    popups,
+    demo,
+  });
+}
+
+async function learnBody(meta: Meta, s: Stats): Promise<Html> {
+  return learnView({ meta, prompts: s.messages ? s.prompts : null, done: await api.learned(), lesson: state.lesson, draft: state.draft, demo });
+}
+
+async function improveBody(meta: Meta, s: Stats): Promise<Html> {
+  // The recent list and the setup tip are extras: Improve still draws without them.
+  const [progress, recent, sources] = await Promise.all([
+    api.progress(state.filter),
+    soft(() => api.recentReportCards(state.filter), []),
+    soft(() => api.sources(), []),
+  ]);
+  // Reading it asks the AI tools, which can take seconds, so it never holds up a draw.
+  const cards = state.reportCards.status;
+  if (!cards && !cardsAsked) {
+    cardsAsked = true;
+    void readReportCards().then(render);
   }
-  return page(body);
+  return improveView({
+    meta,
+    stats: s,
+    progress,
+    range: state.range,
+    subject: subjectText(state.filter, meta),
+    picker: modelPicker({ filter: state.filter, meta }),
+    filtered: isFiltered(state.filter),
+    recent,
+    canGrade: canGrade(meta, sources),
+    noSource: sources.length > 0 && !sources.some((x) => x.state?.allowed),
+    importOnly: isImportOnly(sources),
+    hintDismissed: isDismissed("report-cards"),
+    cardsOn: REPORT_CARD_TOOLS.find((t) => cards?.[t].on) ?? null,
+  });
+}
+
+async function scorecardBody(meta: Meta, s: Stats): Promise<Html> {
+  setReading("off");
+  // Nothing new will come to someone who only imported an export: say to add a newer one.
+  const importOnly = s.overall.to_rank > 0 && isImportOnly(await soft(() => api.sources(), []));
+  const body = scorecardView(s, {
+    importOnly,
+    meta,
+    filter: state.filter,
+    view: state.view,
+    period: state.period,
+    still: s.overall.verdict === state.lastVerdict,
+    promptsStill: s.prompts.tier === state.lastPromptTier,
+    correctionsStill: s.overall.correction_tier === state.lastCorrectionTier,
+    awardSlide: state.awardSlide,
+  });
+  setLastVerdict(s.overall.verdict);
+  setLastPromptTier(s.prompts.tier);
+  setLastCorrectionTier(s.overall.correction_tier);
+  return body;
+}
+
+/** The scorecard with no chats in this period or for this model: widen it if there is history, else onboarding. */
+async function emptyBody(meta: Meta): Promise<Html> {
+  const all = await api.stats({ since: periodSince("all") });
+  // Nothing in this period or for this model, but there is history: keep the pickers so it can be widened.
+  if (all.messages) return noChatsView({ filter: state.filter, meta, period: state.period, view: state.view, lastDay: all.last_day });
+  return onboardingView(await watching(), state.reading === "reading" || state.status.syncing);
 }
 
 /** The holding page for the scorecard, with the frame around it. */

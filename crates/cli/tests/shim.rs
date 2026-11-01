@@ -1,6 +1,7 @@
 //! The `plugins/grade/bin/na` shim as the plugin runs it: with `sh`, a made-up home folder and a
 //! fake helper that records its arguments. It must pass the arguments on, cope with spaces in the
-//! path, and never fail or print when the helper is missing, because a hook that fails blocks work.
+//! path, and never fail or print when the helper is missing (except `digest`, which prints `no-app`),
+//! because a hook that fails blocks work.
 #![cfg(unix)]
 
 use std::os::unix::fs::PermissionsExt;
@@ -119,4 +120,30 @@ fn a_missing_helper_exits_quietly() {
     std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o644)).unwrap();
     home.cli_path(&format!("{}\n", exe.display()));
     quiet_success(&home.run(&["hook", "stop"]));
+}
+
+#[test]
+fn without_a_helper_only_digest_says_so() {
+    let home = Home::new("shim");
+    // `digest` tells the report card skill the app isn't installed, in exactly one line.
+    let o = home.run(&["digest", "--session", "abc"]);
+    assert!(o.status.success(), "{o:?}");
+    assert_eq!(o.stdout, b"no-app\n", "{o:?}");
+    assert!(o.stderr.is_empty(), "{o:?}");
+    // A stale path to a program that is gone is the same as none.
+    home.cli_path("/nowhere/noactually\n");
+    assert_eq!(home.run(&["digest"]).stdout, b"no-app\n");
+    // Hooks never gain output.
+    quiet_success(&home.run(&["hook", "session-start"]));
+    quiet_success(&home.run(&["hook", "stop"]));
+    quiet_success(&home.run(&[]));
+}
+
+#[test]
+fn with_a_helper_digest_is_the_helpers_own() {
+    let home = Home::new("shim");
+    let exe = home.helper("bin");
+    home.cli_path(&format!("{}\n", exe.display()));
+    quiet_success(&home.run(&["digest", "--session", "abc"]));
+    assert_eq!(home.recorded("bin").unwrap(), ["digest", "--session", "abc"]);
 }

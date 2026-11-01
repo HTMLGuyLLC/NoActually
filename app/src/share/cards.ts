@@ -366,7 +366,7 @@ type CorrectionsCard = Pick<Overall, "corrections" | "humbled" | "judgment">;
 const CORRECTION_QUESTION = "Do I correct my AI?";
 export const correctionLines = (o: CorrectionsCard, tier: Pick<PromptTier, "blurb">, when = PERIOD_WHEN["28d"]): [string, string] => [
   `I corrected it ${plural(o.corrections, "time")} ${when}. It corrected me ${o.humbled}.`,
-  `Judgment ${o.judgment ?? 0} of 100. ${tier.blurb}`,
+  `Who corrects whom: ${o.judgment ?? 0} of 100. ${tier.blurb}`,
 ];
 
 /** The corrections card: "Do I correct my AI?", the tier's answer, and who corrected whom. */

@@ -137,6 +137,34 @@ const ctx = (p: Progress, over: Partial<Parameters<typeof improveView>[0]> = {})
 });
 const view = (p: Progress, over: Partial<Parameters<typeof improveView>[0]> = {}) => improveView(ctx(p, over)).value;
 
+describe("import-only goals", () => {
+  it("explains goals need a live tool instead of showing the picker", () => {
+    const m = view(progress({ goal: null }), { importOnly: true });
+    expect(m).toContain("Goals need a live AI tool.");
+    expect(m).not.toContain('goal-pick"><p><span');
+    expect(m).not.toContain('data-action="start-goal"');
+    expect(view(progress({ goal: null }))).toContain('data-action="start-goal"');
+  });
+
+  it("still shows an existing goal, with the scorecard's wording when it has no score", () => {
+    const st = {
+      goal: goal({ kind: "tier", tier: "irreplaceable" } as Partial<Goal>),
+      score: null,
+      weeks: [],
+      met: 0,
+      needed: 4,
+      streak: 0,
+      need: null,
+      done: false,
+    } as unknown as GoalStatus;
+    const m = view(progress({ goal: st }), { importOnly: true });
+    expect(m).toContain("Not scored yet. Add a newer export to get a score.");
+    expect(m).toContain("Goals need a live AI tool.");
+    expect(m).toContain('data-action="clear-goal"');
+    expect(view(progress({ goal: st }))).toContain("you need more tasks with more than one message.");
+  });
+});
+
 const goal = (over: Partial<Goal> = {}): Goal => ({ kind: "habit", signal: "why", id: 1, target: 40, start: "2026-10-05", ...over }) as Goal;
 const gw = (w: string, state: GoalWeek["state"], value = 45, count = 20): GoalWeek => ({ week: w, count, value, state });
 const status = (over: Partial<GoalStatus> = {}): GoalStatus => ({
@@ -227,7 +255,7 @@ describe("improveView goal", () => {
     expect(m).not.toContain("Your score is"); // the meter already says "70 of 65 to reach …"
     expect(m).not.toContain("goal-weeks");
     expect(m).not.toContain("weeks met");
-    expect(view(progress({ goal: { ...st, score: null } }))).toContain("Not scored yet: you need more tasks with a follow-up.");
+    expect(view(progress({ goal: { ...st, score: null } }))).toContain("Not scored yet: you need more tasks with more than one message.");
   });
 
   it("says a done goal is done, opens the picker for the next one", () => {

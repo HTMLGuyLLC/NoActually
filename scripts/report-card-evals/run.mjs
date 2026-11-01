@@ -6,10 +6,11 @@
 // one record block, the right seal and ids, the expected task count and grades, and a visible
 // grade that matches the block. Runs use your Claude plan, so this is manual, never CI.
 //
-//   node scripts/report-card-evals/run.mjs [--model sonnet] [--runs 1] [--only id,id] [--no-digest]
+//   node scripts/report-card-evals/run.mjs [--model sonnet] [--runs 1] [--only id,id] [--no-digest | --no-app]
 //
 // NOACTUALLY_BIN=path/to/noactually skips the cargo build.
-// --no-digest: the summary is empty (app not installed, paused or timed out); the AI must stop: no grade, no record block, no dollar figures.
+// --no-digest: the summary is empty (paused, turned off or timed out); the AI must stop: no grade, no record block, no dollar figures.
+// --no-app: the summary is `no-app` (app not installed); the AI must grade by eye: a grade, but no record block and no dollar figures.
 
 import { execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -29,6 +30,7 @@ const model = opt("model", "sonnet");
 const runs = Number(opt("runs", "1"));
 const only = opt("only", "")?.split(",").filter(Boolean) ?? [];
 const noDigest = flag("no-digest");
+const noApp = flag("no-app");
 const outDir = opt("out", join(tmpdir(), `report-card-evals-${Date.now()}`));
 mkdirSync(outDir, { recursive: true });
 
@@ -107,8 +109,8 @@ function render(c) {
 }
 
 function prompt(c) {
-  // With --no-digest the app isn't installed, so nothing is built or run.
-  const { seal, prompts, digest } = noDigest ? { seal: "", prompts: [], digest: "" } : render(c);
+  // With --no-digest or --no-app there is no app, so nothing is built or run.
+  const { seal, prompts, digest } = noDigest ? { seal: "", prompts: [], digest: "" } : noApp ? { seal: "", prompts: [], digest: "no-app" } : render(c);
   const chat = chatText(c);
   let body = skill.replace(/^!`.*`$/m, digest);
   body = body.replace("$ARGUMENTS", "");
@@ -146,6 +148,14 @@ function check(c, { seal, prompts, card }) {
     if (/Grade:\s*\**[A-F]\b/.test(card)) bad.push("a grade without a summary");
     if (blocks.length) bad.push("record block without a summary");
     if (/\$\d/.test(card)) bad.push("dollar figures without a summary");
+    return { bad, grades: [] };
+  }
+  if (noApp) {
+    // `no-app` means grade by eye: a card, but nothing the app could track.
+    if (!card.trim()) bad.push("no reply without the app");
+    if (c.expect.tasks > 0 && !/Grade:\s*\**[A-F]\b/.test(card)) bad.push("no grade without the app");
+    if (blocks.length) bad.push("record block without the app");
+    if (/\$\d/.test(card)) bad.push("dollar figures without the app");
     return { bad, grades: [] };
   }
   if (c.expect.tasks === 0) {
@@ -216,5 +226,5 @@ for (const c of picked) {
     console.log(rows.at(-1).join("  "));
   }
 }
-console.log(`\n${picked.length * runs - failed}/${picked.length * runs} passed (${model}${noDigest ? ", no summary" : ""}). Cards: ${outDir}`);
+console.log(`\n${picked.length * runs - failed}/${picked.length * runs} passed (${model}${noDigest ? ", no summary" : noApp ? ", no app" : ""}). Cards: ${outDir}`);
 process.exitCode = failed ? 1 : 0;

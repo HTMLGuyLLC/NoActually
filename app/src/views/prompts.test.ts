@@ -37,7 +37,7 @@ describe("promptsView", () => {
     const m = view({ tier: null, next_tier: null, to_rank: 3, window_tasks: 7 });
     expect(m).toContain('class="no maybe"');
     expect(m).toContain(">Hmm.</div>");
-    expect(m).toContain("<b>3 more tasks</b> with a follow-up to get ranked");
+    expect(m).toContain("<b>3 more tasks</b> with more than one message to get ranked");
     expect(m).not.toContain("share-prompts");
   });
 
@@ -100,6 +100,14 @@ describe("prompts on the scorecard and the glance", () => {
     expect(glanceView(stats({ prompts: prompts({ tier: null, to_rank: 3 }) }), meta).value).toContain("3 more tasks to get ranked");
   });
 
+  it("says no follow-ups only when there were no redirects, and which kind of empty it is", () => {
+    const none = { ai_wrong: 0, added: 0, clarified: 0, redo: 0 };
+    const m = (over: Parameters<typeof prompts>[0]) => promptsView(prompts(over), meta, true, "AI", "28d", []).value;
+    expect(m({ steering: none, continued: 5 })).toContain("No follow-ups yet. Every task with more than one message was clear the first time.");
+    expect(m({ steering: none, continued: 0 })).toContain("No follow-ups yet. No task has more than one message.");
+    expect(m({ steering: { ...none, added: 2 }, continued: 5 })).not.toContain("No follow-ups yet.");
+  });
+
   it("charts prompts per week as clear vs needed more, adding up to each week's tasks", () => {
     const weekly = stats().weekly;
     const m = promptsView(prompts(), meta, true, "AI", "28d", weekly).value;
@@ -108,9 +116,9 @@ describe("prompts on the scorecard and the glance", () => {
     expect(m).toContain("Needed more from you");
     // One tip per week's bar: its tasks, what landed, and what the rest needed.
     expect(m).toContain(
-      'class="bar-group" data-tip="Week of Oct 19\n20 prompts · 17 clear the first time (85%)\n\nNeeded more from you:\nYou added more 2\nYou clarified 1\n\nIt got it wrong 4 (not on you)"',
+      'class="bar-group" data-tip="Week of Oct 19\n20 tasks · 17 clear the first time (85%)\n\nNeeded more from you:\nYou added more 2\nYou clarified 1\n\nIt got it wrong 4 (not on you)"',
     );
-    expect(m).toContain("17 of 20 prompts were clear the first time.");
-    expect(promptsView(prompts(), meta, true, "AI", "28d", []).value).toContain("No tasks with a follow-up yet.");
+    expect(m).toContain("17 of 20 tasks were clear the first time.");
+    expect(promptsView(prompts(), meta, true, "AI", "28d", []).value).toContain("No tasks with more than one message yet.");
   });
 });

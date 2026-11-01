@@ -36,11 +36,20 @@ const days = (value: string, fallback: number) => {
   return Math.min(RETENTION_MAX_DAYS, Math.max(RETENTION_MIN_DAYS, Math.round(n)));
 };
 
-/** Whether saving `next` keeps less than `saved` does, so older text will be deleted for good. */
+/** Whether a level reads the "full text for N days" and the "snippets for N days" fields. The other fields have no effect, so they are hidden. */
+export const usesFullDays = (l: Level): boolean => l === "full";
+export const usesSnippetDays = (l: Level): boolean => l !== "category";
+
+/** Whether saving `next` keeps less than `saved` does, so older text will be deleted for good. A days field only counts when both levels use it. */
 export function tightens(saved: Retention, next: Retention): boolean {
   // LEVELS runs from the most kept to the least.
   const keeps = (l: Level) => LEVELS.length - LEVELS.indexOf(l);
-  return keeps(next.level) < keeps(saved.level) || next.full_days < saved.full_days || next.snippet_days < saved.snippet_days;
+  const both = (uses: (l: Level) => boolean) => uses(saved.level) && uses(next.level);
+  return (
+    keeps(next.level) < keeps(saved.level) ||
+    (both(usesFullDays) && next.full_days < saved.full_days) ||
+    (both(usesSnippetDays) && next.snippet_days < saved.snippet_days)
+  );
 }
 
 /**
@@ -267,7 +276,7 @@ function reportCardsView(rc: ReportCardsState, sources: SourceInfo[], tipRules: 
       <p class="muted small" id="report-cards-cost">Grades are your AI's judgment, so they can vary between runs, unlike your score. Claude Haiku misses more tips than larger models. Each report card uses your own tokens: roughly 0.5k to 2k output tokens per task graded.</p>
       <div class="settings-row">
         <label class="toggle"><input id="report-cards-tips" data-action="report-cards-tips" type="checkbox" aria-describedby="report-cards-tips-help"${attr(tipsOn, "checked")}${attr(tipsLocked, 'aria-disabled="true"')}/><span>Give me tips as I work (Claude Code only)</span></label>
-        <span class="muted small" id="report-cards-tips-help">When a follow-up could have been in your first message, your AI adds a one-line tip, and No, Actually... keeps count. Adds about 480 tokens to each chat. Applies to new or reopened chats. To stop sooner, tell your AI “no more tips.”${tipsHint}</span>${err("tips")}
+        <span class="muted small" id="report-cards-tips-help">When a follow-up could have been in your first message, your AI adds a one-line tip, and No, Actually... keeps count. Adds about 480 tokens when a chat starts and again after a long chat is compacted, about 2.5% more tokens overall in testing. Applies to new or reopened chats. To stop sooner, tell your AI “no more tips.”${tipsHint}</span>${err("tips")}
         <details class="tip-rules"><summary>See what your AI is told</summary><pre>${tipRules}</pre></details>
         ${tipsState}
       </div>
@@ -297,8 +306,8 @@ function privacyView({ retention: r }: SettingsContext): Html {
         ${opt("category", "Category only", "No text at all. Just “Made it up”, “Still broken”, and so on.")}
       </fieldset>
       <div class="ttl">
-        <label>Keep full text for <input id="full-days" type="number" min="${RETENTION_MIN_DAYS}" max="${RETENTION_MAX_DAYS}" value="${r.full_days}"/> days, then snippet</label>
-        <label>Keep snippets for <input id="snippet-days" type="number" min="${RETENTION_MIN_DAYS}" max="${RETENTION_MAX_DAYS}" value="${r.snippet_days}"/> days, then category only</label>
+        <label id="full-days-row"${attr(!usesFullDays(r.level), "hidden")}>Keep full text for <input id="full-days" type="number" min="${RETENTION_MIN_DAYS}" max="${RETENTION_MAX_DAYS}" value="${r.full_days}"/> days, then snippet</label>
+        <label id="snippet-days-row"${attr(!usesSnippetDays(r.level), "hidden")}>Keep snippets for <input id="snippet-days" type="number" min="${RETENTION_MIN_DAYS}" max="${RETENTION_MAX_DAYS}" value="${r.snippet_days}"/> days, then category only</label>
         <button data-action="save-privacy">Save</button><span id="privacy-status" class="muted small" role="status" aria-live="polite"></span>
       </div>
       <p class="muted small">Pinned corrections keep their text until you unpin them.</p>

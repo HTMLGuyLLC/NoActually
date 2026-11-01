@@ -14,8 +14,6 @@ pub struct Model {
     pub family: String,
     /// Human version like "5.5". Empty when the id carries none.
     pub version: String,
-    /// The id as the source recorded it.
-    pub raw: String,
 }
 
 impl Model {
@@ -53,9 +51,8 @@ pub fn normalize_model(raw: &str) -> Option<Model> {
     let base = base.trim_start_matches("meta-");
     let id = DATE_SUFFIX.replace(base, "");
     let id = id.as_ref();
-    let m = |provider: &str, family: String, version: String| {
-        Some(Model { provider: provider.into(), family, version, raw: raw.into() })
-    };
+    let m =
+        |provider: &str, family: String, version: String| Some(Model { provider: provider.into(), family, version });
 
     if let Some(c) = CLAUDE.captures(id) {
         let tier = title(&c[3]);

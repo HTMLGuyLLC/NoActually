@@ -6,7 +6,7 @@ No, Actually... runs on your computer. The app doesn't send your chats anywhere.
 
 ## What it reads
 
-Only sources you allow. On first launch the app lists each AI tool it detects, with the exact path it would read. Every source is off until you tap **Allow**. You can also set a backfill window (everything, since a date, or none), pause a source, or revoke it. While a source is paused, revoked, forgotten or was never allowed, the report card hooks stay out of its chats too. If you install the plugin yourself and never set up the app, there are no sources to allow, so the plugin works in the chats you use it in.
+Only sources you allow. On first launch the app lists each AI tool it detects, with the exact path it would read. Every source is off until you tap **Allow**. You can also set a backfill window (everything, since a date, or none), pause a source, or revoke it. While a source is paused, revoked, forgotten or was never allowed, the report card hooks stay out of its chats too. If you install the plugin yourself and never set up the app, there are no sources to allow, so the plugin works in the chats you use it in, grading by eye and saving nothing.
 
 macOS may show its own "access data from other apps" prompt for some sources. Saying no there only means that source can't be read.
 
@@ -16,11 +16,11 @@ macOS may show its own "access data from other apps" prompt for some sources. Sa
 |---|---|---|---|
 | Ordinary messages (not corrections) | Counts only, per day, source and model | Never | Forever (just numbers) |
 | Sessions | Hashed id, source, day range, message and correction counts | Never | Forever |
-| Tasks (prompts) | Day, source, hashed chat id, model, which of 5 signals the prompt carried, message and follow-up counts | Never | Forever |
+| Tasks | Day, source, hashed chat id, model, which of 5 signals the prompt carried, message and follow-up counts | Never | Forever |
 | Your goal | What it asks for (a signal, a kind of follow-up or a tier), its target percent and start day | Never | Until you drop it |
 | Goal weeks and trophies | Each finished week's count, percent and result; finished goals and the day | Never | Forever (kept even after Forget, since they're totals across sources) |
 | Lessons done | The ids of lessons you marked done | Never | Forever |
-| Correction / humbled events | Time, source, hashed chat id, model, label, category, matched rule ids | Per retention level | Per TTL |
+| Correction / humbled events | Time, source, hashed chat id, model, label, category | Per retention level | Until it steps down (see Retention levels) |
 | Report cards | Day, start and end time, source, hashed chat id, model, letter grade, follow-up counts, which habits were missing, tokens, minutes | Never | Until you Forget the source or delete report card history |
 | Tips | Day, time, source, hashed chat id, model, which habit, how much was redone | Never | Until you Forget the source or delete report card and tip history |
 | Chats that got the tip instructions | Hashed chat id, source, day | Never | Until you Forget the source or delete report card and tip history |
@@ -33,13 +33,13 @@ macOS may show its own "access data from other apps" prompt for some sources. Sa
 
 You choose how much correction text to keep:
 
-| Level | What's kept | Default TTL, then... |
+| Level | What's kept | Kept for (default), then... |
 |---|---|---|
 | Full | Your whole message and the start of the AI's reply (redacted) | 30 days, then Snippet |
 | Snippet (default) | The matched sentence from each side, 140 characters or less, redacted | 365 days, then Category |
 | Category only | No text at all | Forever |
 
-Levels only step down (Full, then Snippet, then Category). The step-down runs after every check (at launch, when files change, and every 5 minutes). You pick the starting level and both TTLs. Pinning a correction to the Hall of Fame keeps its text until you unpin it.
+Levels only step down (Full, then Snippet, then Category). The step-down runs after every check (at launch, when files change, and every 5 minutes). You pick the starting level and both time limits. Pinning a correction to the Hall of fame keeps its text until you unpin it.
 
 ## Redaction
 
@@ -93,7 +93,7 @@ To offer new versions, the app downloads one small public file, `latest.json`, f
 
 - **Forget a source** in the app: deletes that source's events, aggregates and checkpoints, pinned corrections included. (Revoke only stops reading, and keeps your scores.) Finished goal weeks and trophies stay, as totals across sources.
 - **Delete report cards and tips:** click **Delete report card and tip history** in Settings to remove all of them. **Forget** on a source removes that source's report cards and tips too. Tips stop while Claude Code is paused, revoked or forgotten, and start again when you allow it. Turning report cards off removes the plugin but keeps the history until you delete it.
-- **Delete everything:** first turn report cards off in **Settings → Report cards** (that removes what they added to Claude Code and Codex) and turn off **Launch at login** in **Settings → General**, then quit the app and delete the whole app data folder for `app.noactually` (macOS: `~/Library/Application Support/app.noactually/`, Windows: `%APPDATA%\app.noactually\`, Linux: `~/.local/share/app.noactually/`). It holds the database (`noactually.db`, `-wal` and `-shm`) and a few small report-card files: `report-cards.key`, `cli-path`, `report-cards-claude` and the on/off switch files (`report-cards-tips`, `report-cards-tips-off`, `source-allowed-…`, `source-stopped-…`, `report-cards-problem`, `report-cards-quiet`, and `report-cards-repin` while a plugin update is unfinished). Deleting only the database leaves those behind. Then delete the log folder (see Logs). Uninstalling the app does not remove any of this.
+- **Delete everything:** click **Delete everything** in Settings. It turns off report cards and Launch at login, deletes the data and the logs, and quits. By hand (for example if you already removed the app): first turn report cards off in **Settings → Report cards** (that removes what they added to Claude Code and Codex) and turn off **Launch at login** in **Settings → General**, then quit the app and delete the whole app data folder for `app.noactually` (macOS: `~/Library/Application Support/app.noactually/`, Windows: `%APPDATA%\app.noactually\`, Linux: `~/.local/share/app.noactually/`). It holds the database (`noactually.db`, `-wal` and `-shm`) and a few small report-card files: `report-cards.key`, `cli-path`, `report-cards-claude` and the on/off switch files (`report-cards-tips`, `report-cards-tips-off`, `source-allowed-…`, `source-stopped-…`, `report-cards-problem`, `report-cards-quiet`, and `report-cards-repin` while a plugin update is unfinished). Deleting only the database leaves those behind. Then delete the log folder (see Logs). Uninstalling the app does not remove any of this.
 - Deleted text is overwritten in the database, not just unlinked, the write-ahead log is truncated, and the backup is removed after Forget and after text ages out.
 
 ## Logs

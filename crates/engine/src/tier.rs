@@ -237,6 +237,14 @@ impl Answer {
             Answer::Hmm
         }
     }
+
+    /// How the answer reads ("No.").
+    pub const fn label(self) -> &'static str {
+        match self {
+            Answer::No => "No.",
+            Answer::Hmm => "Hmm.",
+        }
+    }
 }
 
 /// "Do you correct it?" How judgment reads, in a word (rarely < sometimes < often <
@@ -448,6 +456,7 @@ mod tests {
         assert_eq!(Answer::for_tier(Some(Tier::RubberStamp)), Answer::Hmm);
         assert_eq!(Answer::for_tier(Some(Tier::Coworker)), Answer::No);
         assert_eq!(serde_json::to_string(&Answer::Hmm).unwrap(), "\"hmm\"");
+        assert_eq!((Answer::No.label(), Answer::Hmm.label()), ("No.", "Hmm."));
     }
 
     #[test]

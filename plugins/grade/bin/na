@@ -1,7 +1,9 @@
 #!/bin/sh
 # Runs the No, Actually... app as the report card helper. The app writes its own path to a
-# `cli-path` file on every launch. Without the app this does nothing, quietly: report cards still
-# work (graded by eye), and a missing helper never blocks anyone's work.
+# `cli-path` file on every launch. Without the app it prints nothing and exits 0, so a missing
+# helper never blocks anyone's work, with one exception: `digest` prints the single line `no-app`,
+# so the report card skill can tell "not installed" (grade by eye) from an empty summary (stop).
+# Hooks never get output.
 
 for dir in \
   "$HOME/Library/Application Support/app.noactually" \
@@ -25,4 +27,6 @@ fi
 if command -v noactually >/dev/null 2>&1; then
   exec noactually "$@"
 fi
+# No helper. Only `digest` says so; everything else, hooks included, stays silent.
+[ "${1:-}" = "digest" ] && echo "no-app"
 exit 0

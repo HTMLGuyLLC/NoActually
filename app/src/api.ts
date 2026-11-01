@@ -1,10 +1,10 @@
 // Typed wrappers over the Rust commands in src-tauri/src/commands.rs.
-// Outside Tauri (a plain browser) the UI runs as a read-only demo on public/demo.json.
+// Outside Tauri, `pnpm dev` runs the UI as a read-only demo on public/demo.json. A release build has no demo code or data.
 import { type InvokeArgs, isTauri, invoke as tauriInvoke } from "@tauri-apps/api/core";
-import { demoCall } from "./api.demo";
 import type { Tab } from "./state";
 
-export const demo = !isTauri();
+/** A dev run in a plain browser. Always false in a release build, which drops the demo code and its data. */
+export const demo = import.meta.env.DEV && !isTauri();
 
 export type Filter = { source?: string | null; provider?: string | null; family?: string | null; version?: string | null };
 /** A filter plus a window: only days from `since` (local YYYY-MM-DD) on. Counts and the score both follow it. */
@@ -41,7 +41,7 @@ export type Meta = {
   prompt_tiers: PromptTier[];
   /** "Do you correct it?" tiers, by judgment, ascending. */
   correction_tiers: PromptTier[];
-  /** Tasks with a follow-up, in the window, before a prompt tier is given. */
+  /** Tasks with more than one message, in the window, before a prompt tier is given. */
   min_prompts: number;
   /** Days of tasks a prompt tier looks at. */
   prompt_window_days: number;
@@ -63,8 +63,6 @@ export type Meta = {
   min_card_week: number;
   /** What your AI is told when tips are on, word for word. */
   tip_rules: string;
-  /** Graded tasks a week needs to be a personal best. */
-  min_card_best: number;
   /** Graded tasks on each side of the "since you started" comparison. */
   min_card_half: number;
 };
@@ -90,7 +88,6 @@ export type HallEntry = {
   model: string;
   label: string;
   category: string;
-  category_title: string;
   human: string | null;
   ai: string | null;
   pinned: boolean;
@@ -112,7 +109,7 @@ export type WeekRow = {
 export type Tip = { signal: string; pct_of_prompts: number; landed_with_without: [number, number] | null };
 /**
  * How you prompt it. A prompt is "clear the first time" (internally `landed`) when you never had to add to, clarify or redo it. Only tasks
- * with a follow-up (`continued`) count toward landing: a one-shot task can't need steering.
+ * with more than one message (`continued`) count toward landing: a task with one message can't need steering.
  */
 export type Prompts = {
   tasks: number;
@@ -125,7 +122,7 @@ export type Prompts = {
   tier: string | null;
   /** The tier above it; its floor is the target to show. */
   next_tier: string | null;
-  /** More tasks with a follow-up before a tier is given (0 once ranked). */
+  /** More tasks with more than one message before a tier is given (0 once ranked). */
   to_rank: number;
   /** Keyed by grade id. */
   grades: Record<string, number>;
@@ -138,7 +135,7 @@ export type Prompts = {
 /**
  * "Could AI replace you?": an overall score over the last `Meta.prompt_window_days` days, mixing how
  * often your tasks land (`direction`) with who corrects whom (`judgment`). Score fields are null
- * until there are enough tasks with a follow-up.
+ * until there are enough tasks with more than one message.
  */
 export type Overall = {
   score: number | null;
@@ -360,8 +357,12 @@ export type Command = keyof Commands;
 export type ArgsOf<C extends Command> = Commands[C]["args"];
 export type ResultOf<C extends Command> = Commands[C]["result"];
 
-function call<C extends Command>(cmd: C, args: ArgsOf<C>): Promise<ResultOf<C>> {
-  if (demo) return demoCall(cmd, args);
+async function call<C extends Command>(cmd: C, args: ArgsOf<C>): Promise<ResultOf<C>> {
+  // Loaded only in a dev run: the check is on `import.meta.env.DEV` itself so the build drops the import.
+  if (import.meta.env.DEV && demo) {
+    const { demoCall } = await import("./api.demo");
+    return demoCall(cmd, args);
+  }
   const sent: InvokeArgs | undefined = args;
   return tauriInvoke<ResultOf<C>>(cmd, sent);
 }

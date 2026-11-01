@@ -294,6 +294,14 @@ impl Retention {
         }
         Ok(())
     }
+
+    /// Whether saving this keeps less than `saved` does, so older text is deleted for good.
+    #[must_use]
+    pub fn keeps_less_than(&self, saved: &Retention) -> bool {
+        self.level.at_most(saved.level) != saved.level
+            || self.full_days < saved.full_days
+            || self.snippet_days < saved.snippet_days
+    }
 }
 
 /// What the user decided about one source.
@@ -381,8 +389,10 @@ const KEPT_TABLES: [&str; 7] = ["events", "daily", "sessions", "tasks", "seen", 
 const REBUILDING_KEY: &str = "rules_rebuild.pending";
 /// The [`engine::REDACTION_VERSION`] stored text was last cleaned with.
 const REDACTION_KEY: &str = "redaction_version";
+/// The setting that says which [`engine::RULES_VERSION`] the scores were counted under.
+pub const RULES_KEY: &str = "rules_version";
 /// Kept beside the database. Deleting text removes it, and the next pass writes a new one.
-const BACKUP_FILE: &str = "noactually-backup.db";
+pub const BACKUP_FILE: &str = "noactually-backup.db";
 const BACKUP_EVERY: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
 
 /// Shown when a message's chat never recorded a model (a session with no real reply).
@@ -702,10 +712,15 @@ impl Store {
 
     /// Whether the next pass reads history again, so the numbers until then are partial.
     pub fn rebuild_due(&self) -> Result<bool> {
-        let stored = self.get_setting("rules_version")?;
-        let current = stored.as_deref().and_then(|v| v.parse::<u32>().ok()).is_some_and(|v| v >= engine::RULES_VERSION);
+        let current = self.scores_current()?;
         let had_scores: bool = self.conn.query_row("SELECT EXISTS(SELECT 1 FROM daily)", [], |r| r.get(0))?;
         Ok(self.rebuild_pending()? || (!current && had_scores))
+    }
+
+    /// Whether the scores were counted under these rules, or newer ones.
+    fn scores_current(&self) -> Result<bool> {
+        let stored = self.get_setting(RULES_KEY)?;
+        Ok(stored.as_deref().and_then(|v| v.parse::<u32>().ok()).is_some_and(|v| v >= engine::RULES_VERSION))
     }
 
     /// Ends a rebuild once history has been read again. A chat that wasn't read again comes back as
@@ -749,8 +764,8 @@ impl Store {
         tx.execute(&format!("INSERT INTO daily SELECT k.* FROM kept_daily k WHERE NOT {READ_DAY}"), [])?;
         tx.execute(
             &format!(
-                "INSERT INTO events SELECT NULL, ts, day, source, session, provider, family, version, model_raw,
-                   label, category, rules, level, human_full, ai_full, human_snip, ai_snip, pinned, seen_key
+                "INSERT INTO events SELECT NULL, ts, day, source, session, provider, family, version,
+                   label, category, level, human_full, ai_full, human_snip, ai_snip, pinned, seen_key
                  FROM kept_events k WHERE {UNREAD} AND {NOT_BACK}"
             ),
             [],
@@ -858,9 +873,7 @@ impl Store {
     /// Rebuilds scores once if they were counted under older rules. Returns true if it did. Scores
     /// from newer rules stay: an older build can't read them better.
     pub fn ensure_rules_current(&mut self) -> Result<bool> {
-        let current = engine::RULES_VERSION.to_string();
-        let stored = self.get_setting("rules_version")?;
-        if stored.as_deref().and_then(|v| v.parse::<u32>().ok()).is_some_and(|v| v >= engine::RULES_VERSION) {
+        if self.scores_current()? {
             return Ok(false);
         }
         // Only counted scores need rebuilding. A store with checkpoints but no counts yet (say,
@@ -869,11 +882,12 @@ impl Store {
         if had_scores {
             self.reset_scores()?;
         }
-        self.set_setting("rules_version", &current)?;
+        self.set_setting(RULES_KEY, &engine::RULES_VERSION.to_string())?;
         Ok(had_scores)
     }
 
-    /// Stop reading and delete everything this source ever produced.
+    /// Stop reading and delete what this source produced. Finished goal weeks and trophies stay:
+    /// they hold totals, with no source on them.
     pub fn forget(&mut self, id: &str) -> Result<()> {
         let tx = self.conn.transaction()?;
         for table in SCORE_TABLES {
@@ -1016,10 +1030,10 @@ impl Store {
             let text = EventText::new(&st.turn, &v, level);
             // A pinned correction kept through a rules rebuild is already here; keep it as pinned.
             tx.execute(
-                "INSERT INTO events (ts, day, source, session, provider, family, version, model_raw, label, category, rules,
+                "INSERT INTO events (ts, day, source, session, provider, family, version, label, category,
                     level, human_full, ai_full, human_snip, ai_snip, seen_key)
-                 SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17
-                 WHERE NOT EXISTS (SELECT 1 FROM events WHERE seen_key = ?17)",
+                 SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15
+                 WHERE NOT EXISTS (SELECT 1 FROM events WHERE seen_key = ?15)",
                 params![
                     st.ts.to_rfc3339(),
                     day,
@@ -1028,10 +1042,8 @@ impl Store {
                     provider,
                     family,
                     version,
-                    model.as_ref().map(|m| m.raw.as_str()),
                     label.as_str(),
                     category,
-                    v.rules.join(","),
                     level.as_str(),
                     text.human_full,
                     text.ai_full,
@@ -1234,6 +1246,6 @@ impl EventText {
 #[cfg(test)]
 mod card_tests;
 #[cfg(test)]
-mod low_tests;
+mod modes_tests;
 #[cfg(test)]
 mod tests;

@@ -382,7 +382,7 @@ describe("tips", () => {
     expect(box().checked).toBe(true);
     expect(section()).toContain("Give me tips as I work (Claude Code only)");
     expect(section()).toContain(
-      "When a follow-up could have been in your first message, your AI adds a one-line tip, and No, Actually... keeps count. Adds about 480 tokens to each chat.",
+      "When a follow-up could have been in your first message, your AI adds a one-line tip, and No, Actually... keeps count. Adds about 480 tokens when a chat starts and again after a long chat is compacted, about 2.5% more tokens overall in testing.",
     );
   });
 

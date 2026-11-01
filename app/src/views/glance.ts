@@ -6,6 +6,7 @@ import { type Html, html } from "../html";
 import { correctionTier, landedPct, promptTier, tierName, tierOf } from "../meta";
 import { TAB_ICONS, wordmarkView } from "./chrome";
 import { goalTitle } from "./improve";
+import { needMoreNote } from "./prompts";
 
 const topView = () =>
   html`<div class="g-top">${wordmarkView("brand small")}<button class="g-gear" data-action="open-main" data-id="settings" aria-label="Settings">${TAB_ICONS.settings}</button></div>`;
@@ -17,13 +18,15 @@ const answerView = (ask: string, word: string | null, why: string) =>
   html`<div class="g-ans"><span class="g-ask">${ask}</span><div class="g-line"><span class="g-word${word ? "" : " maybe"}">${word ?? "Hmm."}</span><span class="muted small">${why}</span></div></div>`;
 
 /** The three answers the app gives, as the scorecard words them, over the last 28 days. */
-function answersView(s: Stats, meta: Meta): Html {
+function answersView(s: Stats, meta: Meta, importOnly: boolean): Html {
   const o = s.overall;
-  const replace = o.score == null ? `${plural(o.to_rank, "more task")} to get a score` : `Score ${o.score} · ${tierName(meta, o.tier)}`;
+  // Someone who only imported an export gets no new chats: the scorecard says to add a newer export, and so does this.
+  const exported = importOnly ? { end: null } : null;
+  const replace = o.score == null ? needMoreNote(o.to_rank, "a score", exported) : `Score ${o.score} · ${tierName(meta, o.tier)}`;
   const prompt = promptTier(meta, s.prompts.tier);
-  const guess = prompt ? `${landedPct(s.prompts)}% clear · ${prompt.name}` : `${plural(s.prompts.to_rank, "more task")} to get ranked`;
+  const guess = prompt ? `${landedPct(s.prompts)}% clear · ${prompt.name}` : needMoreNote(s.prompts.to_rank, "ranked", exported);
   const corrected = correctionTier(meta, o.correction_tier);
-  const check = corrected ? `${plural(o.corrections, "correction")} · ${corrected.name}` : `${plural(o.to_rank, "more task")} to get ranked`;
+  const check = corrected ? `${plural(o.corrections, "correction")} · ${corrected.name}` : needMoreNote(o.to_rank, "ranked", exported);
   return html`<div class="g-answers">
     ${answerView("Could AI replace you?", o.score == null ? null : o.verdict === "no" ? "No." : "Hmm.", replace)}
     ${answerView("Do you make it guess?", prompt?.verdict ?? null, guess)}
@@ -48,20 +51,20 @@ function goalView(st: GoalStatus | null, meta: Meta): Html | "" {
   return html`<div class="g-goal"><span class="eyebrow">Your goal</span><span class="g-goal-title">${goalTitle(g, meta)}</span><span class="muted small">${line}</span></div>`;
 }
 
-export function glanceView(s: Stats, meta: Meta, goal: GoalStatus | null = null): Html {
+export function glanceView(s: Stats, meta: Meta, goal: GoalStatus | null = null, importOnly = false): Html {
   return html`<div class="glance">
     <h1 class="sr-only">Quick glance</h1>
     ${topView()}
-    ${answersView(s, meta)}
+    ${answersView(s, meta, importOnly)}
     ${goalView(goal, meta)}
     ${openView()}
   </div>`;
 }
 
-/** Before there is a score. `watching` names the sources being read right now (empty: none allowed yet); `minPrompts` is how many tasks with a follow-up a score needs. */
+/** Before there is a score. `watching` names the sources being read right now (empty: none allowed yet); `minPrompts` is how many tasks with more than one message a score needs. */
 export function emptyGlanceView(watching: string, minPrompts = 10): Html {
   return watching
-    ? html`<div class="glance empty-glance"><h1 class="sr-only">Quick glance</h1>${topView()}<span class="eyebrow"><i class="dot live"></i> Watching ${watching}</span><div class="g-q">No corrections yet.</div><p class="muted small">Your score shows up after ${minPrompts} tasks with a follow-up.</p>${openView()}</div>`
+    ? html`<div class="glance empty-glance"><h1 class="sr-only">Quick glance</h1>${topView()}<span class="eyebrow"><i class="dot live"></i> Watching ${watching}</span><div class="g-q">No corrections yet.</div><p class="muted small">Your score shows up after ${minPrompts} tasks with more than one message.</p>${openView()}</div>`
     : html`<div class="glance empty-glance"><h1 class="sr-only">Quick glance</h1>${topView()}<div class="g-q">Could AI replace you?</div><p class="muted small">Pick which AI tools to count, then find out.</p>${openView("Set up")}</div>`;
 }
 

@@ -36,9 +36,6 @@ pub const POPUPS_KEY: &str = "popups.enabled";
 /// tell the person even if the popup was off or missed.
 pub const RESCORED_NOTICE_KEY: &str = "rescored.notice";
 
-/// The daily backup's file name, beside the database (`BACKUP_FILE` in the store crate).
-const BACKUP_FILE_NAME: &str = "noactually-backup.db";
-
 /// Settings key: "off" makes it an ordinary app (no menu bar or tray icon, quits when its
 /// window closes). Anything else, or never set, keeps it running in the menu bar.
 pub const MENU_BAR_KEY: &str = "menu_bar";
@@ -438,8 +435,9 @@ fn startup_failure_text(e: &store::Error, log_dir: Option<&Path>, db: Option<&Pa
         let mut t = format!("No, Actually... couldn't open its database.\n\n{e}");
         if let Some(folder) = db.and_then(Path::parent) {
             t = format!(
-                "{t}\n\nA daily backup, if one was made, is {BACKUP_FILE_NAME} in {}. \
+                "{t}\n\nA daily backup, if one was made, is {} in {}. \
                  Copy it somewhere safe before changing anything.",
+                store::BACKUP_FILE,
                 folder.display()
             );
         }
@@ -510,7 +508,7 @@ fn setup(tauri_app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     log::info!(
         "database format {}, scored under rules {}",
         writer.schema_version()?,
-        writer.get_setting("rules_version")?.as_deref().unwrap_or("none")
+        writer.get_setting(store::RULES_KEY)?.as_deref().unwrap_or("none")
     );
     match report_cards::cli_path::publish(&db) {
         Ok(report_cards::cli_path::Published::Translocated) => {
@@ -813,7 +811,7 @@ mod launch_tests {
         let broken = store::Error::Invalid("disk is full");
         let text = startup_failure_text(&broken, Some(logs), Some(db));
         assert!(text.contains("disk is full"), "{text}");
-        assert!(text.contains(BACKUP_FILE_NAME) && text.contains("/data"), "{text}");
+        assert!(text.contains(store::BACKUP_FILE) && text.contains("/data"), "{text}");
         assert!(text.contains("/logs/app.noactually"), "{text}");
     }
 
@@ -822,16 +820,10 @@ mod launch_tests {
         let newer = store::Error::NewerDatabase { found: 13, known: 12 };
         let text = startup_failure_text(&newer, Some(Path::new("/logs")), Some(Path::new("/data/noactually.db")));
         assert!(text.contains("releases/latest"), "{text}");
-        assert!(!text.contains(BACKUP_FILE_NAME), "a newer file's backup isn't an answer: {text}");
+        assert!(!text.contains(store::BACKUP_FILE), "a newer file's backup isn't an answer: {text}");
         assert!(text.contains("/logs"), "{text}");
         // With no known paths it still says something useful.
         assert!(startup_failure_text(&store::Error::NoDataDir, None, None).contains("couldn't open"));
-    }
-
-    #[test]
-    fn the_backup_name_matches_the_stores() {
-        let store_src = include_str!("../../../crates/store/src/lib.rs");
-        assert!(store_src.contains(&format!("const BACKUP_FILE: &str = \"{BACKUP_FILE_NAME}\";")));
     }
 
     #[test]

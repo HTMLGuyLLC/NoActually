@@ -351,6 +351,32 @@ describe("delegated actions", () => {
     }
   });
 
+  it("stays armed past the timeout while focus is on the button, and Escape disarms it", async () => {
+    await toTab("settings");
+    vi.useFakeTimers();
+    try {
+      const b = btn('[data-action="forget"][data-id="codex"]');
+      const label = b.textContent;
+      b.focus();
+      b.click();
+      vi.advanceTimersByTime(60_000);
+      expect(b.dataset.confirm).toBe("yes");
+      b.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      expect(b.dataset.confirm).toBeUndefined();
+      expect(b.textContent).toBe(label);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("opens the changelog from the rescored notice", async () => {
+    await toTab("settings");
+    api.rescoredNotice.mockResolvedValue("2026-11-01T00:00:00Z");
+    await render();
+    await click('[data-action="open-changelog"]');
+    expect(api.openShare).toHaveBeenCalledWith("https://github.com/HTMLGuyLLC/NoActually/blob/main/CHANGELOG.md");
+  });
+
   it("disarms a confirm when focus leaves the button", async () => {
     await toTab("settings");
     const b = btn('[data-action="forget"][data-id="codex"]');
@@ -434,6 +460,39 @@ describe("delegated actions", () => {
     });
   });
 
+  describe("the first import", () => {
+    const imported = source({ id: "chatgpt-export", name: "ChatGPT (export)", kind: "import", roots: [] });
+    const importFirst = async (picked: string | null, messages = 0) => {
+      api.stats.mockResolvedValue(stats({ messages }));
+      api.sources.mockResolvedValue([imported]);
+      api.importExport.mockResolvedValueOnce(picked);
+      await render();
+      await toTab("settings");
+      state.setSettingsPane("sources");
+      await render();
+      await click('[data-action="import"]');
+    };
+
+    it("goes to the scorecard and says it is reading, like the first Allow", async () => {
+      await importFirst("/tmp/conversations.json");
+      expect(state.state.tab).toBe("score");
+      expect(state.state.view).toBe("overview");
+      expect(state.state.reading).toBe("reading");
+    });
+
+    it("stays in Settings when the picker was cancelled", async () => {
+      await importFirst(null);
+      expect(state.state.tab).toBe("settings");
+      expect(state.state.reading).toBe("off");
+    });
+
+    it("stays in Settings when there was history already", async () => {
+      await importFirst("/tmp/conversations.json", 400);
+      expect(state.state.tab).toBe("settings");
+      expect(state.state.reading).toBe("off");
+    });
+  });
+
   it("puts a failed Allow back and says why, instead of leaving it on Allowing…", async () => {
     await toTab("settings");
     api.allow.mockRejectedValueOnce("permission denied");
@@ -447,7 +506,7 @@ describe("delegated actions", () => {
   it("switches scorecard sections", async () => {
     expect(root.querySelector('[data-action="view"][aria-current="page"]')?.textContent).toBe("Overview");
     await click('[data-action="view"][data-id="prompts"]');
-    expect(root.querySelector('[data-action="view"][aria-current="page"]')?.textContent).toBe("Prompting");
+    expect(root.querySelector('[data-action="view"][aria-current="page"]')?.textContent).toBe("Prompts");
     expect(root.textContent).toContain("Why you followed up");
   });
 
@@ -557,14 +616,38 @@ describe("delegated actions", () => {
     it("asks once more, naming what goes, before keeping less", async () => {
       holdClock();
       await open();
-      field("#full-days", "5");
+      field("#snippet-days", "5");
       await click('[data-action="save-privacy"]');
       expect(api.setRetention).not.toHaveBeenCalled();
       expect(btn('[data-action="save-privacy"]').textContent).toBe("Click again to delete older text for good");
       later();
       await click('[data-action="save-privacy"]');
-      expect(api.setRetention).toHaveBeenCalledWith({ level: "snippet", full_days: 5, snippet_days: 365 });
+      expect(api.setRetention).toHaveBeenCalledWith({ level: "snippet", full_days: 30, snippet_days: 5 });
       expect(root.querySelector("#privacy-status")?.textContent).toBe("Saved. Older text was trimmed to match.");
+    });
+
+    it("shows only the day fields the chosen level uses, and saves without a confirm for a field it doesn't use", async () => {
+      await open();
+      const hidden = (id: string) => root.querySelector<HTMLElement>(id)?.hasAttribute("hidden");
+      // Snippet (the saved level) keeps no full text, so only the snippet days show.
+      expect(hidden("#full-days-row")).toBe(true);
+      expect(hidden("#snippet-days-row")).toBe(false);
+      const radio = (v: string) => root.querySelector<HTMLInputElement>(`input[name="level"][value="${v}"]`);
+      const pick = (v: string) => {
+        const r = radio(v);
+        if (r) r.checked = true;
+        r?.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+      pick("full");
+      expect(hidden("#full-days-row")).toBe(false);
+      expect(hidden("#snippet-days-row")).toBe(false);
+      pick("category");
+      expect(hidden("#full-days-row")).toBe(true);
+      expect(hidden("#snippet-days-row")).toBe(true);
+      pick("snippet");
+      field("#full-days", "5");
+      await click('[data-action="save-privacy"]');
+      expect(api.setRetention).toHaveBeenCalledWith({ level: "snippet", full_days: 5, snippet_days: 365 });
     });
 
     it("counts the corrections that lose their text when nothing is kept but the category", async () => {

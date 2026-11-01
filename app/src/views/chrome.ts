@@ -11,6 +11,9 @@ const MARK = raw(
 
 export const wordmarkView = (cls = "brand"): Html => html`<span class="${cls}">${MARK}<span>No, Actually...</span></span>`;
 
+/** The note about English, in onboarding and under the prompts' grades. */
+export const ENGLISH_NOTE = "Only English is graded fairly for now.";
+
 export const TAB_TITLES: Record<Tab, string> = { score: "Scorecard", improve: "Improve", learn: "Learn", settings: "Settings" };
 
 /** Small line icons beside each tab's name (decoration: the name is the label). */
@@ -44,7 +47,7 @@ export function coverage(s: Pick<Stats, "first_day" | "last_day" | "messages"> |
  */
 export function statusPillView(status: SyncStatus, demo: boolean, covers = ""): Html {
   if (status.last_error)
-    return html`<span class="sync-pill"><button class="sync-bad" data-action="sync-now" data-id="top" data-tip="${status.last_error}">Couldn't check. Retry<span class="sr-only">. ${status.last_error}</span></button></span>`;
+    return html`<span class="sync-pill"><button class="sync-bad" data-action="sync-now" data-id="top" data-tip="${status.last_error}">Couldn't check. Try again<span class="sr-only">. ${status.last_error}</span></button></span>`;
   // The counts are being rebuilt from the start, so there is nothing to check now and nothing to cover.
   if (status.rebuilding)
     return html`<span class="sync-pill"><i class="dot live"></i><span class="sync-text" role="status">Recounting your history…</span></span>`;

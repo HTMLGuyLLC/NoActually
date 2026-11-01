@@ -65,7 +65,6 @@ export const meta: Meta = {
   min_week: 5,
   goal_weeks: 4,
   min_card_week: 3,
-  min_card_best: 5,
   min_card_half: 20,
   tip_rules: "The rules your AI gets.",
 };
@@ -209,7 +208,6 @@ export const hallEntry = (over: Partial<HallEntry> = {}): HallEntry => ({
   model: "Claude Opus 5",
   label: "confirmed",
   category: "made_it_up",
-  category_title: "Made it up",
   human: "that's not a real page",
   ai: "You're right.",
   pinned: false,

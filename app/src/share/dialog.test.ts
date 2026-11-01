@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { must } from "../dom";
 import { HOSTILE } from "../test/fixtures";
 import { openShareDialog, type Post } from "./dialog";
@@ -7,6 +7,8 @@ import { openShareDialog, type Post } from "./dialog";
 const settle = () => new Promise((r) => setTimeout(r, 0));
 
 describe("share dialog", () => {
+  // The demo loads on first use; load it now so a click is answered within one tick.
+  beforeAll(() => import("../api.demo"));
   const writeText = vi.fn(async (_: string) => {});
   const onClose = vi.fn();
   let opener: HTMLButtonElement;

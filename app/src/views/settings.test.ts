@@ -358,11 +358,11 @@ describe("Settings → Report cards", () => {
     expect(words(dom(view({ status: status({ tips: false, claude_code: tool({ on: true }) }) }, "report-cards", [])))).not.toContain(paused);
   });
 
-  it("names the tips box for Claude Code only, and says it uses tokens without a number", () => {
+  it("names the tips box for Claude Code only, and says what it costs", () => {
     const text = words(dom(view({ status: status({ claude_code: tool({ on: true }) }) })));
     expect(text).toContain("Give me tips as I work (Claude Code only)");
     expect(text).toContain(
-      "When a follow-up could have been in your first message, your AI adds a one-line tip, and No, Actually... keeps count. Adds about 480 tokens to each chat.",
+      "When a follow-up could have been in your first message, your AI adds a one-line tip, and No, Actually... keeps count. Adds about 480 tokens when a chat starts and again after a long chat is compacted, about 2.5% more tokens overall in testing.",
     );
     expect(text).not.toMatch(/1,000|per report card/);
   });

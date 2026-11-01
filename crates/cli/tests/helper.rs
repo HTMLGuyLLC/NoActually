@@ -269,6 +269,10 @@ fn the_other_commands_still_work() {
     assert!(String::from_utf8_lossy(&bad.stderr).starts_with("Error: missing source"));
     let sources = home.run(&["sources"], "");
     assert!(stdout(&sources).starts_with("claude-code"), "{}", stdout(&sources));
+    let unknown = home.run(&["frobnicate"], "");
+    assert!(!unknown.status.success(), "an unknown command is a mistake");
+    assert_eq!(stdout(&unknown), "");
+    assert!(String::from_utf8_lossy(&unknown.stderr).starts_with("Error: unknown command 'frobnicate'"));
 }
 
 #[test]
@@ -290,7 +294,7 @@ fn help_and_version_run_nothing_and_forget_wants_a_yes() {
     assert!(stdout(&home.run(&["sources"], "")).contains("codex"), "still there");
     let done = home.run(&["forget", "codex", "--yes"], "");
     assert!(done.status.success(), "{}", String::from_utf8_lossy(&done.stderr));
-    assert!(stdout(&done).starts_with("Deleted everything"));
+    assert_eq!(stdout(&done), "Deleted what this source produced. Finished goal weeks and trophies stay, as totals.\n");
 }
 
 /// The ids a digest gives the prompts, in order.
