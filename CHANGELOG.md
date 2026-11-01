@@ -4,6 +4,8 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-11-01
+
 ### Changed
 
 - A rules update no longer loses history. Chats no longer on your computer, and sources you stopped, keep their counts, and a popup says when your scores were updated.
@@ -204,7 +206,8 @@ First release.
 - Per-source consent: nothing is read until you allow it, and Forget deletes a source's data
 - `noactually` command-line tool (`sources`, `allow`, `sync`, `stats`)
 
-[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.0...v0.5.1
