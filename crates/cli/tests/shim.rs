@@ -140,6 +140,20 @@ fn without_a_helper_only_digest_says_so() {
 }
 
 #[test]
+fn a_stopped_source_stays_stopped_without_a_helper() {
+    let home = Home::new("shim");
+    // The app was moved, so the helper is gone, but its data says what the person chose.
+    home.cli_path("/nowhere/noactually\n");
+    let file = |name: &str| home.data().join(name);
+    std::fs::write(file("noactually.db"), "").unwrap();
+    quiet_success(&home.run(&["digest"])); // never allowed
+    std::fs::write(file("source-allowed-claude-code"), "").unwrap();
+    assert_eq!(home.run(&["digest"]).stdout, b"no-app\n", "allowed, so grading by eye is fine");
+    std::fs::write(file("source-stopped-claude-code"), "").unwrap();
+    quiet_success(&home.run(&["digest"])); // paused
+}
+
+#[test]
 fn with_a_helper_digest_is_the_helpers_own() {
     let home = Home::new("shim");
     let exe = home.helper("bin");

@@ -269,7 +269,7 @@ fn retention_is_validated() {
 
 #[test]
 fn keeping_less_is_a_lower_level_or_fewer_days() {
-    let saved = Retention::default();
+    let saved = Retention { level: Level::Full, ..Retention::default() };
     let less = |r: Retention| r.keeps_less_than(&saved);
     assert!(!less(saved), "the same settings");
     assert!(!less(Retention { level: Level::Full, full_days: 60, snippet_days: 400 }));
@@ -277,6 +277,13 @@ fn keeping_less_is_a_lower_level_or_fewer_days() {
     assert!(less(Retention { full_days: 29, ..saved }));
     assert!(less(Retention { snippet_days: 364, ..saved }));
     assert!(less(Retention { level: Level::Full, full_days: 7, ..saved }), "more of one, less of another");
+    let snippet = Retention { level: Level::Snippet, full_days: 30, ..saved };
+    assert!(
+        !Retention { level: Level::Full, full_days: 7, ..snippet }.keeps_less_than(&snippet),
+        "full days weren't in use"
+    );
+    let none = Retention { level: Level::Category, snippet_days: 365, ..saved };
+    assert!(!Retention { level: Level::Category, snippet_days: 7, ..none }.keeps_less_than(&none), "no days in use");
 }
 
 #[test]

@@ -792,10 +792,10 @@ mod tests {
         // The test's stdin isn't a terminal, so without --yes anything that keeps less is refused.
         let refused = run(&mut s, Level::Category, None, false).unwrap_err();
         assert!(refused.to_string().contains("--yes"), "{refused}");
-        assert!(run(&mut s, Level::Snippet, Some(7), false).is_err(), "fewer days keep less too");
         assert_eq!(s.retention().unwrap(), Retention::default(), "nothing changed");
         run(&mut s, Level::Full, Some(60), false).unwrap();
         assert_eq!(s.retention().unwrap().level, Level::Full, "keeping more deletes nothing, so it just saves");
+        assert!(run(&mut s, Level::Full, Some(7), false).is_err(), "fewer days keep less too");
         run(&mut s, Level::Category, None, true).unwrap();
         assert_eq!(s.retention().unwrap().level, Level::Category, "--yes saves it");
     }

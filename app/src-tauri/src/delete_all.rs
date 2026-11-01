@@ -175,11 +175,14 @@ struct Real<'a> {
     handle: &'a AppHandle,
     app: &'a App,
     home: &'a Path,
+    /// Anything report cards left that the person should hear about.
+    note: Option<String>,
 }
 
 impl Steps for Real<'_> {
     fn report_cards_off(&mut self) -> Res<()> {
-        report_cards::turn_off_on_this_computer()
+        self.note = report_cards::turn_off_on_this_computer()?;
+        Ok(())
     }
 
     fn login_off(&mut self) -> Res<()> {
@@ -194,7 +197,7 @@ impl Steps for Real<'_> {
         if tracker::stop(&self.app.tracker, STOP_WAIT) {
             Ok(())
         } else {
-            Err("Report cards and Launch at login are off, but a check of your chats is still running. Try again in a minute.".into())
+            Err("Report cards and Launch at login are off, but a check of your chats is still running. Try again in a minute, or reopen the app to keep tracking.".into())
         }
     }
 
@@ -231,11 +234,13 @@ pub fn run(handle: &AppHandle, app: &App) -> Res<()> {
     // Held until the app is gone: no report cards change, and no launch check, from here on.
     let _one = report_cards::exclusive();
     log::info!("delete everything: started");
-    let mut steps = Real { handle, app, home: &folders.home };
+    let mut steps = Real { handle, app, home: &folders.home, note: None };
     let left = delete_all(&mut steps, &folders).inspect_err(|why| {
         log::warn!("delete everything stopped: {}", shorten_home_in(why, Some(&folders.home)));
     })?;
-    if left.is_empty() {
+    let left = (!left.is_empty()).then(|| left_text(&left, &folders.logs));
+    let told: Vec<String> = left.into_iter().chain(steps.note).collect();
+    if told.is_empty() {
         handle.exit(0);
         return Ok(());
     }
@@ -243,7 +248,7 @@ pub fn run(handle: &AppHandle, app: &App) -> Res<()> {
     // Not a blocking dialog, like the one for a failed start.
     handle
         .dialog()
-        .message(left_text(&left, &folders.logs))
+        .message(told.join("\n\n"))
         .title("No, Actually...")
         .kind(MessageDialogKind::Warning)
         .show(move |_| exit.exit(0));

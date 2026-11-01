@@ -1,5 +1,5 @@
 ---
-description: A report card on how the person prompted in this chat - a letter grade, why, and how to ask so it clear the first time. Use only when the person asks for it (/grade:me, "grade me", "report card").
+description: A report card on how the person prompted in this chat - a letter grade, why, and how to ask so it's clear the first time. Use only when the person asks for it (/grade:me, "grade me", "report card").
 argument-hint: "[all]"
 allowed-tools: Bash("${CLAUDE_PLUGIN_ROOT}/bin/na" digest --session *)
 ---

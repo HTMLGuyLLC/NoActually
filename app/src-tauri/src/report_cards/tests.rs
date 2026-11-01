@@ -2420,13 +2420,13 @@ fn a_tool_that_fails_to_turn_off_is_named_and_stops_the_rest() {
 }
 
 #[test]
-fn a_plugin_with_no_command_to_remove_it_is_reported_not_left_behind() {
+fn a_plugin_with_no_command_to_remove_it_is_reported_and_does_not_block() {
     let lab = Lab::new();
     let file = lab.env.home.join(".claude/plugins/installed_plugins.json");
     fs::create_dir_all(file.parent().unwrap()).unwrap();
     fs::write(&file, format!(r#"{{"plugins":{{"{PLUGIN}":[]}}}}"#)).unwrap();
-    let why = turn_off_everywhere(&lab.env).unwrap_err();
-    assert!(why.contains("Claude Code") && why.contains("wasn't found"), "{why}");
+    let note = turn_off_everywhere(&lab.env).unwrap().unwrap();
+    assert!(note.contains("Claude Code") && note.contains("wasn't found"), "{note}");
 }
 
 #[test]

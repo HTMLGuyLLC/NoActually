@@ -298,9 +298,10 @@ impl Retention {
     /// Whether saving this keeps less than `saved` does, so older text is deleted for good.
     #[must_use]
     pub fn keeps_less_than(&self, saved: &Retention) -> bool {
+        let both = |uses: fn(Level) -> bool| uses(self.level) && uses(saved.level);
         self.level.at_most(saved.level) != saved.level
-            || self.full_days < saved.full_days
-            || self.snippet_days < saved.snippet_days
+            || (both(|l| l == Level::Full) && self.full_days < saved.full_days)
+            || (both(|l| l != Level::Category) && self.snippet_days < saved.snippet_days)
     }
 }
 

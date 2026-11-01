@@ -550,13 +550,12 @@ pub(super) fn turn_off(env: &Env) -> Res<()> {
     Ok(())
 }
 
-/// [`turn_off`] when the `claude` command can't be found: fine unless Claude Code's own files say the
-/// plugin is still there, since only that command can take it out.
-pub(super) fn turn_off_absent(env: &Env) -> Res<()> {
-    if recorded_on(env) {
-        return Err("Claude Code's files list the plugin, but its command wasn't found. Press Look again in Settings → Report cards, then try again.".into());
-    }
-    Ok(())
+/// What's left when the `claude` command can't be found: nothing unless Claude Code's own files say
+/// the plugin is still there, since only that command can take it out. It does nothing without the app.
+pub(super) fn left_without_command(env: &Env) -> Option<String> {
+    recorded_on(env).then(|| {
+        "Claude Code's files still list the report card plugin, and its command wasn't found. The plugin does nothing without the app. If you use Claude Code again, remove it with /plugin uninstall grade@noactually.".to_string()
+    })
 }
 
 // ---- moving to a new release -------------------------------------------------------------------

@@ -352,19 +352,39 @@ describe("delegated actions", () => {
     }
   });
 
-  it("stays armed past the timeout while focus is on the button, and Escape disarms it", async () => {
+  it("stays armed under keyboard focus, up to a cap, and Escape disarms it", async () => {
     await toTab("settings");
     vi.useFakeTimers();
     try {
       const b = btn('[data-action="forget"][data-id="codex"]');
       const label = b.textContent;
+      vi.spyOn(b, "matches").mockImplementation((s) => s === ":focus-visible" || Element.prototype.matches.call(b, s));
       b.focus();
       b.click();
-      vi.advanceTimersByTime(60_000);
+      vi.advanceTimersByTime(20_000);
       expect(b.dataset.confirm).toBe("yes");
       b.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
       expect(b.dataset.confirm).toBeUndefined();
       expect(b.textContent).toBe(label);
+      b.click();
+      expect(b.dataset.confirm).toBe("yes");
+      vi.advanceTimersByTime(35_000);
+      expect(b.dataset.confirm).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("disarms on time after a mouse click, even if the click focused the button", async () => {
+    await toTab("settings");
+    vi.useFakeTimers();
+    try {
+      const b = btn('[data-action="forget"][data-id="codex"]');
+      vi.spyOn(b, "matches").mockImplementation((s) => s !== ":focus-visible" && Element.prototype.matches.call(b, s));
+      b.focus();
+      b.click();
+      vi.advanceTimersByTime(6000);
+      expect(b.dataset.confirm).toBeUndefined();
     } finally {
       vi.useRealTimers();
     }

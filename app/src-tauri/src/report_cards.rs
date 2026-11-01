@@ -493,22 +493,24 @@ fn turn_off(env: &Env, tool: Tool) -> Res<()> {
 /// Turns report cards off in every tool, for Delete everything, stopping at the first that fails and
 /// naming it. Turning off is safe to repeat, so the tools don't have to be asked whether they're on,
 /// which can itself fail. A tool that isn't on this computer has nothing to take out, unless Claude
-/// Code's files still list the plugin but its command can't be found: that can't be removed from
-/// here, and going on would leave its hooks in place.
-fn turn_off_everywhere(env: &Env) -> Res<()> {
+/// Code's files still list the plugin but its command can't be found. That can't be removed from
+/// here and mustn't block the delete for good, so it comes back as a note for the person.
+fn turn_off_everywhere(env: &Env) -> Res<Option<String>> {
+    let mut left = None;
     for tool in [Tool::ClaudeCode, Tool::Codex] {
-        let done = match tool {
-            Tool::ClaudeCode if env.claude.is_none() => claude::turn_off_absent(env),
-            _ => turn_off(env, tool),
-        };
-        done.map_err(|why| format!("Report cards couldn't be turned off in {}. {why}", tool.name()))?;
+        if matches!(tool, Tool::ClaudeCode) && env.claude.is_none() {
+            left = claude::left_without_command(env);
+        } else {
+            turn_off(env, tool)
+                .map_err(|why| format!("Report cards couldn't be turned off in {}. {why}", tool.name()))?;
+        }
         forget_launch_problem(tool);
     }
-    Ok(())
+    Ok(left)
 }
 
 /// [`turn_off_everywhere`] on the real folders and tools, found the way a click on Turn off finds them.
-pub(crate) fn turn_off_on_this_computer() -> Res<()> {
+pub(crate) fn turn_off_on_this_computer() -> Res<Option<String>> {
     turn_off_everywhere(&Env::system(true)?)
 }
 

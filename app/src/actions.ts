@@ -118,6 +118,8 @@ const when = () => PERIOD_WHEN[state.tab === "score" ? state.period : "28d"];
 
 /** How long a first click stays armed before the button goes back to normal, unless focus is still on it (a screen reader needs the time). */
 const CONFIRM_MS = 5000;
+/** The longest a confirm stays armed, even under keyboard focus. Redraws wait on it. */
+const CONFIRM_CAP_MS = 30_000;
 /** A second click sooner than this is a double-click, not a decision: it does nothing. */
 const CONFIRM_GUARD_MS = 400;
 const armed = new WeakMap<HTMLButtonElement, (flush: boolean) => void>();
@@ -137,7 +139,7 @@ function confirmNote(): HTMLElement {
 }
 
 /** True on the second click. The first relabels the button and holds off redraws until then; it disarms
- * itself after a few seconds (not while focus is on the button), or when focus leaves or Escape is pressed, restoring the label. A second click within
+ * itself after a few seconds (longer under keyboard focus), or when focus leaves or Escape is pressed, restoring the label. A second click within
  * `CONFIRM_GUARD_MS` of the first (a double-click) is ignored. */
 function confirmed(b: HTMLButtonElement, ask: string): boolean {
   const disarm = armed.get(b);
@@ -163,9 +165,13 @@ function confirmed(b: HTMLButtonElement, ask: string): boolean {
   const onKey = (e: KeyboardEvent) => {
     if (e.key === "Escape") off(true);
   };
-  const timer = setTimeout(() => {
-    if (document.activeElement !== b) off(true);
-  }, CONFIRM_MS);
+  // Keyboard focus keeps it armed so a screen reader can finish, up to a cap; a mouse click doesn't.
+  const expire = () => {
+    const reading = b.matches(":focus-visible") && Date.now() - (armedAt.get(b) ?? 0) < CONFIRM_CAP_MS;
+    if (reading) timer = setTimeout(expire, CONFIRM_MS);
+    else off(true);
+  };
+  let timer = setTimeout(expire, CONFIRM_MS);
   // Set after the region exists for a tick, so a screen reader notices the change.
   const announce = setTimeout(() => say(note, ask), 0);
   b.addEventListener("blur", onBlur);
