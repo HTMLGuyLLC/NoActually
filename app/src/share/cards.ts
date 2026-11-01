@@ -3,7 +3,7 @@ import type { Overall, Prompts, PromptTier, Stats } from "../api";
 import { plural } from "../format";
 import { landedPct, percent } from "../meta";
 import { PERIOD_WHEN } from "../state";
-import { type CorrectionLike, clip, QUOTE_CLIP, SHARE_URL_SHORT } from "./share";
+import { type CorrectionLike, clip, quoteClip, SHARE_URL_SHORT } from "./share";
 
 /** The light theme's colors (style.css :root), which the cards always use whatever the app's theme. */
 export const CARD_THEME = {
@@ -156,7 +156,7 @@ const timesLine = (s: ScoreCard) =>
     ? `I corrected it ${plural(s.corrections_last_7d, "time")} this week.`
     : `Score ${s.overall.score}. ${s.overall.direction}% of my prompts were clear the first time.`;
 const pctLine = (s: ScoreCard, when: string) =>
-  s.overall.score == null ? null : `I corrected it ${plural(s.overall.corrections, "time")} to its ${s.overall.humbled} ${when}.`;
+  s.overall.score == null ? null : `I corrected it ${plural(s.overall.corrections, "time")} ${when}. It corrected me ${s.overall.humbled}.`;
 
 /** Hand-written `text`, rotated like a red-pen mark, baseline at (x, y). */
 function drawMark(g: CanvasRenderingContext2D, text: string, color: string, x: number, y: number, size: number) {
@@ -287,10 +287,11 @@ export async function drawCorrectionCard(e: CorrectionLike, shape: CardShape = "
   const aiFont = `500 ${26 * k}px 'Instrument Sans'`;
   const pad = 26 * k;
   const lead = 36 * k;
+  const keep = quoteClip(e);
   g.font = quoteFont;
-  const quote = e.human ? wrap(g, `“${clip(e.human, QUOTE_CLIP)}”`, inner, L.quoteLines) : [];
+  const quote = e.human ? wrap(g, `“${clip(e.human, keep)}”`, inner, L.quoteLines) : [];
   g.font = aiFont;
-  const reply = e.ai ? wrap(g, clip(e.ai, QUOTE_CLIP), inner - 2 * pad - 8 * k, L.aiLines) : [];
+  const reply = e.ai ? wrap(g, clip(e.ai, keep), inner - 2 * pad - 8 * k, L.aiLines) : [];
   const boxH = 34 * k + reply.length * lead;
 
   y = Math.max(y + 20 * k, L.quoteY);

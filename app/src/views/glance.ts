@@ -64,3 +64,14 @@ export function emptyGlanceView(watching: string, minPrompts = 10): Html {
     ? html`<div class="glance empty-glance"><h1 class="sr-only">Quick glance</h1>${topView()}<span class="eyebrow"><i class="dot live"></i> Watching ${watching}</span><div class="g-q">No corrections yet.</div><p class="muted small">Your score shows up after ${minPrompts} tasks with a follow-up.</p>${openView()}</div>`
     : html`<div class="glance empty-glance"><h1 class="sr-only">Quick glance</h1>${topView()}<div class="g-q">Could AI replace you?</div><p class="muted small">Pick which AI tools to count, then find out.</p>${openView("Set up")}</div>`;
 }
+
+/** The glance when it can't load its answers: what went wrong, a retry, and the full app. */
+export function glanceErrorView(message: string): Html {
+  return html`<div class="glance empty-glance"><h1 class="sr-only">Quick glance</h1>${topView()}<div class="g-q">Couldn't load your answers.</div><p class="muted small mono">${message}</p>
+    <div class="g-actions"><button data-action="retry">Try again</button><button class="ghost" data-action="open-main">Open app</button></div></div>`;
+}
+
+/** The glance while the counts are rebuilt from the start. */
+export function glanceRebuildingView(): Html {
+  return html`<div class="glance empty-glance" role="status"><h1 class="sr-only">Quick glance</h1>${topView()}<span class="eyebrow"><i class="dot live"></i> Recounting</span><div class="g-q">Recounting your history…</div><p class="muted small">Your answers are back in a moment.</p>${openView()}</div>`;
+}

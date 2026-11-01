@@ -285,7 +285,15 @@ export type SourceState = {
   start_after: string | null;
   paths: string[];
 };
-export type SyncStatus = { syncing: boolean; last_sync: string | null; last_error: string | null; files_with_errors: number };
+export type SyncStatus = {
+  syncing: boolean;
+  last_sync: string | null;
+  last_error: string | null;
+  /** Chat files the last pass couldn't read. */
+  files_with_errors: number;
+  /** Scores are being recounted from the start, so the numbers are not whole yet. */
+  rebuilding: boolean;
+};
 export type UpdateChannel = "stable" | "beta";
 export type UpdateStatus = {
   current: string;
@@ -341,6 +349,12 @@ export type Commands = {
   report_cards_delete_history: { args: undefined; result: number };
   log_error: { args: { message: string }; result: null };
   open_log_folder: { args: undefined; result: null };
+  get_popups: { args: undefined; result: boolean };
+  set_popups: { args: { enabled: boolean }; result: null };
+  /** When scores were last rebuilt (RFC 3339), or null. Nothing clears it. */
+  rescored_notice: { args: undefined; result: string | null };
+  /** Opens the licenses file. Main window only; a dev run has none and refuses. */
+  open_notices: { args: undefined; result: null };
 };
 export type Command = keyof Commands;
 export type ArgsOf<C extends Command> = Commands[C]["args"];
@@ -396,6 +410,10 @@ export const api = {
   /** Adds a line to the app's log file. */
   logError: (message: string) => call("log_error", { message }),
   openLogFolder: () => call("open_log_folder", undefined),
+  getPopups: () => call("get_popups", undefined),
+  setPopups: (enabled: boolean) => call("set_popups", { enabled }),
+  rescoredNotice: () => call("rescored_notice", undefined),
+  openNotices: () => call("open_notices", undefined),
 };
 
 /** The tools report cards can be turned on in. */

@@ -170,14 +170,17 @@ impl Source for ClaudeCode {
         let session = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
         let mut events = Vec::new();
         let mut rules = Vec::new();
+        let mut skipped = 0;
         let end = for_each_line(open_at(path, from)?, from, |pos, buf| {
             let line = read_line(buf, pos, false);
+            skipped += usize::from(line.skipped);
             events.extend(line.event);
             rules.extend(line.rules);
         })
         .map_err(Error::io(path))?;
         let mut scan = pair_from(self.id, &session, events, from, end, finalize);
         scan.rules = rules.into_iter().map(|ts| RulesSeen { session: session.clone(), ts }).collect();
+        scan.skipped_lines = skipped;
         Ok(scan)
     }
 }
@@ -227,6 +230,8 @@ struct Read {
     rules: Option<DateTime<Utc>>,
     /// The chat was told to stop giving tips.
     stopped: bool,
+    /// The line looked wanted but wasn't JSON.
+    skipped: bool,
 }
 
 /// The skill's name as Claude Code writes it in a transcript: [`GRADE_COMMAND`] without its slash.
@@ -244,13 +249,14 @@ fn read_line(buf: &[u8], pos: u64, usage: bool) -> Read {
     if !(wants_event || wants_cut || wants_sample || wants_rules) {
         return Read::default();
     }
-    let Ok(line) = serde_json::from_slice::<Line>(buf) else { return Read::default() };
+    let Ok(line) = serde_json::from_slice::<Line>(buf) else { return Read { skipped: true, ..Read::default() } };
     Read {
         event: wants_event.then(|| event(&line, pos)).flatten(),
         cut: wants_cut.then(|| cut(&line, pos)).flatten(),
         sample: wants_sample.then(|| sample(&line, pos)).flatten(),
         rules: wants_rules.then(|| rules_at(&line)).flatten(),
         stopped: wants_rules && was_stopped(&line),
+        skipped: false,
     }
 }
 
@@ -394,6 +400,16 @@ mod tests {
         line(&json!({"type":"attachment","uuid":"h1","timestamp":TS,"sessionId":"abc","isSidechain":sidechain,
             "attachment":{"type":kind,"content":[text],"hookName":"SessionStart","toolUseID":"SessionStart",
             "hookEvent":"SessionStart"}}))
+    }
+
+    #[test]
+    fn lines_that_do_not_parse_are_counted_not_lost_silently() {
+        let body = cc_user("u1", TS, "hello")
+            + "{\"type\":\"user\", the format changed\n"
+            + "{\"type\":\"assistant\"\n"
+            + "unrelated noise\n";
+        let scan = scan_str(&body, true);
+        assert_eq!((scan.turns.len(), scan.skipped_lines), (1, 2), "noise that no rule wants isn't counted");
     }
 
     #[test]

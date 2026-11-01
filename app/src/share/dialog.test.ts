@@ -37,7 +37,15 @@ describe("share dialog", () => {
   it("lets the person edit text that quotes a chat", () => {
     openShareDialog(post({ quotesChat: true }), opener, onClose);
     expect(must<HTMLTextAreaElement>("#share-text").readOnly).toBe(false);
-    expect(must("#share-guide").textContent).toContain("This quotes your chat");
+    expect(must("#share-warn").textContent).toContain("This quotes your chat");
+    expect(document.activeElement?.id).toBe("share-text");
+  });
+
+  it("has no redaction warning when only numbers are shared", () => {
+    openShareDialog(post(), opener, onClose);
+    expect(dialog().querySelector("#share-warn")).toBeNull();
+    expect(dialog().getAttribute("aria-describedby")).toBeNull();
+    expect(must("#share-guide").textContent).toContain("Only these numbers");
   });
 
   describe("a correction's two quotes", () => {
@@ -48,13 +56,36 @@ describe("share dialog", () => {
       el.dispatchEvent(new Event("input", { bubbles: true }));
     };
 
-    it("edits each quote in its own box and warns that redaction can miss things", () => {
+    it("edits each quote in its own box and says only the first 90 characters are used", () => {
       openShareDialog(post({ quotes }), opener, onClose);
       expect(must<HTMLTextAreaElement>("#share-human").value).toBe(quotes.human);
       expect(must<HTMLTextAreaElement>("#share-ai").value).toBe(quotes.ai);
       expect(must<HTMLTextAreaElement>("#share-text").readOnly).toBe(true);
-      expect(must("#share-guide").textContent).toContain("Redaction can miss things");
-      expect(must("#share-guide").textContent).not.toContain("already redacted");
+      expect(must("#share-limit").textContent).toBe("Only the first 90 characters are used.");
+      expect(must("#share-ai").getAttribute("aria-describedby")).toBe("share-limit");
+    });
+
+    it("warns that redaction can miss things above the boxes, and is described by it", () => {
+      openShareDialog(post({ quotes }), opener, onClose);
+      const warn = must("#share-warn");
+      expect(warn.textContent).toContain("Redaction can miss things. Check it before you share.");
+      expect(dialog().getAttribute("aria-describedby")).toBe("share-warn");
+      // Before the first box, so it is read and seen before anything can be sent.
+      expect(warn.compareDocumentPosition(must("#share-human")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(warn.compareDocumentPosition(must('[data-sd="share"]')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("starts on the first quote box, not on a network button", () => {
+      openShareDialog(post({ quotes }), opener, onClose);
+      expect(document.activeElement?.id).toBe("share-human");
+    });
+
+    it("grows each box to what's in it", () => {
+      openShareDialog(post({ quotes }), opener, onClose);
+      const human = must<HTMLTextAreaElement>("#share-human");
+      Object.defineProperty(human, "scrollHeight", { value: 96, configurable: true });
+      edit("#share-human", "a longer line\nover\nthree lines");
+      expect(human.style.height).toBe("96px");
     });
 
     it("draws Save image and Instagram from the edited quotes", async () => {
@@ -152,7 +183,10 @@ describe("share dialog", () => {
     openShareDialog(post(), opener, onClose);
     const box = { left: 100, right: 500, top: 50, bottom: 400 } as DOMRect;
     vi.spyOn(dialog(), "getBoundingClientRect").mockReturnValue(box);
-    const clickAt = (clientX: number, clientY: number) => dialog().dispatchEvent(new MouseEvent("click", { bubbles: true, clientX, clientY }));
+    const clickAt = (clientX: number, clientY: number) => {
+      dialog().dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX, clientY }));
+      dialog().dispatchEvent(new MouseEvent("click", { bubbles: true, clientX, clientY }));
+    };
     clickAt(300, 200); // padding inside the box
     expect(document.querySelector("dialog.share-dialog")).not.toBeNull();
     expect(onClose).not.toHaveBeenCalled();

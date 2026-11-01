@@ -56,7 +56,8 @@ Better prompts mean fewer mistakes to correct, and that never costs you: once yo
 - **A prompt score.** "Do you make it guess? **Sometimes.** 85% of your prompts were clear the first time." Plus what your prompts include, why you followed up, and one tip backed by your own history.
 - **Improve.** One weekly goal picked from your own numbers ("Include guardrails in 25% of your prompts"), streaks, trophies, personal bests, last week's recap, and charts of how you're trending.
 - **Learn.** 13 one-minute lessons in three tracks (the 6 habits, follow up less, correct more), quick quizzes, and a prompt checker that grades a draft as you type, with the same rules as your score.
-- **Any time window.** 7 days, 28 days, 90 days or all time: the whole scorecard follows the picker, score included. Every part of the score is a rate, so tiers mean the same thing in any window.
+- **English only, for now.** Corrections and prompts are read by rules written for English. Messages in other languages aren't graded fairly, and may not count at all.
+- **Any time window.** 7 days, 28 days, 90 days or all time: the whole scorecard follows the picker, score included. Windows under 28 days ask for fewer corrections, so a short window is fair. Windows over 28 days ask for the same 3, so a longer window can score higher.
 - **Every model, side by side.** All AI, one provider, one family, or one exact version (say, Claude Opus 5.5). The picker shows the numbers that page is about.
 - **A Hall of fame** of awards, one per kind of correction: The Fabulist (made it up), Selective Hearing, Reading Is Hard, The Blind Spot, “Fixed” It, Big Brain Energy, and Touché for the times it corrected you. Each shows its best snippet, picked the same way every time. Pin the ones you want to keep forever.
 - **Popups** for your 1st, 10th, 25th… correction, a new tier, a streak, a goal week met, or a goal done.
@@ -78,7 +79,7 @@ No, Actually... saves each report card's numbers (never your words) and shows ho
 **On Windows:** report cards work with Claude Code, which needs Git for Windows. They aren't available for Codex yet.
 
 **Without the app:** in Claude Code run `/plugin marketplace add HTMLGuyLLC/NoActually` then
-`/plugin install grade@noactually`. You get report cards, but no history.
+`/plugin install grade@noactually`. You get report cards, but no history. This follows the newest code on the default branch. To stay on a release, add `HTMLGuyLLC/NoActually#v<version>` instead.
 
 **Cost:** report cards are written by your own AI, so each one uses some of your tokens: about 0.5k to 2k output tokens per task graded, more with `all`.
 They only run when you ask. Tips as you work are optional and use a little in each chat.
@@ -92,7 +93,7 @@ Your AI chats can hold code, keys, client names and half-formed ideas. This app 
 
 | | |
 |---|---|
-| 🔒 **Local only** | No accounts, no servers, no telemetry, no analytics. Fonts are bundled. The app's only network use is an update check against GitHub and a share link you click yourself. The update check carries no account, ID, stats or chat data (GitHub sees your IP address, as with any download), and you can turn it off. With optional report cards on, Claude Code downloads a small plugin from GitHub (and the matching one after an app update), a small check runs after each AI reply and reads the end of that chat on your computer, and when you ask for a report card your AI reads a short summary of the chat that the app makes on your computer. See [PRIVACY.md](PRIVACY.md#report-cards-optional). |
+| 🔒 **Local only** | No accounts, no servers, no telemetry, no analytics. Fonts are bundled. The app's only network use is an update check against GitHub, a share link you click yourself and, with report cards on, a check of the plugin's version on GitHub. The update check carries no account, ID, stats or chat data (GitHub sees your IP address, as with any download), and you can turn it off. With optional report cards on, Claude Code downloads a small plugin from GitHub (and the matching one after an app update), a small check runs after each AI reply and reads the end of that chat on your computer, and when you ask for a report card your AI reads a short summary of the chat that the app makes on your computer. See [PRIVACY.md](PRIVACY.md#report-cards-optional). |
 | ✋ **Asks first** | Every source is off until you **Allow** it. Pause it, stop it, or **Forget** it (deletes what it read, leaving only finished goal weeks and trophies, which are totals) any time. |
 | 🔢 **Numbers, not chats** | Ordinary messages are only counted, never stored. For corrections you pick **full text**, **snippet** (the default) or **category only**, and kept text steps down on a timer you set. Prompts, goals and lessons store numbers only, never words, and the prompt checker saves nothing you type. |
 | ✂️ **Redacted** | Keys, emails, links, home paths and long numbers are stripped from any text kept. It's pattern-based, so it can miss things: pick **category only** if that matters. |
@@ -353,14 +354,15 @@ The app lands in `target/release/bundle/`. (The `-c` part skips the signed updat
 
 ### Command line
 
-The same engine and database work from a terminal:
+The same engine and database work from a terminal. Releases don't include the command line, so install it from a checkout of this repo:
 
 ```bash
-cargo run --release -p noactually-cli -- sources              # what it can read, and what you've allowed
-cargo run --release -p noactually-cli -- allow claude-code
-cargo run --release -p noactually-cli -- sync
-cargo run --release -p noactually-cli -- stats --family "Claude Opus"
-cargo run --release -p noactually-cli -- check "Fix the crash in checkout.ts. Done when the tests pass."
+cargo install --path crates/cli
+noactually sources              # what it can read, and what you've allowed
+noactually allow claude-code
+noactually sync
+noactually stats --family "Claude Opus"
+noactually check "Fix the crash in checkout.ts. Done when the tests pass."
 ```
 
 `stats` prints the overall score and both halves. `check "<prompt>"` grades a draft prompt, like the app's checker. Set `NOACTUALLY_DB=/path/to/test.db` to use a different database than your real one. Every command is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#command-line).

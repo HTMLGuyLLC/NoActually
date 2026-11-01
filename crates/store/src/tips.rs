@@ -1,7 +1,6 @@
 //! Tips in the database. When a follow-up could have been in the first message, the AI says so in
 //! a line of its reply. Only what the line's bracket says is kept, never the words, and tips are
-//! counted against the tasks in chats that had the rules. The design is in
-//! `docs/plans/prompt-feedback.md`.
+//! counted against the tasks in chats that had the rules. The design is in `docs/ARCHITECTURE.md`.
 
 use crate::cards::{ts_str, CLEARED_KEY};
 use crate::stats::{monday_of, View};

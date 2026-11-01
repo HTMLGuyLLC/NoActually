@@ -53,6 +53,10 @@ impl Home {
     }
 
     fn run(&self, args: &[&str], stdin: &str) -> Output {
+        self.run_with(args, stdin, &[])
+    }
+
+    fn run_with(&self, args: &[&str], stdin: &str, env: &[(&str, &str)]) -> Output {
         let mut child = Command::new(env!("CARGO_BIN_EXE_noactually"))
             .args(args)
             .env("HOME", self.dir.path())
@@ -61,6 +65,8 @@ impl Home {
             .env("NOACTUALLY_CLAUDE_PROJECTS", self.dir.path().join("projects"))
             .env("NOACTUALLY_CODEX_SESSIONS", self.dir.path().join("sessions"))
             .env_remove("CLAUDE_CODE_ENTRYPOINT")
+            .env_remove("NOACTUALLY_DEBUG")
+            .envs(env.iter().copied())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -227,6 +233,29 @@ fn a_broken_helper_is_silent_and_succeeds() {
 }
 
 #[test]
+fn debug_mode_gives_a_reason_on_stderr_and_never_on_stdout() {
+    let home = Home::new();
+    let gone = home.dir.path().join("gone.jsonl");
+    let debug = [("NOACTUALLY_DEBUG", "1")];
+    let cases: [(&[&str], String, &str); 5] = [
+        (&["digest", "--session", "no-such-chat"], String::new(), "chat-not-found"),
+        (&["digest", "--session", "../bad"], String::new(), "bad-session-id"),
+        (&["digest", "--transcript", gone.to_str().unwrap()], String::new(), "transcript-unreadable"),
+        (&["hook", "stop"], "not json".into(), "bad-hook-input"),
+        (&["hook", "bogus"], "{}".into(), "bad-arguments"),
+    ];
+    for (args, stdin, code) in cases {
+        let out = home.run_with(args, &stdin, &debug);
+        assert!(out.status.success() && out.stdout.is_empty(), "{args:?}: still silent on stdout, still success");
+        assert_eq!(String::from_utf8_lossy(&out.stderr), format!("noactually helper: {code}\n"), "{args:?}");
+        let quiet = home.run(args, &stdin);
+        assert!(quiet.stdout.is_empty() && quiet.stderr.is_empty(), "{args:?}: silent unless asked");
+    }
+    let off = home.run_with(&["digest", "--session", "no-such-chat"], "", &[("NOACTUALLY_DEBUG", "0")]);
+    assert!(off.stderr.is_empty(), "0 means off");
+}
+
+#[test]
 fn the_other_commands_still_work() {
     let home = Home::new();
     let help = home.run(&[], "");
@@ -240,6 +269,28 @@ fn the_other_commands_still_work() {
     assert!(String::from_utf8_lossy(&bad.stderr).starts_with("Error: missing source"));
     let sources = home.run(&["sources"], "");
     assert!(stdout(&sources).starts_with("claude-code"), "{}", stdout(&sources));
+}
+
+#[test]
+fn help_and_version_run_nothing_and_forget_wants_a_yes() {
+    let home = Home::new();
+    for args in [&["sync", "--help"][..], &["sync", "-h"], &["forget", "codex", "--help"]] {
+        let out = home.run(args, "");
+        assert!(out.status.success(), "{args:?}");
+        assert!(stdout(&out).starts_with("noactually: could AI replace you?"), "{args:?}");
+        assert!(!home.dir.path().join("noactually.db").exists(), "{args:?}: help opens no database");
+    }
+    let version = home.run(&["--version"], "");
+    assert_eq!(stdout(&version), format!("noactually {}\n", env!("CARGO_PKG_VERSION")));
+
+    home.run(&["allow", "codex"], "");
+    let refused = home.run(&["forget", "codex"], "");
+    assert!(!refused.status.success(), "no terminal and no --yes");
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("--yes"));
+    assert!(stdout(&home.run(&["sources"], "")).contains("codex"), "still there");
+    let done = home.run(&["forget", "codex", "--yes"], "");
+    assert!(done.status.success(), "{}", String::from_utf8_lossy(&done.stderr));
+    assert!(stdout(&done).starts_with("Deleted everything"));
 }
 
 /// The ids a digest gives the prompts, in order.

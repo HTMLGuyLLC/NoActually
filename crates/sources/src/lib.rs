@@ -55,6 +55,14 @@ pub enum Error {
         /// The underlying error.
         source: ruzstd::decoding::errors::FrameDecoderError,
     },
+    /// A file is bigger than is safe to hold in memory, once decompressed.
+    #[error("{}: too large to read (over {} MB)", path.display(), limit / (1 << 20))]
+    TooBig {
+        /// The file being read.
+        path: PathBuf,
+        /// The most bytes read from one file.
+        limit: u64,
+    },
     /// No adapter has this id.
     #[error("unknown source '{0}'")]
     UnknownSource(String),
@@ -65,6 +73,9 @@ impl Error {
         move |source| Error::Io { path: path.to_path_buf(), source }
     }
 }
+
+/// The most bytes read into memory from one export, or from one rollout once decompressed.
+pub(crate) const MAX_READ_BYTES: u64 = 1 << 30;
 
 /// Shorthand for results from this crate.
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -103,6 +114,9 @@ pub struct FileScan {
     pub tips: Vec<TipSeen>,
     /// Each time this pass saw the chat being given the tip rules.
     pub rules: Vec<RulesSeen>,
+    /// Lines that looked like messages or usage but didn't parse as JSON, so a changed file format
+    /// shows up as a number instead of as silently missing turns. Counts lines only, never text.
+    pub skipped_lines: usize,
 }
 
 /// A record block (a fenced `noactually` block) found in an AI reply. Not yet validated.

@@ -1,14 +1,13 @@
 //! Background tracking: one thread owns syncing. File events and a timer only ever ask it
 //! to sync; the timer is the safety net for anything the OS watcher misses.
 
-use crate::{lock, milestones, App};
+use crate::{home_short, lock, milestones, shorten_home_in, App, SyncStatus};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use sources::Kind;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
-use tauri_plugin_notification::NotificationExt;
 
 pub enum Msg {
     SyncNow,
@@ -22,8 +21,6 @@ const DEBOUNCE: Duration = Duration::from_secs(2);
 /// its files every few seconds, and scores don't need to move that fast. "Check now" and consent
 /// changes don't wait.
 const MIN_GAP: Duration = Duration::from_secs(60);
-/// More new messages than a person writes between two checks means history was just read.
-const BACKFILL_MESSAGES: usize = 40;
 /// Shown once after the rules change, because scores can move with no new chats.
 const RESCORED_TITLE: &str = "Your scores were updated";
 const RESCORED_BODY: &str = "The scoring rules improved, so your history was counted again. Chats no longer on your computer keep their old counts.";
@@ -52,15 +49,88 @@ fn watch(app: &App, tx: &mpsc::Sender<Msg>) -> Option<RecommendedWatcher> {
     .ok()?;
     for root in watched_roots(app) {
         if let Err(e) = w.watch(&root, RecursiveMode::Recursive) {
-            log::warn!("can't watch {}: {e}", root.display());
+            log::warn!("can't watch {}: {e}", home_short(&root));
         }
     }
     Some(w)
 }
 
+/// How many skipped files get a line of their own in the log.
+const LOGGED_SKIPS: usize = 5;
+
+/// The log lines for the files a pass skipped: the first few, then the total. A bad folder can skip
+/// thousands, and every pass would write them all again.
+fn skipped_lines(errors: &[String], home: Option<&Path>) -> Vec<String> {
+    let mut lines: Vec<String> =
+        errors.iter().take(LOGGED_SKIPS).map(|e| format!("skipped file: {}", shorten_home_in(e, home))).collect();
+    if errors.len() > LOGGED_SKIPS {
+        lines.push(format!("{} files skipped in all; the first {LOGGED_SKIPS} are listed", errors.len()));
+    }
+    lines
+}
+
+/// The line a pass leaves in the log, if it did anything worth a line: it read files, or it rebuilt
+/// scores (which can happen with no new files at all).
+fn sync_line(files: usize, messages: usize, corrections: usize, rescored: bool, took: Duration) -> Option<String> {
+    if files == 0 && !rescored {
+        return None;
+    }
+    let rebuilt = if rescored {
+        format!(" (scores rebuilt under scoring rules {})", engine::RULES_VERSION)
+    } else {
+        String::new()
+    };
+    Some(format!("synced {files} files{rebuilt}: {messages} messages, {corrections} corrections in {took:?}"))
+}
+
+/// Whether windows should redraw after a pass: numbers moved, or what the status line says did. A
+/// pass that found nothing new only ends the check, since redrawing every window for it is wasted
+/// work. A rebuild always counts: rows restored at its end change the numbers even if no file was read.
+fn pass_changed(files_read: usize, rescored: bool, errors: usize, before: &SyncStatus, rebuilt: bool) -> bool {
+    rebuilt || files_read > 0 || rescored || before.files_with_errors != errors || before.last_error.is_some()
+}
+
+/// A pass has started.
+fn pass_started(status: &mut SyncStatus, rebuilding: bool) {
+    status.syncing = true;
+    status.rebuilding = rebuilding;
+}
+
+/// A pass ended well, with `errors` files skipped.
+fn pass_succeeded(status: &mut SyncStatus, errors: usize, now: chrono::DateTime<chrono::Utc>) {
+    status.syncing = false;
+    status.rebuilding = false;
+    status.last_sync = Some(now);
+    status.last_error = None;
+    status.files_with_errors = errors;
+}
+
+/// A pass failed: the last sync time still moves, so the window says when it last tried.
+fn pass_failed(status: &mut SyncStatus, message: String, now: chrono::DateTime<chrono::Utc>) {
+    status.syncing = false;
+    status.rebuilding = false;
+    status.last_sync = Some(now);
+    status.last_error = Some(message);
+}
+
+/// A pass panicked: the window says so, and the next change or timer tries again.
+fn pass_panicked(status: &mut SyncStatus) {
+    status.syncing = false;
+    status.rebuilding = false;
+    status.last_error = Some(PANIC_MESSAGE.to_string());
+}
+
 /// `quiet`: record milestones without announcing them (a backfill, or a source just allowed).
 fn sync_once(handle: &AppHandle, app: &App, quiet: bool) {
-    lock(&app.status).syncing = true;
+    // History is read again from zero when the rules changed, so the numbers are partial until the end.
+    let rebuilding = lock(&app.reader).rebuild_due().unwrap_or_else(|e| {
+        log::warn!("couldn't tell if a rebuild is due: {e}");
+        false
+    });
+    if rebuilding {
+        log::info!("rebuilding: history will be read again under scoring rules {}", engine::RULES_VERSION);
+    }
+    pass_started(&mut lock(&app.status), rebuilding);
     let _ = handle.emit("sync-started", ());
     let started = std::time::Instant::now();
     let report = {
@@ -68,43 +138,38 @@ fn sync_once(handle: &AppHandle, app: &App, quiet: bool) {
         store::sync(&mut store, &app.sources)
     };
     let mut status = lock(&app.status);
-    status.syncing = false;
-    status.last_sync = Some(chrono::Utc::now());
     match report {
         Ok(r) => {
-            if r.files_read > 0 {
-                log::info!(
-                    "synced {} files: {} messages, {} corrections in {:?}",
-                    r.files_read,
-                    r.messages,
-                    r.corrections,
-                    started.elapsed()
-                );
+            if let Some(line) = sync_line(r.files_read, r.messages, r.corrections, r.rescored, started.elapsed()) {
+                log::info!("{line}");
             }
-            for e in &r.errors {
-                log::warn!("skipped file: {e}");
+            if r.skipped_lines > 0 {
+                log::warn!("{} lines couldn't be read; a tool may have changed its format", r.skipped_lines);
             }
-            // Numbers moved, or what the status line says did. A pass that found nothing new only
-            // ends the check: redrawing every window for it is wasted work.
-            let changed = r.files_read > 0
-                || r.rescored
-                || status.files_with_errors != r.errors.len()
-                || status.last_error.is_some();
-            status.last_error = None;
-            status.files_with_errors = r.errors.len();
+            for line in skipped_lines(&r.errors, std::env::home_dir().as_deref()) {
+                log::warn!("{line}");
+            }
+            let changed = pass_changed(r.files_read, r.rescored, r.errors.len(), &status, rebuilding);
+            pass_succeeded(&mut status, r.errors.len(), chrono::Utc::now());
             drop(status);
+            if r.rescored {
+                // Kept so the window can say so after the popup is gone, or if popups are off.
+                let when = chrono::Utc::now().to_rfc3339();
+                if let Err(e) = lock(&app.writer).set_setting(crate::RESCORED_NOTICE_KEY, &when) {
+                    log::warn!("couldn't note that scores were rebuilt: {e}");
+                }
+            }
             let _ = handle.emit(if changed { "stats-changed" } else { "sync-idle" }, &r);
             if r.rescored {
-                let _ = handle.notification().builder().title(RESCORED_TITLE).body(RESCORED_BODY).show();
+                crate::notify(handle, app, RESCORED_TITLE, RESCORED_BODY);
             }
             // A big pass is history arriving, not new corrections: don't celebrate old milestones.
-            let backfill = quiet || r.rescored || r.messages > BACKFILL_MESSAGES;
-            milestones::check(handle, app, backfill);
+            milestones::check(handle, app, milestones::Quiet::for_pass(quiet, r.rescored, r.messages));
             update_tray(handle, app);
         }
         Err(e) => {
-            log::error!("sync failed: {e:#}");
-            status.last_error = Some(e.to_string());
+            log::error!("sync failed: {}", shorten_home_in(&format!("{e:#}"), std::env::home_dir().as_deref()));
+            pass_failed(&mut status, e.to_string(), chrono::Utc::now());
             drop(status);
             let _ = handle.emit("sync-failed", e.to_string());
         }
@@ -137,8 +202,7 @@ pub fn spawn(handle: AppHandle, app: Arc<App>, tx: mpsc::Sender<Msg>, rx: mpsc::
                     log::error!("sync pass panicked; will retry on the next change or timer");
                     {
                         let mut status = lock(&app.status);
-                        status.syncing = false;
-                        status.last_error = Some(PANIC_MESSAGE.to_string());
+                        pass_panicked(&mut status);
                     }
                     let _ = handle.emit("sync-failed", PANIC_MESSAGE);
                 }
@@ -178,4 +242,89 @@ pub fn spawn(handle: AppHandle, app: Arc<App>, tx: mpsc::Sender<Msg>, rx: mpsc::
             drop(watcher);
         })
         .expect("start tracker thread");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{TimeZone, Utc};
+
+    fn at() -> chrono::DateTime<Utc> {
+        Utc.with_ymd_and_hms(2026, 11, 1, 12, 0, 0).unwrap()
+    }
+
+    #[test]
+    fn a_quiet_pass_does_not_redraw() {
+        let idle = SyncStatus::default();
+        assert!(!pass_changed(0, false, 0, &idle, false));
+    }
+
+    #[test]
+    fn a_pass_redraws_when_numbers_or_the_status_line_moved() {
+        let idle = SyncStatus::default();
+        assert!(pass_changed(1, false, 0, &idle, false), "files were read");
+        assert!(pass_changed(0, true, 0, &idle, false), "scores were rebuilt");
+        assert!(pass_changed(0, false, 2, &idle, false), "files newly skipped");
+        assert!(pass_changed(0, false, 0, &idle, true), "a rebuild restores rows even if no file was read");
+        let skipping = SyncStatus { files_with_errors: 2, ..SyncStatus::default() };
+        assert!(pass_changed(0, false, 0, &skipping, false), "the skips went away");
+        assert!(!pass_changed(0, false, 2, &skipping, false), "same skips, nothing new");
+        let failed = SyncStatus { last_error: Some("disk full".into()), ..SyncStatus::default() };
+        assert!(pass_changed(0, false, 0, &failed, false), "the error cleared");
+    }
+
+    #[test]
+    fn a_pass_sets_and_clears_the_rebuilding_flag() {
+        let mut s = SyncStatus::default();
+        pass_started(&mut s, true);
+        assert!(s.syncing && s.rebuilding);
+        pass_succeeded(&mut s, 0, at());
+        assert!(!s.syncing && !s.rebuilding);
+        pass_started(&mut s, true);
+        pass_failed(&mut s, "boom".into(), at());
+        assert!(!s.syncing && !s.rebuilding, "a failure ends the rebuilding state too");
+        pass_started(&mut s, true);
+        pass_panicked(&mut s);
+        assert!(!s.syncing && !s.rebuilding);
+    }
+
+    #[test]
+    fn success_clears_the_error_and_records_the_skips() {
+        let mut s = SyncStatus { last_error: Some("old".into()), ..SyncStatus::default() };
+        pass_succeeded(&mut s, 3, at());
+        assert_eq!((s.last_error, s.files_with_errors, s.last_sync), (None, 3, Some(at())));
+    }
+
+    #[test]
+    fn failure_keeps_the_message_and_the_skip_count() {
+        let mut s = SyncStatus { files_with_errors: 3, ..SyncStatus::default() };
+        pass_failed(&mut s, "disk full".into(), at());
+        assert_eq!((s.last_error.as_deref(), s.files_with_errors, s.last_sync), (Some("disk full"), 3, Some(at())));
+        pass_panicked(&mut s);
+        assert_eq!(s.last_error.as_deref(), Some(PANIC_MESSAGE));
+    }
+
+    #[test]
+    fn only_the_first_skipped_files_are_logged_with_a_total() {
+        let home = Some(Path::new("/Users/me"));
+        let few = vec!["/Users/me/a.jsonl: bad".to_string()];
+        assert_eq!(skipped_lines(&few, home), vec!["skipped file: ~/a.jsonl: bad"]);
+        assert_eq!(skipped_lines(&[], home).len(), 0);
+        let many: Vec<String> = (0..40).map(|i| format!("/Users/me/{i}.jsonl: bad")).collect();
+        let lines = skipped_lines(&many, home);
+        assert_eq!(lines.len(), LOGGED_SKIPS + 1);
+        assert_eq!(lines[LOGGED_SKIPS], "40 files skipped in all; the first 5 are listed");
+        assert!(lines.iter().all(|l| !l.contains("/Users/me")), "{lines:?}");
+    }
+
+    #[test]
+    fn a_rebuild_is_logged_even_when_no_file_was_read() {
+        let took = Duration::from_secs(1);
+        assert_eq!(sync_line(0, 0, 0, false, took), None);
+        let line = sync_line(0, 0, 0, true, took).expect("a rebuild leaves a line");
+        assert!(line.contains("rebuilt under scoring rules"), "{line}");
+        assert!(line.contains(&engine::RULES_VERSION.to_string()), "{line}");
+        let line = sync_line(3, 10, 2, false, took).unwrap();
+        assert!(line.starts_with("synced 3 files: 10 messages, 2 corrections"), "{line}");
+    }
 }

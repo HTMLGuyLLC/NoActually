@@ -68,6 +68,10 @@ dev: install
 bump VERSION:
     scripts/bump-version.sh {{VERSION}}
 
+# Create the draft release, tag the merged commit and push the tag (main, CI green): just start-release v0.2.0
+start-release TAG:
+    scripts/start-release.sh {{TAG}}
+
 # Publish a finished draft to beta, or a beta to everyone: just publish v0.2.0 beta
 publish TAG CHANNEL:
     scripts/publish-release.sh {{TAG}} {{CHANNEL}}

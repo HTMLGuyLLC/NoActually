@@ -7,11 +7,25 @@
 # beta also gets full releases. A channel file for a newer version is left in place, so releasing an
 # older beta to everyone can't take the newer one away.
 #
-# Usage: scripts/publish-release.sh vX.Y.Z beta|stable
+# It refuses a latest.json that leaves out a platform (Windows, Linux or Mac), so a release can't go
+# out with some apps never offered it. --allow-missing ships anyway.
+#
+# Usage: scripts/publish-release.sh vX.Y.Z beta|stable [--allow-missing]
 set -euo pipefail
 
-TAG="${1:?usage: scripts/publish-release.sh vX.Y.Z beta|stable}"
-CHANNEL="${2:?usage: scripts/publish-release.sh vX.Y.Z beta|stable}"
+USAGE="usage: scripts/publish-release.sh vX.Y.Z beta|stable [--allow-missing]"
+ALLOW=()
+POS=()
+for arg in "$@"; do
+  case "$arg" in
+    --allow-missing) ALLOW=(--allow-missing) ;;
+    -*) echo "unknown option '$arg'. $USAGE" >&2; exit 1 ;;
+    *) POS+=("$arg") ;;
+  esac
+done
+[[ ${#POS[@]} -eq 2 ]] || { echo "$USAGE" >&2; exit 1; }
+TAG="${POS[0]}"
+CHANNEL="${POS[1]}"
 REPO="HTMLGuyLLC/NoActually"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HOLDER="beta-channel"
@@ -21,6 +35,7 @@ case "$CHANNEL" in
   beta | stable) ;;
   *) echo "'$CHANNEL' isn't a channel. Use beta or stable." >&2; exit 1 ;;
 esac
+[[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "'$TAG' isn't a release tag like v1.2.3." >&2; exit 1; }
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -30,6 +45,7 @@ mkdir "$WORK/new" "$WORK/old"
 gh release download "$TAG" -R "$REPO" --pattern latest.json --dir "$WORK/new"
 FOUND="$(node "$ROOT/scripts/latest-json.mjs" version "$WORK/new/latest.json")"
 [[ "$FOUND" == "$VERSION" ]] || { echo "latest.json on $TAG says $FOUND." >&2; exit 1; }
+node "$ROOT/scripts/latest-json.mjs" check "$WORK/new/latest.json" "${ALLOW[@]+"${ALLOW[@]}"}"
 
 if [[ "$CHANNEL" == beta ]]; then
   gh release edit "$TAG" -R "$REPO" --draft=false --prerelease --latest=false >/dev/null

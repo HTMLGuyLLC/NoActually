@@ -9,7 +9,9 @@ use crate::{lock, tracker::Msg, App, SyncStatus};
 use chrono::{Local, NaiveDate};
 use serde::Serialize;
 use sources::{Kind, Source};
-use std::sync::Arc;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use store::{Filter, Goal, GoalKind, Meta, Progress, RecentReportCard, Retention, SourceState, Stats};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_autostart::ManagerExt as _;
@@ -19,9 +21,44 @@ use tauri_plugin_opener::OpenerExt;
 
 type Res<T> = Result<T, String>;
 
+/// Errors a command returned lately, so [`log_error`] doesn't write the same one again when the
+/// window reports what it got back.
+static RECENT_ERRORS: Mutex<Vec<(Instant, String)>> = Mutex::new(Vec::new());
+/// How long a returned error counts as already logged.
+const RECENT_ERROR_WINDOW: Duration = Duration::from_secs(30);
+/// How many returned errors are remembered.
+const RECENT_ERRORS_KEPT: usize = 16;
+
+/// Remembers `message` as returned to a window at `now`, dropping old ones.
+fn remember_error(recent: &mut Vec<(Instant, String)>, message: &str, now: Instant) {
+    recent.retain(|(at, _)| now.saturating_duration_since(*at) < RECENT_ERROR_WINDOW);
+    if recent.len() >= RECENT_ERRORS_KEPT {
+        recent.remove(0);
+    }
+    recent.push((now, message.to_string()));
+}
+
+/// Whether a window's report is (or contains) an error a command returned a moment ago.
+fn already_logged(recent: &[(Instant, String)], report: &str, now: Instant) -> bool {
+    recent.iter().any(|(at, m)| {
+        now.saturating_duration_since(*at) < RECENT_ERROR_WINDOW && !m.is_empty() && report.contains(m.as_str())
+    })
+}
+
+/// A real failure, logged once as a warning and passed on. The window may report it again through
+/// [`log_error`], which then stays quiet.
 fn err(e: impl std::fmt::Display) -> String {
-    log::warn!("command failed: {e}");
-    e.to_string()
+    let message = e.to_string();
+    log::warn!("command failed: {message}");
+    remember_error(&mut crate::lock(&RECENT_ERRORS), &message, Instant::now());
+    message
+}
+
+/// An expected "no" (a wrong window, a file that isn't an export): passed on for the window to show,
+/// and not logged at all, as neither warning nor error.
+fn refused(message: &str) -> String {
+    remember_error(&mut crate::lock(&RECENT_ERRORS), message, Instant::now());
+    message.to_string()
 }
 
 /// Fails unless `label` is the scorecard window. What changes consent or deletes data is done only
@@ -30,7 +67,7 @@ fn only_main(label: &str) -> Res<()> {
     if label == "main" {
         Ok(())
     } else {
-        Err("That can only be done from the main window.".into())
+        Err(refused("That can only be done from the main window."))
     }
 }
 
@@ -224,8 +261,25 @@ async fn pick(dialog: FileDialogBuilder<tauri::Wry>, save: bool) -> Option<FileP
     rx.recv().await.flatten()
 }
 
+/// Checks that `path` reads as an export of `src`, the way a sync would read it, so a wrong file is
+/// refused now and not skipped silently on every pass. An error the window can show.
+fn check_export(src: &dyn Source, path: &Path) -> Res<()> {
+    match src.scan(path, 0, true) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            log::info!("import refused: {}", crate::shorten_home_in(&e.to_string(), std::env::home_dir().as_deref()));
+            Err(refused(&if matches!(e, sources::Error::TooBig { .. }) {
+                "That file is over the 1 GB limit for an export.".to_string()
+            } else {
+                format!("That doesn't look like a {} export. Choose its conversations.json.", src.name())
+            }))
+        }
+    }
+}
+
 /// Opens a native file picker for an export (ChatGPT / Claude.ai `conversations.json`), then
-/// imports it: the path is added and the source allowed, same as `noactually import`.
+/// imports it: the path is added and the source allowed, same as `noactually import`. A file the
+/// source can't read as an export is refused and not added.
 #[tauri::command]
 pub async fn import_export(
     window: tauri::Window,
@@ -238,12 +292,15 @@ pub async fn import_export(
     let dialog = handle.dialog().file().set_title("Choose your conversations.json").add_filter("Export", &["json"]);
     let Some(file) = pick(dialog, false).await else { return Ok(None) };
     let path = file.into_path().map_err(err)?.to_string_lossy().to_string();
-    // The writer may be held by a sync for a while; wait for it off the async runtime.
+    // Reading the file and waiting for the writer (a sync may hold it) both happen off the async runtime.
     let (writer, import_path) = (Arc::clone(&app), path.clone());
-    tauri::async_runtime::spawn_blocking(move || lock(&writer.writer).import(&id, &import_path))
-        .await
-        .map_err(err)?
-        .map_err(err)?;
+    tauri::async_runtime::spawn_blocking(move || -> Res<()> {
+        let src = sources::find(&writer.sources, &id).map_err(err)?;
+        check_export(src, Path::new(&import_path))?;
+        lock(&writer.writer).import(&id, &import_path).map_err(err)
+    })
+    .await
+    .map_err(err)??;
     changed(&app);
     Ok(Some(path))
 }
@@ -256,7 +313,7 @@ pub fn get_retention(app: State<Arc<App>>) -> Res<Retention> {
 #[tauri::command(async)]
 pub fn set_retention(window: tauri::Window, app: State<Arc<App>>, retention: Retention) -> Res<()> {
     only_main(window.label())?;
-    retention.validate().map_err(|e| e.to_string())?;
+    retention.validate().map_err(|e| refused(&e.to_string()))?;
     lock(&app.writer).set_retention(retention).map_err(err)
 }
 
@@ -310,10 +367,10 @@ const SHARE_CARD_MAX_BYTES: usize = 10 * 1024 * 1024;
 #[tauri::command]
 pub async fn save_share_card(handle: AppHandle, png: Vec<u8>) -> Res<Option<String>> {
     if !is_png(&png) {
-        return Err("That isn't a PNG image.".into());
+        return Err(refused("That isn't a PNG image."));
     }
     if png.len() > SHARE_CARD_MAX_BYTES {
-        return Err("That image is too big to be a scorecard.".into());
+        return Err(refused("That image is too big to be a scorecard."));
     }
     let dialog = handle
         .dialog()
@@ -346,12 +403,13 @@ pub fn is_share_url(url: &str) -> bool {
     SHARE_HOSTS.contains(&host)
 }
 
-/// Opens a network's share page in the person's browser. The share text is in the URL: numbers and
-/// the project link, and for a correction its quote too. Nothing is sent until they post it themselves.
+/// Opens a network's share page in the person's browser. The share text is in the URL, so it reaches
+/// the site as soon as the page opens (numbers and the project link, and for a correction its quote
+/// too), before anything is posted. Nothing is posted until they do it themselves.
 #[tauri::command]
 pub fn open_share(handle: AppHandle, url: String) -> Res<()> {
     if !is_share_url(&url) {
-        return Err("That link isn't a share link.".into());
+        return Err(refused("That link isn't a share link."));
     }
     handle.opener().open_url(url, None::<&str>).map_err(err)
 }
@@ -367,8 +425,15 @@ fn cap_log_message(message: &str) -> String {
 /// Records an error from a window in the app log, where a release build would otherwise lose it.
 #[tauri::command]
 pub fn log_error(message: String) {
+    // A command that failed already logged its error; the window reporting it back isn't a second one.
+    if already_logged(&crate::lock(&RECENT_ERRORS), &message, Instant::now()) {
+        return;
+    }
     log::error!("window: {}", cap_log_message(&message));
 }
+
+/// The notices file's name in the bundle's resources (see `bundle.resources` in `tauri.conf.json`).
+const NOTICES_FILE: &str = "THIRD_PARTY_NOTICES.md";
 
 /// Opens the folder the app log lives in, so someone can attach it to a bug report.
 #[tauri::command]
@@ -377,6 +442,36 @@ pub fn open_log_folder(window: tauri::Window, handle: AppHandle) -> Res<()> {
     let dir = handle.path().app_log_dir().map_err(err)?;
     std::fs::create_dir_all(&dir).map_err(err)?;
     handle.opener().open_path(dir.to_string_lossy(), None::<&str>).map_err(err)
+}
+
+/// Opens the third-party notices file that ships with the app, so a person can read the licenses.
+#[tauri::command]
+pub fn open_notices(window: tauri::Window, handle: AppHandle) -> Res<()> {
+    only_main(window.label())?;
+    let file = handle.path().resolve(NOTICES_FILE, tauri::path::BaseDirectory::Resource).map_err(err)?;
+    if !file.exists() {
+        // A development run has no bundle to read it from.
+        return Err(refused("The notices file isn't part of this build."));
+    }
+    handle.opener().open_path(file.to_string_lossy(), None::<&str>).map_err(err)
+}
+
+/// Whether popups (milestones and the rescored notice) are on.
+#[tauri::command]
+pub fn get_popups(app: State<Arc<App>>) -> bool {
+    crate::popups_enabled(lock(&app.reader).get_setting(crate::POPUPS_KEY).ok().flatten().as_deref())
+}
+
+#[tauri::command(async)]
+pub fn set_popups(app: State<Arc<App>>, enabled: bool) -> Res<()> {
+    lock(&app.writer).set_setting(crate::POPUPS_KEY, if enabled { "on" } else { "off" }).map_err(err)
+}
+
+/// When scores were last rebuilt under new rules (an RFC 3339 time), or `None` if they never were.
+/// Kept even with popups off, so the window can show the notice.
+#[tauri::command]
+pub fn rescored_notice(app: State<Arc<App>>) -> Res<Option<String>> {
+    lock(&app.reader).get_setting(crate::RESCORED_NOTICE_KEY).map_err(err)
 }
 
 #[tauri::command]
@@ -402,7 +497,7 @@ pub fn set_update_channel(
     channel: String,
 ) -> Res<()> {
     if channel != updater::STABLE && channel != updater::BETA {
-        return Err("That isn't an update channel.".into());
+        return Err(refused("That isn't an update channel."));
     }
     lock(&app.writer).set_setting(updater::CHANNEL_KEY, &channel).map_err(err)?;
     updates.forget_offer(&handle);
@@ -465,6 +560,76 @@ mod tests {
         assert_eq!(cap_log_message("short"), "short");
         let long = "é".repeat(LOG_MESSAGE_MAX_CHARS + 50);
         assert_eq!(cap_log_message(&long).chars().count(), LOG_MESSAGE_MAX_CHARS);
+    }
+
+    #[test]
+    fn a_returned_error_is_not_logged_a_second_time() {
+        let t = Instant::now();
+        let mut recent = Vec::new();
+        remember_error(&mut recent, "That link isn't a share link.", t);
+        let report = "invoke failed: That link isn't a share link.";
+        assert!(already_logged(&recent, report, t + Duration::from_secs(1)));
+        assert!(!already_logged(&recent, "TypeError: x is undefined", t));
+        assert!(!already_logged(&recent, report, t + RECENT_ERROR_WINDOW), "old ones are forgotten");
+        assert!(!already_logged(&[(t, String::new())], "anything", t), "an empty message matches nothing");
+    }
+
+    #[test]
+    fn remembered_errors_are_capped() {
+        let t = Instant::now();
+        let mut recent = Vec::new();
+        for i in 0..RECENT_ERRORS_KEPT + 5 {
+            remember_error(&mut recent, &format!("error {i}"), t);
+        }
+        assert_eq!(recent.len(), RECENT_ERRORS_KEPT);
+        assert_eq!(recent[0].1, "error 5");
+    }
+
+    fn export_source(id: &str) -> &'static dyn Source {
+        static ALL: std::sync::OnceLock<Vec<Box<dyn Source>>> = std::sync::OnceLock::new();
+        sources::find(ALL.get_or_init(sources::all), id).unwrap()
+    }
+
+    #[test]
+    fn a_file_that_is_not_an_export_is_refused_with_a_plain_error() {
+        let dir = tempfile::tempdir().unwrap();
+        for id in ["chatgpt-export", "claude-ai-export"] {
+            let src = export_source(id);
+            let write = |name: &str, text: &str| {
+                let p = dir.path().join(name);
+                std::fs::write(&p, text).unwrap();
+                p
+            };
+            assert!(check_export(src, &write("ok.json", "[]")).is_ok(), "{id}: an empty export is still an export");
+            for bad in ["not json at all", "{\"conversations\": []}", ""] {
+                let err = check_export(src, &write("bad.json", bad)).unwrap_err();
+                assert!(
+                    err.starts_with("That doesn't look like a ") && err.contains("conversations.json"),
+                    "{id}: {err}"
+                );
+                assert!(!err.contains(dir.path().to_str().unwrap()), "no path in the message: {err}");
+            }
+            let missing = check_export(src, &dir.path().join("gone.json")).unwrap_err();
+            assert!(missing.starts_with("That doesn't look like a "), "{missing}");
+        }
+    }
+
+    #[test]
+    fn the_notices_and_license_ship_in_the_bundle() {
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let resources = &conf["bundle"]["resources"];
+        assert_eq!(resources["../../THIRD_PARTY_NOTICES.md"], NOTICES_FILE);
+        assert_eq!(resources["../../LICENSE"], "LICENSE");
+        assert!(include_str!("../../../THIRD_PARTY_NOTICES.md").contains("Third-party notices"));
+        assert!(include_str!("../../../LICENSE").contains("MIT"));
+    }
+
+    #[test]
+    fn the_long_description_tells_the_truth_about_what_reaches_github() {
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let text = conf["bundle"]["longDescription"].as_str().unwrap();
+        assert!(text.contains("checks GitHub for updates"), "{text}");
+        assert!(text.contains("report cards") && text.contains("plugin version"), "{text}");
     }
 
     #[test]

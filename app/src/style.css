@@ -60,6 +60,9 @@ p { margin: 0 }
 .mac-bar .top .tab.icon-only { width: 28px; height: 28px; padding: 6px }
 /* Keeps a focused control from scrolling under the strip. */
 html.mac-bar { scroll-padding-top: 52px }
+/* Skip link: off the page until it takes focus, then the first thing on it. */
+.skip-link { position: absolute; left: 12px; top: -48px; z-index: 60 }
+.skip-link:focus { top: 8px }
 /* Read by screen readers, not shown. */
 .sr-only, .top .tab.icon-only .tab-name { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0 }
 
@@ -106,8 +109,8 @@ nav { display: flex; gap: 6px }
 .sync-text { background: none; border: 0; padding: 5px 0; margin-block: -5px; color: inherit; font: inherit; border-radius: 6px }
 .sync-text:hover { filter: none }
 .sync-text[data-tip]:hover, .sync-text[data-tip]:focus-visible, .sync-text[aria-expanded="true"] { color: var(--ink) }
-/* A bigger target than the dot it holds, without moving the text away from the dot. */
-.sync-now { display: inline-grid; place-items: center; width: 24px; height: 24px; margin-right: -8px; padding: 0; border-radius: 50%; background: transparent; color: var(--muted); border: 0 }
+/* A bigger target than the dot it holds (at least 24 by 24, with room before the text), without moving the text away from the dot. */
+.sync-now { display: inline-grid; place-items: center; width: 28px; height: 28px; margin-right: -6px; padding: 0; border-radius: 50%; background: transparent; color: var(--muted); border: 0 }
 .sync-now:hover { filter: none; color: var(--ink) }
 .sync-now .refresh { display: none; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
 .sync-now:hover .dot, .sync-now:focus-visible .dot { display: none }
@@ -137,6 +140,8 @@ nav { display: flex; gap: 6px }
 @media (hover: none) {
   .sync-text[data-tip]:hover:not(:focus-visible):not([aria-expanded="true"])::after { display: none }
 }
+/* A long hint under a control wraps rather than running off the window. */
+.correction-actions [data-tip]::after { left: 0; right: auto; width: max-content; white-space: normal; max-width: min(300px, calc(100vw - 48px)) }
 /* Marks with a breakdown look clickable; the pinned one stays lit. */
 svg [data-tip] { cursor: pointer }
 svg .tip-pinned, svg [data-tip]:hover { opacity: 1; filter: brightness(1.12) }
@@ -165,8 +170,8 @@ svg [data-tip]:focus-visible { outline: 3px solid var(--ai); outline-offset: 2px
 /* The model picker and the time range: what the whole page is filtered by. */
 .filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0 }
 .model-pick { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; font: 600 12.5px var(--body); color: var(--ink);
-  background: transparent; border: 1px solid var(--rule); border-radius: 999px; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.model-pick:hover, .model-pick[aria-expanded="true"] { filter: none; border-color: var(--muted) }
+  background: transparent; border: 1px solid var(--muted); border-radius: 999px; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.model-pick:hover, .model-pick[aria-expanded="true"] { filter: none; border-color: var(--ink) }
 .model-pick svg { width: 10px; height: 10px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 .model-pick[aria-expanded="true"] svg { transform: rotate(180deg) }
 
@@ -193,8 +198,8 @@ svg [data-tip]:focus-visible { outline: 3px solid var(--ai); outline-offset: 2px
 .ladder li { display: grid; grid-template-columns: 1fr auto; padding: 9px 12px; border-radius: 10px; border: 1px dashed var(--rule); color: var(--muted); font-size: 14px }
 .ladder li span:last-child { font: 400 12px/1.6 var(--mono) }
 .ladder li.on { border: 2px solid var(--pen); color: var(--ink); background: var(--pen-soft); font-weight: 600 }
-.ladder li .at { font: 700 15px/1 var(--display); color: var(--pen) }
-.hand-note { font: 400 18px/1.1 var(--hand); color: var(--pen) }
+.ladder li .at { font: 700 15px/1 var(--display); color: var(--pen-text) }
+.hand-note { font: 400 18px/1.1 var(--hand); color: var(--pen-text) }
 .share { display: flex; gap: 8px; flex-wrap: wrap }
 
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); border-block: 1px solid var(--rule) }
@@ -383,7 +388,7 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .pick-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 8px; cursor: pointer }
 .pick-list li.d1 { padding-left: 24px } .pick-list li.d2 { padding-left: 40px }
 .pick-list li.active { background: var(--ai-soft) }
-.pick-list li[aria-selected="true"] .pick-name b { color: var(--pen) }
+.pick-list li[aria-selected="true"] .pick-name b { color: var(--pen-text) }
 .pick-list li[aria-selected="true"] .pick-name b::after { content: " ✓" }
 .pick-list .pick-empty { color: var(--muted); cursor: default }
 .pick-name { display: grid; min-width: 0 }
@@ -400,18 +405,24 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .sd-head { display: flex; justify-content: space-between; align-items: center }
 .sd-close { background: none; border: 0; color: var(--muted); font-size: 26px; line-height: 1; padding: 2px 6px; min-width: 32px; min-height: 32px }
 .sd-close:hover { filter: none; color: var(--ink) }
-#share-text { width: 100%; resize: none; font: 400 14px/1.45 var(--body); color: var(--ink); background: var(--paper); border: 1px solid var(--muted); border-radius: 10px; padding: 10px 12px }
+#share-text, #share-human, #share-ai { width: 100%; resize: none; overflow: hidden; font: 400 14px/1.45 var(--body); color: var(--ink); background: var(--paper); border: 1px solid var(--muted); border-radius: 10px; padding: 10px 12px }
 .share-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px }
 .share-btn { display: grid; gap: 3px; justify-items: start; text-align: left; background: transparent; color: var(--ink); border: 1px solid var(--rule); border-radius: 12px; padding: 10px 11px; font: 600 14px var(--body) }
 .share-btn span { font: 500 11px/1.25 var(--body); color: var(--muted) }
-.share-btn .needs-paste { color: var(--pen) }
+.share-btn .needs-paste { color: var(--pen-text) }
 .share-btn:hover { filter: none; border-color: var(--ink); background: var(--pen-soft) }
+.share-warn { font-size: 13px; font-weight: 600; color: var(--ink); padding: 10px 12px; border-radius: 10px; background: var(--pen-soft) }
+.share-guide:empty { padding: 0; margin-top: -12px }
 .share-guide { font-size: 13px; color: var(--muted); padding: 10px 12px; border-radius: 10px; background: var(--paper) }
 .share-guide.paste { color: var(--ink); background: var(--hl); border: 1px solid var(--muted) }
 @supports (color: color-mix(in srgb, red, blue)) {
   .share-guide.paste { background: color-mix(in srgb, var(--hl) 55%, transparent); border: 1px solid color-mix(in srgb, var(--hl) 90%, var(--ink) 10%) }
 }
 .share-guide kbd { font: 600 12px var(--mono); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--muted); background: var(--surface) }
+/* No showModal (Safari before 15.4): the page centers the dialog and dims the rest itself (modal.ts). */
+dialog.modal-fallback[open] { position: fixed; inset: 0; margin: auto; height: max-content; max-height: calc(100vh - 32px); overflow: auto; z-index: 100;
+  box-shadow: 0 0 0 100vmax rgba(var(--shade), .55) }
+dialog.modal-fallback:not([open]) { display: none }
 .sd-foot { display: flex; gap: 8px; justify-content: flex-end }
 .confirm-dialog h2 { font-size: 20px }
 .confirm-list { margin: 0; padding-left: 20px; display: grid; gap: 8px }

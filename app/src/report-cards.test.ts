@@ -523,13 +523,20 @@ describe("reminders", () => {
 
 describe("deleting the history", () => {
   const del = '[data-action="report-cards-delete"]';
+  // A second click within 400 ms is a double-click and does nothing: hold the clock and move it on.
+  beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
+  afterEach(() => vi.useRealTimers());
+  const again = async () => {
+    vi.setSystemTime(Date.now() + 500);
+    await click(del);
+  };
 
   it("takes a second click, like Forget", async () => {
     await open();
     await click(del);
     expect(api.reportCardsDeleteHistory).not.toHaveBeenCalled();
-    expect(btn(del).textContent).toBe("Click again to delete the history");
-    await click(del);
+    expect(btn(del).textContent).toBe("Click again to delete every report card and tip for good");
+    await again();
     expect(api.reportCardsDeleteHistory).toHaveBeenCalledTimes(1);
     expect(must("#report-cards-note").textContent).toBe("Deleted your report card and tip history.");
     expect(btn(del).textContent).toBe("Delete report card and tip history");
@@ -539,11 +546,11 @@ describe("deleting the history", () => {
     await open();
     api.reportCardsDeleteHistory.mockResolvedValueOnce(0);
     await click(del);
-    await click(del);
+    await again();
     expect(must("#report-cards-note").textContent).toBe("There was no history to delete.");
     api.reportCardsDeleteHistory.mockResolvedValueOnce(1);
     await click(del);
-    await click(del);
+    await again();
     expect(must("#report-cards-note").textContent).toBe("Deleted your report card and tip history.");
   });
 
@@ -551,7 +558,7 @@ describe("deleting the history", () => {
     await open();
     api.reportCardsDeleteHistory.mockRejectedValueOnce("Couldn't delete the report card history. Try again.");
     await click(del);
-    await click(del);
+    await again();
     expect(must("#report-cards .action-error").textContent).toBe("Couldn't delete the report card history. Try again.");
     expect(must("#report-cards-note").textContent).toBe("");
   });
@@ -561,11 +568,20 @@ describe("deleting the history", () => {
     const work = pending<number>();
     api.reportCardsDeleteHistory.mockReturnValueOnce(work.promise);
     await click(del);
-    await click(del);
+    await again();
     expect(btn(del).textContent).toBe("Deleting…");
     expect(btn(del).getAttribute("aria-disabled")).toBe("true");
     work.resolve(2);
     await settle();
     expect(btn(del).textContent).toBe("Delete report card and tip history");
+  });
+
+  it("ignores a double-click", async () => {
+    await open();
+    await click(del);
+    await click(del);
+    expect(api.reportCardsDeleteHistory).not.toHaveBeenCalled();
+    await again();
+    expect(api.reportCardsDeleteHistory).toHaveBeenCalledTimes(1);
   });
 });

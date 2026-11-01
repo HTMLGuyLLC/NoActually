@@ -64,6 +64,12 @@ export const RANGES = ["12w", "6m", "all"] as const;
 export type Range = (typeof RANGES)[number];
 export const isRange = (x: unknown): x is Range => RANGES.some((r) => r === x);
 
+/**
+ * The first read of a history, after the first Allow: "reading" while the app takes it in, "done" once a check
+ * has ended and until the person has seen the scorecard, "off" otherwise.
+ */
+export type Reading = "off" | "reading" | "done";
+
 export type AppState = {
   tab: Tab;
   /** Which scorecard section is showing. */
@@ -77,6 +83,7 @@ export type AppState = {
   /** The window `allModels` counts cover: a start date on the scorecard, "" (all history) elsewhere. */
   allModelsScope: string;
   status: SyncStatus;
+  reading: Reading;
   /** The stats last drawn. */
   current: Stats | null;
   update: UpdateStatus | null;
@@ -110,7 +117,8 @@ const initial = (): AppState => ({
   filter: {},
   allModels: [],
   allModelsScope: "",
-  status: { syncing: false, last_sync: null, last_error: null, files_with_errors: 0 },
+  status: { syncing: false, last_sync: null, last_error: null, files_with_errors: 0, rebuilding: false },
+  reading: "off",
   current: null,
   update: null,
   laterFor: null,
@@ -172,6 +180,13 @@ export function setCurrent(stats: Stats): void {
 }
 export function setUpdate(update: UpdateStatus): void {
   s.update = update;
+}
+export function setReading(reading: Reading): void {
+  s.reading = reading;
+}
+/** An update that failed to install, in the app's words, until the next status replaces it. */
+export function setUpdateError(text: string): void {
+  if (s.update) s.update = { ...s.update, last_error: text, installing: false };
 }
 export function setAutoUpdate(auto: boolean): void {
   if (s.update) s.update = { ...s.update, auto };

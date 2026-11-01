@@ -3,10 +3,11 @@
 // so nothing is re-bound on each redraw.
 import { api, type GoalKind, type HallEntry, type Meta, type PromptTier, REPORT_CARD_TOOLS, type ReportCardTool, type Stats } from "./api";
 import { data, say } from "./dom";
-import { errorText, filterLabel } from "./format";
-import { dismiss } from "./hints";
+import { errorText, filterLabel, plural } from "./format";
+import { dismiss, dismissRescored } from "./hints";
 import { scheduleCheck } from "./learn/checker";
 import { lessonById } from "./learn/lessons";
+import { report } from "./log";
 import { correctionTier, promptTier, tierName } from "./meta";
 import type { PickStat } from "./picker/picker";
 import { buildPickItems, sameFilter } from "./picker/picker";
@@ -33,15 +34,17 @@ import {
   setLesson,
   setPeriod,
   setRange,
+  setReading,
   setReportCards,
   setSettingsPane,
   setTab,
   setUpdateChannel,
+  setUpdateError,
   setView,
   state,
 } from "./state";
 import { judgeQuiz } from "./views/learn";
-import { parseRetention } from "./views/settings";
+import { goneByCount, parseRetention, tightens } from "./views/settings";
 import { allowArgs } from "./views/sources";
 
 /** Removes the note a failed action left in `slot`. */
@@ -114,7 +117,10 @@ const when = () => PERIOD_WHEN[state.tab === "score" ? state.period : "28d"];
 
 /** How long a first click stays armed before the button goes back to normal. */
 const CONFIRM_MS = 5000;
+/** A second click sooner than this is a double-click, not a decision: it does nothing. */
+const CONFIRM_GUARD_MS = 400;
 const armed = new WeakMap<HTMLButtonElement, (flush: boolean) => void>();
+const armedAt = new WeakMap<HTMLButtonElement, number>();
 
 /** A hidden status line that reads the "Click again…" prompt aloud; the button's own text change isn't announced. */
 function confirmNote(): HTMLElement {
@@ -130,10 +136,12 @@ function confirmNote(): HTMLElement {
 }
 
 /** True on the second click. The first relabels the button and holds off redraws until then; it disarms
- * itself after a few seconds or when focus leaves, restoring the label. */
+ * itself after a few seconds or when focus leaves, restoring the label. A second click within
+ * `CONFIRM_GUARD_MS` of the first (a double-click) is ignored. */
 function confirmed(b: HTMLButtonElement, ask: string): boolean {
   const disarm = armed.get(b);
   if (disarm) {
+    if (Date.now() - (armedAt.get(b) ?? 0) < CONFIRM_GUARD_MS) return false;
     disarm(false);
     return true;
   }
@@ -155,6 +163,7 @@ function confirmed(b: HTMLButtonElement, ask: string): boolean {
   const announce = setTimeout(() => say(note, ask), 0);
   b.addEventListener("blur", onBlur);
   armed.set(b, off);
+  armedAt.set(b, Date.now());
   b.dataset.confirm = "yes";
   b.textContent = ask;
   return false;
@@ -249,8 +258,21 @@ export const clickActions = {
   home: () => {
     setTab("score");
     setView("overview");
+    setReading("off");
     return render();
   },
+  // The "rescored" line is gone for good once dismissed; only a later rebuild brings it back.
+  "dismiss-rescored": (b) => {
+    dismissRescored(data(b, "id"));
+    return render();
+  },
+  // The skip link: focus the page's content, past the header. (An anchor would change the hash, which reloads the window.)
+  "skip-to-main": () => {
+    const main = document.getElementById("main");
+    main?.focus();
+    main?.scrollIntoView?.({ block: "start" });
+  },
+  "open-notices": (b) => run(b, () => api.openNotices()),
   // Opens a Settings section from another tab (Improve's "Set up", the scorecard's "Choose sources").
   "go-settings": (b) => {
     const pane = data(b, "id");
@@ -377,7 +399,7 @@ export const clickActions = {
     return thenRender(b, () => api.setGoal(g.kind, g.target));
   },
   "clear-goal": (b) => {
-    if (!confirmed(b, "Click again to drop it")) return;
+    if (!confirmed(b, "Click again to drop this goal and its progress for good")) return;
     return thenRender(b, () => api.clearGoal());
   },
   pin: (b) => {
@@ -391,14 +413,26 @@ export const clickActions = {
     const id = data(b, "id");
     const choice = b.parentElement?.querySelector<HTMLSelectElement>(`select[data-since="${CSS.escape(id)}"]`)?.value ?? "all";
     const { since, fromNow } = allowArgs(choice, new Date());
-    return thenRender(b, () => api.allow(id, since, fromNow), "Allowing…");
+    // The first Allow with a history to read goes to the scorecard, which says it is reading and then fills in.
+    const first = !fromNow && !state.current?.messages;
+    return thenRender(
+      b,
+      async () => {
+        await api.allow(id, since, fromNow);
+        if (!first) return;
+        setReading("reading");
+        setTab("score");
+        setView("overview");
+      },
+      "Allowing…",
+    );
   },
   revoke: (b) => thenRender(b, () => api.revoke(data(b, "id"))),
   pause: (b) => thenRender(b, () => api.pause(data(b, "id"), data(b, "paused") !== "true")),
   import: (b) => thenRender(b, () => api.importExport(data(b, "id"))),
-  // Forget deletes data, so it takes a second click to confirm.
+  // Forget deletes data for good, so it takes a second click to confirm, and says what goes.
   forget: (b) => {
-    if (!confirmed(b, "Click again to delete its data")) return;
+    if (!confirmed(b, "Click again to delete its scores, pins and report cards for good")) return;
     return thenRender(b, () => api.forget(data(b, "id")));
   },
   // Turn on asks first; Turn off just does it (History stays until deleted).
@@ -434,7 +468,7 @@ export const clickActions = {
   },
   // Deleting takes a second click, like Forget.
   "report-cards-delete": (b) => {
-    if (state.reportCards.busy !== null || !confirmed(b, "Click again to delete the history")) return;
+    if (state.reportCards.busy !== null || !confirmed(b, "Click again to delete every report card and tip for good")) return;
     return reportCardsDo(
       "delete",
       () => api.reportCardsDeleteHistory(),
@@ -446,13 +480,23 @@ export const clickActions = {
     const out = form.querySelector("#privacy-status");
     const value = (sel: string) => form.querySelector<HTMLInputElement>(sel)?.value ?? "";
     try {
-      const retention = parseRetention({
+      const typed = {
         level: form.querySelector<HTMLInputElement>('input[name="level"]:checked')?.value ?? null,
         fullDays: value("#full-days"),
         snippetDays: value("#snippet-days"),
-      });
+      };
+      const retention = parseRetention(typed);
+      const saved = await api.retention();
+      const cuts = tightens(saved, retention);
+      // Keeping less deletes older text for good: say how much, and ask once more.
+      if (cuts) {
+        const n = goneByCount(state.current, retention);
+        if (!confirmed(b, `Click again to delete older text${n === null ? "" : ` (${plural(n, "correction")} in your Hall of fame)`} for good`)) return;
+      }
       await api.setRetention(retention);
-      say(out, "Saved. Older text was trimmed to match.");
+      // Draw the values as saved (days are kept between 1 and 3650), then say what happened.
+      await render();
+      say(document.querySelector("#privacy-status"), cuts ? "Saved. Older text was trimmed to match." : "Saved.");
     } catch (e) {
       say(out, errorText(e));
     }
@@ -473,7 +517,21 @@ export const clickActions = {
   // Opens or closes the tooltip for touch and keyboard. Closing happens in `bindActions` (blur, Escape, a click elsewhere).
   "sync-tip": (b) => b.setAttribute("aria-expanded", String(b.getAttribute("aria-expanded") !== "true")),
   "open-log-folder": (b) => run(b, () => api.openLogFolder()),
-  "install-update": (b) => run(b, () => api.installUpdate()),
+  // A failure is kept in the state and drawn in the banner, which a redraw may have replaced since the click.
+  "install-update": async (b) => {
+    let failure: unknown = null;
+    const ok = await run(b, async () => {
+      try {
+        await api.installUpdate();
+      } catch (e) {
+        failure = e;
+        throw e;
+      }
+    });
+    if (ok) return;
+    setUpdateError(errorText(failure));
+    paintUpdate();
+  },
   "later-update": () => {
     setLaterFor(state.update?.available ?? null);
     paintUpdate();
@@ -542,6 +600,7 @@ export const changeActions = {
   autostart: toggle((on) => api.setAutostart(on)),
   "auto-update": toggle((on) => api.setAutoUpdate(on), setAutoUpdate),
   // The "Launch at login" hint depends on it, so the page redraws.
+  popups: toggle((on) => api.setPopups(on)),
   "menu-bar": toggle(
     (on) => api.setMenuBar(on),
     () => void render(),
@@ -583,12 +642,6 @@ export const changeActions = {
 const has = <T extends object>(map: T, key: string): key is Extract<keyof T, string> => Object.keys(map).includes(key);
 
 const actionTarget = (e: Event) => (e.target instanceof Element ? e.target.closest<HTMLElement>("[data-action]") : null);
-
-/** Logs a failed action, in the console and in the app's log file (where a failure to write it is ignored). */
-const report = (e: unknown) => {
-  console.error("Action failed:", e);
-  void api.logError(errorText(e)).catch(() => {});
-};
 
 const SYNC_TIP = '.sync-text[aria-expanded="true"]';
 

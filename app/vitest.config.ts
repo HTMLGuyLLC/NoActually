@@ -16,8 +16,8 @@ export default defineConfig({
       // fonts.ts is CSS imports; main.ts is boot wiring (Tauri events), exercised by running the app.
       exclude: ["src/**/*.test.ts", "src/test/**", "src/fonts.ts", "src/main.ts", "src/vite-env.d.ts"],
       reporter: ["text", "text-summary"],
-      // Just under today's numbers (about 79% of lines), so a drop fails `test:coverage`.
-      thresholds: { lines: 75 },
+      // Just under today's numbers (about 84% of lines), so a drop fails `test:coverage`.
+      thresholds: { lines: 82 },
     },
   },
 });

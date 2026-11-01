@@ -225,6 +225,17 @@ pub enum Level {
 }
 
 impl Level {
+    /// The one of the two that keeps less text.
+    #[must_use]
+    pub fn at_most(self, other: Level) -> Level {
+        let rank = |l| [Level::Category, Level::Snippet, Level::Full].iter().position(|x| *x == l);
+        if rank(self) <= rank(other) {
+            self
+        } else {
+            other
+        }
+    }
+
     /// Stable id, as stored and serialized.
     pub fn as_str(self) -> &'static str {
         match self {
@@ -368,6 +379,11 @@ const SCORE_TABLES: [&str; 8] = ["events", "daily", "sessions", "tasks", "files"
 const KEPT_TABLES: [&str; 7] = ["events", "daily", "sessions", "tasks", "seen", "tips", "tip_chats"];
 /// The setting that says a rebuild has set scores aside and hasn't put back what it couldn't read.
 const REBUILDING_KEY: &str = "rules_rebuild.pending";
+/// The [`engine::REDACTION_VERSION`] stored text was last cleaned with.
+const REDACTION_KEY: &str = "redaction_version";
+/// Kept beside the database. Deleting text removes it, and the next pass writes a new one.
+const BACKUP_FILE: &str = "noactually-backup.db";
+const BACKUP_EVERY: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
 
 /// Shown when a message's chat never recorded a model (a session with no real reply).
 pub const NO_MODEL: &str = "No model recorded";
@@ -660,27 +676,64 @@ impl Store {
         Ok(())
     }
 
+    /// Remembers that the file as it stands now can't be read, so it isn't tried on every pass.
+    pub(crate) fn remember_unreadable(&self, path: &str, source: &str, meta: FileMeta) {
+        let pass = Pass { meta, finalized: true, cards_to: None };
+        if let Err(e) = upsert_file(&self.conn, path, source, 0, pass) {
+            log::warn!("couldn't note an unreadable file: {e}");
+        }
+    }
+
+    /// Whether `id` is still allowed. `noactually forget` from another process doesn't wait for a
+    /// running pass, which holds what it read in memory: this stops the pass writing it back.
+    pub(crate) fn still_allowed(&self, id: &str) -> Result<bool> {
+        Ok(self.source_state(id)?.is_some_and(|s| s.allowed))
+    }
+
+    /// The database's format version, for the log.
+    pub fn schema_version(&self) -> Result<usize> {
+        Ok(self.conn.pragma_query_value(None, "user_version", |r| r.get(0))?)
+    }
+
+    /// Whether a rebuild was cut short and hasn't finished yet.
+    pub fn rebuild_pending(&self) -> Result<bool> {
+        Ok(self.get_setting(REBUILDING_KEY)?.is_some())
+    }
+
+    /// Whether the next pass reads history again, so the numbers until then are partial.
+    pub fn rebuild_due(&self) -> Result<bool> {
+        let stored = self.get_setting("rules_version")?;
+        let current = stored.as_deref().and_then(|v| v.parse::<u32>().ok()).is_some_and(|v| v >= engine::RULES_VERSION);
+        let had_scores: bool = self.conn.query_row("SELECT EXISTS(SELECT 1 FROM daily)", [], |r| r.get(0))?;
+        Ok(self.rebuild_pending()? || (!current && had_scores))
+    }
+
     /// Ends a rebuild once history has been read again. A chat that wasn't read again comes back as
     /// it was counted: its file is gone, or its source is stopped. Counts per day have no chat on
-    /// them, so a day with nothing read again comes back whole, and a day with some of its chats
-    /// gone keeps the larger message count and adds back the corrections of those chats. Every
-    /// message key comes back too, so a file that returns can't count twice.
+    /// them, so a day with nothing read again comes back whole, and a day that a missing chat
+    /// touched keeps the larger message count and adds back that chat's corrections. Other days take
+    /// the new count. Message keys of missing chats come back too, so a file that returns can't
+    /// count twice. A correction that a fork already brought back isn't restored a second time.
     pub(crate) fn finish_rebuild(&mut self) -> Result<()> {
         const UNREAD: &str = "k.session NOT IN (SELECT id FROM temp.read_chats)";
         const READ_DAY: &str = "EXISTS (SELECT 1 FROM temp.read_days r WHERE r.source = k.source AND r.day = k.day)";
+        const MISSING_CHAT_DAY: &str = "EXISTS (SELECT 1 FROM kept_sessions s WHERE s.source = k.source
+            AND k.day BETWEEN s.first_day AND s.last_day AND s.id NOT IN (SELECT id FROM temp.read_chats))";
+        // `seen` holds only what this rebuild read until the kept keys come back below.
+        const NOT_BACK: &str = "NOT EXISTS (SELECT 1 FROM seen s WHERE s.key = k.seen_key)";
         if self.get_setting(REBUILDING_KEY)?.is_none() {
             return Ok(());
         }
         let tx = self.conn.transaction()?;
         tx.execute_batch(
-            "CREATE TEMP TABLE read_chats AS SELECT id FROM sessions;
+            "CREATE TEMP TABLE read_chats AS SELECT id FROM rebuild_read UNION SELECT id FROM sessions;
              CREATE TEMP TABLE read_days AS SELECT DISTINCT source, day FROM daily;",
         )?;
         tx.execute(
             &format!(
                 "INSERT INTO daily SELECT k.day, k.source, k.provider, k.family, k.version, k.label, k.category, count(*)
                  FROM (SELECT * FROM kept_events UNION ALL SELECT * FROM events WHERE pinned = 1) k
-                 WHERE {UNREAD} AND {READ_DAY}
+                 WHERE {UNREAD} AND {READ_DAY} AND {NOT_BACK}
                  GROUP BY k.day, k.source, k.provider, k.family, k.version, k.label, k.category
                  ON CONFLICT (day, source, provider, family, version, kind, category) DO UPDATE SET n = n + excluded.n"
             ),
@@ -688,7 +741,7 @@ impl Store {
         )?;
         tx.execute(
             &format!(
-                "INSERT INTO daily SELECT k.* FROM kept_daily k WHERE k.kind = 'message' AND {READ_DAY}
+                "INSERT INTO daily SELECT k.* FROM kept_daily k WHERE k.kind = 'message' AND {READ_DAY} AND {MISSING_CHAT_DAY}
                  ON CONFLICT (day, source, provider, family, version, kind, category) DO UPDATE SET n = max(n, excluded.n)"
             ),
             [],
@@ -698,7 +751,7 @@ impl Store {
             &format!(
                 "INSERT INTO events SELECT NULL, ts, day, source, session, provider, family, version, model_raw,
                    label, category, rules, level, human_full, ai_full, human_snip, ai_snip, pinned, seen_key
-                 FROM kept_events k WHERE {UNREAD}"
+                 FROM kept_events k WHERE {UNREAD} AND {NOT_BACK}"
             ),
             [],
         )?;
@@ -710,17 +763,96 @@ impl Store {
             ),
             [],
         )?;
-        tx.execute("INSERT OR IGNORE INTO sessions SELECT * FROM kept_sessions", [])?;
+        tx.execute(
+            "INSERT OR IGNORE INTO sessions SELECT k.* FROM kept_sessions k
+             WHERE k.id NOT IN (SELECT id FROM temp.read_chats)",
+            [],
+        )?;
         tx.execute(&format!("INSERT OR IGNORE INTO tips SELECT k.* FROM kept_tips k WHERE {UNREAD}"), [])?;
         tx.execute(&format!("INSERT OR IGNORE INTO tip_chats SELECT k.* FROM kept_tip_chats k WHERE {UNREAD}"), [])?;
-        tx.execute("INSERT OR IGNORE INTO seen SELECT * FROM kept_seen", [])?;
+        tx.execute(
+            "INSERT OR IGNORE INTO seen SELECT k.* FROM kept_seen k
+             WHERE k.session IS NULL OR k.session NOT IN (SELECT id FROM temp.read_chats)",
+            [],
+        )?;
         tx.execute_batch("DROP TABLE temp.read_chats; DROP TABLE temp.read_days;")?;
         for table in KEPT_TABLES {
             tx.execute(&format!("DELETE FROM kept_{table}"), [])?;
         }
+        tx.execute("DELETE FROM rebuild_read", [])?;
         tx.execute("DELETE FROM settings WHERE key = ?1", [REBUILDING_KEY])?;
         tx.commit()?;
         Ok(())
+    }
+
+    /// Runs newer redaction over text already stored, once. Text whose chat can't be read again would
+    /// otherwise keep whatever the older rules missed, and pinned text is the likeliest to be shared.
+    pub fn redact_stored_text(&mut self) -> Result<()> {
+        let current = engine::REDACTION_VERSION;
+        let stored = self.get_setting(REDACTION_KEY)?.and_then(|v| v.parse::<u32>().ok());
+        if stored.is_some_and(|v| v >= current) {
+            return Ok(());
+        }
+        let tx = self.conn.transaction()?;
+        let mut changed = false;
+        for table in ["events", "kept_events"] {
+            let rows = {
+                let mut q = tx.prepare(&format!(
+                    "SELECT rowid, human_full, ai_full, human_snip, ai_snip FROM {table}
+                     WHERE human_full IS NOT NULL OR ai_full IS NOT NULL OR human_snip IS NOT NULL OR ai_snip IS NOT NULL"
+                ))?;
+                let rows = q.query_map([], |r| {
+                    let text = |i| r.get::<_, Option<String>>(i);
+                    Ok((r.get::<_, i64>(0)?, [text(1)?, text(2)?, text(3)?, text(4)?]))
+                })?;
+                rows.collect::<std::result::Result<Vec<_>, _>>()?
+            };
+            for (id, text) in rows {
+                let clean = text.clone().map(|t| t.map(|t| engine::redact(&t)));
+                if clean != text {
+                    tx.execute(
+                        &format!(
+                            "UPDATE {table} SET human_full = ?2, ai_full = ?3, human_snip = ?4, ai_snip = ?5
+                             WHERE rowid = ?1"
+                        ),
+                        params![id, clean[0], clean[1], clean[2], clean[3]],
+                    )?;
+                    changed = true;
+                }
+            }
+        }
+        put_setting(&tx, REDACTION_KEY, &current.to_string())?;
+        tx.commit()?;
+        if changed {
+            self.flush_deleted()?;
+        }
+        Ok(())
+    }
+
+    /// Writes a fresh copy of the database beside it, at most once a day and before a rebuild.
+    /// A failure is only logged: a backup must never stop a sync.
+    pub fn backup_if_due(&self) -> Result<()> {
+        let Some(path) = self.backup_path() else { return Ok(()) };
+        let age = std::fs::metadata(&path).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok());
+        if age.is_some_and(|a| a < BACKUP_EVERY) && !self.rebuild_due()? {
+            return Ok(());
+        }
+        let temp = path.with_extension("db.tmp");
+        let _ = std::fs::remove_file(&temp);
+        if let Err(e) = self.conn.execute("VACUUM INTO ?1", [temp.to_string_lossy()]) {
+            log::warn!("couldn't back up the database: {e}");
+            return Ok(());
+        }
+        files::restrict(&temp, 0o600);
+        if let Err(e) = std::fs::rename(&temp, &path) {
+            log::warn!("couldn't save the database backup: {e}");
+        }
+        Ok(())
+    }
+
+    fn backup_path(&self) -> Option<PathBuf> {
+        let db = self.conn.path().filter(|p| !p.is_empty())?;
+        Some(Path::new(db).with_file_name(BACKUP_FILE))
     }
 
     /// Rebuilds scores once if they were counted under older rules. Returns true if it did. Scores
@@ -750,6 +882,7 @@ impl Store {
         for table in KEPT_TABLES {
             tx.execute(&format!("DELETE FROM kept_{table} WHERE source = ?1"), [id])?;
         }
+        tx.execute("DELETE FROM rebuild_read WHERE source = ?1", [id])?;
         tx.execute("DELETE FROM report_cards WHERE source = ?1", [id])?;
         tx.execute("DELETE FROM sources WHERE id = ?1", [id])?;
         clear_left_out(&tx, Some(id))?;
@@ -835,11 +968,20 @@ impl Store {
         } else {
             pass.cards_to = pass.cards_to.max(scan.cards.iter().map(|c| c.pos).max());
         }
+        let rebuilding = self.rebuild_pending()?;
         let tx = self.conn.transaction()?;
         let (mut messages, mut corrections) = (0, 0);
         for st in scan.turns.iter().filter(|st| state.wants(st.ts)) {
+            let session = hash(&[source, &st.session]);
+            if rebuilding {
+                tx.execute(
+                    "INSERT OR IGNORE INTO rebuild_read (id, source) VALUES (?1, ?2)",
+                    params![session, source],
+                )?;
+            }
             let key = engine::message_key(source, &st.session, st.key.as_deref(), &st.ts.to_rfc3339(), &st.turn.human);
-            if tx.execute("INSERT OR IGNORE INTO seen (key, source) VALUES (?1, ?2)", params![key, source])? == 0 {
+            let new = "INSERT OR IGNORE INTO seen (key, source, session) VALUES (?1, ?2, ?3)";
+            if tx.execute(new, params![key, source, session])? == 0 {
                 continue; // a copy we've already counted (resumed or forked session, re-import)
             }
             let v = classify(&st.turn);
@@ -857,7 +999,6 @@ impl Store {
             };
             bump("message", "")?;
             messages += 1;
-            let session = hash(&[source, &st.session]);
             let is_correction = v.label.is_some_and(Label::is_correction);
             tx.execute(
                 "INSERT INTO sessions (id, source, first_day, last_day, messages, corrections) VALUES (?1,?2,?3,?3,1,?4)
@@ -865,27 +1006,14 @@ impl Store {
                    first_day = min(first_day, excluded.first_day), last_day = max(last_day, excluded.last_day)",
                 params![session, source, day, i64::from(is_correction)],
             )?;
-            // Prompts: a new task gets a row; steering and other replies count toward the chat's latest.
-            let latest = "id = (SELECT MAX(id) FROM tasks WHERE session = ?1)";
-            let has_task: bool =
-                tx.query_row("SELECT EXISTS(SELECT 1 FROM tasks WHERE session = ?1)", [&session], |r| r.get(0))?;
-            match read_prompt(&st.turn, &v, has_task) {
-                Prompt::Task { signals, .. } => tx.execute(
-                    "INSERT INTO tasks (day, source, session, provider, family, version, signals) VALUES (?1,?2,?3,?4,?5,?6,?7)",
-                    params![day, source, session, provider, family, version, signals.0],
-                )?,
-                Prompt::Steer { cause, .. } => tx.execute(
-                    &format!("UPDATE tasks SET messages = messages + 1, {c} = {c} + 1 WHERE {latest}", c = cause.as_str()),
-                    [&session],
-                )?,
-                Prompt::Other => tx.execute(&format!("UPDATE tasks SET messages = messages + 1 WHERE {latest}"), [&session])?,
-            };
+            count_prompt(&tx, &st.turn, &v, &session, [day.as_str(), source, provider, family, version])?;
             let Some(label) = v.label else { continue };
             let category = v.category.map_or("", engine::Category::as_str);
             bump(label.as_str(), category)?;
             corrections += usize::from(is_correction);
 
-            let text = EventText::new(&st.turn, &v, retention.level);
+            let level = if rebuilding { level_after_rebuild(&tx, &key, retention.level)? } else { retention.level };
+            let text = EventText::new(&st.turn, &v, level);
             // A pinned correction kept through a rules rebuild is already here; keep it as pinned.
             tx.execute(
                 "INSERT INTO events (ts, day, source, session, provider, family, version, model_raw, label, category, rules,
@@ -904,7 +1032,7 @@ impl Store {
                     label.as_str(),
                     category,
                     v.rules.join(","),
-                    retention.level.as_str(),
+                    level.as_str(),
                     text.human_full,
                     text.ai_full,
                     text.human_snip,
@@ -998,6 +1126,11 @@ impl Store {
         // Returns (busy, log frames, checkpointed frames). busy = 1 means a reader blocked it.
         for attempt in 0..CHECKPOINT_TRIES {
             let busy: i64 = self.conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(0))?;
+            if attempt == 0 {
+                if let Some(path) = self.backup_path() {
+                    let _ = std::fs::remove_file(path); // it still holds what was just deleted
+                }
+            }
             if busy == 0 {
                 return Ok(());
             }
@@ -1038,6 +1171,42 @@ struct EventText {
     ai_full: Option<String>,
     human_snip: Option<String>,
     ai_snip: Option<String>,
+}
+
+/// Prompts: a new task gets a row; steering and other replies count toward the chat's latest.
+/// `row` is the day, source, provider, family and version a new task is filed under.
+fn count_prompt(
+    tx: &rusqlite::Transaction<'_>,
+    turn: &engine::Turn,
+    v: &engine::Verdict,
+    session: &str,
+    row: [&str; 5],
+) -> Result<()> {
+    let latest = "id = (SELECT MAX(id) FROM tasks WHERE session = ?1)";
+    let has_task: bool =
+        tx.query_row("SELECT EXISTS(SELECT 1 FROM tasks WHERE session = ?1)", [session], |r| r.get(0))?;
+    match read_prompt(turn, v, has_task) {
+        Prompt::Task { signals, .. } => {
+            let [day, source, provider, family, version] = row;
+            tx.execute(
+                "INSERT INTO tasks (day, source, session, provider, family, version, signals) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+                params![day, source, session, provider, family, version, signals.0],
+            )?
+        }
+        Prompt::Steer { cause, .. } => tx.execute(
+            &format!("UPDATE tasks SET messages = messages + 1, {c} = {c} + 1 WHERE {latest}", c = cause.as_str()),
+            [session],
+        )?,
+        Prompt::Other => tx.execute(&format!("UPDATE tasks SET messages = messages + 1 WHERE {latest}"), [session])?,
+    };
+    Ok(())
+}
+
+/// A rebuild never keeps more text than the correction had: levels only step down.
+fn level_after_rebuild(tx: &rusqlite::Transaction<'_>, key: &str, level: Level) -> Result<Level> {
+    let kept: Option<String> =
+        tx.query_row("SELECT level FROM kept_events WHERE seen_key = ?1", [key], |r| r.get(0)).optional()?;
+    Ok(kept.and_then(|l| l.parse().ok()).map_or(level, |l: Level| l.at_most(level)))
 }
 
 impl EventText {

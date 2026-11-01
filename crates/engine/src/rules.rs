@@ -83,7 +83,12 @@ pub static AI_ADMIT: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         rule_unless("ai.youre_right", r"\byou'?re (absolutely |totally |completely )?(right|correct)\b", RIGHT_TO_ASK),
         rule_unless("ai.you_are_right", r"\byou (are|were) (absolutely |totally |completely )?(right|correct)\b", RIGHT_TO_ASK),
         rule_unless("ai.good_catch", r"\b(good|great|nice|sharp) catch\b", &good_catch),
-        rule("ai.my_mistake", r"\bmy (mistake|bad|apologies|error)\b"),
+        rule_unless(
+            "ai.my_mistake",
+            r"\bmy (mistake|bad|apologies|error)\b",
+            // Code and habits, not an admission: "my error handling", "my bad habit".
+            r"my (error (handling|message|log|path|code|type|boundary|page)|bad (habit|luck|idea))",
+        ),
         rule(
             "ai.i_was_wrong",
             r"\bi (was wrong|got (that|it) wrong|missed|misread|overlooked|misunderstood|made (a|an) (mistake|error)|used the wrong)\b",
@@ -96,10 +101,20 @@ pub static AI_ADMIT: LazyLock<Vec<Rule>> = LazyLock::new(|| {
             r"sorry,? for (the|that) (long |short )?(delay|wait|interruption)\b",
         ),
         rule("ai.on_me", r"\bthat'?s on me\b"),
-        rule("ai.should_have", r"\bi should have\b"),
+        rule_unless(
+            "ai.should_have",
+            r"\bi should have\b",
+            // What the AI expects to have, not what it failed to do: "I should have enough context now".
+            r"i should have\s+(enough|everything|all|what|which|the (context|info|information|data|access|files?|details?|answer|results?|rest)|access|a (good|clear|better|full|complete)|more (time|context|info|information|data|details?|access)|some|plenty|sufficient|both|time|permission|it (now|soon|ready|done|working|fixed)|that (now|soon))\b",
+        ),
         rule("ai.incorrectly", r"\bi incorrectly\b"),
         rule("ai.that_was_wrong", r"\bthat was (wrong|incorrect|a mistake)\b"),
-        rule("ai.didnt_check", r"\bi (didn'?t|did not) (actually )?(check|verify|read|correction)\b"),
+        rule_unless(
+            "ai.didnt_check",
+            r"\bi (didn'?t|did not) (actually )?(check|verify|read|catch|correction)\b",
+            // "I didn't catch that" can mean "I didn't hear you" (but "didn't catch that bug" admits it).
+            r"i (didn'?t|did not) (actually )?catch\s+(that|this|what you (said|meant|mean|wrote|typed)|you|your|the (last|previous|whole|rest))\b(\s+(last|part|message|one|again|bit))?\s*([,.!?;:—–-]|$|\s+(can|could|would|please|come|one more|again|sorry|what)\b)",
+        ),
     ]
     .into_iter()
     .map(Rule::not_when_unsure)

@@ -9,7 +9,7 @@
 //   node scripts/report-card-evals/run.mjs [--model sonnet] [--runs 1] [--only id,id] [--no-digest]
 //
 // NOACTUALLY_BIN=path/to/noactually skips the cargo build.
-// --no-digest: the app isn't installed; the card must have no record block and no dollar figures.
+// --no-digest: the summary is empty (app not installed, paused or timed out); the AI must stop: no grade, no record block, no dollar figures.
 
 import { execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -131,6 +131,8 @@ function run(c) {
     { env, encoding: "utf8", maxBuffer: 16 << 20, timeout: 300_000 },
   );
   const out = JSON.parse(raw);
+  // An error message in `result` would pass the no-summary checks below as if it were a card.
+  if (out.is_error || (out.subtype && out.subtype !== "success")) throw new Error(`claude failed: ${String(out.result ?? out.subtype).slice(0, 200)}`);
   return { seal, prompts, out, card: out.result ?? "" };
 }
 
@@ -139,6 +141,9 @@ function check(c, { seal, prompts, card }) {
   const bad = [];
   const blocks = [...card.matchAll(/^\s*```noactually\s*\n([\s\S]*?)```/gm)].map((m) => m[1].trim());
   if (noDigest) {
+    // An empty summary means stop: say so, grade nothing.
+    if (!card.trim()) bad.push("no reply to an empty summary");
+    if (/Grade:\s*\**[A-F]\b/.test(card)) bad.push("a grade without a summary");
     if (blocks.length) bad.push("record block without a summary");
     if (/\$\d/.test(card)) bad.push("dollar figures without a summary");
     return { bad, grades: [] };

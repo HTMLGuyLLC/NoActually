@@ -9,16 +9,35 @@ mod updater;
 
 use serde::Serialize;
 use sources::Source;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Mutex, MutexGuard};
+use std::time::Duration;
 use store::Store;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, WindowEvent};
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_positioner::{Position, WindowExt};
 
 /// Passed by the login item so a launch at login starts quietly in the menu bar.
 pub const HIDDEN_ARG: &str = "--hidden";
+
+/// Passed by CI: opens a temporary database, builds the app and exits 0, with no window and no
+/// network. Hidden: it isn't in any help or doc a user reads.
+pub const SELF_CHECK_ARG: &str = "--self-check";
+
+/// Settings key: "off" turns off every popup the app sends (milestones and the rescored notice).
+/// Anything else, or never set, keeps them on.
+pub const POPUPS_KEY: &str = "popups.enabled";
+
+/// Settings key: when scores were last rebuilt under new rules (RFC 3339, UTC), so the window can
+/// tell the person even if the popup was off or missed.
+pub const RESCORED_NOTICE_KEY: &str = "rescored.notice";
+
+/// The daily backup's file name, beside the database (`BACKUP_FILE` in the store crate).
+const BACKUP_FILE_NAME: &str = "noactually-backup.db";
 
 /// Settings key: "off" makes it an ordinary app (no menu bar or tray icon, quits when its
 /// window closes). Anything else, or never set, keeps it running in the menu bar.
@@ -61,6 +80,21 @@ pub struct SyncStatus {
     pub last_sync: Option<chrono::DateTime<chrono::Utc>>,
     pub last_error: Option<String>,
     pub files_with_errors: usize,
+    /// The pass in progress reads history again, so the numbers are partial until it ends.
+    pub rebuilding: bool,
+}
+
+/// Whether popups are on, given the saved setting.
+pub fn popups_enabled(setting: Option<&str>) -> bool {
+    setting != Some("off")
+}
+
+/// Shows a popup, unless the person turned popups off. Every notification goes through here.
+pub fn notify(handle: &AppHandle, app: &App, title: impl Into<String>, body: impl Into<String>) {
+    let setting = lock(&app.reader).get_setting(POPUPS_KEY).ok().flatten();
+    if popups_enabled(setting.as_deref()) {
+        let _ = handle.notification().builder().title(title).body(body).show();
+    }
 }
 
 /// A panicked holder must not take the whole app down with it: the data behind the lock is
@@ -172,7 +206,7 @@ fn build_tray(tauri_app: &tauri::App, menu: &Menu<tauri::Wry>) -> tauri::Result<
             }
             "update" => updater::on_menu(app),
             "quit" => {
-                save_main_placement(app);
+                save_main_placement_before_exit(app);
                 app.exit(0);
             }
             _ => {}
@@ -257,22 +291,49 @@ fn place_main(handle: &AppHandle, saved: Option<&str>) {
     let _ = w.set_position(tauri::LogicalPosition::new(r.x, r.y));
 }
 
-/// Remembers the scorecard's position and size (outer frame, in points) for next launch.
-pub(crate) fn save_main_placement(handle: &AppHandle) {
-    let Some(w) = handle.get_webview_window("main") else { return };
+/// The scorecard's position and size as saved: "x,y,width,height" in points.
+fn placement_string(pos: (i32, i32), size: (u32, u32), scale: f64) -> String {
+    format!(
+        "{},{},{},{}",
+        f64::from(pos.0) / scale,
+        f64::from(pos.1) / scale,
+        f64::from(size.0) / scale,
+        f64::from(size.1) / scale
+    )
+}
+
+/// How long a quit waits for the placement to be written. A sync pass can hold the writer far longer.
+const EXIT_SAVE_WAIT: Duration = Duration::from_millis(1500);
+
+/// Remembers the scorecard's position and size (outer frame, in points) for next launch. The window
+/// is read here, but the write waits for the writer on its own thread, so a long sync pass never
+/// freezes the window. The receiver hears when it's written.
+pub(crate) fn save_main_placement(handle: &AppHandle) -> Option<mpsc::Receiver<()>> {
+    let w = handle.get_webview_window("main")?;
     if w.is_minimized().unwrap_or(false) || w.is_fullscreen().unwrap_or(false) {
+        return None;
+    }
+    let (Ok(pos), Ok(size), Ok(scale)) = (w.outer_position(), w.outer_size(), w.scale_factor()) else { return None };
+    let r = placement_string((pos.x, pos.y), (size.width, size.height), scale);
+    let app = std::sync::Arc::clone(&*handle.try_state::<std::sync::Arc<App>>()?);
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = lock(&app.writer).set_setting(MAIN_WINDOW_KEY, &r);
+        let _ = tx.send(());
+    });
+    Some(rx)
+}
+
+/// [`save_main_placement`] for a quit: waits a moment for the write, but never for a whole sync pass.
+pub(crate) fn save_main_placement_before_exit(handle: &AppHandle) {
+    // A tray Quit waits here and then again on the exit it asks for: once is enough.
+    static WAITED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if WAITED.swap(true, std::sync::atomic::Ordering::Relaxed) {
         return;
     }
-    let (Ok(pos), Ok(size), Ok(scale)) = (w.outer_position(), w.outer_size(), w.scale_factor()) else { return };
-    let r = format!(
-        "{},{},{},{}",
-        f64::from(pos.x) / scale,
-        f64::from(pos.y) / scale,
-        f64::from(size.width) / scale,
-        f64::from(size.height) / scale
-    );
-    let app = handle.state::<std::sync::Arc<App>>();
-    let _ = lock(&app.writer).set_setting(MAIN_WINDOW_KEY, &r);
+    if let Some(done) = save_main_placement(handle) {
+        let _ = done.recv_timeout(EXIT_SAVE_WAIT);
+    }
 }
 
 /// One line for the log: the panic's message and where it happened.
@@ -325,6 +386,28 @@ fn shorten_home(path: &std::path::Path, home: Option<&std::path::Path>) -> Strin
     }
 }
 
+/// `text` with the home folder written as `~` wherever it appears, for log lines that quote a path.
+/// Whole folders only: `/Users/me` leaves `/Users/mellow` alone.
+pub(crate) fn shorten_home_in(text: &str, home: Option<&Path>) -> String {
+    let Some(home) = home.map(|h| h.display().to_string()).filter(|h| !h.is_empty()) else { return text.to_string() };
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find(&home) {
+        let after = &rest[at + home.len()..];
+        let whole = after.chars().next().is_none_or(|c| !(c.is_alphanumeric() || c == '_' || c == '-' || c == '.'));
+        out.push_str(&rest[..at]);
+        out.push_str(if whole { "~" } else { &home });
+        rest = after;
+    }
+    out.push_str(rest);
+    out
+}
+
+/// `path` for the log, with the home folder written as `~`.
+pub(crate) fn home_short(path: &Path) -> String {
+    shorten_home(path, std::env::home_dir().as_deref())
+}
+
 /// Writes every panic to the log, then runs the default hook so a panic still prints as before.
 fn log_panics() {
     let default = std::panic::take_hook();
@@ -334,24 +417,101 @@ fn log_panics() {
     }));
 }
 
+/// Whether the launch asks for the CI self-check.
+fn is_self_check(mut args: impl Iterator<Item = std::ffi::OsString>) -> bool {
+    args.any(|a| a == SELF_CHECK_ARG)
+}
+
+/// The throwaway folder a self-check keeps its database in.
+fn self_check_dir() -> PathBuf {
+    std::env::temp_dir().join(format!("noactually-self-check-{}", std::process::id()))
+}
+
+/// What the dialog says when the database can't be opened at launch. Plain words: the person
+/// has no window to look at, only this.
+fn startup_failure_text(e: &store::Error, log_dir: Option<&Path>, db: Option<&Path>) -> String {
+    let mut text = if matches!(e, store::Error::NewerDatabase { .. }) {
+        "Your data was saved by a newer version of No, Actually... Download the latest version from \
+         github.com/HTMLGuyLLC/NoActually/releases/latest to open it. Nothing was changed."
+            .to_string()
+    } else {
+        let mut t = format!("No, Actually... couldn't open its database.\n\n{e}");
+        if let Some(folder) = db.and_then(Path::parent) {
+            t = format!(
+                "{t}\n\nA daily backup, if one was made, is {BACKUP_FILE_NAME} in {}. \
+                 Copy it somewhere safe before changing anything.",
+                folder.display()
+            );
+        }
+        t
+    };
+    if let Some(dir) = log_dir {
+        text = format!("{text}\n\nThe log is in {}.", dir.display());
+    }
+    text
+}
+
+/// Tells the person why the app can't start, in a native dialog, then exits when it's closed.
+/// Without this the app would stop with no window and no word.
+fn startup_failed(handle: &AppHandle, db: Option<&Path>, e: &store::Error) {
+    log::error!("couldn't open the database: {e}");
+    let log_dir = handle.path().app_log_dir().ok();
+    let text = startup_failure_text(e, log_dir.as_deref(), db);
+    let exit = handle.clone();
+    // Not a blocking dialog: this runs on the main thread, which has to keep running to draw it.
+    handle
+        .dialog()
+        .message(text)
+        .title("No, Actually... can't start")
+        .kind(MessageDialogKind::Error)
+        .show(move |_| exit.exit(1));
+}
+
+/// The database path and the two connections to it (writer, reader). On failure, the path if it
+/// was known and the error.
+type Opened = (PathBuf, Store, Store);
+fn open_databases(self_check: bool) -> Result<Opened, (Option<PathBuf>, store::Error)> {
+    // The same file the CLI opens. NOACTUALLY_DB points at another one (development, demos).
+    let db = if self_check {
+        self_check_dir().join(store::DB_FILE)
+    } else {
+        store::default_db_path().map_err(|e| (None, e))?
+    };
+    if store::legacy_db_env_in_use() {
+        log::warn!("{} is deprecated; set {} instead", store::LEGACY_DB_ENV, store::DB_ENV);
+    }
+    log::info!("database: {}", home_short(&db));
+    let open = || Store::open(&db).map_err(|e| (Some(db.clone()), e));
+    let (writer, reader) = (open()?, open()?);
+    Ok((db, writer, reader))
+}
+
 /// Opens the database, builds the tray, and starts the tracker and update threads.
 fn setup(tauri_app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     log_panics();
     let handle = tauri_app.handle().clone();
-    // The same file the CLI opens. NOACTUALLY_DB points at another one (development, demos).
-    let db = store::default_db_path()?;
-    if store::legacy_db_env_in_use() {
-        log::warn!("{} is deprecated; set {} instead", store::LEGACY_DB_ENV, store::DB_ENV);
-    }
+    let self_check = is_self_check(std::env::args_os());
     log::info!(
-        "No, Actually... {} on {} {}",
+        "No, Actually... {} on {} {}, scoring rules {}",
         tauri_app.package_info().version,
         std::env::consts::OS,
-        std::env::consts::ARCH
+        std::env::consts::ARCH,
+        engine::RULES_VERSION
     );
-    log::info!("database: {}", shorten_home(&db, std::env::home_dir().as_deref()));
-    let writer = Store::open(&db)?;
-    let reader = Store::open(&db)?;
+    let (db, writer, reader) = match open_databases(self_check) {
+        Ok(opened) => opened,
+        Err((_, e)) if self_check => return Err(e.into()),
+        Err((db, e)) => {
+            startup_failed(&handle, db.as_deref(), &e);
+            return Ok(()); // no window opens; the dialog's button ends the app
+        }
+    };
+    // The trail a rebuild or migration leaves: what the database was last scored under.
+    log::info!(
+        "database format {}, scored under rules {}",
+        writer.schema_version()?,
+        writer.get_setting("rules_version")?.as_deref().unwrap_or("none")
+    );
     match report_cards::cli_path::publish(&db) {
         Ok(report_cards::cli_path::Published::Translocated) => {
             log::warn!("running from a temporary copy; not recording where the report-card helper is");
@@ -383,6 +543,13 @@ fn setup(tauri_app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     tauri_app.manage(HasTray(has_tray));
     apply_menu_bar(&handle, &app, menu_bar);
 
+    if self_check {
+        // Everything above is what a launch builds. No window, no threads, no network: done.
+        log::info!("self-check passed");
+        handle.exit(0);
+        return Ok(());
+    }
+
     // A launch at login stays in the menu bar; a launch by the user opens the scorecard. With no
     // menu bar icon (turned off, or no tray on this system) there'd be nothing to click, so it
     // always opens.
@@ -407,13 +574,17 @@ pub fn run() {
     tauri::Builder::default()
         // First: a second launch just brings the running app forward, so two trackers never
         // write the same database.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // No arguments in the log: they can hold paths.
+            log::info!("a second launch brought the scorecard forward");
+            show_main(app);
+        }))
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
                 .max_file_size(2_000_000)
-                // The log in use and the one before it, so a rotation never wipes what led up to a problem.
-                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(2))
+                // The log in use and one older one (about 4 MB in all), so a rotation never wipes the lead-up.
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(1))
                 .build(),
         )
         .plugin(tauri_plugin_positioner::init())
@@ -430,15 +601,17 @@ pub fn run() {
             // Closing the scorecard hides it and tracking keeps running from the menu bar, unless
             // it's set to be an ordinary app or there's no tray on this system: then closing quits.
             WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
-                save_main_placement(window.app_handle());
                 let handle = window.app_handle();
-                if handle.state::<std::sync::Arc<App>>().menu_bar()
+                if handle.try_state::<std::sync::Arc<App>>().is_some_and(|a| a.menu_bar())
                     && handle.try_state::<HasTray>().is_some_and(|t| t.0)
                 {
+                    // Hiding never waits: the placement is written in the background.
+                    let _ = save_main_placement(handle);
                     api.prevent_close();
                     hide_main(window);
                 } else {
-                    window.app_handle().exit(0);
+                    save_main_placement_before_exit(handle);
+                    handle.exit(0);
                 }
             }
             WindowEvent::Focused(false) if window.label() == "glance" => {
@@ -480,6 +653,10 @@ pub fn run() {
             commands::install_update,
             commands::log_error,
             commands::open_log_folder,
+            commands::open_notices,
+            commands::get_popups,
+            commands::set_popups,
+            commands::rescored_notice,
             commands::recent_report_cards,
             report_cards::report_cards_status,
             report_cards::report_cards_turn_on,
@@ -490,11 +667,13 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building No, Actually...")
-        .run(|handle, event| {
+        .run(|handle, event| match event {
             // Cmd+Q and logout quit without closing the window first.
-            if let tauri::RunEvent::ExitRequested { .. } = event {
-                save_main_placement(handle);
+            tauri::RunEvent::ExitRequested { .. } => save_main_placement_before_exit(handle),
+            tauri::RunEvent::Exit if is_self_check(std::env::args_os()) => {
+                let _ = std::fs::remove_dir_all(self_check_dir());
             }
+            _ => {}
         });
 }
 
@@ -599,5 +778,83 @@ mod panic_tests {
         assert_eq!(shorten_home(Path::new("/Users/me"), home), "~");
         assert_eq!(shorten_home(Path::new("/Users/mellow/x.db"), home), "/Users/mellow/x.db", "whole folders only");
         assert_eq!(shorten_home(&db, None), db.display().to_string());
+    }
+}
+
+#[cfg(test)]
+mod launch_tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn the_self_check_flag_is_found_among_the_arguments() {
+        let args = |v: &[&str]| v.iter().map(OsString::from).collect::<Vec<_>>().into_iter();
+        assert!(is_self_check(args(&["--self-check"])));
+        assert!(is_self_check(args(&["--hidden", "--self-check"])));
+        assert!(!is_self_check(args(&["--hidden"])));
+        assert!(!is_self_check(args(&[])));
+    }
+
+    #[test]
+    fn the_self_check_database_is_in_its_own_temporary_folder() {
+        let dir = self_check_dir();
+        assert!(dir.starts_with(std::env::temp_dir()));
+        assert!(dir.to_string_lossy().contains(&std::process::id().to_string()));
+        let opened = open_databases(true).expect("a temporary database opens");
+        assert!(dir.join(store::DB_FILE).exists());
+        drop(opened);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_failed_open_names_the_log_folder_and_the_backup() {
+        let db = Path::new("/data/noactually.db");
+        let logs = Path::new("/logs/app.noactually");
+        let broken = store::Error::Invalid("disk is full");
+        let text = startup_failure_text(&broken, Some(logs), Some(db));
+        assert!(text.contains("disk is full"), "{text}");
+        assert!(text.contains(BACKUP_FILE_NAME) && text.contains("/data"), "{text}");
+        assert!(text.contains("/logs/app.noactually"), "{text}");
+    }
+
+    #[test]
+    fn a_newer_database_says_to_update_the_app() {
+        let newer = store::Error::NewerDatabase { found: 13, known: 12 };
+        let text = startup_failure_text(&newer, Some(Path::new("/logs")), Some(Path::new("/data/noactually.db")));
+        assert!(text.contains("releases/latest"), "{text}");
+        assert!(!text.contains(BACKUP_FILE_NAME), "a newer file's backup isn't an answer: {text}");
+        assert!(text.contains("/logs"), "{text}");
+        // With no known paths it still says something useful.
+        assert!(startup_failure_text(&store::Error::NoDataDir, None, None).contains("couldn't open"));
+    }
+
+    #[test]
+    fn the_backup_name_matches_the_stores() {
+        let store_src = include_str!("../../../crates/store/src/lib.rs");
+        assert!(store_src.contains(&format!("const BACKUP_FILE: &str = \"{BACKUP_FILE_NAME}\";")));
+    }
+
+    #[test]
+    fn popups_are_on_unless_turned_off() {
+        assert!(popups_enabled(None));
+        assert!(popups_enabled(Some("on")));
+        assert!(popups_enabled(Some("anything")));
+        assert!(!popups_enabled(Some("off")));
+    }
+
+    #[test]
+    fn the_placement_is_saved_in_points() {
+        assert_eq!(placement_string((200, 100), (2400, 1800), 2.0), "100,50,1200,900");
+        let saved = placement_string((-30, 50), (1085, 900), 1.0);
+        assert_eq!(Rect::parse(&saved), Some(Rect { x: -30.0, y: 50.0, w: 1085.0, h: 900.0 }));
+    }
+
+    #[test]
+    fn the_home_folder_is_cut_from_any_text_that_quotes_a_path() {
+        let home = Some(Path::new("/Users/me"));
+        assert_eq!(shorten_home_in("can't read /Users/me/chat.jsonl: denied", home), "can't read ~/chat.jsonl: denied");
+        assert_eq!(shorten_home_in("/Users/me and /Users/me/x", home), "~ and ~/x");
+        assert_eq!(shorten_home_in("/Users/mellow/x /Users/me-too", home), "/Users/mellow/x /Users/me-too");
+        assert_eq!(shorten_home_in("/Users/me/a", None), "/Users/me/a");
     }
 }

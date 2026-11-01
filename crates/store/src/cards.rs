@@ -1,7 +1,6 @@
 //! Report cards in the database. A card's record block only names prompts and says which
 //! follow-ups were avoidable; everything counted here (rounds, grade, tokens, minutes) comes from
-//! the transcript, and only numbers are kept. The merge rule and the table are in
-//! `docs/plans/prompt-feedback.md`.
+//! the transcript, and only numbers are kept. The merge rule is in `docs/ARCHITECTURE.md`.
 
 use crate::stats::View;
 use crate::{hash, Result, SourceState, NO_MODEL};
@@ -176,25 +175,23 @@ fn row(state: &SourceState, view: &ChatView, block: &Block, st: &SealedTask) -> 
     if !state.wants(first.ts) {
         return Ok(None);
     }
-    // Each follow-up redid a share of the work before it, up to but not counting its own round. The
-    // share of a model's rounds is taken once per follow-up, so a task that changed models keeps
-    // each round's tokens under the model that answered it. Time is the shared seconds, summed over
-    // the follow-ups and rounded to a minute once, at the end.
+    // Each follow-up redid a share of the work before it, up to but not counting its own round. A
+    // round can't be redone for more than it cost, however many follow-ups touch it. A task that changed
+    // models keeps each round's tokens under the model that answered it. Time is the shared seconds,
+    // summed over the follow-ups and rounded to a minute once, at the end.
     let mut tokens = Tokens::new();
     let mut shared_seconds = 0u64;
+    let mut standing = vec![100u8; prompts.len() - at];
     for (i, share) in follow_ups {
-        let before = &prompts[at..i];
-        let mut work: BTreeMap<&str, Usage> = BTreeMap::new();
-        for p in before {
-            work.entry(p.model.as_deref().unwrap_or_default()).or_default().add(&p.usage);
-        }
-        for (model, usage) in work {
-            let part = usage.share(share);
+        for (p, left) in prompts[at..i].iter().zip(&mut standing) {
+            let redone = share.min(*left);
+            *left -= redone;
+            let part = p.usage.share(redone);
             if part != Usage::default() {
-                tokens.entry(model.to_string()).or_default().add(&part);
+                tokens.entry(p.model.clone().unwrap_or_default()).or_default().add(&part);
             }
+            shared_seconds += u64::from(p.seconds) * u64::from(redone) / 100;
         }
-        shared_seconds += before.iter().map(|p| u64::from(p.seconds)).sum::<u64>() * u64::from(share) / 100;
     }
     let model = first.model.as_deref().and_then(normalize_model);
     let (provider, family, version) = model

@@ -34,7 +34,7 @@ pub use key::{key_hash, message_key, short_id};
 pub use model::{normalize_model, Model};
 pub use pricing::{price, Price, Usage, PRICES_AS_OF};
 pub use prompt::{check, is_signoff, read_prompt, Check, Grade, Prompt, Signal, Signals, Steer};
-pub use redact::{redact, snippet, SNIPPET_CHARS};
+pub use redact::{redact, snippet, REDACTION_VERSION, SNIPPET_CHARS};
 pub use tier::{
     correction_proof, Answer, CorrectionTier, PromptTier, Score, Tier, UnknownTier, Window, CORRECTION_PROOF,
     DIRECTION_WEIGHT, HUMBLED_BASE, HUMBLED_COST, MIN_PROMPTS, WINDOW_DAYS,
@@ -211,7 +211,9 @@ impl Verdict {
 ///    ("let me check if I missed it"); "you were right" and "you're correct" are.
 /// 10: an AI that checks first and then says you were right counts, from any message before your next.
 /// 11: a chat's first message follows no AI reply, so it is never a correction and keeps its task.
-pub const RULES_VERSION: u32 = 11;
+/// 12: "I didn't catch the bug" admits again, but "I didn't catch that" (didn't hear you) doesn't;
+///     "I should have enough context now" and "my error handling" aren't admissions.
+pub const RULES_VERSION: u32 = 12;
 
 /// Tools write placeholder ids for replies no model wrote (Claude Code's "<synthetic>" for errors,
 /// interruptions and "No response requested").

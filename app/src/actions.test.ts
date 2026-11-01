@@ -26,6 +26,13 @@ const api = vi.hoisted(() => ({
   openShare: vi.fn(),
   syncNow: vi.fn(),
   setAutoUpdate: vi.fn(),
+  installUpdate: vi.fn(),
+  updateStatus: vi.fn(),
+  getPopups: vi.fn(),
+  setPopups: vi.fn(),
+  rescoredNotice: vi.fn(),
+  openNotices: vi.fn(),
+  importExport: vi.fn(),
 }));
 vi.mock("./api", async (importOriginal) => ({ ...(await importOriginal<typeof import("./api")>()), api, demo: false }));
 
@@ -63,9 +70,17 @@ beforeEach(async () => {
   api.reportCardsStatus.mockResolvedValue(null);
   api.logError.mockResolvedValue(null);
   api.openLogFolder.mockResolvedValue(null);
+  api.getPopups.mockResolvedValue(true);
+  api.setPopups.mockResolvedValue(null);
+  api.rescoredNotice.mockResolvedValue(null);
+  api.openNotices.mockResolvedValue(null);
+  vi.stubGlobal("localStorage", memoryStorage());
   await render();
 });
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  vi.useRealTimers();
+});
 
 const btn = (sel: string) => {
   const b = root.querySelector<HTMLButtonElement>(sel);
@@ -78,6 +93,12 @@ const click = async (sel: string) => {
   btn(sel).click();
   await settle();
 };
+/**
+ * Holds the clock still, so the next click can be put a set time after the last one. A second click on an
+ * armed button sooner than 400 ms is a double-click and does nothing.
+ */
+const holdClock = () => vi.useFakeTimers({ toFake: ["Date"] });
+const later = (ms = 500) => vi.setSystemTime(Date.now() + ms);
 const toTab = async (tab: string) => {
   await click(`[data-action="tab"][data-id="${tab}"]`);
 };
@@ -271,13 +292,41 @@ describe("delegated actions", () => {
     expect(shown().replace(/[“”]/g, "")).toBe("a5");
   });
 
-  it("takes two clicks to forget a source", async () => {
+  it("takes two clicks to forget a source, and says what goes and that it's final", async () => {
+    holdClock();
     await toTab("settings");
     await click('[data-action="forget"][data-id="codex"]');
     expect(api.forget).not.toHaveBeenCalled();
-    expect(btn('[data-action="forget"]').textContent).toBe("Click again to delete its data");
+    expect(btn('[data-action="forget"]').textContent).toBe("Click again to delete its scores, pins and report cards for good");
+    later();
     await click('[data-action="forget"][data-id="codex"]');
     expect(api.forget).toHaveBeenCalledWith("codex");
+  });
+
+  it("ignores a second click within 400 ms, a double-click, and still takes a real one after", async () => {
+    holdClock();
+    await toTab("settings");
+    const forget = '[data-action="forget"][data-id="codex"]';
+    await click(forget);
+    later(399);
+    await click(forget);
+    expect(api.forget).not.toHaveBeenCalled();
+    expect(btn(forget).dataset.confirm).toBe("yes"); // still armed, still asking
+    later(1);
+    await click(forget);
+    expect(api.forget).toHaveBeenCalledTimes(1);
+  });
+
+  it("guards dropping a goal the same way", async () => {
+    holdClock();
+    api.progress.mockResolvedValue(progress({ goal: null }));
+    root.insertAdjacentHTML("beforeend", '<button id="drop" data-action="clear-goal">Drop</button>');
+    const drop = btn("#drop");
+    drop.click();
+    expect(drop.textContent).toBe("Click again to drop this goal and its progress for good");
+    drop.click(); // a double-click
+    expect(drop.dataset.confirm).toBe("yes");
+    expect(drop.textContent).toBe("Click again to drop this goal and its progress for good");
   });
 
   it("announces the confirm prompt and disarms it after a few seconds", async () => {
@@ -290,7 +339,7 @@ describe("delegated actions", () => {
       vi.advanceTimersByTime(1);
       const note = must("#confirm-note");
       expect(note.getAttribute("role")).toBe("status");
-      expect(note.textContent).toBe("Click again to delete its data");
+      expect(note.textContent).toBe("Click again to delete its scores, pins and report cards for good");
       vi.advanceTimersByTime(5000);
       expect(b.textContent).toBe(label);
       expect(b.dataset.confirm).toBeUndefined();
@@ -307,7 +356,7 @@ describe("delegated actions", () => {
     const b = btn('[data-action="forget"][data-id="codex"]');
     const label = b.textContent;
     b.click();
-    expect(b.textContent).toBe("Click again to delete its data");
+    expect(b.textContent).toBe("Click again to delete its scores, pins and report cards for good");
     b.dispatchEvent(new FocusEvent("blur"));
     expect(b.textContent).toBe(label);
     expect(root.querySelector('[data-confirm="yes"]')).toBeNull();
@@ -330,6 +379,59 @@ describe("delegated actions", () => {
     if (select) select.value = "none";
     await click('[data-action="allow"][data-id="claude-code"]');
     expect(api.allow).toHaveBeenCalledWith("claude-code", null, true);
+  });
+
+  describe("the first Allow", () => {
+    const allowFirst = async (choice?: string) => {
+      api.stats.mockResolvedValue(stats({ messages: 0 }));
+      api.sources.mockResolvedValue([source()]);
+      await render();
+      await toTab("settings");
+      if (choice) {
+        const select = root.querySelector<HTMLSelectElement>('select[data-since="claude-code"]');
+        if (select) select.value = choice;
+      }
+      api.sources.mockResolvedValue([source({ state: allowed })]);
+      await click('[data-action="allow"][data-id="claude-code"]');
+    };
+
+    it("goes to the scorecard and says it is reading, not that all is set", async () => {
+      await allowFirst("all");
+      expect(root.querySelector('[data-action="tab"][data-id="score"][aria-current="page"]')).not.toBeNull();
+      expect(root.textContent).toContain("Reading your history…");
+      expect(root.textContent).not.toContain("You're all set.");
+    });
+
+    it("stays in Settings for From now on, where there is no history to read", async () => {
+      await allowFirst("none");
+      expect(state.state.tab).toBe("settings");
+    });
+
+    it("says all is set only when no read is under way", async () => {
+      await allowFirst("all");
+      state.setReading("off");
+      await render();
+      expect(root.textContent).toContain("You're all set.");
+    });
+
+    it("offers the way back to the scorecard when the read ends elsewhere", async () => {
+      await allowFirst("all");
+      await toTab("settings");
+      state.setReading("done");
+      await render();
+      expect(root.textContent).toContain("Your history is read.");
+      await click('#notice-slot [data-action="home"]');
+      expect(state.state.reading).toBe("off");
+      expect(state.state.tab).toBe("score");
+      expect(root.querySelector("#notice-slot")).toBeNull();
+    });
+
+    it("stays where it is when something is already counted", async () => {
+      await toTab("settings");
+      await click('[data-action="allow"][data-id="claude-code"]');
+      expect(state.state.tab).toBe("settings");
+      expect(state.state.reading).toBe("off");
+    });
   });
 
   it("puts a failed Allow back and says why, instead of leaving it on Allowing…", async () => {
@@ -392,7 +494,7 @@ describe("delegated actions", () => {
   it("opens the false-positive form from a correction", async () => {
     await click('[data-action="view"][data-id="hall"]');
     const b = btn('[data-action="counted-wrong"]');
-    expect(b.title).toContain("Leave out");
+    expect(b.dataset.tip).toContain("Leave out");
     await click('[data-action="counted-wrong"]');
     expect(api.openShare).toHaveBeenCalledWith("https://github.com/HTMLGuyLLC/NoActually/issues/new?template=false_positive.yml");
   });
@@ -430,14 +532,57 @@ describe("delegated actions", () => {
     expect(api.pin).toHaveBeenCalledWith(1, true);
   });
 
-  it("saves privacy settings, clamped", async () => {
-    await toTab("settings");
-    await click('[data-action="settings-pane"][data-id="privacy"]');
-    const full = root.querySelector<HTMLInputElement>("#full-days");
-    if (full) full.value = "99999";
-    await click('[data-action="save-privacy"]');
-    expect(api.setRetention).toHaveBeenCalledWith({ level: "snippet", full_days: 3650, snippet_days: 365 });
-    expect(root.querySelector("#privacy-status")?.textContent).toBe("Saved. Older text was trimmed to match.");
+  describe("saving privacy", () => {
+    const open = async () => {
+      await toTab("settings");
+      await click('[data-action="settings-pane"][data-id="privacy"]');
+    };
+    const field = (id: string, value: string) => {
+      const el = root.querySelector<HTMLInputElement>(id);
+      if (el) el.value = value;
+    };
+
+    it("clamps, redraws the values as saved, and doesn't say it trimmed when it kept as much", async () => {
+      await open();
+      field("#full-days", "99999");
+      await click('[data-action="save-privacy"]');
+      expect(api.setRetention).toHaveBeenCalledWith({ level: "snippet", full_days: 3650, snippet_days: 365 });
+      expect(root.querySelector("#privacy-status")?.textContent).toBe("Saved.");
+      // The redraw reads the saved value back, not what was typed.
+      api.retention.mockResolvedValue({ level: "snippet", full_days: 3650, snippet_days: 365 });
+      await render();
+      expect(root.querySelector<HTMLInputElement>("#full-days")?.value).toBe("3650");
+    });
+
+    it("asks once more, naming what goes, before keeping less", async () => {
+      holdClock();
+      await open();
+      field("#full-days", "5");
+      await click('[data-action="save-privacy"]');
+      expect(api.setRetention).not.toHaveBeenCalled();
+      expect(btn('[data-action="save-privacy"]').textContent).toBe("Click again to delete older text for good");
+      later();
+      await click('[data-action="save-privacy"]');
+      expect(api.setRetention).toHaveBeenCalledWith({ level: "snippet", full_days: 5, snippet_days: 365 });
+      expect(root.querySelector("#privacy-status")?.textContent).toBe("Saved. Older text was trimmed to match.");
+    });
+
+    it("counts the corrections that lose their text when nothing is kept but the category", async () => {
+      holdClock();
+      await open();
+      const none = root.querySelector<HTMLInputElement>('input[name="level"][value="category"]');
+      if (none) none.checked = true;
+      await click('[data-action="save-privacy"]');
+      expect(btn('[data-action="save-privacy"]').textContent).toMatch(/^Click again to delete older text \(\d+ corrections? in your Hall of fame\) for good$/);
+    });
+
+    it("shows a form error in place", async () => {
+      await open();
+      for (const r of root.querySelectorAll<HTMLInputElement>('input[name="level"]')) r.checked = false;
+      await click('[data-action="save-privacy"]');
+      expect(root.querySelector("#privacy-status")?.textContent).toBe("Pick what to keep first.");
+      expect(api.setRetention).not.toHaveBeenCalled();
+    });
   });
 
   it("un-ticks a toggle the backend refused", async () => {
@@ -533,7 +678,7 @@ describe("the status text's tooltip", () => {
 
   it("stays open through a repaint that changes the words", () => {
     text().click();
-    state.setStatus({ syncing: false, last_sync: "2026-01-01T00:00:00Z", last_error: null, files_with_errors: 0 });
+    state.setStatus({ syncing: false, last_sync: "2026-01-01T00:00:00Z", last_error: null, files_with_errors: 0, rebuilding: false });
     paintStatus();
     expect(open()).toBe("true");
   });
@@ -559,7 +704,8 @@ describe("the log", () => {
     api.logError.mockRejectedValueOnce("disk full");
     root.insertAdjacentHTML("beforeend", '<button id="bad" data-action="start-goal"></button>');
     await click("#bad");
-    expect(api.logError).toHaveBeenCalledWith("Pick a goal first");
+    // The line carries the stack too.
+    expect(api.logError).toHaveBeenCalledWith(expect.stringContaining("Pick a goal first"));
     shout.mockRestore();
   });
 });
@@ -578,7 +724,7 @@ describe("sync pill repaint", () => {
 
   it("falls back to the first control when that one is gone", () => {
     root.querySelector<HTMLElement>(".sync-now")?.focus();
-    state.setStatus({ syncing: false, last_sync: null, last_error: "boom", files_with_errors: 0 });
+    state.setStatus({ syncing: false, last_sync: null, last_error: "boom", files_with_errors: 0, rebuilding: false });
     paintStatus();
     expect(active()).toBe("sync-bad");
   });
@@ -646,5 +792,191 @@ describe("the report card tip", () => {
     api.recentReportCards.mockRejectedValue(new Error("no such command"));
     await render();
     expect(root.querySelector(".improve-top")).not.toBeNull();
+  });
+});
+
+describe("while the counts are rebuilt", () => {
+  const rebuilding = () => state.setStatus({ syncing: false, last_sync: null, last_error: null, files_with_errors: 0, rebuilding: true });
+
+  it("says so in the pill, and holds the scorecard with no numbers and nothing to share", async () => {
+    rebuilding();
+    await render();
+    expect(root.querySelector(".sync-pill")?.textContent).toBe("Recounting your history…");
+    expect(root.textContent).toContain("Recounting your history…");
+    expect(root.querySelector(".card")).toBeNull();
+    expect(root.querySelector('[data-action="open-share"], [data-action="share-prompts"], [data-action="share-corrections"]')).toBeNull();
+    expect(api.stats).toHaveBeenCalledTimes(1); // the beforeEach draw only
+  });
+
+  it("brings the scorecard back when the rebuild is over", async () => {
+    rebuilding();
+    await render();
+    state.setStatus({ syncing: false, last_sync: null, last_error: null, files_with_errors: 0, rebuilding: false });
+    await render();
+    expect(root.querySelector(".card.hero")).not.toBeNull();
+  });
+
+  it("leaves the other tabs alone", async () => {
+    rebuilding();
+    await toTab("learn");
+    expect(root.textContent).not.toContain("Recounting your history…".replace("Recounting your history…", "Recounting…x"));
+    expect(root.querySelector("main#main")).not.toBeNull();
+  });
+});
+
+describe("chats that couldn't be read", () => {
+  it("shows how many in the pill, with a way to the log folder", async () => {
+    state.setStatus({ syncing: false, last_sync: new Date().toISOString(), last_error: null, files_with_errors: 3, rebuilding: false });
+    await render();
+    const b = btn('.sync-pill [data-action="open-log-folder"]');
+    expect(b.textContent).toBe("3 chats couldn't be read");
+    await click('.sync-pill [data-action="open-log-folder"]');
+    expect(api.openLogFolder).toHaveBeenCalledTimes(1);
+  });
+
+  it("says nothing when every chat was read", async () => {
+    expect(root.querySelector('.sync-pill [data-action="open-log-folder"]')).toBeNull();
+  });
+});
+
+describe("the update banner", () => {
+  const update = (over = {}) => ({
+    current: "0.5.4",
+    auto: true,
+    channel: "stable" as const,
+    checking: false,
+    installing: false,
+    available: "0.6.0",
+    last_check: null,
+    last_error: null,
+    ...over,
+  });
+
+  it("keeps a failed install's reason on the banner, even though the button was clicked on a banner that's gone", async () => {
+    state.setUpdate(update());
+    await render();
+    api.installUpdate.mockImplementationOnce(async () => {
+      // The banner is redrawn while the install runs (a status event), so the button is detached.
+      const slot = root.querySelector("#update-slot");
+      if (slot) slot.innerHTML = "";
+      throw "disk full";
+    });
+    await click('[data-action="install-update"]');
+    expect(root.querySelector("#update-slot")?.textContent).toContain("The last try failed: disk full");
+    expect(root.querySelector('#update-slot [data-action="install-update"]')?.textContent).toBe("Try again");
+  });
+
+  it("shows the app's own reason for a failed install, beside an update that is still available", async () => {
+    state.setUpdate(update({ last_error: "signature check failed" }));
+    await render();
+    expect(root.querySelector("#update-slot")?.textContent).toContain("The last try failed: signature check failed");
+  });
+});
+
+describe("the rescored line", () => {
+  const STAMP = "2026-11-01T10:00:00Z";
+
+  it("shows once scores were recounted, and goes for good when dismissed", async () => {
+    api.rescoredNotice.mockResolvedValue(STAMP);
+    await render();
+    expect(root.querySelector("#notice-slot")?.textContent).toContain("recounted your history");
+    await click('[data-action="dismiss-rescored"]');
+    expect(root.querySelector("#notice-slot")).toBeNull();
+    await render();
+    expect(root.querySelector("#notice-slot")).toBeNull();
+  });
+
+  it("comes back for a later rebuild", async () => {
+    api.rescoredNotice.mockResolvedValue(STAMP);
+    await render();
+    await click('[data-action="dismiss-rescored"]');
+    api.rescoredNotice.mockResolvedValue("2026-11-09T10:00:00Z");
+    await render();
+    expect(root.querySelector("#notice-slot")).not.toBeNull();
+  });
+
+  it("is quiet when the app can't say", async () => {
+    api.rescoredNotice.mockRejectedValue("nope");
+    await render();
+    expect(root.querySelector("#notice-slot")).toBeNull();
+  });
+});
+
+describe("General settings", () => {
+  const general = async () => {
+    state.setSettingsPane("general");
+    await toTab("settings");
+  };
+
+  it("has a popups switch bound to the app's setting, on by default", async () => {
+    await general();
+    const box = root.querySelector<HTMLInputElement>("#popups");
+    expect(box?.checked).toBe(true);
+    if (!box) return;
+    box.checked = false;
+    box.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle();
+    expect(api.setPopups).toHaveBeenCalledWith(false);
+  });
+
+  it("shows the switch off when the app says so, and puts it back when the app refuses", async () => {
+    api.getPopups.mockResolvedValue(false);
+    await general();
+    const box = root.querySelector<HTMLInputElement>("#popups");
+    expect(box?.checked).toBe(false);
+    if (!box) return;
+    api.setPopups.mockRejectedValueOnce("nope");
+    box.checked = true;
+    box.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle();
+    expect(box.checked).toBe(false);
+  });
+
+  it("opens the licenses, and shows why when this build has none", async () => {
+    await general();
+    await click('[data-action="open-notices"]');
+    expect(api.openNotices).toHaveBeenCalledTimes(1);
+    api.openNotices.mockRejectedValueOnce("The notices file isn't part of this build.");
+    await click('[data-action="open-notices"]');
+    expect(root.textContent).toContain("The notices file isn't part of this build.");
+  });
+});
+
+describe("moving around", () => {
+  it("wraps each page in main, behind a skip link that moves focus there", async () => {
+    const main = root.querySelector("main#main");
+    expect(main).not.toBeNull();
+    await click('[data-action="skip-to-main"]');
+    expect(document.activeElement).toBe(main);
+  });
+
+  it("announces a move to another page, and not a redraw of the same one", async () => {
+    document.body.insertAdjacentHTML("beforeend", '<div id="announce" role="status"></div>');
+    await toTab("improve");
+    expect(document.getElementById("announce")?.textContent).toBe("Improve");
+    await render();
+    await click('[data-action="tab"][data-id="settings"]');
+    expect(document.getElementById("announce")?.textContent).toMatch(/^Settings, /);
+    document.getElementById("announce")?.remove();
+  });
+
+  it("logs a page that failed to draw, with the stack", async () => {
+    const shout = vi.spyOn(console, "error").mockImplementation(() => {});
+    api.stats.mockRejectedValueOnce(new Error("database is locked"));
+    await render();
+    expect(api.logError).toHaveBeenCalledWith(expect.stringContaining("database is locked"));
+    shout.mockRestore();
+  });
+});
+
+describe("importing an export", () => {
+  it("shows the app's plain reason when the file is refused", async () => {
+    api.sources.mockResolvedValue([source({ id: "chatgpt-export", name: "ChatGPT (export)", kind: "import", roots: [] })]);
+    api.importExport.mockRejectedValueOnce("That doesn't look like a ChatGPT export. Choose its conversations.json.");
+    state.setTab("settings");
+    state.setSettingsPane("sources");
+    await render();
+    await click('[data-action="import"]');
+    expect(root.querySelector(".action-error")?.textContent).toBe("Couldn't do that: That doesn't look like a ChatGPT export. Choose its conversations.json.");
   });
 });

@@ -74,9 +74,12 @@ cat <<EOF
 
 Done. Review the diff, then (main only takes pull requests):
   git switch -c release-$NEW && git commit -am "release: v$NEW"
-  # open a pull request, merge it once CI is green, then:
-  git switch main && git pull && git tag v$NEW
-  git push origin v$NEW             # the Release workflow builds Windows and Linux into a draft
+  # open a pull request and merge it once CI is green, then wait for CI on the merged commit:
+  git switch main && git pull
+  scripts/start-release.sh v$NEW    # checks main is green, creates the draft, tags and pushes the tag
+  # By hand instead: gh release create v$NEW --draft --target "\$(git rev-parse HEAD)" \\
+  #   --title "No, Actually... v$NEW" --notes "See the changelog." && git tag v$NEW && git push origin v$NEW
+  # The Release workflow then fills the draft with the Windows and Linux builds.
   scripts/release-macos.sh          # on the release Mac
   scripts/finish-release.sh v$NEW
 EOF

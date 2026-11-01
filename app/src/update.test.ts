@@ -33,10 +33,29 @@ describe("updateBanner", () => {
     expect(banner(status({ available: "0.3.0" }), "0.2.0")).toContain("0.3.0");
   });
 
+  it("says why an update failed, beside the button, while it's still available", () => {
+    const b = banner(status({ available: "0.2.0", last_error: "disk full" }));
+    expect(b).toContain("Version 0.2.0 is available.");
+    expect(b).toContain("The last try failed: disk full");
+    expect(b).toContain('data-action="install-update">Try again<');
+    expect(b).toContain('data-action="later-update"');
+    expect(banner(status({ available: "0.2.0" }))).not.toContain("failed");
+  });
+
+  it("says nothing about a failed check when no update is waiting", () => {
+    expect(banner(status({ last_error: "offline" }))).toBe("");
+  });
+
   it("shows progress while installing, with no buttons", () => {
     const b = banner(status({ available: "0.2.0", installing: true }));
     expect(b).toContain("Updating to 0.2.0…");
     expect(b).not.toContain("<button");
+  });
+
+  it("escapes the error, which comes from the network too", () => {
+    const b = banner(status({ available: "0.2.0", last_error: HOSTILE }));
+    expect(b).not.toContain("<img");
+    expect(b).toContain("&lt;img");
   });
 
   it("escapes the version string, which comes from the network", () => {
@@ -56,5 +75,8 @@ describe("updateLine", () => {
     expect(updateLine(status({ last_check: "2026-10-27T00:00:00Z" }))).toBe("You're up to date (0.1.0).");
     expect(updateLine(status({ available: "0.2.0" }))).toBe("Version 0.2.0 is available. You have 0.1.0.");
     expect(updateLine(status({ last_error: "offline", last_check: "2026-10-27T00:00:00Z" }))).toBe("Couldn't check for updates. You have 0.1.0.");
+    expect(updateLine(status({ available: "0.2.0", last_error: "disk full" }))).toBe(
+      "Version 0.2.0 is available. You have 0.1.0. The last try failed: disk full",
+    );
   });
 });

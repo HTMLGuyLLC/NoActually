@@ -58,7 +58,7 @@ The `noactually` binary shares the engine and database with the app:
 | `sources` | List sources, where they read from, and whether they're allowed |
 | `allow <source> [--since YYYY-MM-DD \| --from-now]` | Allow a source, optionally limiting the backfill |
 | `revoke <source>` | Stop reading, keep scores |
-| `forget <source>` | Stop reading and delete everything from that source |
+| `forget <source> [--yes]` | Stop reading and delete everything from that source. Asks first, and needs `--yes` when nobody can answer |
 | `import <source> <path>` | Add an export file or folder (`chatgpt-export`, `claude-ai-export`) |
 | `sync` | Read anything new from allowed sources |
 | `stats [--source S] [--provider P] [--family F] [--version V] [--since YYYY-MM-DD] [--json]` | Print the scorecard, optionally from a start date instead of the last 28 days |
@@ -89,7 +89,9 @@ The `noactually` binary shares the engine and database with the app:
 
 ### Report cards
 
-Optional. The score never reads them. Plan: [`docs/plans/prompt-feedback.md`](plans/prompt-feedback.md).
+Optional. The score never reads them. How they came to be, including what was tried and dropped, is in [`docs/plans/prompt-feedback.md`](plans/prompt-feedback.md), which is history, not a description of the app.
+
+**Merge rule.** Every card's tasks are stored as they came, one row per card and task, so the order cards are read in can't change the result. A row's key hashes the card's full message key and the task's first prompt key, so reading a card twice writes the same row. A row counts unless a newer card has a task that starts at the same first prompt, in any copy of the chat, or in the same chat a task that shares more than an endpoint with its range. "Newer" means the card's timestamp, then more rounds, then key.
 
 1. The user types `/grade:me` (Codex: `$grade-me`). The user's own AI writes the card and a small `noactually` record block into the chat.
 2. The transcript holds both. The adapter looks for the fence in AI messages only. The whole reply that holds a block that reads as a card is hidden from the engine (a quoted example that doesn't parse is scored as before), so a card can't trip a correction rule, and the `/grade:me` prompt and any "Stop hook feedback" message never count as the person's messages.
@@ -159,7 +161,7 @@ Adding a source means implementing the `Source` trait in `crates/sources`: `root
 - If a file shrinks or is rewritten, it's re-read from zero. Keys block the duplicates.
 - The watcher is a trigger, not the source of truth. A 5-minute sync picks up anything the OS missed, and launch catches up on anything written while the app was closed.
 - The first sync only records a milestone baseline, so backfilling history never fires notifications.
-- Claude Code deletes old transcripts (about 30 days by default). Aggregates live in our database, so history survives that, rules rebuilds included: a rebuild sets scores aside in `kept_*` tables, reads what it can, and puts back each chat it couldn't read. Scores counted by newer rules than the running build are left alone.
+- Claude Code deletes old transcripts (about 30 days by default). Aggregates live in our database, so history survives that, rules rebuilds included: a rebuild sets scores aside in `kept_*` tables, reads what it can, and puts back each chat it couldn't read. Scores counted by newer rules than the running build are left alone. A rebuild records every chat it read in `rebuild_read`, so a chat whose messages a fork claimed isn't mistaken for a missing one. Before a rebuild and about once a day, `noactually-backup.db` is written beside the database with `VACUUM INTO`, and `flush_deleted` removes it, so it never outlives deleted text.
 
 ## Testing
 

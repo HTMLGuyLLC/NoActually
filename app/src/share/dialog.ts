@@ -5,7 +5,7 @@ import { errorText } from "../format";
 import { EMPTY, type Html, html } from "../html";
 import { openModal } from "../modal";
 import type { CardShape } from "./cards";
-import { type CorrectionLike, correctionShareText, shareGuide, shareTargets } from "./share";
+import { type CorrectionLike, correctionShareText, QUOTE_CLIP, shareGuide, shareTargets } from "./share";
 
 export type Post = {
   title: string;
@@ -89,24 +89,29 @@ async function share(id: string, post: Post, text: string, quotes: CorrectionLik
  * waited for the dialog).
  */
 export function openShareDialog(post: Post, opener: HTMLElement | null, onClose: () => void): HTMLDialogElement {
-  const note =
-    post.quotes || post.quotesChat
-      ? "This quotes your chat. Redaction can miss things. Check it before you share."
-      : "Only these numbers and the project link are shared. Never your chats.";
+  const quoting = !!(post.quotes || post.quotesChat);
+  // A post that quotes a chat leads with the warning, before any box; one of numbers needs no warning.
+  const warning = quoting
+    ? html`<p class="share-warn" id="share-warn">This quotes your chat. Redaction can miss things. Check it before you share.</p>`
+    : EMPTY;
+  const first = post.quotes ? "#share-human" : post.quotesChat ? "#share-text" : '[data-sd="share"]';
   const { dlg } = openModal({
     className: "share-dialog",
     labelledBy: "share-title",
+    ...(quoting ? { describedBy: "share-warn" } : {}),
     opener,
     onClose,
-    focus: '[data-sd="share"]',
+    focus: first,
     markup: html`
     <div class="sd-head"><h2 id="share-title">${post.title}</h2><button class="sd-close" data-sd="close" aria-label="Close">×</button></div>
+    ${warning}
     ${
       post.quotes
         ? html`<label class="eyebrow" for="share-human">Your message · you can edit it</label>
     <textarea id="share-human" rows="2">${post.quotes.human ?? ""}</textarea>
     <label class="eyebrow" for="share-ai">${post.quotes.model || "The AI"}'s reply · you can edit it</label>
-    <textarea id="share-ai" rows="2">${post.quotes.ai ?? ""}</textarea>`
+    <textarea id="share-ai" rows="2" aria-describedby="share-limit">${post.quotes.ai ?? ""}</textarea>
+    <p class="muted small" id="share-limit">Only the first ${QUOTE_CLIP} characters are used.</p>`
         : EMPTY
     }
     <label class="eyebrow" for="share-text">What you'll post${post.quotesChat ? " · you can edit it" : ""}</label>
@@ -121,7 +126,7 @@ export function openShareDialog(post: Post, opener: HTMLElement | null, onClose:
             : html`<span class="needs-paste">Saves image · paste caption</span>`
         }</button>`,
     )}</div>
-    <div id="share-guide" class="share-guide" role="status" aria-live="polite">${note}</div>
+    <div id="share-guide" class="share-guide" role="status" aria-live="polite">${quoting ? "" : "Only these numbers and the project link are shared. Never your chats."}</div>
     <div class="sd-foot"><button class="ghost" data-sd="image">Save image</button><button class="ghost" data-sd="copy">Copy text</button></div>`,
     onClick: (target, close) => {
       const b = target.closest<HTMLButtonElement>("button[data-sd]");
@@ -142,11 +147,19 @@ export function openShareDialog(post: Post, opener: HTMLElement | null, onClose:
   function edited(): CorrectionLike | undefined {
     return quotes && human && reply ? { model: quotes.model, human: human.value.trim() || null, ai: reply.value.trim() || null } : undefined;
   }
+  // Each box is as tall as what's in it, so nothing hides below a scroll.
+  const grow = (el: HTMLTextAreaElement) => {
+    el.style.height = "auto";
+    if (el.scrollHeight > 0) el.style.height = `${el.scrollHeight}px`;
+  };
   const refresh = () => {
     const q = edited();
     if (q) box.value = correctionShareText(q);
+    for (const el of [human, reply, box]) if (el) grow(el);
   };
   human?.addEventListener("input", refresh);
   reply?.addEventListener("input", refresh);
+  box.addEventListener("input", () => grow(box));
+  for (const el of [human, reply, box]) if (el) grow(el);
   return dlg;
 }

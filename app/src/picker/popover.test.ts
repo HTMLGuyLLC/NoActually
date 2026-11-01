@@ -63,6 +63,12 @@ describe("model picker popover", () => {
     expect(status.textContent).toBe("No models match");
   });
 
+  it("says so when there are no models at all, with no search", () => {
+    open([]);
+    expect(must(".picker-pop [role=status]").textContent).toBe("No models yet");
+    expect(must(".pick-empty").textContent).toBe("No models yet");
+  });
+
   it("moves the highlight with the arrow keys and chooses with Enter", () => {
     open();
     key("ArrowDown");

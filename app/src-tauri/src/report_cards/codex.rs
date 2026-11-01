@@ -407,7 +407,7 @@ fn read_hooks(path: &Path) -> Res<Option<Json>> {
         return Ok(Some(Json::Obj(Vec::new())));
     }
     serde_json::from_str(&text).map(Some).map_err(|e| {
-        log::warn!("report cards: {} isn't JSON: {e}", path.display());
+        log::warn!("report cards: {} isn't JSON: {e}", crate::home_short(path));
         BAD_HOOKS.to_string()
     })
 }

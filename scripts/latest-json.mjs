@@ -7,9 +7,14 @@
 //   node scripts/latest-json.mjs version <latest.json>
 //     Prints the version a latest.json offers, for scripts/publish-release.sh.
 //
+//   node scripts/latest-json.mjs check <latest.json> [--allow-missing]
+//     Fails unless the file lists every platform in REQUIRED, for scripts/publish-release.sh.
+//
 //   node scripts/latest-json.mjs finish --version 0.2.0 --tag v0.2.0 --repo owner/name \
 //     --assets assets.txt (one "<id>\t<name>" or "<name>" per line) [--in latest.json] [--mac-file NAME --mac-sig FILE.sig]
+//     [--allow-missing]
 //     Prints latest.json with every URL pointing at the renamed files, plus the Mac entries.
+//     Fails when a platform in REQUIRED is missing, unless --allow-missing.
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,13 +41,21 @@ export function plainName(name, version) {
 /** Updater targets a universal Mac build serves. The plugin looks up `<os>-<arch>-<installer>`, then `<os>-<arch>`. */
 const MAC_TARGETS = ["darwin-universal", "darwin-aarch64", "darwin-x86_64", "darwin-aarch64-app", "darwin-x86_64-app"];
 
+/** Every platform a release must offer, so an app on a missing one is never left without an update. */
+export const REQUIRED = ["windows-x86_64", "linux-x86_64", ...MAC_TARGETS];
+
+/** The platforms in REQUIRED that `platforms` (a latest.json's) doesn't list. */
+export function missingPlatforms(platforms) {
+  return REQUIRED.filter((t) => !platforms?.[t]);
+}
+
 /**
  * latest.json for a release: tauri-action's entries (Windows, Linux, maybe macOS) re-pointed at
  * the renamed files, the locally built Mac update added, and every file checked to be on the release.
  * On a draft release tauri-action v1 links files by asset id (".../download/v0.2.0/683868082"), so
  * `assetIds` maps those ids to the files' current names.
  */
-export function finishLatest({ latest, version, tag, repo, assets, assetIds = {}, mac, now = new Date() }) {
+export function finishLatest({ latest, version, tag, repo, assets, assetIds = {}, mac, allowMissing = false, now = new Date() }) {
   const out = {
     version,
     notes: latest?.notes ?? "",
@@ -59,6 +72,10 @@ export function finishLatest({ latest, version, tag, repo, assets, assetIds = {}
   const missing = Object.entries(out.platforms).filter(([, p]) => !assets.includes(decodeURIComponent(p.url.split("/").pop())));
   if (missing.length) throw new Error(`latest.json points at files not on the release: ${missing.map(([t, p]) => `${t} → ${p.url}`).join(", ")}`);
   if (!Object.keys(out.platforms).length) throw new Error("latest.json would list no platforms.");
+  const absent = missingPlatforms(out.platforms);
+  if (absent.length && !allowMissing) {
+    throw new Error(`latest.json is missing platforms: ${absent.join(", ")}. Fix the release, or pass --allow-missing to ship without them.`);
+  }
   return out;
 }
 
@@ -70,6 +87,16 @@ function main(argv) {
     console.log(version);
     return;
   }
+  if (cmd === "check") {
+    const { values: v, positionals } = parseArgs({ args: rest, options: { "allow-missing": { type: "boolean" } }, allowPositionals: true });
+    if (!positionals[0]) throw new Error("usage: check <latest.json> [--allow-missing]");
+    const { platforms } = JSON.parse(readFileSync(positionals[0], "utf8"));
+    const absent = missingPlatforms(platforms);
+    if (absent.length && !v["allow-missing"]) {
+      throw new Error(`latest.json is missing platforms: ${absent.join(", ")}. Finish the release (scripts/finish-release.sh), or pass --allow-missing to ship without them.`);
+    }
+    return;
+  }
   if (cmd === "plain-name") {
     const [file, version] = rest;
     if (!file || !version) throw new Error("usage: plain-name <file> <version>");
@@ -79,7 +106,10 @@ function main(argv) {
   if (cmd === "finish") {
     const { values: v } = parseArgs({
       args: rest,
-      options: Object.fromEntries(["in", "version", "tag", "repo", "assets", "mac-file", "mac-sig"].map((k) => [k, { type: "string" }])),
+      options: {
+        ...Object.fromEntries(["in", "version", "tag", "repo", "assets", "mac-file", "mac-sig"].map((k) => [k, { type: "string" }])),
+        "allow-missing": { type: "boolean" },
+      },
     });
     for (const k of ["version", "tag", "repo", "assets"]) if (!v[k]) throw new Error(`--${k} is required`);
     const latest = v.in ? JSON.parse(readFileSync(v.in, "utf8")) : null;
@@ -89,10 +119,10 @@ function main(argv) {
     const assets = rows.map(([, name]) => name);
     const assetIds = Object.fromEntries(rows.filter(([id]) => id));
     const mac = v["mac-file"] ? { file: basename(v["mac-file"]), signature: readFileSync(v["mac-sig"], "utf8") } : null;
-    console.log(JSON.stringify(finishLatest({ latest, version: v.version, tag: v.tag, repo: v.repo, assets, assetIds, mac }), null, 2));
+    console.log(JSON.stringify(finishLatest({ latest, version: v.version, tag: v.tag, repo: v.repo, assets, assetIds, mac, allowMissing: v["allow-missing"] }), null, 2));
     return;
   }
-  throw new Error("usage: latest-json.mjs plain-name|version|finish …");
+  throw new Error("usage: latest-json.mjs plain-name|version|check|finish …");
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
