@@ -1,6 +1,6 @@
 // The browser demo's stand-in for the Rust side: sample numbers from public/demo.json, read-only.
 import type { ArgsOf, Command, Filter, Goal, GoalStatus, Meta, Overall, Progress, Prompts, RecentReportCard, ResultOf, SourceInfo, Stats } from "./api";
-import { isFiltered } from "./format";
+import { isFiltered, localIsoDate } from "./format";
 import { modelName } from "./picker/picker";
 import { periodSince } from "./state";
 
@@ -45,8 +45,14 @@ function demoData(): Promise<DemoData> {
   return loaded;
 }
 
-/** What Rust's `Score::of` says for a window (engine/src/tier.rs): the demo's stand-in for it. */
-export function judge(meta: Meta, w: { continued: number; landed: number; corrections: number; humbled: number }): Overall {
+/** Corrections that fully show you check its work over `days`, as Rust's `correction_proof`. */
+function correctionProof(meta: Meta, days: number): number {
+  const proof = Math.floor((meta.correction_proof * days + meta.prompt_window_days - 1) / meta.prompt_window_days);
+  return Math.min(Math.max(proof, 1), meta.correction_proof);
+}
+
+/** What Rust's `Score::of` says for a window of `days` days (engine/src/tier.rs): the demo's stand-in for it. */
+export function judge(meta: Meta, w: { continued: number; landed: number; corrections: number; humbled: number; days: number }): Overall {
   const base = { corrections: w.corrections, humbled: w.humbled, to_rank: Math.max(0, meta.min_prompts - w.continued) };
   if (w.continued < meta.min_prompts)
     return {
@@ -62,7 +68,8 @@ export function judge(meta: Meta, w: { continued: number; landed: number; correc
     };
   const direction = Math.floor((1000 * Math.min(w.landed, w.continued)) / w.continued);
   const right = Math.max(0, 1000 - Math.floor((meta.humbled_cost * 1000 * Math.max(0, w.humbled)) / Math.max(w.continued, meta.humbled_base)));
-  const judgment = Math.floor((right * Math.min(Math.max(0, w.corrections), meta.correction_proof)) / meta.correction_proof);
+  const proof = correctionProof(meta, w.days);
+  const judgment = Math.floor((right * Math.min(Math.max(0, w.corrections), proof)) / proof);
   const score = Math.floor((meta.direction_weight * direction + (100 - meta.direction_weight) * judgment) / 100 / 10);
   const up = [...meta.tiers].sort((a, b) => a.floor - b.floor);
   const tier = up.filter((t) => score >= t.floor).pop();
@@ -109,6 +116,7 @@ export function demoStats({ meta, stats: base }: DemoData, filter: Filter): Stat
       landed: windowLanded,
       corrections: scale(base.overall.corrections),
       humbled: Math.round(base.overall.humbled * share),
+      days: meta.prompt_window_days,
     }),
     prompts: {
       ...base.prompts,
@@ -129,6 +137,18 @@ export function demoStats({ meta, stats: base }: DemoData, filter: Filter): Stat
   };
 }
 
+const dayNumber = (iso: string) => Date.parse(`${iso}T00:00Z`) / 86_400_000;
+const isoOfDay = (n: number) => new Date(n * 86_400_000).toISOString().slice(0, 10);
+
+/**
+ * The demo's "today" is the sample's last day, not the clock, so its score never ages. A period start
+ * the UI worked out from the real clock moves back by the same gap, keeping its length.
+ */
+export function demoSince(stats: Stats, since: string): string {
+  if (!stats.last_day) return since;
+  return isoOfDay(dayNumber(since) - (dayNumber(localIsoDate(new Date())) - dayNumber(stats.last_day)));
+}
+
 /**
  * The demo's stand-in for a period: counts shrink to the share of weekly corrections since `since`,
  * and the score is worked out again over them, as in Rust.
@@ -140,6 +160,8 @@ export function withSince(meta: Meta, s: Stats, since: string | null): Stats {
   const weekly = s.weekly.filter((w) => new Date(`${w.week}T00:00`).getTime() + 6 * 86_400_000 >= new Date(`${since}T00:00`).getTime());
   const share = total ? weekly.reduce((t, w) => t + w.corrections, 0) / total : 0;
   const scale = (n: number) => Math.round(n * share);
+  // The period runs from `since` to the sample's last day; a window with no last day counts as the default.
+  const days = s.last_day ? Math.max(1, dayNumber(s.last_day) - dayNumber(since) + 1) : meta.prompt_window_days;
   const each = (r: Record<string, number>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, scale(v)]));
   const prompts: Prompts = {
     ...s.prompts,
@@ -170,7 +192,13 @@ export function withSince(meta: Meta, s: Stats, since: string | null): Stats {
       landed: scale(m.landed),
     })),
     prompts,
-    overall: judge(meta, { continued: prompts.window_tasks, landed: prompts.window_landed, corrections: scale(s.corrections), humbled: scale(s.humbled) }),
+    overall: judge(meta, {
+      continued: prompts.window_tasks,
+      landed: prompts.window_landed,
+      corrections: scale(s.corrections),
+      humbled: scale(s.humbled),
+      days,
+    }),
   };
 }
 
@@ -203,9 +231,10 @@ const handlers: Handlers = {
     // demo.json's counts cover all its history (its `overall` is the default 28 days, as with no date in Rust).
     // A period scales them down by weeks, the same for the 28-day default, so a page's counts agree.
     const all = demoStats(data, filter);
-    if (since) return withSince(data.meta, all, since);
+    if (since) return withSince(data.meta, all, demoSince(all, since));
     // No date: counts cover everything, and the score covers the last 28 days, as in Rust.
-    return { ...all, overall: withSince(data.meta, all, periodSince("28d")).overall };
+    const today = all.last_day ? new Date(`${all.last_day}T00:00`) : new Date();
+    return { ...all, overall: withSince(data.meta, all, periodSince("28d", today)).overall };
   },
   list_sources: () => demoSources,
   allow_source: () => null,

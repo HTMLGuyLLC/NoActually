@@ -38,6 +38,8 @@ export type ImproveContext = {
   canGrade: boolean;
   /** The "get a report card" line was dismissed. */
   hintDismissed: boolean;
+  /** Sources exist but none is allowed yet: the empty state then leads to Settings → Sources. */
+  noSource?: boolean;
   /** A tool report cards are already on in, if any: the line then says how to ask instead of how to set up. */
   cardsOn: ReportCardTool | null;
 };
@@ -533,6 +535,12 @@ function rangeNav(range: Range): Html {
   )}</nav>`;
 }
 
+/** Charts with nothing to draw: with no source allowed, the way to get some leads. */
+const emptyTrends = (noSource = false): Html =>
+  noSource
+    ? html`<p class="muted">Nothing is being counted yet. Pick which AI tools it may read, and your charts start with your first tasks.</p><p><button data-action="go-settings" data-id="sources">Choose sources</button></p>`
+    : html`<p class="muted">No history yet. Your charts start with your first tasks.</p>`;
+
 export function improveView(ctx: ImproveContext): Html {
   const { meta, progress: p } = ctx;
   const empty = !p.weeks.length;
@@ -542,6 +550,6 @@ export function improveView(ctx: ImproveContext): Html {
     ${bestsView(p, ctx.filtered)}
     ${trophiesView(p, meta)}
     <div class="head trends-head"><h2 id="trends-heading">How ${ctx.subject} and you are trending</h2><div class="filters">${ctx.picker ?? ""}${rangeNav(ctx.range)}</div></div>
-    ${empty ? html`<p class="muted">No history yet. Your charts start with your first tasks.</p>` : html`${cardHintView(ctx)}${trendsView(ctx)}`}
+    ${empty ? emptyTrends(ctx.noSource) : html`${cardHintView(ctx)}${trendsView(ctx)}`}
     ${insightsView(p, meta)}`;
 }

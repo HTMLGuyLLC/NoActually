@@ -418,7 +418,7 @@ mod tests {
 
     #[test]
     fn a_field_this_version_doesnt_use_is_ignored() {
-        let body = r#"{"v":1,"k":"9c41e0aa","auto":true,"tasks":[{"at":"7f3a9c21","to":"e44a1b90"}]}"#;
+        let body = r#"{"v":1,"k":"9c41e0aa","later":true,"tasks":[{"at":"7f3a9c21","to":"e44a1b90"}]}"#;
         assert_eq!(parse_card(body).unwrap().tasks.len(), 1);
     }
 

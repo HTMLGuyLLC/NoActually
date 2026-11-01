@@ -43,6 +43,11 @@ body:
     validations:
       required: true
   - type: input
+    id: rule
+    attributes:
+      label: Rule id
+      description: If the app shows one for this message, paste it here.
+  - type: input
     id: version
     attributes:
       label: App version

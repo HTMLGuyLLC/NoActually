@@ -253,6 +253,25 @@ fn corrections_are_the_ais_fault() {
 }
 
 #[test]
+fn a_chats_first_message_cant_be_a_correction_and_keeps_its_task() {
+    let human = "still broken: the login page in src/app.ts shows a blank screen";
+    let turn = |prev: Option<&str>| Turn {
+        human: human.into(),
+        prev_ai: prev.map(ai),
+        next_ai: Some(ai("Looking now.")),
+        later_ai: Vec::new(),
+        chat_model: None,
+    };
+    let first = turn(None);
+    assert_eq!(classify(&first).label, None, "nothing came before it to correct");
+    assert!(matches!(read_prompt(&first, &classify(&first), false), Prompt::Task { .. }));
+    // Near miss: the same words after a reply are a correction, and steer that task.
+    let later = turn(Some("Fixed the login page."));
+    assert!(classify(&later).label.is_some_and(Label::is_correction));
+    assert_eq!(steer("Fixed the login page.", human), Some(Steer::AiWrong));
+}
+
+#[test]
 fn steering_that_is_on_you() {
     let cases = [
         ("Done, added the export.", "also, it needs to work on Windows", Steer::Added),

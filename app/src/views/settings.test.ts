@@ -84,6 +84,13 @@ describe("Settings → Report cards", () => {
     expect(view({ status: status() }, "general")).not.toContain('<section id="report-cards">');
   });
 
+  it("says grades can vary and what a card costs", () => {
+    const text = words(dom(view({ status: status() })));
+    expect(text).toContain("can vary between runs, unlike your score");
+    expect(text).toContain("Claude Haiku misses more tips");
+    expect(text).toContain("0.5k to 2k output tokens per task graded");
+  });
+
   it("says what it is, and how to use it", () => {
     const text = words(dom(view({ status: status() })));
     expect(text).toContain(

@@ -40,6 +40,51 @@ describe("share dialog", () => {
     expect(must("#share-guide").textContent).toContain("This quotes your chat");
   });
 
+  describe("a correction's two quotes", () => {
+    const quotes = { model: "Claude", human: "my client Acme owes me", ai: "You're right about Acme." };
+    const edit = (sel: string, value: string) => {
+      const el = must<HTMLTextAreaElement>(sel, dialog());
+      el.value = value;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+
+    it("edits each quote in its own box and warns that redaction can miss things", () => {
+      openShareDialog(post({ quotes }), opener, onClose);
+      expect(must<HTMLTextAreaElement>("#share-human").value).toBe(quotes.human);
+      expect(must<HTMLTextAreaElement>("#share-ai").value).toBe(quotes.ai);
+      expect(must<HTMLTextAreaElement>("#share-text").readOnly).toBe(true);
+      expect(must("#share-guide").textContent).toContain("Redaction can miss things");
+      expect(must("#share-guide").textContent).not.toContain("already redacted");
+    });
+
+    it("draws Save image and Instagram from the edited quotes", async () => {
+      const image = vi.fn(async () => new Blob());
+      URL.createObjectURL = vi.fn(() => "blob:card");
+      openShareDialog(post({ quotes, image }), opener, onClose);
+      edit("#share-human", "my client owes me");
+      edit("#share-ai", "");
+      click('[data-sd="image"]');
+      await settle();
+      expect(image).toHaveBeenLastCalledWith("wide", { model: "Claude", human: "my client owes me", ai: null });
+      click('[data-sd="share"][data-id="instagram"]');
+      await settle();
+      expect(image).toHaveBeenLastCalledWith("portrait", { model: "Claude", human: "my client owes me", ai: null });
+    });
+
+    it("sends the edited quotes to the network and the clipboard", async () => {
+      openShareDialog(post({ quotes }), opener, onClose);
+      edit("#share-human", "my client owes me");
+      expect(must<HTMLTextAreaElement>("#share-text").value).not.toContain("Acme owes");
+      click('[data-sd="share"][data-id="x"]');
+      await settle();
+      const sent = String(vi.mocked(window.open).mock.calls.at(-1)?.[0]);
+      expect(decodeURIComponent(sent)).toContain("Me: “my client owes me”");
+      expect(sent).not.toContain("owes%20me%20Acme");
+      expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("my client owes me"));
+      expect(writeText).toHaveBeenLastCalledWith(expect.not.stringContaining("Acme”"));
+    });
+  });
+
   it("copies the text and opens a network that takes it", async () => {
     openShareDialog(post(), opener, onClose);
     click('[data-sd="share"][data-id="x"]');
@@ -88,11 +133,11 @@ describe("share dialog", () => {
     openShareDialog(post({ image }), opener, onClose);
     click('[data-sd="share"][data-id="instagram"]');
     await settle();
-    expect(image).toHaveBeenLastCalledWith("portrait");
+    expect(image).toHaveBeenLastCalledWith("portrait", undefined);
     expect(must("#share-guide").textContent).toContain("Post the image from the Instagram app");
     click('[data-sd="image"]');
     await settle();
-    expect(image).toHaveBeenLastCalledWith("wide");
+    expect(image).toHaveBeenLastCalledWith("wide", undefined);
   });
 
   it("closes from the × button, focusing the opener and running onClose", () => {

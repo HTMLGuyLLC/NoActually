@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::milestones::straight_as;
+use chrono::{SecondsFormat, TimeZone};
 use engine::{habit_bit, seal, Usage};
 use serde_json::{json, Value};
 use sources::testing::{cc_user, line, set_mtime_ago};
@@ -13,10 +14,19 @@ use std::time::Duration as StdDuration;
 
 // ---- transcripts ---------------------------------------------------------------------------
 
-/// `m` minutes past noon UTC on October `day` 2026 (the 5th is a Monday). Noon is the same local
-/// day everywhere from UTC-11 to UTC+11.
+/// `m` minutes past local noon on October `day` 2026 (the 5th is a Monday), as a UTC time. Noon
+/// local is the same day in every timezone, which a fixed UTC hour isn't.
 fn at(day: u32, m: u32) -> String {
-    format!("2026-10-{day:02}T12:{m:02}:00Z")
+    chrono::Local
+        .with_ymd_and_hms(2026, 10, day, 12, m, 0)
+        .unwrap()
+        .with_timezone(&Utc)
+        .to_rfc3339_opts(SecondsFormat::Secs, true)
+}
+
+/// `at`, as the store keeps it.
+fn stored_at(day: u32, m: u32) -> String {
+    cards::ts_str(at(day, m).parse().unwrap())
 }
 
 fn t(m: u32) -> String {
@@ -218,8 +228,8 @@ fn a_card_becomes_numbers_worked_out_from_the_transcript() {
     assert_eq!((r.source.as_str(), r.session.as_str()), ("claude-code", hash(&["claude-code", "chat1"]).as_str()));
     assert_eq!(r.day, "2026-10-05");
     assert_eq!(
-        (r.start_ts.as_str(), r.end_ts.as_str(), r.graded_at.as_str()),
-        ("2026-10-05T12:00:00.000Z", "2026-10-05T12:30:00.000Z", "2026-10-05T12:40:00.000Z")
+        (r.start_ts.clone(), r.end_ts.clone(), r.graded_at.clone()),
+        (stored_at(5, 0), stored_at(5, 30), stored_at(5, 40))
     );
     assert_eq!(
         (r.provider.as_str(), r.family.as_str(), r.version.as_str()),
@@ -257,7 +267,7 @@ fn a_task_can_be_one_prompt_and_a_wrong_goal_is_a_d() {
     let r = &stored(&lab.store)[0];
     assert_eq!((r.grade.as_str(), r.rounds, r.avoidable, r.minutes), ("D", 1, 0, 0), "never worse than a D on its own");
     assert_eq!(r.tokens, cards::Tokens::new(), "nothing was redone");
-    assert_eq!((r.start_ts.as_str(), r.end_ts.as_str()), ("2026-10-05T12:00:00.000Z", "2026-10-05T12:00:00.000Z"));
+    assert_eq!((r.start_ts.clone(), r.end_ts.clone()), (stored_at(5, 0), stored_at(5, 0)));
 }
 
 #[test]
@@ -272,7 +282,7 @@ fn a_card_with_no_message_id_or_time_still_stores() {
     // The key falls back to where the reply is in the file, and the time to the task's last prompt.
     let pos = work("u", 5).len();
     assert_eq!(r.key, hash(&[&hash(&["claude-code", "chat1", &pos.to_string()]), &hash(&["claude-code", "u1"])]));
-    assert_eq!(r.graded_at, "2026-10-05T12:30:00.000Z");
+    assert_eq!(r.graded_at, stored_at(5, 30));
 }
 
 // ---- what is left out ------------------------------------------------------------------------
@@ -749,8 +759,8 @@ impl Seed {
         s.conn()
             .execute(
                 "INSERT INTO report_cards (key, card, source, session, first, day, start_ts, end_ts, provider, family,
-                    version, grade, rounds, avoidable, missing, auto, tokens, minutes, graded_at)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,0,?16,?17,?18)",
+                    version, grade, rounds, avoidable, missing, tokens, minutes, graded_at)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
                 params![
                     self.key,
                     self.card,
@@ -1669,7 +1679,7 @@ fn a_rebuild_keeps_tips_and_tasks_in_step() {
     assert_eq!(tip_week(&lab.store), TipWeek { tips: 2, tasks: 2 }, "the same again");
     std::fs::remove_file(lab.path("s2")).unwrap();
     rules_rebuild(&mut lab);
-    assert_eq!(tip_week(&lab.store), TipWeek { tips: 1, tasks: 1 }, "a transcript that's gone takes both with it");
+    assert_eq!(tip_week(&lab.store), TipWeek { tips: 2, tasks: 2 }, "a transcript that's gone keeps both");
 }
 
 #[test]
@@ -1820,7 +1830,29 @@ fn stopping_a_source_leaves_a_marker_and_allowing_it_removes_it() {
     assert!(!stopped(), "allowed again");
     s.forget("claude-code").unwrap();
     assert!(stopped(), "forgotten");
-    assert!(!crate::source_stopped(&db, "codex"), "each source has its own");
+    assert!(crate::source_stopped(&db, "codex"), "a source nobody allowed is off limits too");
+}
+
+#[test]
+fn hooks_can_only_read_a_source_that_was_allowed() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("noactually.db");
+    assert!(!crate::source_stopped(&db, "claude-code"), "no app set up: the plugin stands alone");
+    let s = Store::open(&db).unwrap();
+    assert!(crate::source_stopped(&db, "claude-code"), "the app is here and it was never allowed");
+    s.allow("claude-code", None).unwrap();
+    assert!(!crate::source_stopped(&db, "claude-code"));
+    drop(s);
+
+    // Allowed by a version that only wrote the stopped marker: opening the database catches up.
+    std::fs::remove_file(dir.path().join("source-allowed-claude-code")).unwrap();
+    assert!(crate::source_stopped(&db, "claude-code"), "unsure means no");
+    let s = Store::open(&db).unwrap();
+    assert!(!crate::source_stopped(&db, "claude-code"));
+    s.add_path("codex", "/tmp/x").unwrap();
+    drop(s);
+    let _ = Store::open(&db).unwrap();
+    assert!(dir.path().join("source-stopped-codex").exists(), "known but not allowed");
 }
 
 #[test]

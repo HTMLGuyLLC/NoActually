@@ -283,9 +283,45 @@ fn panic_line(info: &std::panic::PanicHookInfo<'_>) -> String {
         .copied()
         .or_else(|| info.payload().downcast_ref::<String>().map(String::as_str))
         .unwrap_or("no message");
+    let message = strip_quoted(message);
     match info.location() {
         Some(at) => format!("panic: {message} at {}:{}", at.file(), at.line()),
         None => format!("panic: {message}"),
+    }
+}
+
+/// `message` with whatever sits inside double quotes or backticks replaced by `…`. A panic's text can
+/// quote a path or a line of a chat (`unwrap()` on an error that holds one), and the log gets shared
+/// in bug reports. An unclosed quote hides the rest.
+fn strip_quoted(message: &str) -> String {
+    let mut out = String::with_capacity(message.len());
+    let mut chars = message.chars();
+    while let Some(c) = chars.next() {
+        out.push(c);
+        if c == '"' || c == '`' {
+            let mut escaped = false;
+            for d in chars.by_ref() {
+                match d {
+                    _ if escaped => escaped = false,
+                    '\\' if c == '"' => escaped = true,
+                    _ if d == c => break,
+                    _ => {}
+                }
+            }
+            out.push('…');
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// `path` with the home folder written as `~`, for the log: it is shared in bug reports, and the
+/// folder is the user's name.
+fn shorten_home(path: &std::path::Path, home: Option<&std::path::Path>) -> String {
+    match home.and_then(|h| path.strip_prefix(h).ok()) {
+        Some(rest) if rest.as_os_str().is_empty() => "~".into(),
+        Some(rest) => format!("~{}{}", std::path::MAIN_SEPARATOR, rest.display()),
+        None => path.display().to_string(),
     }
 }
 
@@ -307,7 +343,13 @@ fn setup(tauri_app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     if store::legacy_db_env_in_use() {
         log::warn!("{} is deprecated; set {} instead", store::LEGACY_DB_ENV, store::DB_ENV);
     }
-    log::info!("database: {}", db.display());
+    log::info!(
+        "No, Actually... {} on {} {}",
+        tauri_app.package_info().version,
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    );
+    log::info!("database: {}", shorten_home(&db, std::env::home_dir().as_deref()));
     let writer = Store::open(&db)?;
     let reader = Store::open(&db)?;
     match report_cards::cli_path::publish(&db) {
@@ -370,7 +412,8 @@ pub fn run() {
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
                 .max_file_size(2_000_000)
-                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
+                // The log in use and the one before it, so a rotation never wipes what led up to a problem.
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(2))
                 .build(),
         )
         .plugin(tauri_plugin_positioner::init())
@@ -522,7 +565,8 @@ mod tray_tests {
 
 #[cfg(test)]
 mod panic_tests {
-    use super::panic_line;
+    use super::{panic_line, shorten_home, strip_quoted};
+    use std::path::Path;
     use std::sync::Mutex;
 
     #[test]
@@ -535,5 +579,25 @@ mod panic_tests {
         let seen = SEEN.lock().unwrap();
         let line = seen.iter().find(|l| l.contains("bad file 7")).expect("hook saw the panic");
         assert!(line.starts_with("panic: bad file 7 at ") && line.contains("lib.rs:"), "{line}");
+    }
+
+    #[test]
+    fn quoted_text_is_cut_from_a_logged_panic() {
+        let message = r#"called `Result::unwrap()` on an `Err` value: Io { path: "/Users/me/chat.jsonl", note: "say \"hi\" ok" } done"#;
+        assert_eq!(strip_quoted(message), r#"called `…` on an `…` value: Io { path: "…", note: "…" } done"#);
+        assert_eq!(strip_quoted("index out of bounds: the len is 3"), "index out of bounds: the len is 3");
+        assert_eq!(strip_quoted(r#"bad line "never closed"#), r#"bad line "…""#, "an open quote hides the rest");
+        assert_eq!(strip_quoted("don't panic"), "don't panic", "apostrophes are not quotes");
+    }
+
+    #[test]
+    fn the_home_folder_is_written_as_a_tilde_in_the_log() {
+        let home = Some(Path::new("/Users/me"));
+        let sep = std::path::MAIN_SEPARATOR;
+        let db = Path::new("/Users/me").join("Library").join("noactually.db");
+        assert_eq!(shorten_home(&db, home), format!("~{sep}Library{sep}noactually.db"));
+        assert_eq!(shorten_home(Path::new("/Users/me"), home), "~");
+        assert_eq!(shorten_home(Path::new("/Users/mellow/x.db"), home), "/Users/mellow/x.db", "whole folders only");
+        assert_eq!(shorten_home(&db, None), db.display().to_string());
     }
 }

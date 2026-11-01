@@ -40,13 +40,15 @@ export function openPicker(trigger: HTMLElement, opts: PickerOptions): HTMLEleme
   pop.className = "picker-pop";
   pop.innerHTML = html`<input class="pick-search" type="search" role="combobox" aria-expanded="true" aria-controls="${LIST_ID}"
       aria-autocomplete="list" placeholder="Search models, e.g. opus 5.5" aria-label="Search models" autocomplete="off" spellcheck="false" />
-    <ul class="pick-list" id="${LIST_ID}" role="listbox" aria-label="Models"></ul>`.value;
+    <ul class="pick-list" id="${LIST_ID}" role="listbox" aria-label="Models"></ul>
+    <p class="sr-only" role="status" aria-live="polite"></p>`.value;
   document.body.appendChild(pop);
   trigger.setAttribute("aria-expanded", "true");
 
   const input = pop.querySelector("input");
   const list = pop.querySelector("ul");
-  if (!input || !list) throw new Error("Picker markup is missing its parts");
+  const status = pop.querySelector("p");
+  if (!input || !list || !status) throw new Error("Picker markup is missing its parts");
   let shown: PickItem[] = opts.items;
   let current = Math.max(
     0,
@@ -83,6 +85,8 @@ export function openPicker(trigger: HTMLElement, opts: PickerOptions): HTMLEleme
         : html`<li class="pick-empty" role="presentation">No model matches “${input.value}”</li>`
     ).value;
     highlight(current, true);
+    // Announced only for a search; opening with the full list says nothing.
+    status.textContent = searching ? (shown.length ? `${shown.length} ${shown.length === 1 ? "model matches" : "models match"}` : "No models match") : "";
   };
 
   // Keep the popover under its trigger if the page itself scrolls or resizes.

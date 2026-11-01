@@ -1,6 +1,7 @@
 //! The store's behavior suite: ingest, sync, consent, retention and stats, end to end.
 
 use super::*;
+use chrono::TimeZone;
 use engine::{Answer, PromptTier, Signal, Signals};
 use sources::testing::{cc_ai, cc_correction, cc_user, set_mtime_ago};
 use sources::{FileScan, SourceTurn};
@@ -143,13 +144,13 @@ fn hall_names_known_sources() {
 #[test]
 fn weekly_buckets_split_on_monday() {
     let mut s = Store::open_in_memory().unwrap();
-    // Noon UTC stays on the same local day in every timezone from UTC-11 to UTC+11.
-    let sunday = "2026-10-25T12:00:00Z";
-    let monday = "2026-10-26T12:00:00Z";
+    // Local noon is the same day in every timezone; a fixed UTC hour isn't.
+    let noon = |day: u32| Local.with_ymd_and_hms(2026, 10, day, 12, 0, 0).unwrap().with_timezone(&Utc).to_rfc3339();
+    let (sunday, monday) = (noon(25), noon(26));
     ingest(
         &mut s,
         "f",
-        vec![turn("no, that's wrong", "You're right.", "m", sunday, "a"), turn("thanks", "Sure.", "m", monday, "b")],
+        vec![turn("no, that's wrong", "You're right.", "m", &sunday, "a"), turn("thanks", "Sure.", "m", &monday, "b")],
     );
     let w = s.stats(&Filter::default(), "2026-10-27".parse().unwrap()).unwrap().weekly;
     let d = |s: &str| s.parse::<NaiveDate>().unwrap();
@@ -392,7 +393,7 @@ fn rewritten_or_shrunk_files_never_double_count() {
 fn unreadable_files_are_reported_not_fatal() {
     let dir = tempfile::tempdir().unwrap();
     let ts = Utc::now().to_rfc3339();
-    write_settled(&dir.path().join("a.jsonl"), cc_correction("u", &ts));
+    write_settled(&dir.path().join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u", &ts));
     let mut s = Store::open_in_memory().unwrap();
     s.import("chatgpt-export", &dir.path().join("conversations.json").to_string_lossy()).unwrap();
     std::fs::write(dir.path().join("conversations.json"), "{not json").unwrap();
@@ -409,7 +410,7 @@ fn unreadable_files_are_reported_not_fatal() {
 fn paused_and_revoked_sources_are_not_read() {
     let dir = tempfile::tempdir().unwrap();
     let ts = Utc::now().to_rfc3339();
-    write_settled(&dir.path().join("a.jsonl"), cc_correction("u", &ts));
+    write_settled(&dir.path().join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u", &ts));
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
     s.allow("claude-code", None).unwrap();
@@ -426,7 +427,8 @@ fn paused_and_revoked_sources_are_not_read() {
 fn rule_changes_rebuild_scores_but_keep_consent() {
     let dir = tempfile::tempdir().unwrap();
     let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
-    write_settled(&dir.path().join("a.jsonl"), cc_ai("<synthetic>", &ts, "API Error") + &cc_correction("u", &ts));
+    let body = cc_ai("claude-opus-5-5", &ts, "hi") + &cc_ai("<synthetic>", &ts, "API Error");
+    write_settled(&dir.path().join("a.jsonl"), body + &cc_correction("u", &ts));
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
     s.allow("claude-code", None).unwrap();
@@ -526,6 +528,121 @@ fn db_path_prefers_the_new_variable() {
     assert!(matches!(resolve_db_path(env(&[]), Some("relative".into())), Err(Error::NoDataDir)), "never relative");
 }
 
+/// (daily rows, events, sessions, seen keys): everything a rebuild must not lose.
+fn kept_counts(s: &Store) -> (i64, i64, i64, i64) {
+    s.conn
+        .query_row(
+            "SELECT (SELECT count(*) FROM daily), (SELECT count(*) FROM events),
+                    (SELECT count(*) FROM sessions), (SELECT count(*) FROM seen)",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .unwrap()
+}
+
+#[test]
+fn a_rebuild_keeps_what_it_cant_read_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let file = dir.path().join("a.jsonl");
+    write_settled(&file, cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts));
+    let all = claude_code(&dir);
+    let mut s = Store::open_in_memory().unwrap();
+    s.allow("claude-code", None).unwrap();
+    sync(&mut s, &all).unwrap();
+    let before = kept_counts(&s);
+    assert!(before.0 > 0 && before.1 == 1, "a day and a correction to lose");
+
+    s.revoke("claude-code").unwrap();
+    s.set_setting("rules_version", "1").unwrap();
+    assert!(sync(&mut s, &all).unwrap().rescored);
+    assert_eq!(kept_counts(&s), before, "stop reading keeps your scores, through a rebuild too");
+
+    s.allow("claude-code", None).unwrap();
+    std::fs::remove_file(&file).unwrap();
+    s.set_setting("rules_version", "1").unwrap();
+    assert!(sync(&mut s, &all).unwrap().rescored);
+    assert_eq!(kept_counts(&s), before, "a history file that's gone keeps its chat");
+
+    write_settled(&file, cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts));
+    sync(&mut s, &all).unwrap();
+    assert_eq!(kept_counts(&s), before, "and it can't count twice if the file comes back");
+
+    let kept: i64 = s.conn.query_row("SELECT count(*) FROM kept_daily", [], |r| r.get(0)).unwrap();
+    assert_eq!(kept, 0, "nothing stays set aside once the rebuild is done");
+    assert_eq!(s.get_setting(REBUILDING_KEY).unwrap(), None);
+}
+
+#[test]
+fn a_day_with_some_of_its_chats_gone_keeps_them() {
+    let dir = tempfile::tempdir().unwrap();
+    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let chat = |n: &str| cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction(n, &ts);
+    let (stays, goes) = (dir.path().join("stays.jsonl"), dir.path().join("goes.jsonl"));
+    write_settled(&stays, chat("u1"));
+    write_settled(&goes, chat("u2"));
+    let all = claude_code(&dir);
+    let mut s = Store::open_in_memory().unwrap();
+    s.allow("claude-code", None).unwrap();
+    sync(&mut s, &all).unwrap();
+    let totals = |s: &Store| -> Vec<(String, i64)> {
+        let mut q = s.conn.prepare("SELECT kind, sum(n) FROM daily GROUP BY kind ORDER BY kind").unwrap();
+        q.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().map(Result::unwrap).collect()
+    };
+    let (before, counts) = (kept_counts(&s), totals(&s));
+    assert_eq!(before.1, 2, "a correction in each chat");
+
+    std::fs::remove_file(&goes).unwrap();
+    s.set_setting("rules_version", "1").unwrap();
+    let r = sync(&mut s, &all).unwrap();
+    assert_eq!((r.rescored, r.files_read), (true, 1), "only one chat is left to read");
+    assert_eq!(kept_counts(&s), before, "the chat whose file is gone comes back, on a day that was read too");
+    assert_eq!(totals(&s), counts, "and so do its share of the day's counts");
+
+    s.set_setting("rules_version", "1").unwrap();
+    sync(&mut s, &all).unwrap();
+    assert_eq!(totals(&s), counts, "a second rebuild doesn't count them twice");
+}
+
+#[test]
+fn a_rebuild_cut_short_loses_nothing_and_forget_reaches_what_it_set_aside() {
+    let dir = tempfile::tempdir().unwrap();
+    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    write_settled(&dir.path().join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts));
+    let all = claude_code(&dir);
+    let mut s = Store::open_in_memory().unwrap();
+    s.allow("claude-code", None).unwrap();
+    sync(&mut s, &all).unwrap();
+    let before = kept_counts(&s);
+
+    s.reset_scores().unwrap(); // the app quits here
+    assert_eq!(kept_counts(&s).0, 0);
+    s.reset_scores().unwrap(); // and the next rebuild starts from what was set aside
+    s.revoke("claude-code").unwrap();
+    sync(&mut s, &all).unwrap();
+    assert_eq!(kept_counts(&s), before);
+
+    s.reset_scores().unwrap();
+    s.forget("claude-code").unwrap();
+    sync(&mut s, &all).unwrap();
+    assert_eq!(kept_counts(&s), (0, 0, 0, 0), "forget deletes the rows a rebuild was holding too");
+}
+
+#[test]
+fn scores_from_newer_rules_are_left_alone() {
+    let dir = tempfile::tempdir().unwrap();
+    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    write_settled(&dir.path().join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts));
+    let all = claude_code(&dir);
+    let mut s = Store::open_in_memory().unwrap();
+    s.allow("claude-code", None).unwrap();
+    sync(&mut s, &all).unwrap();
+    let newer = (engine::RULES_VERSION + 1).to_string();
+    s.set_setting("rules_version", &newer).unwrap();
+    assert!(!sync(&mut s, &all).unwrap().rescored, "an older build can't read them better");
+    assert_eq!(s.get_setting("rules_version").unwrap().as_deref(), Some(newer.as_str()));
+}
+
 #[test]
 fn pins_survive_a_rules_rebuild() {
     let dir = tempfile::tempdir().unwrap();
@@ -554,9 +671,10 @@ fn pins_survive_a_rules_rebuild() {
     std::fs::remove_file(&file).unwrap(); // the tool cleaned up old history
     s.set_setting("rules_version", "1").unwrap();
     assert!(sync(&mut s, &all).unwrap().rescored);
-    assert_eq!(pins(&s), (1, 1), "only the pinned correction outlives its deleted history file");
-    let text: Option<String> = s.conn.query_row("SELECT human_snip FROM events", [], |r| r.get(0)).unwrap();
-    assert!(text.is_some(), "and it keeps its text");
+    assert_eq!(pins(&s), (2, 1), "a deleted history file costs nothing: its day is kept as counted");
+    let text: Option<String> =
+        s.conn.query_row("SELECT human_snip FROM events WHERE pinned = 1", [], |r| r.get(0)).unwrap();
+    assert!(text.is_some(), "and the pin keeps its text");
 
     s.forget("claude-code").unwrap();
     assert_eq!(pins(&s), (0, 0), "forgetting a source deletes its pinned corrections too");
@@ -780,6 +898,8 @@ fn no_tip_once_every_signal_is_common() {
 #[test]
 fn a_window_moves_the_counts_and_the_score() {
     let s = Store::open_in_memory().unwrap();
+    // A fixed Sunday, so the rows 1-3 days back stay in one Monday week whatever day the test runs.
+    let today = || "2026-11-01".parse::<NaiveDate>().unwrap();
     let day = |ago: i64| (today() - chrono::Duration::days(ago)).to_string();
     let count = |ago: i64, kind: &str, n: i64| {
         s.conn()
@@ -943,7 +1063,9 @@ fn a_message_waits_for_the_ai_to_finish_and_gets_its_later_admission() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("a.jsonl");
     let ts = Utc::now().to_rfc3339();
-    let body = cc_user("u1", &ts, "are you sure?") + &cc_ai("claude-opus-5-5", &ts, "Let me check.");
+    let body = cc_ai("claude-opus-5-5", &ts, "It's fixed.")
+        + &cc_user("u1", &ts, "are you sure?")
+        + &cc_ai("claude-opus-5-5", &ts, "Let me check.");
     std::fs::write(&path, body).unwrap();
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();

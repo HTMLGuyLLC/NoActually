@@ -4,7 +4,7 @@
 //!
 //! The score mixes direction (how often your tasks land without you steering them) with judgment
 //! (how rarely the AI has to correct you, once you've shown you check its work). Corrections only
-//! have to show that you check: past [`CORRECTION_PROOF`] in the window, more add nothing, and
+//! have to show that you check: past [`correction_proof`] in the window, more add nothing, and
 //! judgment never compares your corrections with the AI's, so prompting better and correcting fewer
 //! mistakes never costs you points.
 
@@ -14,7 +14,7 @@ use std::str::FromStr;
 
 /// Percent of the score that comes from direction (landed tasks); the rest is judgment.
 pub const DIRECTION_WEIGHT: i64 = 70;
-/// Corrections in the window that fully show you check its work.
+/// Corrections in the last [`WINDOW_DAYS`] that fully show you check its work.
 pub const CORRECTION_PROOF: i64 = 3;
 /// Judgment points lost per 1% of continued tasks the AI had to correct you on (so being
 /// corrected on a fifth of your tasks leaves none).
@@ -331,6 +331,15 @@ pub struct Window {
     pub corrections: i64,
     /// Times the AI corrected you.
     pub humbled: i64,
+    /// Days the window covers.
+    pub days: i64,
+}
+
+/// The corrections that fully show you check its work over `days`: [`CORRECTION_PROOF`] over
+/// [`WINDOW_DAYS`] or longer, and a share of that in a shorter window, so the same habits earn the
+/// same tier in any window. Always at least one.
+pub fn correction_proof(days: i64) -> i64 {
+    ((CORRECTION_PROOF * days + WINDOW_DAYS - 1) / WINDOW_DAYS).clamp(1, CORRECTION_PROOF)
 }
 
 /// The overall score and the two parts it's made of.
@@ -341,7 +350,7 @@ pub struct Score {
     /// Percent of continued tasks that landed, rounded down.
     pub direction: i64,
     /// 0 to 100: how rarely the AI corrected you (per task), scaled down until you've shown
-    /// [`CORRECTION_PROOF`] corrections.
+    /// [`correction_proof`] corrections.
     pub judgment: i64,
     /// The tier `score` reaches.
     pub tier: Tier,
@@ -358,7 +367,8 @@ impl Score {
         let direction = 1000 * w.landed.clamp(0, w.continued) / w.continued;
         // Per task, not per correction: comparing with corrections would make fewer corrections cost points.
         let right = (1000 - HUMBLED_COST * 1000 * w.humbled.max(0) / w.continued.max(HUMBLED_BASE)).max(0);
-        let judgment = right * w.corrections.clamp(0, CORRECTION_PROOF) / CORRECTION_PROOF;
+        let proof = correction_proof(w.days);
+        let judgment = right * w.corrections.clamp(0, proof) / proof;
         let score = (DIRECTION_WEIGHT * direction + (100 - DIRECTION_WEIGHT) * judgment) / 100;
         Some(Score {
             score: score / 10,
@@ -374,7 +384,21 @@ mod tests {
     use super::*;
 
     fn w(continued: i64, landed: i64, corrections: i64, humbled: i64) -> Window {
-        Window { continued, landed, corrections, humbled }
+        Window { continued, landed, corrections, humbled, days: WINDOW_DAYS }
+    }
+
+    #[test]
+    fn the_correction_proof_follows_the_window() {
+        assert_eq!(
+            [1, 7, 10, 19, 20, 28, 90, 4000].map(correction_proof),
+            [1, 1, 2, 3, 3, 3, 3, 3],
+            "a share of 3 in a short window, never more than 3 in a long one"
+        );
+        // The same habits in 28 days and in one week of them: same tier.
+        let month = Score::of(Window { continued: 100, landed: 80, corrections: 6, humbled: 0, days: 28 }).unwrap();
+        let week = Score::of(Window { continued: 20, landed: 16, corrections: 1, humbled: 0, days: 7 }).unwrap();
+        assert_eq!((month.score, week.score), (86, 86));
+        assert_eq!(month.tier, week.tier);
     }
 
     #[test]

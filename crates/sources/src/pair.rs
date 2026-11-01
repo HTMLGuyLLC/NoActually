@@ -68,6 +68,26 @@ impl Event {
     }
 }
 
+/// Pairs a read that began at byte `from` of a chat file. Past the start of the file a chat is
+/// already going, so a message with no reply in view still isn't the chat's first ("From now on"
+/// starts reading at the end of a file).
+pub fn pair_from(
+    source: &'static str,
+    session: &str,
+    events: Vec<Event>,
+    from: u64,
+    end: u64,
+    finalize: bool,
+) -> FileScan {
+    let mut scan = pair(source, session, events, end, finalize);
+    if from > 0 {
+        for st in &mut scan.turns {
+            st.turn.prev_ai.get_or_insert_with(AiMsg::default);
+        }
+    }
+    scan
+}
+
 /// Pairs each human event with the AI text around it.
 ///
 /// A human message is complete once the next one follows it, since the AI may still be working

@@ -4,6 +4,26 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+### Changed
+
+- A rules update no longer loses history. Chats no longer on your computer, and sources you stopped, keep their counts, and a popup says when your scores were updated.
+- The scorecard now shows the same tier for the same habits in any time window. Corrections needed for full credit scale with the window: 3 in 28 days, 1 in 7 days.
+- Share dialog: you edit each quote in its own box, and every network and image uses your edits. Images show the same words as the box.
+- Report card hooks now stay out of any source you never allowed, not only ones you stopped.
+- With automatic update checks off, changing the update channel no longer checks for updates.
+- A chat's first message can't count as a correction, since there's nothing yet to correct. It counts as a task.
+- `noactually sync` exits non-zero when a file is skipped. `sources`, `sync` and `check` take `--json`. New `pause` and `resume` commands.
+- The app honors `CODEX_HOME` and `CLAUDE_CONFIG_DIR`.
+
+### Fixed
+
+- A filter or period with no chats no longer looks like a fresh install. Your pickers stay, with a button to widen the view.
+- Redaction now catches many more secrets: prefixed names like `DB_PASSWORD`, JSON keys, Bearer tokens, private key blocks, more API key formats, database logins, and more path styles.
+- Imported files are no longer described as being watched.
+- Failed checks, toggles and updates now say why, and the error page keeps the app's header and links to the log folder.
+- The database and its folder are now private to your account on Mac and Linux.
+- A count popup can't repeat after Forget or a rebuild. The "left out" report card count no longer grows when chats are read again.
+
 ## [0.5.3] - 2026-10-31
 
 ### Fixed

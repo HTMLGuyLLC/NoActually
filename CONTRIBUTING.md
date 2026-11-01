@@ -27,7 +27,7 @@ cargo run -p noactually-cli -- sync
 cargo run -p noactually-cli -- stats
 ```
 
-Set `NOACTUALLY_DB` to use a throwaway database instead of your real one (`WA_DB` still works but is deprecated):
+Set `NOACTUALLY_DB` to use a throwaway database instead of your real one:
 
 ```bash
 NOACTUALLY_DB=/tmp/na-test.db cargo run -p noactually-cli -- stats
@@ -69,8 +69,8 @@ It's the same as running these by hand (build the frontend first; the app crate 
 pnpm --dir app install --frozen-lockfile
 pnpm --dir app build
 cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo test --locked --workspace
 pnpm --dir app check
 pnpm --dir app lint
 pnpm --dir app test
@@ -129,12 +129,19 @@ If something goes wrong after a tag is pushed, release the next patch version ra
 ### Each release
 
 1. Make sure `main` is green and `CHANGELOG.md` has the user-facing changes under **Unreleased**.
-2. Run `just bump 0.2.0` (`scripts/bump-version.sh 0.2.0`). It sets the version in `Cargo.toml` (the source of truth), `app/package.json`, the report card plugin's `plugins/grade/.claude-plugin/plugin.json` and, if present, `app/src-tauri/tauri.conf.json`, refreshes `Cargo.lock`, and moves the Unreleased notes under a dated `## [0.2.0]` heading with updated compare links. Commit it on a branch (`git switch -c release-0.2.0 && git commit -am "release: v0.2.0"`) and merge it with a pull request once CI is green (`main` only takes pull requests).
-3. Tag the merged commit on `main` and push the tag: `git switch main && git pull && git tag v0.2.0 && git push origin v0.2.0`. The Release workflow checks the tag against the Cargo version, then builds Windows and Linux into a draft release, with signed update files and a `latest.json` for them.
+2. Run `just bump 0.2.0` (`scripts/bump-version.sh 0.2.0`). It sets the version in `Cargo.toml` (the source of truth), `app/package.json`, the report card plugin's `plugins/grade/.claude-plugin/plugin.json` and `app/src-tauri/tauri.conf.json`, refreshes `Cargo.lock`, and moves the Unreleased notes under a dated `## [0.2.0]` heading with updated compare links. Commit it on a branch (`git switch -c release-0.2.0 && git commit -am "release: v0.2.0"`) and merge it with a pull request once CI is green (`main` only takes pull requests).
+3. Tag the merged commit on `main` and push the tag: `git switch main && git pull && git tag v0.2.0 && git push origin v0.2.0`. The Release workflow checks that the tagged commit is on `main` and has a passing `ci-ok` check (if the merge's CI is still running, wait and re-run the workflow), checks the tag against the Cargo version, then builds Windows and Linux into a draft release, with signed update files and a `latest.json` for them.
 4. On a Mac with the Developer ID certificate and the updater key, check out the tag and run `just release-mac` (`scripts/release-macos.sh`). It refuses to run on a dirty tree or when HEAD isn't the tagged commit (`--force` skips the tag check). It builds a universal app, signs it, notarizes and staples both the app and the DMG, and makes the signed update file (`No-Actually-0.2.0-Mac-Update-universal.app.tar.gz` + `.sig`).
 5. Run `scripts/finish-release.sh v0.2.0`. It renames the files to plain names people can pick from ("No-Actually-0.2.0-Mac-universal.dmg", "-Windows-Setup-x64.exe", "-x86_64.AppImage"…), setting both the asset name and the label tauri-action v1 adds; uploads the Mac DMG and update file; rewrites `latest.json` so every entry points at the renamed files and adds the Mac entries (`darwin-universal`, `darwin-aarch64`, `darwin-x86_64`); and writes `SHA256SUMS.txt`. It refuses to write a `latest.json` that points at a file missing from the release.
 6. Check the draft and publish it as a beta: `scripts/publish-release.sh v0.2.0 beta` (or `just publish v0.2.0 beta`). Only apps on the Beta channel are offered it, because the script copies its `latest.json` to the `beta-channel` release. Everyone else keeps reading `releases/latest/download/latest.json`, which skips prereleases. The `beta-channel` tag isn't a version, so the `v*` tag rules don't lock it; it holds only that one file.
-7. Smoke-test the beta on one machine. On the previous release, set Settings → General → Update channel to Beta, with report cards on, and update through the app. Then go to Settings → Report cards → Turn on for Claude Code, start a new chat, do a small task, type `/grade:me`, and check the card and that it appears under Improve. Leave the chat open, quit and reopen the app, and check Report cards shows no error. Turn it off again.
+7. Smoke-test the beta on one machine. On the previous release, set Settings → General → Update channel to Beta, with report cards on, and update through the app. Also update one Windows or Linux machine through the app. Then go to Settings → Report cards → Turn on for Claude Code, start a new chat, do a small task, type `/grade:me`, and check the card and that it appears under Improve. Leave the chat open, quit and reopen the app, and check Report cards shows no error. Turn it off again.
 8. Release it to everyone: `scripts/publish-release.sh v0.2.0 stable`. The same files go out, with no rebuild. If the beta has a problem, leave it as a beta and fix it in the next patch release.
+
+### A bad stable release
+
+This has not been tried yet, so treat it as a plan and fix it here the first time it's used.
+
+1. Make the previous good release the latest again: `gh release edit vOLD --latest -R HTMLGuyLLC/NoActually`. Apps stop being offered the bad one. Apps that already updated stay on it; there is no rollback.
+2. Build the fix as the next patch version and send it through the normal flow above (beta, smoke test, stable).
 
 If the `APPLE_*` secrets are set in the repo, the Release workflow also signs and notarizes macOS, and step 4 isn't needed.

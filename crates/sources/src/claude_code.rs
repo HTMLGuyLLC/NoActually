@@ -3,12 +3,14 @@
 use crate::jsonl::{for_each_line, open_at};
 use crate::view::{build, Cut, Sample};
 use crate::{
-    contains, data_dir, home, pair, parse_ts, walk, ChatView, Error, Event, FileScan, Kind, Result, RulesSeen, Source,
+    contains, data_dir, home, pair_from, parse_ts, walk, ChatView, Error, Event, FileScan, Kind, Result, RulesSeen,
+    Source,
 };
 use chrono::{DateTime, Utc};
 use engine::{head_chars, is_tip_rules, is_tip_stop, Usage};
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 pub struct ClaudeCode {
@@ -21,7 +23,7 @@ pub struct ClaudeCode {
 
 impl ClaudeCode {
     pub fn code() -> Self {
-        let roots = home().map(|h| h.join(".claude").join("projects")).into_iter().collect();
+        let roots = claude_dir_in(|k| std::env::var_os(k), home()).map(|d| d.join("projects")).into_iter().collect();
         Self { id: "claude-code", name: "Claude Code", roots, gradable: true }
     }
     /// Claude Code reading from `root` instead of the real home folder (tests, custom installs).
@@ -33,6 +35,12 @@ impl ClaudeCode {
         // Cowork can't run the plugin, so its chats can't carry a report card.
         Self { id: "claude-cowork", name: "Claude Cowork", roots, gradable: false }
     }
+}
+
+/// Claude Code's folder: `$CLAUDE_CONFIG_DIR`, else `~/.claude`. A variable that isn't an absolute
+/// path counts as unset, so nothing is read from wherever the app happens to run.
+fn claude_dir_in(env: impl Fn(&str) -> Option<OsString>, home: Option<PathBuf>) -> Option<PathBuf> {
+    env("CLAUDE_CONFIG_DIR").map(PathBuf::from).filter(|p| p.is_absolute()).or_else(|| home.map(|h| h.join(".claude")))
 }
 
 /// Messages Claude Code injects as the "user" that a person never typed.
@@ -168,7 +176,7 @@ impl Source for ClaudeCode {
             rules.extend(line.rules);
         })
         .map_err(Error::io(path))?;
-        let mut scan = pair(self.id, &session, events, end, finalize);
+        let mut scan = pair_from(self.id, &session, events, from, end, finalize);
         scan.rules = rules.into_iter().map(|ts| RulesSeen { session: session.clone(), ts }).collect();
         Ok(scan)
     }
@@ -361,6 +369,18 @@ mod tests {
     use serde_json::json;
 
     const TS: &str = "2026-10-01T10:00:00Z";
+
+    #[test]
+    fn claude_config_dir_moves_the_folder_but_only_to_an_absolute_path() {
+        const ABSOLUTE: &str = if cfg!(windows) { r"C:\data\claude" } else { "/data/claude" };
+        let home = Some(PathBuf::from("/home/me"));
+        let var = |v: &'static str| move |k: &str| (k == "CLAUDE_CONFIG_DIR").then(|| OsString::from(v));
+        assert_eq!(claude_dir_in(|_| None, home.clone()), Some("/home/me/.claude".into()));
+        assert_eq!(claude_dir_in(var(ABSOLUTE), home.clone()), Some(ABSOLUTE.into()));
+        assert_eq!(claude_dir_in(var(""), home.clone()), Some("/home/me/.claude".into()), "empty is unset");
+        assert_eq!(claude_dir_in(var("relative"), home), Some("/home/me/.claude".into()));
+        assert_eq!(claude_dir_in(|_| None, None), None);
+    }
 
     fn scan_str(body: &str, finalize: bool) -> FileScan {
         let dir = tempfile::tempdir().unwrap();

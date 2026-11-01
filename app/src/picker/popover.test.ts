@@ -54,6 +54,15 @@ describe("model picker popover", () => {
     expect(must("#pick-opt-0").getAttribute("aria-selected")).toBe("true");
   });
 
+  it("announces how many models match a search, and stays quiet when opened", () => {
+    open();
+    const status = must(".picker-pop [role=status]");
+    expect(status.textContent).toBe("");
+    input().value = "zzzz-no-such-model";
+    input().dispatchEvent(new Event("input", { bubbles: true }));
+    expect(status.textContent).toBe("No models match");
+  });
+
   it("moves the highlight with the arrow keys and chooses with Enter", () => {
     open();
     key("ArrowDown");

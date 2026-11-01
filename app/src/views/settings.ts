@@ -104,7 +104,7 @@ function generalView({ autostart, menuBar, update, demo }: SettingsContext): Htm
       </div>
       <div class="settings-row">
         <label class="toggle"><input id="auto-update" data-action="auto-update" type="checkbox" aria-describedby="auto-update-help"${attr(!!update?.auto, "checked")}${off}/><span>Check for app updates automatically</span></label>
-        <span class="muted small" id="auto-update-help">Asks GitHub for the latest version number at launch and every 6 hours. Sends nothing about you.</span>
+        <span class="muted small" id="auto-update-help">Asks GitHub for the latest version number a minute after launch and every 6 hours. Sends no account, stats or chat data. GitHub sees your IP address, as with any download.</span>
       </div>
       <div class="settings-row">
         <label class="toggle" for="update-channel">Update channel</label>
@@ -236,6 +236,7 @@ function reportCardsView(rc: ReportCardsState, sources: SourceInfo[], tipRules: 
       ${status?.translocated ? html`<p class="action-error" id="report-cards-move-app">${MOVE_APP}</p>` : ""}
       ${tools}
       <p class="muted how-to"><b>How to use it:</b> when you finish something, type <span class="mono">${TOOL_WORDS.claude_code.command}</span> in Claude Code (or <span class="mono">${TOOL_WORDS.codex.command}</span> in Codex).</p>
+      <p class="muted small" id="report-cards-cost">Grades are your AI's judgment, so they can vary between runs, unlike your score. Claude Haiku misses more tips than larger models. Each report card uses your own tokens: roughly 0.5k to 2k output tokens per task graded.</p>
       <div class="settings-row">
         <label class="toggle"><input id="report-cards-tips" data-action="report-cards-tips" type="checkbox" aria-describedby="report-cards-tips-help"${attr(tipsOn, "checked")}${attr(tipsLocked, 'aria-disabled="true"')}/><span>Give me tips as I work (Claude Code only)</span></label>
         <span class="muted small" id="report-cards-tips-help">When a follow-up could have been in your first message, your AI adds a one-line tip, and No, Actually... keeps count. Adds about 480 tokens to each chat. Applies to new or reopened chats. To stop sooner, tell your AI “no more tips.”${tipsHint}</span>${err("tips")}

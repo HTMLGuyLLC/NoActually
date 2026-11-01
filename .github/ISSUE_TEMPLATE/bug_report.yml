@@ -6,6 +6,7 @@ body:
     attributes:
       value: |
         Please do not paste private chat content. Redact anything personal.
+        Logs can include your home folder name and project folder names in file paths. Redact those too.
   - type: textarea
     id: what
     attributes:
@@ -23,7 +24,7 @@ body:
     id: version
     attributes:
       label: App version
-      placeholder: "0.1.0"
+      placeholder: "1.2.3"
     validations:
       required: true
   - type: dropdown
@@ -41,4 +42,4 @@ body:
     id: logs
     attributes:
       label: Logs or screenshots
-      description: Redact private content first.
+      description: Redact private content first, including home and project folder names in paths.

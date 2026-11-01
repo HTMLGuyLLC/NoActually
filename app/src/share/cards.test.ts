@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { CARD_SIZES, CARD_THEME, wrap } from "./cards";
+import { describe, expect, it, vi } from "vitest";
+import { CARD_SIZES, CARD_THEME, drawCorrectionCard, wrap } from "./cards";
+import { QUOTE_CLIP } from "./share";
 
 /** A fake canvas where every character is 10px wide. */
 const g = { measureText: (t: string) => ({ width: t.length * 10 }) as TextMetrics };
@@ -30,5 +31,21 @@ describe("CARD_SIZES", () => {
     expect(CARD_SIZES.wide).toEqual({ w: 1200, h: 630 });
     expect(CARD_SIZES.portrait).toEqual({ w: 1080, h: 1350 });
     expect(CARD_SIZES.portrait.w / CARD_SIZES.portrait.h).toBe(4 / 5);
+  });
+});
+
+describe("drawCorrectionCard", () => {
+  it("draws the quotes it is given, clipped to the same length as the post text", async () => {
+    const drawn: string[] = [];
+    const g = new Proxy({ measureText: (t: string) => ({ width: t.length }), fillText: (t: string) => drawn.push(t) } as Record<string, unknown>, {
+      get: (o, k) => (typeof k === "string" && k in o ? o[k] : () => undefined),
+      set: () => true,
+    });
+    const c = { width: 0, height: 0, getContext: () => g, toBlob: (cb: (b: Blob) => void) => cb(new Blob()) };
+    vi.stubGlobal("document", { createElement: () => c, fonts: { load: async () => [], ready: Promise.resolve() } });
+    await drawCorrectionCard({ model: "Claude", human: "edited message", ai: "x".repeat(300) }, "wide");
+    vi.unstubAllGlobals();
+    expect(drawn.join(" ")).toContain("edited message");
+    expect(drawn.join(" ")).not.toContain("x".repeat(QUOTE_CLIP));
   });
 });

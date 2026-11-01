@@ -7,6 +7,7 @@
 <p align="center">
   <b>A scoreboard for you vs. your AI.</b><br>
   Prompt it well, correct it when it's wrong, and find out if it could really replace you.<br>
+  Works with Claude Code, Claude Cowork, Codex, ChatGPT and Claude.ai.<br>
   Tiers to climb, goals to hit, lessons to level up, and a card worth bragging about.
 </p>
 
@@ -74,12 +75,16 @@ No, Actually... saves each report card's numbers (never your words) and shows ho
 
 **Turn it on:** Settings → Report cards → Turn on. Then start a new chat, finish a task, and type `/grade:me`.
 
+**On Windows:** report cards work with Claude Code, which needs Git for Windows. They aren't available for Codex yet.
+
 **Without the app:** in Claude Code run `/plugin marketplace add HTMLGuyLLC/NoActually` then
 `/plugin install grade@noactually`. You get report cards, but no history.
 
-**Cost:** report cards are written by your own AI, so each one uses some of your tokens.
+**Cost:** report cards are written by your own AI, so each one uses some of your tokens: about 0.5k to 2k output tokens per task graded, more with `all`.
 They only run when you ask. Tips as you work are optional and use a little in each chat.
 Your score never uses AI and stays free.
+
+**Grades can vary:** your AI writes the report card, so a grade is a judgment call and can differ between runs, unlike your score.
 
 ## Private and secure by design
 
@@ -88,7 +93,7 @@ Your AI chats can hold code, keys, client names and half-formed ideas. This app 
 | | |
 |---|---|
 | 🔒 **Local only** | No accounts, no servers, no telemetry, no analytics. Fonts are bundled. The app's only network use is an update check against GitHub and a share link you click yourself. The update check carries no account, ID, stats or chat data (GitHub sees your IP address, as with any download), and you can turn it off. With optional report cards on, Claude Code downloads a small plugin from GitHub (and the matching one after an app update), a small check runs after each AI reply and reads the end of that chat on your computer, and when you ask for a report card your AI reads a short summary of the chat that the app makes on your computer. See [PRIVACY.md](PRIVACY.md#report-cards-optional). |
-| ✋ **Asks first** | Every source is off until you **Allow** it. Pause it, stop it, or **Forget** it (deletes everything it read) any time. |
+| ✋ **Asks first** | Every source is off until you **Allow** it. Pause it, stop it, or **Forget** it (deletes what it read, leaving only finished goal weeks and trophies, which are totals) any time. |
 | 🔢 **Numbers, not chats** | Ordinary messages are only counted, never stored. For corrections you pick **full text**, **snippet** (the default) or **category only**, and kept text steps down on a timer you set. Prompts, goals and lessons store numbers only, never words, and the prompt checker saves nothing you type. |
 | ✂️ **Redacted** | Keys, emails, links, home paths and long numbers are stripped from any text kept. It's pattern-based, so it can miss things: pick **category only** if that matters. |
 | ✅ **Verifiable** | MIT open source. The Mac app is signed and notarized by Apple, updates are signed, and every release ships `SHA256SUMS.txt`. |
@@ -100,7 +105,7 @@ The full details are in [PRIVACY.md](PRIVACY.md).
 <details>
 <summary><b>Does it send my chats anywhere?</b></summary>
 
-No. Everything is read and scored on your computer, and the results live in a local SQLite file. There is no server to send them to. The only time the app sends text anywhere is if you share a Hall of Fame card, and you see the card before it goes anywhere. If you turn on report cards, your AI reads a short summary of that chat, including the first few words of each of your messages, and that goes to your AI provider like the rest of the chat.
+No. Everything is read and scored on your computer, and the results live in a local SQLite file. There is no server to send them to. The only time the app sends text anywhere is if you share a Hall of fame card, and you see the card before it goes anywhere. If you turn on report cards, your AI reads a short summary of that chat, including the first few words of each of your messages, and that goes to your AI provider like the rest of the chat.
 </details>
 
 <details>
@@ -130,7 +135,7 @@ The engine is native Rust, and the window uses your system's built-in web view i
 <details>
 <summary><b>If I prompt it better, it makes fewer mistakes. Doesn't that lower my score?</b></summary>
 
-No. Corrections only have to show you check its work: 3 in 28 days is full credit, and more add nothing. After that, what counts is how rarely the AI has to correct *you*, per task. Most of the score (70%) is how often your prompts are clear the first time, so prompting better is the fastest way up.
+No. Corrections only have to show you check its work: 3 in 28 days is full credit (1 in 7 days), and more add nothing. After that, what counts is how rarely the AI has to correct *you*, per task. Most of the score (70%) is how often your prompts are clear the first time, so prompting better is the fastest way up.
 </details>
 
 <details>
@@ -170,7 +175,7 @@ Your own AI writes it, inside Claude Code or Codex, so it uses some of your toke
 
 An optional setting for Claude Code: **Settings → Report cards → Give me tips as I work**. When a follow-up could have been in your first message, your AI ends that reply with one line, like "Tip from No, Actually...: next time, say it only breaks on Safari when you first ask." Most replies get nothing. The part in brackets at the end, like `[evidence, redid 50%]`, is for the app: the habit, and how much work was redone. Letter grades still come only from `/grade:me`.
 
-It adds about 480 tokens to each chat, plus a few for each tip, and it applies to new or reopened chats. To stop sooner, tell your AI "no more tips." Settings shows the exact instructions your AI gets. The app counts tips and keeps which habit each was about, never the words. Your AI decides when to give a tip, so it can miss some, and Claude Haiku misses more and is less accurate.
+It adds about 480 tokens when a chat starts and again after a long chat is compacted, plus a few for each tip. That came to about 2.5% more tokens overall in testing. It applies to new or reopened chats. To stop sooner, tell your AI "no more tips." Settings shows the exact instructions your AI gets. The app counts tips and keeps which habit each was about, never the words. Your AI decides when to give a tip, so it can miss some, and Claude Haiku misses more and is less accurate.
 </details>
 
 <details>
@@ -182,7 +187,7 @@ The app keeps each report card's numbers, so you can see how you're trending. Th
 <details>
 <summary><b>How do I delete everything?</b></summary>
 
-Click **Forget** on a source to delete everything read from it, including its report cards and tips. **Delete report card and tip history** in Settings clears them all. To remove it all, first turn report cards off in Settings (that removes what they added to Claude Code and Codex), then quit the app and delete its data folder (the paths are in [PRIVACY.md](PRIVACY.md#how-to-delete-your-data)). Uninstalling alone leaves the data behind.
+Click **Forget** on a source to delete what was read from it, including its pins, report cards and tips. Finished goal weeks and trophies stay, as totals. **Delete report card and tip history** in Settings clears them all. To remove it all, first turn report cards off in Settings (that removes what they added to Claude Code and Codex), then quit the app and delete its data folder (the paths are in [PRIVACY.md](PRIVACY.md#how-to-delete-your-data)). Uninstalling alone leaves the data behind.
 </details>
 
 <details>
@@ -206,6 +211,7 @@ direction = % of your prompts that were clear the first time (see "How a prompt 
 judgment  = 100, minus 5 for each 1% of your tasks where the AI had to correct you
             (counted against at least 30 tasks, so a quiet month isn't wiped out),
             scaled down until you've corrected it 3 times
+            (a share of that in a window under 28 days: once in 7 days)
 ```
 
 | Tier | Score | Answer |
@@ -308,8 +314,8 @@ Open the **[latest release](https://github.com/HTMLGuyLLC/NoActually/releases/la
 | Your computer | Download | Install |
 |---|---|---|
 | **Mac** (macOS 12+, Apple silicon or Intel) | `No-Actually-<version>-Mac-universal.dmg` | Open it, drag **No, Actually...** into **Applications**, and open it from there. It's signed and notarized, so there are no warnings. |
-| **Windows** | `No-Actually-<version>-Windows-Setup-x64.exe` | Run it. If you see "Windows protected your PC", click **More info → Run anyway** (the Windows build isn't code-signed yet). |
-| **Linux** | `No-Actually-<version>-x86_64.AppImage` | Right-click → Properties → allow it to run as a program (or `chmod +x`), then open it. |
+| **Windows** (64-bit, with Microsoft Edge WebView2) | `No-Actually-<version>-Windows-Setup-x64.exe` | Run it. If you see "Windows protected your PC", click **More info → Run anyway** (the Windows build isn't code-signed yet). |
+| **Linux** (x86_64, built on Ubuntu 22.04 with WebKitGTK 4.1) | `No-Actually-<version>-x86_64.AppImage` | Right-click → Properties → allow it to run as a program (or `chmod +x`), then open it. |
 
 The other files are for special cases:
 - `-Windows-IT-Installer-x64.msi` is for IT teams deploying to many PCs.
@@ -317,6 +323,13 @@ The other files are for special cases:
 - `SHA256SUMS.txt` lets you verify a download.
 
 The app checks for new versions and shows **Restart to update** when one is ready. Nothing is downloaded or installed until you click it, and an update only installs if its signature matches the project's key. Turn the check off in Settings → General. To get new versions first, set **Update channel** to **Beta** there. Betas may have bugs. Going back to Stable keeps your version until a newer full release comes out.
+
+### For IT teams
+
+- **Silent install (Windows):** `msiexec /i <file>.msi /qn`, using the `-Windows-IT-Installer-x64.msi` file.
+- **Updates:** the settings are per user, in Settings → General. There is no machine-wide switch yet.
+- **Data:** it lives per user, at the paths listed in [PRIVACY.md](PRIVACY.md).
+- **Code signing:** the Windows build isn't code-signed.
 
 ## For developers
 
@@ -329,7 +342,7 @@ The app checks for new versions and shows **Restart to update** when one is read
 
 ### Build from source
 
-Needs Rust stable, Node 20+ and pnpm:
+Needs [rustup](https://rustup.rs) (`rust-toolchain.toml` picks the Rust version), Node 20.19+ and pnpm 10. On Linux, also install the Tauri packages listed in [CONTRIBUTING.md](CONTRIBUTING.md#setup):
 
 ```bash
 git clone https://github.com/HTMLGuyLLC/NoActually.git
@@ -364,8 +377,8 @@ app/             Tauri 2 desktop app: menu bar, scorecard, Improve and Learn, no
 ```
 
 - **Crash-safe checkpoints.** A turn is only counted once its reply exists, and each file's writes commit in a single transaction.
-- **Hashed message keys.** Resumed sessions, forks and re-imports are never counted twice.
-- **Rules versioning.** When the rules change, scores are rebuilt from history. Pinned corrections are always kept; other history counts again only if its files still exist.
+- **Hashed message keys.** Resumed sessions, Claude Code forks and re-imports are never counted twice.
+- **Rules versioning.** When the rules change, history is counted again. Chats whose files are gone, or whose source is stopped, keep their old counts.
 
 The full design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

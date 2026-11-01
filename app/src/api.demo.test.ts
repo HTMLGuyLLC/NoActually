@@ -47,7 +47,7 @@ describe("demoStats", () => {
     // Opus holds 100 of the 110 tasks with a follow-up, so 36 of the window's 40 and 35 of its 38 landed.
     const s = demoStats(data, { provider: "Anthropic" });
     expect(s.prompts).toMatchObject({ tasks: 200, continued: 100, landed: 80, window_tasks: 36, window_landed: 35 });
-    expect(s.overall).toEqual(judge(meta, { continued: 36, landed: 35, corrections: 31, humbled: 2 }));
+    expect(s.overall).toEqual(judge(meta, { continued: 36, landed: 35, corrections: 31, humbled: 2, days: 28 }));
     // 2 corrections on 36 tasks (5.6%) cost 28 judgment points: Sharp-eyed, not Irreplaceable.
     expect(s.overall).toMatchObject({ score: 89, judgment: 72, tier: "sharp_eyed", verdict: "no", next_tier: "irreplaceable" });
   });
@@ -64,7 +64,7 @@ describe("demoStats", () => {
 });
 
 describe("judge", () => {
-  const w = (continued: number, landed: number, corrections: number, humbled: number) => ({ continued, landed, corrections, humbled });
+  const w = (continued: number, landed: number, corrections: number, humbled: number, days = 28) => ({ continued, landed, corrections, humbled, days });
 
   it("matches the Rust score for the author's month", () => {
     // engine/src/tier.rs: 125 of 150 landed, 41 corrections to 2.
@@ -122,6 +122,20 @@ describe("judge", () => {
     const two = judge(meta, w(100, 85, 2, 0)).score ?? -1;
     expect(one).toBeLessThan(two);
     expect(two).toBeLessThan(few.score ?? -1);
+  });
+
+  it("matches Rust's expected scores, table by table", () => {
+    // [continued, landed, corrections, humbled, days, score]; engine/src/tier.rs `the_correction_proof_follows_the_window`.
+    const table: [number, number, number, number, number, number][] = [
+      [100, 80, 6, 0, 28, 86],
+      [20, 16, 1, 0, 7, 86],
+      [20, 16, 1, 0, 28, 65], // a week's habits in a month's window show only a third of the proof
+      [100, 80, 6, 0, 90, 86], // longer than the default counts the same as 28 days
+      [100, 80, 6, 0, 36500, 86], // "all" is a long window
+      [100, 80, 2, 0, 14, 86], // 2 of the 2 corrections a fortnight needs
+    ];
+    for (const [continued, landed, corrections, humbled, days, score] of table)
+      expect(judge(meta, w(continued, landed, corrections, humbled, days)).score, `${continued}/${landed}/${corrections}/${humbled} over ${days}d`).toBe(score);
   });
 
   it("never lets landing more cost points", () => {
@@ -295,6 +309,29 @@ describe("demoCall", () => {
   });
 });
 
+describe("the demo's date", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps its score on a date far in the future", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ json: async () => data })),
+    );
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-28T12:00:00"));
+    const now = await demoCall("stats", { filter: {} });
+    const nowPeriod = await demoCall("stats", { filter: { since: periodSince("28d") } });
+    vi.setSystemTime(new Date("2040-06-15T12:00:00"));
+    const later = await demoCall("stats", { filter: {} });
+    expect(later.overall).toEqual(now.overall);
+    expect(later.overall.score).not.toBeNull();
+    expect(await demoCall("stats", { filter: { since: periodSince("28d") } })).toEqual(nowPeriod);
+  });
+});
+
 describe("withSince", () => {
   it("shrinks the counts to the period and scores them again", async () => {
     const { withSince } = await import("./api.demo");
@@ -305,7 +342,7 @@ describe("withSince", () => {
     expect(p.weekly).toHaveLength(1);
     expect(p.corrections).toBeLessThan(s.corrections);
     expect(p.overall).toEqual(
-      judge(meta, { continued: p.prompts.window_tasks, landed: p.prompts.window_landed, corrections: p.corrections, humbled: p.humbled }),
+      judge(meta, { continued: p.prompts.window_tasks, landed: p.prompts.window_landed, corrections: p.corrections, humbled: p.humbled, days: 2 }),
     );
     expect(withSince(meta, s, null)).toBe(s);
   });

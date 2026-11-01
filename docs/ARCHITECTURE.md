@@ -159,7 +159,7 @@ Adding a source means implementing the `Source` trait in `crates/sources`: `root
 - If a file shrinks or is rewritten, it's re-read from zero. Keys block the duplicates.
 - The watcher is a trigger, not the source of truth. A 5-minute sync picks up anything the OS missed, and launch catches up on anything written while the app was closed.
 - The first sync only records a milestone baseline, so backfilling history never fires notifications.
-- Claude Code deletes old transcripts (about 30 days by default). Aggregates live in our database, so history survives that.
+- Claude Code deletes old transcripts (about 30 days by default). Aggregates live in our database, so history survives that, rules rebuilds included: a rebuild sets scores aside in `kept_*` tables, reads what it can, and puts back each chat it couldn't read. Scores counted by newer rules than the running build are left alone.
 
 ## Testing
 

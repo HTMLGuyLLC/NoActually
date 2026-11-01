@@ -36,8 +36,8 @@ pub use pricing::{price, Price, Usage, PRICES_AS_OF};
 pub use prompt::{check, is_signoff, read_prompt, Check, Grade, Prompt, Signal, Signals, Steer};
 pub use redact::{redact, snippet, SNIPPET_CHARS};
 pub use tier::{
-    Answer, CorrectionTier, PromptTier, Score, Tier, UnknownTier, Window, CORRECTION_PROOF, DIRECTION_WEIGHT,
-    HUMBLED_BASE, HUMBLED_COST, MIN_PROMPTS, WINDOW_DAYS,
+    correction_proof, Answer, CorrectionTier, PromptTier, Score, Tier, UnknownTier, Window, CORRECTION_PROOF,
+    DIRECTION_WEIGHT, HUMBLED_BASE, HUMBLED_COST, MIN_PROMPTS, WINDOW_DAYS,
 };
 pub use tip::{is_tip_rules, is_tip_stop, parse_tip, strip_tip, Tip, HAD_TO_ASK, TIP_RULES, TIP_STOP};
 
@@ -210,7 +210,8 @@ impl Verdict {
 /// 9: "Good catch, let me check" and "You're right to ask" aren't admissions, nor is one left open
 ///    ("let me check if I missed it"); "you were right" and "you're correct" are.
 /// 10: an AI that checks first and then says you were right counts, from any message before your next.
-pub const RULES_VERSION: u32 = 10;
+/// 11: a chat's first message follows no AI reply, so it is never a correction and keeps its task.
+pub const RULES_VERSION: u32 = 11;
 
 /// Tools write placeholder ids for replies no model wrote (Claude Code's "<synthetic>" for errors,
 /// interruptions and "No response requested").
@@ -251,7 +252,10 @@ pub fn classify(turn: &Turn) -> Verdict {
     let context = rules::first(&rules::CONTEXT, head);
     let answering = tail_chars(prev, ANSWER_TAIL).contains('?');
 
+    // A chat's first message follows no AI reply, so there is nothing for it to correct: "still
+    // broken: fix the login page" is a task, and keeps it.
     let label = match (ai_admit, user_open.or(user_any)) {
+        _ if turn.prev_ai.is_none() => None,
         (Some(_), Some(_)) => Some(Label::Confirmed),
         (Some(_), None) if context.is_none() => Some(Label::Admitted),
         (None, _) if user_open.is_some() && context.is_none() && !answering => Some(Label::Claimed),

@@ -50,18 +50,25 @@ pub fn sync(store: &mut Store, all: &[Box<dyn Source>]) -> Result<SyncReport> {
             let scans: Vec<_> = chunk
                 .par_iter()
                 .map(|j| {
-                    let scan = src.scan(&j.path, j.from, j.pass.finalized).map(|scan| tips_if_gradable(src, scan));
-                    // Report cards are rare. Only a file with one not read yet is read again, whole.
-                    let chat = scan
-                        .as_ref()
-                        .ok()
-                        .filter(|s| cards::unread(&s.cards, j.pass.cards_to))
-                        .and_then(|_| src.view(&j.path));
-                    (j, scan, chat)
+                    // A parser bug on one file must cost that file, not the rest of the pass.
+                    let read = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        let scan = src.scan(&j.path, j.from, j.pass.finalized).map(|scan| tips_if_gradable(src, scan));
+                        // Report cards are rare. Only a file with one not read yet is read again, whole.
+                        let chat = scan
+                            .as_ref()
+                            .ok()
+                            .filter(|s| cards::unread(&s.cards, j.pass.cards_to))
+                            .and_then(|_| src.view(&j.path));
+                        (scan, chat)
+                    }));
+                    (j, read)
                 })
                 .collect();
-            for (job, scan, chat) in scans {
-                let saved = scan.map_err(|e| e.to_string()).and_then(|scan| {
+            for (job, read) in scans {
+                // The panic itself is logged by the hook; its message may hold chat text, so it isn't repeated here.
+                let read = read.map_err(|_| format!("{}: reading it failed unexpectedly", job.path.display()));
+                let saved = read.and_then(|(scan, chat)| {
+                    let scan = scan.map_err(|e| e.to_string())?;
                     // A file that can't be read again keeps its checkpoint, so its cards aren't lost.
                     let chat = chat.transpose().map_err(|e| e.to_string())?;
                     // One file failing to save (a locked database, say) must not stop the rest.
@@ -80,6 +87,7 @@ pub fn sync(store: &mut Store, all: &[Box<dyn Source>]) -> Result<SyncReport> {
             }
         }
     }
+    store.finish_rebuild()?;
     store.sweep(chrono::Utc::now())?;
     Ok(report)
 }
@@ -153,6 +161,47 @@ mod tests {
             assert_eq!(kept.tips.len() == 1, src.gradable(), "{}", src.id());
             assert_eq!(!kept.rules.is_empty(), src.gradable(), "{}", src.id());
         }
+    }
+
+    /// A source whose parser has a bug.
+    struct Boom;
+
+    impl Source for Boom {
+        fn id(&self) -> &'static str {
+            "boom"
+        }
+        fn name(&self) -> &'static str {
+            "Boom"
+        }
+        fn kind(&self) -> sources::Kind {
+            sources::Kind::Import
+        }
+        fn roots(&self) -> Vec<PathBuf> {
+            Vec::new()
+        }
+        fn files(&self, _root: &std::path::Path) -> Vec<PathBuf> {
+            Vec::new()
+        }
+        fn scan(&self, _path: &std::path::Path, _from: u64, _finalize: bool) -> sources::Result<FileScan> {
+            panic!("parser bug")
+        }
+        fn append_only(&self, _path: &std::path::Path) -> bool {
+            false
+        }
+    }
+
+    #[test]
+    fn a_file_that_panics_is_an_error_line_and_the_pass_goes_on() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("export.json");
+        std::fs::write(&file, "[]").unwrap();
+        let mut store = Store::open_in_memory().unwrap();
+        store.import("boom", &file.to_string_lossy()).unwrap();
+        let all: Vec<Box<dyn Source>> = vec![Box::new(Boom)];
+        let report = sync(&mut store, &all).unwrap();
+        assert_eq!(report.files_read, 0);
+        assert_eq!(report.errors.len(), 1, "{:?}", report.errors);
+        assert!(report.errors[0].contains("export.json") && report.errors[0].contains("failed unexpectedly"));
     }
 
     fn m(size: u64, mtime: i64) -> FileMeta {

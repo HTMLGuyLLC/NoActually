@@ -13,6 +13,8 @@
 mod cards;
 mod error;
 mod files;
+mod goals;
+mod insights;
 mod meta;
 pub mod milestones;
 mod progress;
@@ -23,40 +25,76 @@ mod tips;
 
 pub use error::{Error, Result};
 pub use files::{write_atomic, write_new};
+pub use goals::{Goal, GoalKind, GoalNews, GoalStatus, GoalWeek, Trophy, WeekState, GOAL_WEEKS};
+pub use insights::{Bests, CardTrend, HabitDrop, Insights, ModelLanded};
 pub use meta::{meta, CategoryInfo, HabitInfo, Meta, SignalInfo, SourceInfo, TierInfo, Titled, VerdictTierInfo};
 pub use progress::{
-    floor_pct, Bests, CardTrend, Goal, GoalKind, GoalNews, GoalStatus, GoalWeek, HabitDrop, HistoryWeek, Insights,
-    ModelLanded, Progress, RecentReportCard, ReportCardWeek, Trophy, WeekState, GOAL_WEEKS, MIN_CARD_BEST,
-    MIN_CARD_HALF, MIN_CARD_WEEK, MIN_WEEK, RECENT_REPORT_CARDS,
+    floor_pct, HistoryWeek, Progress, RecentReportCard, ReportCardWeek, MIN_CARD_BEST, MIN_CARD_HALF, MIN_CARD_WEEK,
+    MIN_WEEK, RECENT_REPORT_CARDS,
 };
 pub use stats::{Filter, HallEntry, ModelRow, Overall, Prompts, Stats, Tip, WeekRow};
 pub use sync::{sync, SyncReport};
 pub use tips::{TipActivity, TipTrend, TipWeek, TopTip};
+
+/// Limits the database and its write-ahead log to their owner, and the app's own data folder too
+/// (on Unix; elsewhere the user's profile already does it). A folder chosen with [`DB_ENV`] may
+/// hold other things, so it isn't touched. Marker files stay world-readable: the hooks read them.
+fn protect(db: &Path) {
+    for suffix in ["", "-wal", "-shm"] {
+        let mut name = db.as_os_str().to_owned();
+        name.push(suffix);
+        files::restrict(Path::new(&name), 0o600);
+    }
+    if let Some(dir) = db.parent().filter(|d| d.file_name().is_some_and(|n| n == APP_ID)) {
+        files::restrict(dir, 0o700);
+    }
+}
 
 /// The file beside the database that says a source is off limits.
 fn stopped_file(db: &Path, source: &str) -> PathBuf {
     db.with_file_name(format!("source-stopped-{source}"))
 }
 
-/// True when the person stopped, paused or forgot `source`, so nothing may read its chats. `db` is
-/// the database's path.
-pub fn source_stopped(db: &Path, source: &str) -> bool {
-    stopped_file(db, source).exists()
+/// The file beside the database that says a source is allowed.
+fn allowed_file(db: &Path, source: &str) -> PathBuf {
+    db.with_file_name(format!("source-allowed-{source}"))
 }
 
-/// Adds `n` to the report cards left out for `source`.
-fn add_left_out(conn: &Connection, source: &str, n: i64) -> Result<()> {
+/// True when nothing may read `source`'s chats: the person stopped, paused or forgot it, or never
+/// allowed it. `db` is the database's path. With no database the app was never set up, so there's
+/// no consent to go by: the person installed the plugin on its own and asked for it.
+pub fn source_stopped(db: &Path, source: &str) -> bool {
+    stopped_file(db, source).exists() || (db.exists() && !allowed_file(db, source).exists())
+}
+
+/// Records how many report cards are left out of the chat file `path`. Each file keeps its own
+/// count, replaced on every full check, so reading a file again (a rebuild, a pass from zero)
+/// can't count the same cards twice, and a card that saves fine later no longer counts.
+fn set_left_out(conn: &Connection, source: &str, path: &str, n: i64) -> Result<()> {
+    let key = format!("{}.{}", left_out_key(source), hash(&[path]));
     if n > 0 {
-        conn.execute(
-            "INSERT INTO settings (key, value) VALUES (?1, ?2)
-             ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + excluded.value",
-            params![left_out_key(source), n.to_string()],
-        )?;
+        put_setting(conn, &key, &n.to_string())
+    } else {
+        conn.execute("DELETE FROM settings WHERE key = ?1", [key])?;
+        Ok(())
     }
+}
+
+/// Clears every left-out count of `source`, or of all sources with `None`. Matches the key itself
+/// (older versions kept one total there) and the per-file keys under it.
+fn clear_left_out(conn: &Connection, source: Option<&str>) -> Result<()> {
+    let prefix = left_out_key(source.unwrap_or_default());
+    let sql = if source.is_some() {
+        "DELETE FROM settings WHERE key = ?1 OR substr(key, 1, length(?1) + 1) = ?1 || '.'"
+    } else {
+        "DELETE FROM settings WHERE substr(key, 1, length(?1)) = ?1"
+    };
+    conn.execute(sql, [prefix])?;
     Ok(())
 }
 
-/// The settings key that counts the report cards left out for `source`.
+/// The settings key that counts the report cards left out for `source`. Its per-file counts are
+/// under `<key>.<hash of the file>`.
 fn left_out_key(source: &str) -> String {
     format!("report_cards.left_out.{source}")
 }
@@ -326,6 +364,10 @@ const CHECKPOINT_WAIT: std::time::Duration = std::time::Duration::from_millis(10
 /// `report_cards` is not one: a rebuild keeps it (Claude Code deletes old transcripts, so those rows
 /// are the history), and reading a card again writes the same row.
 const SCORE_TABLES: [&str; 8] = ["events", "daily", "sessions", "tasks", "files", "seen", "tips", "tip_chats"];
+/// The score tables a rebuild sets aside in `kept_*`. `files` isn't one: its checkpoints have to go.
+const KEPT_TABLES: [&str; 7] = ["events", "daily", "sessions", "tasks", "seen", "tips", "tip_chats"];
+/// The setting that says a rebuild has set scores aside and hasn't put back what it couldn't read.
+const REBUILDING_KEY: &str = "rules_rebuild.pending";
 
 /// Shown when a message's chat never recorded a model (a session with no real reply).
 pub const NO_MODEL: &str = "No model recorded";
@@ -391,13 +433,24 @@ impl Store {
     /// Opens (or creates) the database at `path`, creating its folder and migrating it.
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir).map_err(|source| Error::Io { path: dir.to_path_buf(), source })?;
+            files::create_private_dir(dir).map_err(|source| Error::Io { path: dir.to_path_buf(), source })?;
+        }
+        // Made owner-only from the start; SQLite gives its -wal and -shm files the same mode.
+        #[cfg(unix)]
+        match write_new(path, b"", 0o600) {
+            Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => {
+                log::warn!("couldn't create the database as owner-only: {e}");
+            }
+            _ => {}
         }
         let mut conn = Connection::open(path)?;
         // The app keeps a reader and a writer on the same file; wait instead of failing on a lock.
         conn.busy_timeout(std::time::Duration::from_secs(10))?;
         schema::migrate(&mut conn)?;
-        Ok(Self { conn })
+        protect(path);
+        let store = Self { conn };
+        store.refresh_consent_markers()?;
+        Ok(store)
     }
 
     /// A throwaway database, for tests and demos.
@@ -503,23 +556,35 @@ impl Store {
     /// Says beside the database whether `id` is off limits, for the hooks: they run outside the app,
     /// on every reply, and have to know without opening it. A failure is logged, not fatal, so it
     /// can't block turning a source off.
+    /// The two markers disagree only if a write failed, and either one alone keeps the hooks out.
     fn mark_stopped(&self, id: &str, stopped: bool) {
         let Some(db) = self.conn.path().filter(|p| !p.is_empty()) else { return };
-        let file = stopped_file(Path::new(db), id);
-        let done = if stopped {
-            match files::write_new(&file, b"", 0o644) {
-                Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => Err(e),
-                _ => Ok(()),
+        let (db, make, remove) = (Path::new(db), stopped, !stopped);
+        for (file, wanted) in [(stopped_file(db, id), make), (allowed_file(db, id), remove)] {
+            let done = if wanted {
+                match files::write_new(&file, b"", 0o644) {
+                    Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => Err(e),
+                    _ => Ok(()),
+                }
+            } else {
+                match std::fs::remove_file(&file) {
+                    Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+                    _ => Ok(()),
+                }
+            };
+            if let Err(e) = done {
+                log::warn!("couldn't update the consent marker for {id}: {e}");
             }
-        } else {
-            match std::fs::remove_file(&file) {
-                Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
-                _ => Ok(()),
-            }
-        };
-        if let Err(e) = done {
-            log::warn!("couldn't update the stopped marker for {id}: {e}");
         }
+    }
+
+    /// Writes the consent markers for every known source, so hooks agree with the database even for
+    /// a source allowed before the allowed marker existed.
+    fn refresh_consent_markers(&self) -> Result<()> {
+        for state in self.source_states()? {
+            self.mark_stopped(&state.id, !state.allowed || state.paused);
+        }
+        Ok(())
     }
 
     /// "From now on": marks every file this source has today as already read, so only messages
@@ -574,24 +639,96 @@ impl Store {
         Ok(())
     }
 
-    /// Clears every score and checkpoint so history is re-read under new rules. Consent,
-    /// settings and pinned corrections stay: a pin is often the only copy left once its history file
-    /// is gone. Other scores only come back for history files that still exist.
+    /// Sets every score aside and clears every checkpoint so history is re-read under new rules.
+    /// Consent, settings and pinned corrections stay: a pin is often the only copy left once its
+    /// history file is gone. [`Store::finish_rebuild`] then puts back the chats that couldn't be read.
     pub fn reset_scores(&mut self) -> Result<()> {
+        self.finish_rebuild()?; // one that was cut short
         let tx = self.conn.transaction()?;
+        for table in KEPT_TABLES {
+            let keep = if table == "events" { " WHERE pinned = 0" } else { "" };
+            tx.execute(&format!("INSERT INTO kept_{table} SELECT * FROM {table}{keep}"), [])?;
+        }
         for table in SCORE_TABLES {
             let keep = if table == "events" { " WHERE pinned = 0" } else { "" };
             tx.execute(&format!("DELETE FROM {table}{keep}"), [])?;
         }
+        // The rebuild reads every chat from zero and counts what it leaves out again.
+        clear_left_out(&tx, None)?;
+        put_setting(&tx, REBUILDING_KEY, "1")?;
         tx.commit()?;
         Ok(())
     }
 
-    /// Rebuilds scores once if they were counted under older rules. Returns true if it did.
+    /// Ends a rebuild once history has been read again. A chat that wasn't read again comes back as
+    /// it was counted: its file is gone, or its source is stopped. Counts per day have no chat on
+    /// them, so a day with nothing read again comes back whole, and a day with some of its chats
+    /// gone keeps the larger message count and adds back the corrections of those chats. Every
+    /// message key comes back too, so a file that returns can't count twice.
+    pub(crate) fn finish_rebuild(&mut self) -> Result<()> {
+        const UNREAD: &str = "k.session NOT IN (SELECT id FROM temp.read_chats)";
+        const READ_DAY: &str = "EXISTS (SELECT 1 FROM temp.read_days r WHERE r.source = k.source AND r.day = k.day)";
+        if self.get_setting(REBUILDING_KEY)?.is_none() {
+            return Ok(());
+        }
+        let tx = self.conn.transaction()?;
+        tx.execute_batch(
+            "CREATE TEMP TABLE read_chats AS SELECT id FROM sessions;
+             CREATE TEMP TABLE read_days AS SELECT DISTINCT source, day FROM daily;",
+        )?;
+        tx.execute(
+            &format!(
+                "INSERT INTO daily SELECT k.day, k.source, k.provider, k.family, k.version, k.label, k.category, count(*)
+                 FROM (SELECT * FROM kept_events UNION ALL SELECT * FROM events WHERE pinned = 1) k
+                 WHERE {UNREAD} AND {READ_DAY}
+                 GROUP BY k.day, k.source, k.provider, k.family, k.version, k.label, k.category
+                 ON CONFLICT (day, source, provider, family, version, kind, category) DO UPDATE SET n = n + excluded.n"
+            ),
+            [],
+        )?;
+        tx.execute(
+            &format!(
+                "INSERT INTO daily SELECT k.* FROM kept_daily k WHERE k.kind = 'message' AND {READ_DAY}
+                 ON CONFLICT (day, source, provider, family, version, kind, category) DO UPDATE SET n = max(n, excluded.n)"
+            ),
+            [],
+        )?;
+        tx.execute(&format!("INSERT INTO daily SELECT k.* FROM kept_daily k WHERE NOT {READ_DAY}"), [])?;
+        tx.execute(
+            &format!(
+                "INSERT INTO events SELECT NULL, ts, day, source, session, provider, family, version, model_raw,
+                   label, category, rules, level, human_full, ai_full, human_snip, ai_snip, pinned, seen_key
+                 FROM kept_events k WHERE {UNREAD}"
+            ),
+            [],
+        )?;
+        tx.execute(
+            &format!(
+                "INSERT INTO tasks SELECT NULL, day, source, session, provider, family, version, signals,
+                   messages, ai_wrong, added, clarified, redo
+                 FROM kept_tasks k WHERE {UNREAD}"
+            ),
+            [],
+        )?;
+        tx.execute("INSERT OR IGNORE INTO sessions SELECT * FROM kept_sessions", [])?;
+        tx.execute(&format!("INSERT OR IGNORE INTO tips SELECT k.* FROM kept_tips k WHERE {UNREAD}"), [])?;
+        tx.execute(&format!("INSERT OR IGNORE INTO tip_chats SELECT k.* FROM kept_tip_chats k WHERE {UNREAD}"), [])?;
+        tx.execute("INSERT OR IGNORE INTO seen SELECT * FROM kept_seen", [])?;
+        tx.execute_batch("DROP TABLE temp.read_chats; DROP TABLE temp.read_days;")?;
+        for table in KEPT_TABLES {
+            tx.execute(&format!("DELETE FROM kept_{table}"), [])?;
+        }
+        tx.execute("DELETE FROM settings WHERE key = ?1", [REBUILDING_KEY])?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Rebuilds scores once if they were counted under older rules. Returns true if it did. Scores
+    /// from newer rules stay: an older build can't read them better.
     pub fn ensure_rules_current(&mut self) -> Result<bool> {
         let current = engine::RULES_VERSION.to_string();
         let stored = self.get_setting("rules_version")?;
-        if stored.as_deref() == Some(current.as_str()) {
+        if stored.as_deref().and_then(|v| v.parse::<u32>().ok()).is_some_and(|v| v >= engine::RULES_VERSION) {
             return Ok(false);
         }
         // Only counted scores need rebuilding. A store with checkpoints but no counts yet (say,
@@ -610,9 +747,12 @@ impl Store {
         for table in SCORE_TABLES {
             tx.execute(&format!("DELETE FROM {table} WHERE source = ?1"), [id])?;
         }
+        for table in KEPT_TABLES {
+            tx.execute(&format!("DELETE FROM kept_{table} WHERE source = ?1"), [id])?;
+        }
         tx.execute("DELETE FROM report_cards WHERE source = ?1", [id])?;
         tx.execute("DELETE FROM sources WHERE id = ?1", [id])?;
-        tx.execute("DELETE FROM settings WHERE key = ?1", [left_out_key(id)])?;
+        clear_left_out(&tx, Some(id))?;
         tx.commit()?;
         self.mark_stopped(id, true);
         self.flush_deleted()
@@ -621,7 +761,13 @@ impl Store {
     /// Report cards the app couldn't count, for one source: the person got a grade in chat, so they
     /// should hear why it isn't here.
     pub fn report_cards_left_out(&self, source: &str) -> Result<i64> {
-        Ok(self.get_setting(&left_out_key(source))?.and_then(|n| n.parse().ok()).unwrap_or(0))
+        let key = left_out_key(source);
+        Ok(self.conn.query_row(
+            "SELECT COALESCE(SUM(CAST(value AS INTEGER)), 0) FROM settings
+                 WHERE key = ?1 OR substr(key, 1, length(?1) + 1) = ?1 || '.'",
+            [key],
+            |r| r.get(0),
+        )?)
     }
 
     /// Deletes every report card and tip. They stay deleted: a rebuild that reads the same transcripts
@@ -631,7 +777,9 @@ impl Store {
         let n = tx.execute("DELETE FROM report_cards", [])?;
         let tips = tx.execute("DELETE FROM tips", [])?;
         tx.execute("DELETE FROM tip_chats", [])?;
-        tx.execute("DELETE FROM settings WHERE key LIKE ?1", [left_out_key("%")])?;
+        tx.execute("DELETE FROM kept_tips", [])?;
+        tx.execute("DELETE FROM kept_tip_chats", [])?;
+        clear_left_out(&tx, None)?;
         put_setting(&tx, cards::CLEARED_KEY, &cards::ts_str(Utc::now()))?;
         tx.commit()?;
         self.flush_deleted()?;
@@ -767,7 +915,11 @@ impl Store {
         }
         cards::save(&tx, &graded.rows)?;
         tips::save(&tx, state, scan, cleared.as_deref())?;
-        add_left_out(&tx, source, graded.left_out())?;
+        // Only a full check knows the file's total. Cards that couldn't be checked yet are tried
+        // again, so they aren't counted as left out.
+        if graded.checked {
+            set_left_out(&tx, source, path, graded.left_out())?;
+        }
         upsert_file(&tx, path, source, checkpoint, pass)?;
         tx.commit()?;
         graded.log(source, path);
@@ -912,5 +1064,7 @@ impl EventText {
 
 #[cfg(test)]
 mod card_tests;
+#[cfg(test)]
+mod low_tests;
 #[cfg(test)]
 mod tests;

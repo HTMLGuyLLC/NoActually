@@ -56,6 +56,34 @@ pub(crate) fn temp_sibling(path: &Path) -> std::io::Result<PathBuf> {
     Ok(path.with_file_name(format!(".{name}.{}.tmp", tag.map(|b| format!("{b:02x}")).concat())))
 }
 
+/// Creates `dir` and any missing parents, owner-only (0700) on Unix.
+pub(crate) fn create_private_dir(dir: &Path) -> std::io::Result<()> {
+    let mut build = std::fs::DirBuilder::new();
+    build.recursive(true);
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut build, 0o700);
+    build.create(dir)
+}
+
+/// On Unix, gives an existing `path` exactly `mode`. A file that isn't there is skipped without a
+/// word; one that can't be changed is logged and left, since a locked-down folder is no reason to
+/// stop the app.
+#[cfg(unix)]
+pub(crate) fn restrict(path: &Path, mode: u32) {
+    use std::os::unix::fs::PermissionsExt;
+    let Ok(meta) = std::fs::metadata(path) else { return };
+    if meta.permissions().mode() & 0o777 == mode {
+        return;
+    }
+    if let Err(e) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)) {
+        log::warn!("couldn't limit {} to its owner: {e}", path.display());
+    }
+}
+
+/// Other systems have no modes to set.
+#[cfg(not(unix))]
+pub(crate) fn restrict(_path: &Path, _mode: u32) {}
+
 #[cfg(unix)]
 fn mode_of(path: &Path) -> u32 {
     use std::os::unix::fs::MetadataExt;

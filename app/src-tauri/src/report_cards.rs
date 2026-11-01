@@ -124,8 +124,7 @@ impl Env {
         let via_shell: &dyn Fn(&str) -> Option<PathBuf> = if shell { &login_shell_finds } else { &|_| None };
         let claude = find_claude(&env.data, &FOUND, &dirs, via_shell, shell);
         // Checking for the folder first saves a look.
-        let codex =
-            if env.home.join(".codex").is_dir() { None } else { find_cached(&FOUND, "codex", &dirs, via_shell) };
+        let codex = if codex::codex_dir(&env).is_dir() { None } else { find_cached(&FOUND, "codex", &dirs, via_shell) };
         let git = find_cached(&FOUND, "git", &dirs, via_shell).filter(|git| !is_xcode_stub(git));
         Ok(Env { claude, codex, git, ..env })
     }

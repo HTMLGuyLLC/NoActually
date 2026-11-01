@@ -31,8 +31,7 @@ PROFILE="${ARGS[0]:-noactually-notary}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # The Cargo workspace version is the source of truth (scripts/bump-version.sh keeps the rest in step).
-VERSION="$(awk '/^\[workspace\.package\]/{f=1;next} /^\[/{f=0} f && /^version *=/{gsub(/[" ]/,"",$0); sub(/^version=/,"",$0); print; exit}' "$ROOT/Cargo.toml")"
-[[ -n "$VERSION" ]] || { echo "Couldn't read the version from Cargo.toml." >&2; exit 1; }
+VERSION="$("$ROOT/scripts/version.sh")"
 
 if [[ -n "$(git -C "$ROOT" status --porcelain)" ]]; then
   echo "The working tree has uncommitted changes. Commit or stash them first." >&2
@@ -82,7 +81,7 @@ notarize() { # file to submit, then files to staple
 
 # 1. Build and sign the app only. A universal build needs both Mac targets on the pinned toolchain.
 (cd "$ROOT" && rustup target add aarch64-apple-darwin x86_64-apple-darwin)
-pnpm tauri build --target universal-apple-darwin --bundles app
+pnpm tauri build --target universal-apple-darwin --bundles app -- --locked
 # shellcheck disable=SC2012  # one app bundle, plain names
 APP="$(ls -d "$BUNDLE"/macos/*.app | head -1)"
 codesign --verify --deep --strict --verbose=2 "$APP"

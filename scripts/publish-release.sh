@@ -45,6 +45,7 @@ fi
 
 if gh release download "$HOLDER" -R "$REPO" --pattern latest.json --dir "$WORK/old" 2>/dev/null; then
   OLD="$(node "$ROOT/scripts/latest-json.mjs" version "$WORK/old/latest.json")"
+  # sort -V puts 0.6.0-beta.1 above 0.6.0, so versions must be plain X.Y.Z (bump-version.sh enforces it).
   NEWEST="$(printf '%s\n%s\n' "$OLD" "$VERSION" | sort -V | tail -1)"
   if [[ "$NEWEST" != "$VERSION" ]]; then
     echo "The Beta channel is on $OLD, which is newer, so it stays there."
