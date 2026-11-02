@@ -3,11 +3,14 @@
 
 use super::*;
 use crate::milestones::straight_as;
-use chrono::{SecondsFormat, TimeZone};
+use crate::rebuild::SCORE_TABLES;
+use chrono::{NaiveDate, SecondsFormat, TimeZone, Utc};
 use engine::{habit_bit, seal, Usage};
 use serde_json::{json, Value};
 use sources::testing::{cc_user, line, set_mtime_ago};
+use sources::{ChatView, Kind, Source};
 use std::io::Write;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration as StdDuration;
