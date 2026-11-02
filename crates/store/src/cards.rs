@@ -3,7 +3,7 @@
 //! the transcript, and only numbers are kept. The merge rule is in `docs/ARCHITECTURE.md`.
 
 use crate::stats::View;
-use crate::{hash, Result, SourceState, NO_MODEL};
+use crate::{hash, put_setting, Result, SourceState, Store, NO_MODEL};
 use chrono::{DateTime, Local, NaiveDate, SecondsFormat, Utc};
 use engine::{normalize_model, price, tasks_overlap, LetterGrade, Model, Usage};
 use rusqlite::{params, Connection};
@@ -315,6 +315,68 @@ pub(crate) fn current(v: &View, tail: &str) -> Result<Vec<Current>> {
         }))
     })?;
     Ok(rows.into_iter().flatten().collect())
+}
+
+/// Records how many report cards are left out of the chat file `path`. Each file keeps its own
+/// count, replaced on every full check, so reading a file again (a rebuild, a pass from zero)
+/// can't count the same cards twice, and a card that saves fine later no longer counts.
+pub(crate) fn set_left_out(conn: &Connection, source: &str, path: &str, n: i64) -> Result<()> {
+    let key = format!("{}.{}", left_out_key(source), hash(&[path]));
+    if n > 0 {
+        put_setting(conn, &key, &n.to_string())
+    } else {
+        conn.execute("DELETE FROM settings WHERE key = ?1", [key])?;
+        Ok(())
+    }
+}
+
+/// Clears every left-out count of `source`, or of all sources with `None`. Matches the key itself
+/// (older versions kept one total there) and the per-file keys under it.
+pub(crate) fn clear_left_out(conn: &Connection, source: Option<&str>) -> Result<()> {
+    let prefix = left_out_key(source.unwrap_or_default());
+    let sql = if source.is_some() {
+        "DELETE FROM settings WHERE key = ?1 OR substr(key, 1, length(?1) + 1) = ?1 || '.'"
+    } else {
+        "DELETE FROM settings WHERE substr(key, 1, length(?1)) = ?1"
+    };
+    conn.execute(sql, [prefix])?;
+    Ok(())
+}
+
+/// The settings key that counts the report cards left out for `source`. Its per-file counts are
+/// under `<key>.<hash of the file>`.
+fn left_out_key(source: &str) -> String {
+    format!("report_cards.left_out.{source}")
+}
+
+impl Store {
+    /// Report cards the app couldn't count, for one source: the person got a grade in chat, so they
+    /// should hear why it isn't here.
+    pub fn report_cards_left_out(&self, source: &str) -> Result<i64> {
+        let key = left_out_key(source);
+        Ok(self.conn.query_row(
+            "SELECT COALESCE(SUM(CAST(value AS INTEGER)), 0) FROM settings
+                 WHERE key = ?1 OR substr(key, 1, length(?1) + 1) = ?1 || '.'",
+            [key],
+            |r| r.get(0),
+        )?)
+    }
+
+    /// Deletes every report card and tip. They stay deleted: a rebuild that reads the same transcripts
+    /// again won't bring back anything from before now. Returns how many report cards and tips went.
+    pub fn delete_report_cards(&self) -> Result<usize> {
+        let tx = self.conn.unchecked_transaction()?;
+        let n = tx.execute("DELETE FROM report_cards", [])?;
+        let tips = tx.execute("DELETE FROM tips", [])?;
+        tx.execute("DELETE FROM tip_chats", [])?;
+        tx.execute("DELETE FROM kept_tips", [])?;
+        tx.execute("DELETE FROM kept_tip_chats", [])?;
+        clear_left_out(&tx, None)?;
+        put_setting(&tx, CLEARED_KEY, &ts_str(Utc::now()))?;
+        tx.commit()?;
+        self.flush_deleted()?;
+        Ok(n + tips)
+    }
 }
 
 #[cfg(test)]

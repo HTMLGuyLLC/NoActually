@@ -1,6 +1,7 @@
 //! File modes, and the count of report cards left out.
 
 use super::*;
+use crate::cards::set_left_out;
 
 #[cfg(unix)]
 mod modes {
