@@ -7,7 +7,7 @@ import { categoryTitle, correctionTier, correctionTierRanges, tierName, tierOf, 
 import { correctionRate, modelName } from "../picker/picker";
 import { PERIOD_WHEN, PERIODS, type Period, SCORE_VIEWS, type ScoreView } from "../state";
 import { chartBox, markStops } from "./charts";
-import { answerWord, byAnswer, ladderView, sectionNav, shareButton, svg, tierBlurb, verdictMark } from "./chrome";
+import { answerWord, byAnswer, ENGLISH_NOTE, ladderView, sectionNav, shareButton, svg, tierBlurb, verdictMark } from "./chrome";
 import { type ImportOnly, needMore, needMoreNote, promptsSummaryView, promptsView } from "./prompts";
 
 export type ScorecardContext = {
@@ -45,7 +45,7 @@ function periodNav(period: Period): Html {
   )}</select>`;
 }
 
-export const VIEW_TITLES: Record<ScoreView, string> = { overview: "Overview", prompts: "Prompting", corrections: "Corrections", hall: "Hall of fame" };
+export const VIEW_TITLES: Record<ScoreView, string> = { overview: "Overview", prompts: "Prompts", corrections: "Who corrects whom", hall: "Hall of fame" };
 
 /** Line icons beside each section's name (decoration: the name is the label). */
 const VIEW_ICONS: Record<ScoreView, Html> = {
@@ -96,8 +96,8 @@ function partsView(o: Overall, meta: Meta): Html {
   const part = (label: string, value: number | null, weight: number, hint: string) =>
     html`<div class="part"><span class="part-name">${label}<small class="muted">${hint} · ${weight}% of the score</small></span><span class="bar-bg"><i data-w="${value ?? 0}"></i></span><span class="n">${value ?? "–"}</span></div>`;
   return html`<div class="parts" role="group" aria-label="What the score is made of">
-    ${part("Who corrects whom", o.judgment, 100 - meta.direction_weight, "you check its work, and it rarely corrects you")}
     ${part("Your prompts", o.direction, meta.direction_weight, "prompts clear the first time")}
+    ${part("Who corrects whom", o.judgment, 100 - meta.direction_weight, "you check its work, and it rarely corrects you")}
   </div>`;
 }
 
@@ -237,8 +237,8 @@ export function hallView(entries: HallEntry[]): Html {
         ${e.ai ? html`<div class="ai-said"><b>${e.model || shortSourceName(e.source_name)}:</b> ${e.ai}</div>` : ""}
         <div class="correction-actions">
           ${shareButton("share-correction", "Share", { id: e.id, ghost: true, small: true })}
-          <button class="link small" data-action="counted-wrong" data-tip="${COUNTED_WRONG_HINT}">Counted wrong?</button>
           <button class="ghost small" data-action="pin" data-id="${e.id}" data-pinned="${String(e.pinned)}">${e.pinned ? "Unpin" : "Pin it"}</button>
+          <button class="link small" data-action="counted-wrong" data-tip="${COUNTED_WRONG_HINT}">Counted wrong?</button>
         </div>
       </article>`,
   )}</div>`;
@@ -254,8 +254,8 @@ function overviewView(s: Stats, ctx: Ctx): Html {
   return html`
     ${heroView(s, ctx)}
     <section class="duo">
-      ${correctsSummaryView(s, ctx)}
       ${promptsSummaryView(s.prompts, ctx.meta, ctx.promptsStill, ctx.when, ctx.exported)}
+      ${correctsSummaryView(s, ctx)}
     </section>
     ${statsView(s)}`;
 }
@@ -264,7 +264,7 @@ function statsView(s: Stats): Html {
   const peak = s.peak_hour == null ? "–" : new Date(2000, 0, 1, s.peak_hour).toLocaleTimeString(undefined, { hour: "numeric" });
   return html`<section class="stats">
       <div class="stat"><span class="v">${num(s.corrections)}</span><span class="l">corrections</span></div>
-      <div class="stat"><span class="v">${s.pct_real_chats_with_correction != null ? `${Math.round(s.pct_real_chats_with_correction)}%` : "–"}</span><span class="l">of real chats had a correction</span></div>
+      <div class="stat"><span class="v">${s.pct_real_chats_with_correction != null ? `${Math.round(s.pct_real_chats_with_correction)}%` : "–"}</span><span class="l">of chats of 10+ messages had a correction</span></div>
       <div class="stat"><span class="v">${plural(s.best_streak_days, "day")}</span><span class="l">best streak · now ${s.current_streak_days}</span></div>
       <div class="stat"><span class="v">${s.messages_per_correction ? `1 in ${s.messages_per_correction}` : "–"}</span><span class="l">messages is a correction · peak ${peak}</span></div>
     </section>`;
@@ -423,9 +423,6 @@ export function rebuildingView(): Html {
     <h1 class="q">Recounting your history…</h1>
     <p>Your scorecard comes back here in a moment.</p></section>`;
 }
-
-/** The note about English, once in onboarding and once in the scorecard's method text. */
-export const ENGLISH_NOTE = "Scoring reads English.";
 
 /**
  * Shown before there's anything to score. `watching` names the sources being read right now; `reading` is

@@ -1,4 +1,6 @@
 // The browser demo's stand-in for the Rust side: sample numbers from public/demo.json, read-only.
+
+import pkg from "../package.json";
 import type { ArgsOf, Command, Filter, Goal, GoalStatus, Meta, Overall, Progress, Prompts, RecentReportCard, ResultOf, SourceInfo, Stats } from "./api";
 import { isFiltered, localIsoDate } from "./format";
 import { modelName } from "./picker/picker";
@@ -263,7 +265,7 @@ const handlers: Handlers = {
   },
   open_main: () => null,
   update_status: () => ({
-    current: "0.1.0",
+    current: pkg.version,
     auto: true,
     channel: "stable",
     checking: false,
@@ -282,9 +284,7 @@ const handlers: Handlers = {
   },
   recent_report_cards: async () => (await demoData()).recent_report_cards,
   set_goal: ({ kind, target }) => {
-    const now = new Date();
-    const local = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    const goal: Goal = { ...kind, id: Date.now(), target, start: local };
+    const goal: Goal = { ...kind, id: Date.now(), target, start: localIsoDate(new Date()) };
     visit.goal = fresh(goal);
     return goal;
   },
@@ -335,6 +335,10 @@ const handlers: Handlers = {
     return null;
   },
   report_cards_delete_history: () => 0,
+  // The demo has nothing to delete and must not act as if it did, so this changes nothing and says so.
+  delete_everything: () => {
+    throw new Error("This is the demo, so nothing was deleted.");
+  },
   log_error: () => null,
   open_log_folder: () => null,
   // Remembered for the visit only, like the other choices.

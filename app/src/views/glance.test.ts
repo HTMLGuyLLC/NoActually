@@ -33,6 +33,14 @@ describe("glanceView", () => {
     expect(m).toContain('<span class="g-word">Religiously.</span><span class="muted small">41 corrections · Hawk-eyed</span>');
   });
 
+  it("says to add a newer export, like the scorecard, when only an export is imported", () => {
+    const o = stats({ overall: { ...stats().overall, score: null, tier: null, to_rank: 7 } });
+    expect(glanceView(o, meta).value).toContain("7 more tasks to get a score");
+    const m = glanceView(o, meta, null, true).value;
+    expect(m).toContain("Add a newer export to get a score");
+    expect(m).not.toContain("7 more tasks");
+  });
+
   it("shows a goal only when there is one, with this week's number", () => {
     expect(glanceView(stats(), meta).value).not.toContain("Your goal");
     const m = glanceView(stats(), meta, status({})).value;
@@ -51,7 +59,7 @@ describe("glanceView", () => {
     expect(emptyGlanceView(HOSTILE).value).not.toContain("<img");
     for (const m of [emptyGlanceView("").value, emptyGlanceView("Codex").value, glanceView(stats(), meta).value])
       expect(m).toContain('<h1 class="sr-only">Quick glance</h1>');
-    expect(emptyGlanceView("Codex").value).toContain("Your score shows up after 10 tasks with a follow-up.");
-    expect(emptyGlanceView("Codex", 12).value).toContain("after 12 tasks with a follow-up.");
+    expect(emptyGlanceView("Codex").value).toContain("Your score shows up after 10 tasks with more than one message.");
+    expect(emptyGlanceView("Codex", 12).value).toContain("after 12 tasks with more than one message.");
   });
 });

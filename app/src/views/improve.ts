@@ -21,6 +21,7 @@ import { floorPercent, habitTitle, signalNoun, sourceName, steerTitle, tierName,
 import { TOOL_WORDS } from "../report-cards";
 import { RANGES, type Range } from "../state";
 import { chartBox, lineChart, type Point, sparkline, stackChart } from "./charts";
+import { needMoreNote } from "./prompts";
 
 /** `filtered`: a model is picked, so charts follow it while the goal and bests stay across all AI. */
 export type ImproveContext = {
@@ -40,6 +41,8 @@ export type ImproveContext = {
   hintDismissed: boolean;
   /** Sources exist but none is allowed yet: the empty state then leads to Settings → Sources. */
   noSource?: boolean;
+  /** Only an imported export is allowed: no new chats will come, so goals can't be started. */
+  importOnly?: boolean;
   /** A tool report cards are already on in, if any: the line then says how to ask instead of how to set up. */
   cardsOn: ReportCardTool | null;
 };
@@ -172,10 +175,13 @@ function goalWeeksView(st: GoalStatus, meta: Meta): Html {
 }
 
 /** This week's progress in words. */
-function thisWeekLine(st: GoalStatus, meta: Meta): string {
+function thisWeekLine(st: GoalStatus, meta: Meta, importOnly: boolean): string {
   const g = st.goal;
   // A tier goal's meter already says "87 of 90 to reach …"; only an unscored one needs words.
-  if (g.kind === "tier") return st.score == null ? "Not scored yet: you need more tasks with a follow-up." : "";
+  if (g.kind === "tier") {
+    if (st.score != null) return "";
+    return importOnly ? `Not scored yet. ${needMoreNote(0, "a score", { end: null })}.` : "Not scored yet: you need more tasks with more than one message.";
+  }
   const w = last(st.weeks);
   if (w?.state !== "open") return "";
   // The meter above already shows the percent; this says how many and what's left.
@@ -187,7 +193,12 @@ function thisWeekLine(st: GoalStatus, meta: Meta): string {
   return w.count >= meta.min_week && w.value <= g.target ? `${so} On track.` : so;
 }
 
-function goalPickerView(p: Progress, meta: Meta, current: Goal | null): Html {
+/** Said in place of the goal picker when only an export is imported: a goal is measured on new chats, which won't come. */
+const IMPORT_ONLY_GOALS = "Goals need a live AI tool. They are measured week by week as new chats come in, and an imported export doesn't change.";
+
+function goalPickerView(p: Progress, meta: Meta, current: Goal | null, importOnly: boolean): Html {
+  if (importOnly)
+    return html`<div class="goal-pick"><p class="muted">${IMPORT_ONLY_GOALS}</p>${current ? html`<div class="share"><button class="ghost" data-action="clear-goal">Drop this goal</button></div>` : ""}</div>`;
   const options = p.options;
   const s = p.suggestion;
   const same = (a: GoalKind, b: GoalKind) => JSON.stringify(kindArgs(a)) === JSON.stringify(kindArgs(b));
@@ -222,20 +233,20 @@ function goalMeter(st: GoalStatus, meta: Meta): Html | "" {
   return html`<div class="goal-meter"><span class="big">${w.value}%</span><span class="of">this week · aim for ${word} ${g.target}%</span></div>`;
 }
 
-function goalView(p: Progress, meta: Meta, filtered: boolean): Html {
+function goalView(p: Progress, meta: Meta, filtered: boolean, importOnly: boolean): Html {
   const st = p.goal;
   const across = filtered ? " · all AI" : "";
   if (!st) {
     return html`<section class="card mini goal"><div class="eyebrow">Your goal${across}</div><h2 class="q">Pick one thing to get better at</h2>
-      <p class="muted">One goal at a time, measured each week from your own history. Hit it ${meta.goal_weeks} weeks to win a trophy.</p>
-      ${goalPickerView(p, meta, null)}</section>`;
+      ${importOnly ? "" : html`<p class="muted">One goal at a time, measured each week from your own history. Hit it ${meta.goal_weeks} weeks to win a trophy.</p>`}
+      ${goalPickerView(p, meta, null, importOnly)}</section>`;
   }
   const g = st.goal;
   const progressLine =
     g.kind === "tier"
       ? ""
       : html`<p class="goal-count"><b>${st.met}</b> of ${st.needed} weeks met${st.streak > 1 ? html` · <span class="hand">${st.streak} in a row</span>` : ""}</p>`;
-  const line = st.done ? "It's on your trophy shelf. Pick the next one." : thisWeekLine(st, meta);
+  const line = st.done ? "It's on your trophy shelf. Pick the next one." : thisWeekLine(st, meta, importOnly);
   return html`<section class="card mini goal${st.done ? " finished" : ""}">
     <div class="eyebrow">${st.done ? "Goal done 🏆" : `Your goal · since ${fmtDay(g.start)}`}${across}</div>
     <h2 class="goal-title">${goalTitle(g, meta)}</h2>
@@ -243,7 +254,7 @@ function goalView(p: Progress, meta: Meta, filtered: boolean): Html {
     ${progressLine}
     ${g.kind === "tier" ? "" : goalWeeksView(st, meta)}
     ${line ? html`<p>${line}</p>` : ""}
-    <details${st.done ? raw(" open") : ""}><summary>${st.done ? "Next goal" : "Change goal"}</summary>${goalPickerView(p, meta, g)}</details>
+    <details${st.done ? raw(" open") : ""}><summary>${st.done ? "Next goal" : "Change goal"}</summary>${goalPickerView(p, meta, g, importOnly)}</details>
   </section>`;
 }
 
@@ -376,7 +387,7 @@ function trendsView(ctx: ImproveContext): Html {
   const totalSteer = steerSeries.reduce((t, s) => t + s.values.reduce((a, v) => a + v, 0), 0);
   const reportCards = cardsView(ctx, points, per);
   return html`
-    <section><div class="head"><h2>Prompts clear the first time</h2><p class="muted">Per ${per}. Hollow dots had fewer than ${meta.min_week} prompts with a follow-up, so they're left off the line.</p></div>
+    <section><div class="head"><h2>Prompts clear the first time</h2><p class="muted">Per ${per}. Hollow dots had fewer than ${meta.min_week} tasks with more than one message, so they're left off the line.</p></div>
       ${chartBox("Prompts clear the first time chart, scrolls sideways", lineChart({ id: "landed", label: `Percent of prompts clear the first time, per ${per}`, summary: landedSummary, points: landed, bands, unit: "%", min: landedFloor(landed) }))}</section>
     <section class="split">
       <div><div class="head"><h2>What your prompts include</h2></div><div class="cats">${signals}</div></div>
@@ -546,7 +557,7 @@ export function improveView(ctx: ImproveContext): Html {
   const empty = !p.weeks.length;
   return html`
     <section class="toolbar"><h1 class="eyebrow">Are you getting better?</h1></section>
-    <section class="improve-top">${goalView(p, meta, ctx.filtered)}${recapView(p.weeks, meta) || html`<section class="recap"><div class="eyebrow">Last week</div><p class="muted small">Your weekly recap shows up once a full week has ${meta.min_week}+ tasks.</p></section>`}</section>
+    <section class="improve-top">${goalView(p, meta, ctx.filtered, !!ctx.importOnly)}${recapView(p.weeks, meta) || html`<section class="recap"><div class="eyebrow">Last week</div><p class="muted small">Your weekly recap shows up once a full week has ${meta.min_week}+ tasks.</p></section>`}</section>
     ${bestsView(p, ctx.filtered)}
     ${trophiesView(p, meta)}
     <div class="head trends-head"><h2 id="trends-heading">How ${ctx.subject} and you are trending</h2><div class="filters">${ctx.picker ?? ""}${rangeNav(ctx.range)}</div></div>

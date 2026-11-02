@@ -5,7 +5,7 @@ import { type Html, html, num } from "../html";
 import { landedPct, percent, promptTier, promptTierRanges, signalNoun, steerTitle } from "../meta";
 import { PERIOD_WHEN, type Period } from "../state";
 import { chartBox, stackChart } from "./charts";
-import { answerWord, byAnswer, ladderView, shareButton, tierBlurb, verdictMark } from "./chrome";
+import { answerWord, byAnswer, ENGLISH_NOTE, ladderView, shareButton, tierBlurb, verdictMark } from "./chrome";
 
 /** Someone who only imported an export gets no new chats: `end` is the last day it covers. Null for everyone else. */
 export type ImportOnly = { end: string | null } | null;
@@ -17,9 +17,9 @@ export type ImportOnly = { end: string | null } | null;
 export function needMore(toRank: number, goal: "a score" | "ranked", exported: ImportOnly): Html {
   if (exported) {
     const ends = exported.end ? html`Your export ends <b>${fmtDay(exported.end)}</b>, and` : html`Your export`;
-    return html`${ends} has too few tasks with a follow-up to get ${goal === "ranked" ? "ranked" : "a score"}. <b>Add a newer export</b> to get ${goal === "ranked" ? "ranked" : "one"}.`;
+    return html`${ends} has too few tasks with more than one message to get ${goal === "ranked" ? "ranked" : "a score"}. <b>Add a newer export</b> to get ${goal === "ranked" ? "ranked" : "one"}.`;
   }
-  return html`Give it <b>${plural(toRank, "more task")}</b> with a follow-up to get ${goal}. A one-shot prompt can't need a follow-up, so it doesn't count.`;
+  return html`Give it <b>${plural(toRank, "more task")}</b> with more than one message to get ${goal}. A task with one message can't need a redirect, so it doesn't count.`;
 }
 
 /** The short form, under a ladder: "4 more tasks to get ranked", or "Add a newer export to get ranked". */
@@ -70,7 +70,7 @@ function gradesView(b: Prompts, meta: Meta): Html {
   return html`<div class="grades">
     <div class="grade-bar" role="img" aria-label="Your prompts: ${label}">${parts.map((p) => html`<i class="g-${p.id}" data-w="${p.pct}"></i>`)}</div>
     <ul class="grade-key">${parts.map((p) => html`<li><i class="g-${p.id}" aria-hidden="true"></i>${p.title} <b>${p.pct}%</b></li>`)}</ul>
-    <p class="muted small">Specific prompts include ${meta.sharp_signals}+ of the ${meta.signals.length} things below. Questions aren't graded. Scoring reads English.</p>
+    <p class="muted small">Specific prompts include ${meta.sharp_signals}+ of the ${meta.signals.length} things below. Questions aren't graded. ${ENGLISH_NOTE}</p>
   </div>`;
 }
 
@@ -108,7 +108,8 @@ function tipView(b: Prompts, meta: Meta): Html | "" {
 function steeringView(b: Prompts, meta: Meta): Html {
   const counts = meta.steers.map((c) => ({ ...c, n: b.steering[c.id] ?? 0 }));
   const total = counts.reduce((t, c) => t + c.n, 0);
-  if (!total) return html`<p class="muted">No follow-ups yet. Every prompt was clear the first time.</p>`;
+  if (!total)
+    return html`<p class="muted">No follow-ups yet. ${b.continued ? "Every task with more than one message was clear the first time." : "No task has more than one message."}</p>`;
   const top = Math.max(...counts.map((c) => c.n));
   const yours = counts.filter((c) => c.id !== "ai_wrong").reduce((t, c) => t + c.n, 0);
   const theirs = total - yours;
@@ -123,7 +124,7 @@ function steeringView(b: Prompts, meta: Meta): Html {
  * same tasks the prompt tier counts, so the bars add up to the number at the top. */
 /** A week's tip: its tasks, how many were clear the first time, and what the rest needed. */
 function weekTip(w: WeekRow, meta: Meta): string {
-  const lines = [`Week of ${fmtDay(w.week)}`, `${plural(w.continued, "prompt")} · ${w.landed} clear the first time (${percent(w.landed, w.continued)}%)`];
+  const lines = [`Week of ${fmtDay(w.week)}`, `${plural(w.continued, "task")} · ${w.landed} clear the first time (${percent(w.landed, w.continued)}%)`];
   const onYou = meta.steers.filter((s) => s.id !== "ai_wrong" && (w.steering[s.id] ?? 0) > 0);
   if (onYou.length) lines.push("", "Needed more from you:", ...onYou.map((s) => `${s.title} ${w.steering[s.id]}`));
   const wrong = w.steering.ai_wrong ?? 0;
@@ -133,11 +134,11 @@ function weekTip(w: WeekRow, meta: Meta): string {
 
 function weeksView(weekly: WeekRow[], meta: Meta): Html {
   const weeks = weekly.slice(-20);
-  if (!weeks.some((w) => w.continued)) return html`<p class="muted">No tasks with a follow-up yet.</p>`;
+  if (!weeks.some((w) => w.continued)) return html`<p class="muted">No tasks with more than one message yet.</p>`;
   const recent = weeks.filter((w) => w.continued);
   const last = recent[recent.length - 1];
   const summary = last
-    ? `${plural(weeks.length, "week")} from ${fmtDay(weeks[0]?.week ?? last.week)}. The latest, the week of ${fmtDay(last.week)}: ${last.landed} of ${plural(last.continued, "prompt")} ${last.continued === 1 ? "was" : "were"} clear the first time.`
+    ? `${plural(weeks.length, "week")} from ${fmtDay(weeks[0]?.week ?? last.week)}. The latest, the week of ${fmtDay(last.week)}: ${last.landed} of ${plural(last.continued, "task")} ${last.continued === 1 ? "was" : "were"} clear the first time.`
     : "";
   return stackChart({
     id: "prompt-weeks",
@@ -172,7 +173,7 @@ export function promptsView(
       <div>${verdictView(b, meta, still, subject, period, exported)}</div>
       <div class="meter">${promptLadderView(b, meta, exported)}</div>
     </section>
-    <section><div class="head"><h2>Prompts per week</h2><p class="muted">Prompts with a follow-up. A one-shot prompt can't need more from you, so it doesn't count.</p></div>${chartBox("Prompts per week chart, scrolls sideways", weeksView(weekly, meta))}</section>
+    <section><div class="head"><h2>Prompts per week</h2><p class="muted">Tasks with more than one message. A task with one message can't need more from you, so it doesn't count.</p></div>${chartBox("Prompts per week chart, scrolls sideways", weeksView(weekly, meta))}</section>
     <section class="split">
       <div><div class="head"><h2>What your prompts include</h2></div>${gradesView(b, meta)}${signalsView(b, meta)}</div>
       <div><div class="head"><h2>Why you followed up</h2></div>${steeringView(b, meta)}</div>

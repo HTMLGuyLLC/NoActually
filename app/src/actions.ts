@@ -1,7 +1,7 @@
 // What every control does. Views mark controls with data-action="…" (and data-id for the thing
 // acted on); one delegated listener per event type on the root dispatches through the maps below,
 // so nothing is re-bound on each redraw.
-import { api, type GoalKind, type HallEntry, type Meta, type PromptTier, REPORT_CARD_TOOLS, type ReportCardTool, type Stats } from "./api";
+import { api, type GoalKind, type HallEntry, isLevel, type Meta, type PromptTier, REPORT_CARD_TOOLS, type ReportCardTool, type Stats } from "./api";
 import { data, say } from "./dom";
 import { errorText, filterLabel, plural } from "./format";
 import { dismiss, dismissRescored } from "./hints";
@@ -16,7 +16,7 @@ import { paintUpdate, readReportCards, render, scheduler } from "./render";
 import { confirmTurnOn, doneLine, offLine } from "./report-cards";
 import { drawCorrectionCard, drawCorrectionsCard, drawPromptCard, drawShareCard } from "./share/cards";
 import { openShareDialog, type Post } from "./share/dialog";
-import { correctionShareText, correctionsShareText, promptShareText, shareText } from "./share/share";
+import { correctionShareText, correctionsShareText, promptShareText, SHARE_URL, shareText } from "./share/share";
 import {
   isPeriod,
   isRange,
@@ -28,6 +28,7 @@ import {
   type ReportCardsState,
   setAutoUpdate,
   setAwardSlide,
+  setDeleteAll,
   setDraft,
   setFilter,
   setLaterFor,
@@ -44,7 +45,7 @@ import {
   state,
 } from "./state";
 import { judgeQuiz } from "./views/learn";
-import { goneByCount, parseRetention, tightens } from "./views/settings";
+import { goneByCount, parseRetention, tightens, usesFullDays, usesSnippetDays } from "./views/settings";
 import { allowArgs } from "./views/sources";
 
 /** Removes the note a failed action left in `slot`. */
@@ -115,8 +116,10 @@ const correctionPost = (e: HallEntry): Post => ({
 /** The period the drawn numbers cover: the scorecard's picker, or the default 28 days elsewhere. */
 const when = () => PERIOD_WHEN[state.tab === "score" ? state.period : "28d"];
 
-/** How long a first click stays armed before the button goes back to normal. */
+/** How long a first click stays armed before the button goes back to normal, unless focus is still on it (a screen reader needs the time). */
 const CONFIRM_MS = 5000;
+/** The longest a confirm stays armed, even under keyboard focus. Redraws wait on it. */
+const CONFIRM_CAP_MS = 30_000;
 /** A second click sooner than this is a double-click, not a decision: it does nothing. */
 const CONFIRM_GUARD_MS = 400;
 const armed = new WeakMap<HTMLButtonElement, (flush: boolean) => void>();
@@ -136,7 +139,7 @@ function confirmNote(): HTMLElement {
 }
 
 /** True on the second click. The first relabels the button and holds off redraws until then; it disarms
- * itself after a few seconds or when focus leaves, restoring the label. A second click within
+ * itself after a few seconds (longer under keyboard focus), or when focus leaves or Escape is pressed, restoring the label. A second click within
  * `CONFIRM_GUARD_MS` of the first (a double-click) is ignored. */
 function confirmed(b: HTMLButtonElement, ask: string): boolean {
   const disarm = armed.get(b);
@@ -151,6 +154,7 @@ function confirmed(b: HTMLButtonElement, ask: string): boolean {
     clearTimeout(timer);
     clearTimeout(announce);
     b.removeEventListener("blur", onBlur);
+    b.removeEventListener("keydown", onKey);
     armed.delete(b);
     delete b.dataset.confirm;
     b.textContent = label;
@@ -158,10 +162,20 @@ function confirmed(b: HTMLButtonElement, ask: string): boolean {
     if (flush) scheduler.flush(); // apply any redraw that waited on the armed button
   };
   const onBlur = () => off(true);
-  const timer = setTimeout(() => off(true), CONFIRM_MS);
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") off(true);
+  };
+  // Keyboard focus keeps it armed so a screen reader can finish, up to a cap; a mouse click doesn't.
+  const expire = () => {
+    const reading = b.matches(":focus-visible") && Date.now() - (armedAt.get(b) ?? 0) < CONFIRM_CAP_MS;
+    if (reading) timer = setTimeout(expire, CONFIRM_MS);
+    else off(true);
+  };
+  let timer = setTimeout(expire, CONFIRM_MS);
   // Set after the region exists for a tick, so a screen reader notices the change.
   const announce = setTimeout(() => say(note, ask), 0);
   b.addEventListener("blur", onBlur);
+  b.addEventListener("keydown", onKey);
   armed.set(b, off);
   armedAt.set(b, Date.now());
   b.dataset.confirm = "yes";
@@ -171,6 +185,9 @@ function confirmed(b: HTMLButtonElement, ask: string): boolean {
 
 /** The form for a correction that was counted wrong. */
 export const COUNTED_WRONG_URL = "https://github.com/HTMLGuyLLC/NoActually/issues/new?template=false_positive.yml";
+
+/** What changed in each version, including rules updates that recount history. */
+export const CHANGELOG_URL = `${SHARE_URL}/blob/main/CHANGELOG.md`;
 
 /** A report cards tool named by a button, checked before it's sent to the app. */
 function reportCardTool(id: string): ReportCardTool {
@@ -261,6 +278,7 @@ export const clickActions = {
     setReading("off");
     return render();
   },
+  "open-changelog": (b) => run(b, () => api.openShare(CHANGELOG_URL)),
   // The "rescored" line is gone for good once dismissed; only a later rebuild brings it back.
   "dismiss-rescored": (b) => {
     dismissRescored(data(b, "id"));
@@ -429,7 +447,17 @@ export const clickActions = {
   },
   revoke: (b) => thenRender(b, () => api.revoke(data(b, "id"))),
   pause: (b) => thenRender(b, () => api.pause(data(b, "id"), data(b, "paused") !== "true")),
-  import: (b) => thenRender(b, () => api.importExport(data(b, "id"))),
+  import: (b) => {
+    // Like the first Allow: the first import with no history before it goes to the scorecard. A cancelled picker returns null and changes nothing.
+    const first = !state.current?.messages;
+    return thenRender(b, async () => {
+      const picked = await api.importExport(data(b, "id"));
+      if (picked === null || !first) return;
+      setReading("reading");
+      setTab("score");
+      setView("overview");
+    });
+  },
   // Forget deletes data for good, so it takes a second click to confirm, and says what goes.
   forget: (b) => {
     if (!confirmed(b, "Click again to delete its scores, pins and report cards for good")) return;
@@ -474,6 +502,19 @@ export const clickActions = {
       () => api.reportCardsDeleteHistory(),
       (n) => (n ? "Deleted your report card and tip history." : "There was no history to delete."),
     );
+  },
+  // On success the app quits, so the button stays on "Deleting…". A failure is kept in the state, because a redraw may replace the button meanwhile.
+  "delete-everything": async (b) => {
+    if (state.deleteAll.busy || !confirmed(b, "Click again to delete everything. This can't be undone")) return;
+    setDeleteAll({ busy: true, error: "" });
+    await render();
+    try {
+      await api.deleteEverything();
+    } catch (e) {
+      setDeleteAll({ busy: false, error: errorText(e) });
+      await render();
+      say(confirmNote(), errorText(e));
+    }
   },
   "save-privacy": async (b) => {
     const form = b.closest("section") ?? document;
@@ -596,6 +637,12 @@ async function saveCardsSetting(box: HTMLInputElement | HTMLSelectElement, key: 
 export const changeActions = {
   level: (r) => {
     for (const l of r.closest(".levels")?.querySelectorAll(".level") ?? []) l.classList.toggle("on", l.contains(r));
+    // Only the day fields this level uses are shown.
+    if (isLevel(r.value)) {
+      const form = r.closest("section");
+      form?.querySelector<HTMLElement>("#full-days-row")?.toggleAttribute("hidden", !usesFullDays(r.value));
+      form?.querySelector<HTMLElement>("#snippet-days-row")?.toggleAttribute("hidden", !usesSnippetDays(r.value));
+    }
   },
   autostart: toggle((on) => api.setAutostart(on)),
   "auto-update": toggle((on) => api.setAutoUpdate(on), setAutoUpdate),

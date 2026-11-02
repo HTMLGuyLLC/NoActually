@@ -3,8 +3,8 @@
 use crate::{Result, Store};
 use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, Timelike};
 use engine::{
-    Answer, Category, CorrectionTier, Grade, Label, PromptTier, Score, Signal, Signals, Steer, Tier, Window,
-    MIN_PROMPTS, WINDOW_DAYS,
+    Answer, CorrectionTier, Grade, Label, PromptTier, Score, Signal, Signals, Steer, Tier, Window, MIN_PROMPTS,
+    WINDOW_DAYS,
 };
 use rusqlite::{params_from_iter, Connection};
 use serde::{Deserialize, Serialize};
@@ -164,8 +164,6 @@ pub struct HallEntry {
     pub label: String,
     /// Category id, or "" for humbled moments.
     pub category: String,
-    /// The category's display title, or "".
-    pub category_title: String,
     /// Your side, per the retention level.
     pub human: Option<String>,
     /// The AI's side, per the retention level.
@@ -417,13 +415,18 @@ pub(crate) fn monday_of(d: NaiveDate) -> NaiveDate {
     d - Duration::days(i64::from(d.weekday().num_days_from_monday()))
 }
 
-fn weekly(v: &View) -> Result<Vec<WeekRow>> {
+/// Each day's (day, messages, corrections, humbled moments).
+pub(crate) fn day_counts(v: &View) -> Result<Vec<(String, i64, i64, i64)>> {
     let sql = format!(
         "SELECT day, SUM(CASE WHEN kind = 'message' THEN n ELSE 0 END), SUM(CASE WHEN kind IN {} THEN n ELSE 0 END),
                 SUM(CASE WHEN kind = 'humbled' THEN n ELSE 0 END)
          FROM daily WHERE 1=1 {} GROUP BY day",
         *CORRECTION_KINDS, v.clause
     );
+    v.rows(&sql, &[], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+}
+
+fn weekly(v: &View) -> Result<Vec<WeekRow>> {
     let mut weeks: BTreeMap<NaiveDate, WeekRow> = BTreeMap::new();
     let mut add = |day: String, f: &mut dyn FnMut(&mut WeekRow)| {
         if let Ok(d) = day.parse::<NaiveDate>() {
@@ -431,9 +434,7 @@ fn weekly(v: &View) -> Result<Vec<WeekRow>> {
             f(weeks.entry(week).or_insert_with(|| WeekRow { week, ..WeekRow::default() }));
         }
     };
-    let day_counts =
-        |r: &rusqlite::Row| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?, r.get::<_, i64>(3)?));
-    for (day, m, k, h) in v.rows(&sql, &[], day_counts)? {
+    for (day, m, k, h) in day_counts(v)? {
         add(day, &mut |w| {
             w.messages += m;
             w.corrections += k;
@@ -546,7 +547,6 @@ fn hall_of_fame(v: &View) -> Result<Vec<HallEntry>> {
             source,
             model: r.get(3)?,
             label: r.get(4)?,
-            category_title: Category::from_id(&category).map_or("", Category::title).to_string(),
             category,
             human: r.get(6)?,
             ai: r.get(7)?,

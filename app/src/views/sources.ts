@@ -25,6 +25,9 @@ export function allowArgs(choice: string, now: Date): { since: string | null; fr
 export const watchingNames = (list: SourceInfo[]): string[] =>
   list.filter((x) => x.kind !== "import" && x.state?.allowed && !x.state.paused).map((x) => shortSourceName(x.name));
 
+/** Only an imported export is allowed, and no live tool: nothing new will come, so goals and "more tasks" don't apply. */
+export const isImportOnly = (list: SourceInfo[]): boolean => list.some((x) => x.kind === "import" && x.state?.allowed) && !watchingNames(list).length;
+
 function sourceRow(s: SourceInfo): Html {
   const st = s.state;
   // Every source repeats the same buttons, so each says whose it is.

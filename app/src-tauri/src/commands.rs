@@ -267,7 +267,10 @@ fn check_export(src: &dyn Source, path: &Path) -> Res<()> {
     match src.scan(path, 0, true) {
         Ok(_) => Ok(()),
         Err(e) => {
-            log::info!("import refused: {}", crate::shorten_home_in(&e.to_string(), std::env::home_dir().as_deref()));
+            log::info!(
+                "import refused: {}",
+                crate::logging::shorten_home_in(&e.to_string(), std::env::home_dir().as_deref())
+            );
             Err(refused(&if matches!(e, sources::Error::TooBig { .. }) {
                 "That file is over the 1 GB limit for an export.".to_string()
             } else {
@@ -472,6 +475,19 @@ pub fn set_popups(app: State<Arc<App>>, enabled: bool) -> Res<()> {
 #[tauri::command]
 pub fn rescored_notice(app: State<Arc<App>>) -> Res<Option<String>> {
     lock(&app.reader).get_setting(crate::RESCORED_NOTICE_KEY).map_err(err)
+}
+
+/// Settings → Privacy → Delete everything. Runs off the main thread: it waits for the running sync
+/// pass. On success the app quits, so nothing comes back. The errors are plain sentences, some with
+/// the data folder's path, so they go to the window and not the log.
+#[tauri::command]
+pub async fn delete_everything(window: tauri::Window, handle: AppHandle, app: State<'_, Arc<App>>) -> Res<()> {
+    only_main(window.label())?;
+    let app = Arc::clone(&app);
+    tauri::async_runtime::spawn_blocking(move || crate::delete_all::run(&handle, &app))
+        .await
+        .map_err(err)?
+        .map_err(|e| refused(&e))
 }
 
 #[tauri::command]

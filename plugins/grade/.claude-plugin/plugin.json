@@ -1,7 +1,7 @@
 {
   "name": "grade",
-  "version": "0.5.5",
-  "description": "Report cards on how you prompt: type /grade:me for a letter grade, why, and how to ask so it lands the first time. Works with the No, Actually... app to track your progress.",
+  "version": "0.5.6",
+  "description": "Report cards on how you prompt: type /grade:me for a letter grade, why, and how to ask so it's clear the first time. Works with the No, Actually... app to track your progress.",
   "author": {
     "name": "HTMLGuy LLC",
     "url": "https://github.com/HTMLGuyLLC"

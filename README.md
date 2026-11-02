@@ -5,7 +5,7 @@
 <h1 align="center">No, Actually...</h1>
 
 <p align="center">
-  <b>A scoreboard for you vs. your AI.</b><br>
+  <b>A scorecard for you vs. your AI.</b><br>
   Prompt it well, correct it when it's wrong, and find out if it could really replace you.<br>
   Works with Claude Code, Claude Cowork, Codex, ChatGPT and Claude.ai.<br>
   Tiers to climb, goals to hit, lessons to level up, and a card worth bragging about.
@@ -44,7 +44,7 @@ Better prompts mean fewer mistakes to correct, and that never costs you: once yo
 
 1. **[Download it](https://github.com/HTMLGuyLLC/NoActually/releases/latest)** for Mac, Windows or Linux ([which file?](#download-and-install)).
 2. Open it, click **Choose sources**, and **Allow** the AI tools you want counted. Nothing is read until you do.
-3. That's it. It backfills your history, then keeps score as you work, from your menu bar (Mac) or system tray (Windows and Linux). Prefer an ordinary app that quits when you close it? Turn off **Keep running in the menu bar** in Settings → General.
+3. That's it. It reads your past chats first, then keeps score as you work, from your menu bar (Mac) or system tray (Windows and Linux). Prefer an ordinary app that quits when you close it? Turn off **Keep running in the menu bar** in Settings → General.
 
 <p align="center">
   <img src="docs/screenshot-glance.png" alt="The menu bar quick glance: the three questions, each answered in a word with why, and your goal" width="300">
@@ -56,7 +56,7 @@ Better prompts mean fewer mistakes to correct, and that never costs you: once yo
 - **A prompt score.** "Do you make it guess? **Sometimes.** 85% of your prompts were clear the first time." Plus what your prompts include, why you followed up, and one tip backed by your own history.
 - **Improve.** One weekly goal picked from your own numbers ("Include guardrails in 25% of your prompts"), streaks, trophies, personal bests, last week's recap, and charts of how you're trending.
 - **Learn.** 13 one-minute lessons in three tracks (the 6 habits, follow up less, correct more), quick quizzes, and a prompt checker that grades a draft as you type, with the same rules as your score.
-- **English only, for now.** Corrections and prompts are read by rules written for English. Messages in other languages aren't graded fairly, and may not count at all.
+- **English only, for now.** Prompts and corrections are read by rules written for English. Messages in other languages aren't graded fairly, and may not count at all.
 - **Any time window.** 7 days, 28 days, 90 days or all time: the whole scorecard follows the picker, score included. Windows under 28 days ask for fewer corrections, so a short window is fair. Windows over 28 days ask for the same 3, so a longer window can score higher.
 - **Every model, side by side.** All AI, one provider, one family, or one exact version (say, Claude Opus 5.5). The picker shows the numbers that page is about.
 - **A Hall of fame** of awards, one per kind of correction: The Fabulist (made it up), Selective Hearing, Reading Is Hard, The Blind Spot, “Fixed” It, Big Brain Energy, and Touché for the times it corrected you. Each shows its best snippet, picked the same way every time. Pin the ones you want to keep forever.
@@ -69,7 +69,7 @@ Finish a task in Claude Code or Codex, type `/grade:me` (Codex: `$grade-me`), an
 
 - A letter grade, A to F, and why
 - What you could have said up front, with a better first message to copy
-- What the extra back-and-forth cost you, in minutes (and dollars, at pay-as-you-go prices, when the model has a price)
+- What the extra back-and-forth cost you, in minutes (and dollars, at pay-as-you-go prices, when the model has a price). Codex report cards show minutes only, no dollars: there are no GPT prices in the table
 
 It talks at your level: plain words if you're new, short and technical if you're not.
 No, Actually... saves each report card's numbers (never your words) and shows how you're doing over time.
@@ -79,7 +79,7 @@ No, Actually... saves each report card's numbers (never your words) and shows ho
 **On Windows:** report cards work with Claude Code, which needs Git for Windows. They aren't available for Codex yet.
 
 **Without the app:** in Claude Code run `/plugin marketplace add HTMLGuyLLC/NoActually` then
-`/plugin install grade@noactually`. You get report cards, but no history. This follows the newest code on the default branch. To stay on a release, add `HTMLGuyLLC/NoActually#v<version>` instead.
+`/plugin install grade@noactually`. You get report cards, graded by eye, with no history or cost figures. This follows the newest code on the default branch. To stay on a release, add `HTMLGuyLLC/NoActually#v<version>` instead.
 
 **Cost:** report cards are written by your own AI, so each one uses some of your tokens: about 0.5k to 2k output tokens per task graded, more with `all`.
 They only run when you ask. Tips as you work are optional and use a little in each chat.
@@ -130,7 +130,7 @@ They're written not to. They teach habits that work with any collaborator, human
 <details>
 <summary><b>Will it slow my computer down?</b></summary>
 
-The engine is native Rust, and the window uses your system's built-in web view instead of shipping its own browser. The first backfill reads files in parallel. After that it only reads what's new since its last checkpoint.
+The engine is native Rust, and the window uses your system's built-in web view instead of shipping its own browser. The first read of your history runs files in parallel. After that it only reads what's new since its last checkpoint.
 </details>
 
 <details>
@@ -188,7 +188,7 @@ The app keeps each report card's numbers, so you can see how you're trending. Th
 <details>
 <summary><b>How do I delete everything?</b></summary>
 
-Click **Forget** on a source to delete what was read from it, including its pins, report cards and tips. Finished goal weeks and trophies stay, as totals. **Delete report card and tip history** in Settings clears them all. To remove it all, first turn report cards off in Settings (that removes what they added to Claude Code and Codex), then quit the app and delete its data folder (the paths are in [PRIVACY.md](PRIVACY.md#how-to-delete-your-data)). Uninstalling alone leaves the data behind.
+Click **Forget** on a source to delete what was read from it, including its pins, report cards and tips. Finished goal weeks and trophies stay, as totals. **Delete report card and tip history** in Settings clears them all. Or click **Delete everything** in Settings: it turns off report cards and Launch at login, deletes the data and logs, and quits. If the app is already gone, the manual steps are in [PRIVACY.md](PRIVACY.md#how-to-delete-your-data). Uninstalling alone leaves the data behind.
 </details>
 
 <details>
@@ -203,7 +203,7 @@ Free, and it costs nothing to run. The score never calls an AI, so there's no AP
 
 ### Could AI replace you? (the overall score)
 
-Over the window you pick (the last 28 days unless you choose another), once it has at least 10 tasks with a follow-up:
+Over the window you pick (the last 28 days unless you choose another), once it has at least 10 tasks with more than one message:
 
 ```
 score = 70% × direction + 30% × judgment
@@ -224,15 +224,6 @@ judgment  = 100, minus 5 for each 1% of your tasks where the AI had to correct y
 
 Each question below the score gets a one-word answer too, and that word is its tier. Each tier also has a short name, shown in the quick glance and on share cards.
 
-Do you correct it? goes by judgment:
-
-| Answer | Judgment | Name |
-|---|---|---|
-| Religiously. | 90+ | Hawk-eyed |
-| Often. | 75–89 | Reviewer |
-| Sometimes. | 50–74 | Spot-checker |
-| Rarely. | under 50 | Autopilot |
-
 Do you make it guess? goes by the share of prompts that were clear the first time (see "How a prompt is graded"):
 
 | Answer | Clear the first time | Name |
@@ -241,6 +232,15 @@ Do you make it guess? goes by the share of prompts that were clear the first tim
 | Sometimes. | 80–89% | Tech lead |
 | Often. | 70–79% | Ticket writer |
 | Constantly. | under 70% | Vibes only |
+
+Do you correct it? goes by judgment:
+
+| Answer | Judgment | Name |
+|---|---|---|
+| Religiously. | 90+ | Hawk-eyed |
+| Often. | 75–89 | Reviewer |
+| Sometimes. | 50–74 | Spot-checker |
+| Rarely. | under 50 | Autopilot |
 
 A few things this gets right on purpose:
 - **Prompting better never costs you.** Past 3 corrections, more corrections add nothing, so an AI that makes fewer mistakes because you prompted it well doesn't lower your score.
@@ -270,7 +270,7 @@ Adding context ("also", "fyi", "I forgot to mention") never counts against the A
 
   Three or more is **specific**, two is **decent**, fewer is **vague**. Pasted blocks count as evidence, but their words aren't graded as yours.
 - **A follow-up** is a later message that redirects the task. Either the AI got it wrong (a correction), or it's on you: **added more** ("also…", "I forgot to mention"), **clarified** ("I meant…", "to be clear") or **started over** ("scrap that", "revert it").
-- **A prompt is clear the first time** when nothing on you followed it. The answer (Rarely, Sometimes, Often, Constantly) comes from the share of prompts with a follow-up that were clear the first time over the last 28 days, once there are at least 10 of them.
+- **A prompt is clear the first time** when nothing on you followed it. The answer (Rarely, Sometimes, Often, Constantly) comes from the share of prompts that were clear the first time over the last 28 days, counting tasks with more than one message, once there are at least 10 of them.
 
 The tip names the thing your prompts include least. It only quotes "prompts with guardrails were clear the first time X% vs Y%" when your own history shows a real gap.
 
@@ -397,19 +397,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md), then run the same checks as CI with [ju
 just ci
 ```
 
-Without `just`, run these from a fresh clone. The frontend must be built first because the app crate reads `app/dist` at compile time:
-
-```bash
-pnpm --dir app install --frozen-lockfile
-pnpm --dir app build
-cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-pnpm --dir app check
-pnpm --dir app lint
-pnpm --dir app test
-node --test scripts/*.test.mjs
-```
+Without `just`, the same commands are listed by hand in [CONTRIBUTING.md](CONTRIBUTING.md#checks-and-code-style).
 
 ## License
 

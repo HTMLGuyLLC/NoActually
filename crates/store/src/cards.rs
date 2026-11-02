@@ -281,12 +281,8 @@ impl Current {
     /// priced, at nothing extra, when its own model has a price.
     pub fn cost(&self) -> Option<f64> {
         if self.tokens.is_empty() {
-            let model = Model {
-                provider: self.provider.clone(),
-                family: self.family.clone(),
-                version: self.version.clone(),
-                raw: String::new(),
-            };
+            let model =
+                Model { provider: self.provider.clone(), family: self.family.clone(), version: self.version.clone() };
             return price(&model).map(|_| 0.0);
         }
         self.tokens.iter().map(|(model, usage)| usage.cost_on(model)).sum()

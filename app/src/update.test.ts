@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { UpdateStatus } from "./api";
 import { HOSTILE } from "./test/fixtures";
-import { updateBanner, updateLine } from "./update";
+import { rescoredNotice, updateBanner, updateLine } from "./update";
 
 const status = (over: Partial<UpdateStatus>): UpdateStatus => ({
   current: "0.1.0",
@@ -64,6 +64,15 @@ describe("updateBanner", () => {
       expect(b).not.toContain("<img");
       expect(b).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;&amp;&#39;&quot;");
     }
+  });
+});
+
+describe("rescoredNotice", () => {
+  it("says what happened and links to the changelog", () => {
+    const m = rescoredNotice("2026-11-01T00:00:00Z").value;
+    expect(m).toContain("This update changed how chats are scored, so we recounted your history and your score may have moved.");
+    expect(m).toContain('data-action="open-changelog"');
+    expect(m).toContain('data-action="dismiss-rescored"');
   });
 });
 

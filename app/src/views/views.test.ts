@@ -29,11 +29,11 @@ describe("scorecardView", () => {
     expect(m).toMatch(
       /data-id="overview" data-tip="Overview" aria-current="page"><svg class="tab-icon"[^>]*aria-hidden="true">.*?<\/svg><span class="tab-name">Overview<\/span><\/button>/,
     );
-    expect(m).toContain('data-id="prompts" data-tip="Prompting"');
-    // Corrections come before prompting: in the tabs, the overview cards and the score's parts.
-    expect(m.indexOf('data-id="corrections"')).toBeLessThan(m.indexOf('data-id="prompts"'));
-    expect(m.indexOf("Do you correct it?")).toBeLessThan(m.indexOf("Do you make it guess?"));
-    expect(m.indexOf("Who corrects whom<small")).toBeLessThan(m.indexOf("Your prompts<small"));
+    expect(m).toContain('data-id="prompts" data-tip="Prompts"');
+    // Prompts come before corrections (they are 70% of the score): in the tabs, the overview cards and the score's parts.
+    expect(m.indexOf('data-id="prompts"')).toBeLessThan(m.indexOf('data-id="corrections"'));
+    expect(m.indexOf("Do you make it guess?")).toBeLessThan(m.indexOf("Do you correct it?"));
+    expect(m.indexOf("Your prompts<small")).toBeLessThan(m.indexOf("Who corrects whom<small"));
     expect(m).toContain("Could ");
     expect(m).toContain("Do you make it guess?");
     expect(m).toContain("Do you correct it?");
@@ -132,7 +132,7 @@ describe("scorecardView", () => {
     const s = stats({
       models: [row(HOSTILE, HOSTILE, HOSTILE, 3)],
       categories: { [HOSTILE]: 2 },
-      hall_of_fame: [hallEntry({ human: HOSTILE, ai: HOSTILE, model: HOSTILE, category_title: HOSTILE, label: HOSTILE, day: HOSTILE })],
+      hall_of_fame: [hallEntry({ human: HOSTILE, ai: HOSTILE, model: HOSTILE, label: HOSTILE, day: HOSTILE })],
       first_day: HOSTILE,
     });
     safe(scorecardView(s, { ...ctx, filter: { provider: HOSTILE } }).value);
@@ -185,7 +185,7 @@ describe("overview hero", () => {
 
   it("asks for more tasks, and offers nothing to share, until there is a score", () => {
     const m = hero({ score: null, direction: null, judgment: null, tier: null, next_tier: null, verdict: "hmm", to_rank: 7 });
-    expect(m).toContain("<b>7 more tasks</b> with a follow-up to get a score");
+    expect(m).toContain("<b>7 more tasks</b> with more than one message to get a score");
     expect(m).toContain("7 more tasks to get a score");
     expect(m).toContain("Not scored yet.");
     expect(m).toContain('data-w="0"');
@@ -210,8 +210,8 @@ describe("overview hero", () => {
 });
 
 describe("hallView", () => {
-  it("uses Rust's category title, never the label, and the source name when no model was recorded", () => {
-    const m = hallView([hallEntry({ category_title: "Made it up", label: "confirmed", model: "", source_name: "ChatGPT (export)" })]).value;
+  it("uses the award name, never the label, and the source name when no model was recorded", () => {
+    const m = hallView([hallEntry({ label: "confirmed", model: "", source_name: "ChatGPT (export)" })]).value;
     expect(m).not.toContain("Made it up"); // the award names the kind
     expect(m).not.toContain("confirmed");
     expect(m).toContain('<div class="meta">');
@@ -233,6 +233,11 @@ describe("hall entries", () => {
     expect(m).toContain('data-action="counted-wrong"');
     expect(m).toContain("Leave out names, secrets");
     expect(m).toContain(">Pin it<");
+  });
+
+  it("keeps the report link after the actions", () => {
+    const m = hallView([hallEntry()]).value;
+    expect(m.indexOf(">Pin it<")).toBeLessThan(m.indexOf("Counted wrong?"));
   });
 });
 
@@ -321,7 +326,7 @@ describe("chrome", () => {
 
   it("escapes a sync error in the retry pill", () => {
     const m = statusPillView({ syncing: false, last_sync: null, last_error: HOSTILE, files_with_errors: 0, rebuilding: false }, false).value;
-    expect(m).toContain("Couldn't check. Retry");
+    expect(m).toContain("Couldn't check. Try again");
     safe(m);
   });
 
@@ -346,6 +351,7 @@ describe("sourcesView", () => {
       autostart: false,
       menuBar: { enabled: true, available: true },
       reportCards: emptyReportCards(),
+      deleteAll: { busy: false, error: "" },
       tipRules: "",
       update: null,
       demo: false,
@@ -438,6 +444,7 @@ describe("settingsView", () => {
     autostart: true,
     menuBar: { enabled: true, available: true },
     reportCards: emptyReportCards(),
+    deleteAll: { busy: false, error: "" },
     tipRules: "",
     update: null,
     demo: false,
@@ -576,7 +583,7 @@ describe("overview wording", () => {
 
   it("says nothing twice when unranked: no hand-note beside the 'give it more tasks' line", () => {
     const m = ov({ score: null, direction: null, judgment: null, tier: null, correction_tier: null, to_rank: 4 });
-    expect(m).toContain("Give it <b>4 more tasks</b> with a follow-up to get ranked.");
+    expect(m).toContain("Give it <b>4 more tasks</b> with more than one message to get ranked.");
     expect(m).not.toContain("to get ranked</p>");
   });
 
@@ -638,7 +645,7 @@ describe("the pill, rebuilding and unreadable chats", () => {
 
   it("keeps the failed-check retry ahead of both", () => {
     const m = statusPillView({ ...ok, last_error: "disk full", files_with_errors: 3, rebuilding: true }, false).value;
-    expect(m).toContain("Couldn't check. Retry");
+    expect(m).toContain("Couldn't check. Try again");
   });
 
   it("holds the scorecard and the glance with one line, no numbers and no buttons to share", () => {
@@ -658,10 +665,10 @@ describe("the first read, English and the glance's error", () => {
   });
 
   it("says once in onboarding and once in the method text that scoring reads English", () => {
-    expect(onboardingView("").value).toContain("Scoring reads English.");
+    expect(onboardingView("").value).toContain("Only English is graded fairly for now.");
     const m = scorecardView(stats(), { ...ctx, view: "prompts" }).value;
-    expect(m).toContain("Scoring reads English.");
-    expect(scorecardView(stats(), ctx).value).not.toContain("Scoring reads English.");
+    expect(m).toContain("Only English is graded fairly for now.");
+    expect(scorecardView(stats(), ctx).value).not.toContain("Only English is graded fairly for now.");
   });
 
   it("gives the glance an error page of its own, with Try again and Open app", () => {
@@ -709,7 +716,7 @@ describe("someone who only imported an export", () => {
   });
 
   it("is told to give it more tasks as before when chats keep arriving", () => {
-    expect(view(false)).toContain("Give it <b>4 more tasks</b> with a follow-up to get a score.");
+    expect(view(false)).toContain("Give it <b>4 more tasks</b> with more than one message to get a score.");
     expect(view(false)).not.toContain("Add a newer export");
   });
 });
@@ -721,9 +728,20 @@ describe("keeping less in Privacy", () => {
     expect(tightens(saved, saved)).toBe(false);
     expect(tightens(saved, { ...saved, level: "category" })).toBe(true);
     expect(tightens(saved, { ...saved, level: "full" })).toBe(false);
-    expect(tightens(saved, { ...saved, full_days: 10 })).toBe(true);
     expect(tightens(saved, { ...saved, snippet_days: 400 })).toBe(false);
     expect(tightens(saved, { ...saved, snippet_days: 30 })).toBe(true);
+    const full = { level: "full" as const, full_days: 30, snippet_days: 365 };
+    expect(tightens(full, { ...full, full_days: 10 })).toBe(true);
+    expect(tightens(full, { ...full, full_days: 60 })).toBe(false);
+  });
+
+  it("ignores a days field the chosen level doesn't use, so no false confirm appears", () => {
+    // Snippet keeps no full text, so its full-text days change nothing; category uses neither field.
+    expect(tightens(saved, { ...saved, full_days: 10 })).toBe(false);
+    const category = { level: "category" as const, full_days: 30, snippet_days: 365 };
+    expect(tightens(category, { ...category, full_days: 1, snippet_days: 1 })).toBe(false);
+    // Going from snippet to full: full text wasn't kept before, so a short full-text window deletes nothing.
+    expect(tightens(saved, { level: "full", full_days: 1, snippet_days: 365 })).toBe(false);
   });
 
   it("counts the Hall of fame entries that lose their text, only when it can tell", () => {

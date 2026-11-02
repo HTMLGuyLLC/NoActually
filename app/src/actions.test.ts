@@ -33,6 +33,7 @@ const api = vi.hoisted(() => ({
   rescoredNotice: vi.fn(),
   openNotices: vi.fn(),
   importExport: vi.fn(),
+  deleteEverything: vi.fn(),
 }));
 vi.mock("./api", async (importOriginal) => ({ ...(await importOriginal<typeof import("./api")>()), api, demo: false }));
 
@@ -351,6 +352,52 @@ describe("delegated actions", () => {
     }
   });
 
+  it("stays armed under keyboard focus, up to a cap, and Escape disarms it", async () => {
+    await toTab("settings");
+    vi.useFakeTimers();
+    try {
+      const b = btn('[data-action="forget"][data-id="codex"]');
+      const label = b.textContent;
+      vi.spyOn(b, "matches").mockImplementation((s) => s === ":focus-visible" || Element.prototype.matches.call(b, s));
+      b.focus();
+      b.click();
+      vi.advanceTimersByTime(20_000);
+      expect(b.dataset.confirm).toBe("yes");
+      b.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      expect(b.dataset.confirm).toBeUndefined();
+      expect(b.textContent).toBe(label);
+      b.click();
+      expect(b.dataset.confirm).toBe("yes");
+      vi.advanceTimersByTime(35_000);
+      expect(b.dataset.confirm).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("disarms on time after a mouse click, even if the click focused the button", async () => {
+    await toTab("settings");
+    vi.useFakeTimers();
+    try {
+      const b = btn('[data-action="forget"][data-id="codex"]');
+      vi.spyOn(b, "matches").mockImplementation((s) => s !== ":focus-visible" && Element.prototype.matches.call(b, s));
+      b.focus();
+      b.click();
+      vi.advanceTimersByTime(6000);
+      expect(b.dataset.confirm).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("opens the changelog from the rescored notice", async () => {
+    await toTab("settings");
+    api.rescoredNotice.mockResolvedValue("2026-11-01T00:00:00Z");
+    await render();
+    await click('[data-action="open-changelog"]');
+    expect(api.openShare).toHaveBeenCalledWith("https://github.com/HTMLGuyLLC/NoActually/blob/main/CHANGELOG.md");
+  });
+
   it("disarms a confirm when focus leaves the button", async () => {
     await toTab("settings");
     const b = btn('[data-action="forget"][data-id="codex"]');
@@ -434,6 +481,39 @@ describe("delegated actions", () => {
     });
   });
 
+  describe("the first import", () => {
+    const imported = source({ id: "chatgpt-export", name: "ChatGPT (export)", kind: "import", roots: [] });
+    const importFirst = async (picked: string | null, messages = 0) => {
+      api.stats.mockResolvedValue(stats({ messages }));
+      api.sources.mockResolvedValue([imported]);
+      api.importExport.mockResolvedValueOnce(picked);
+      await render();
+      await toTab("settings");
+      state.setSettingsPane("sources");
+      await render();
+      await click('[data-action="import"]');
+    };
+
+    it("goes to the scorecard and says it is reading, like the first Allow", async () => {
+      await importFirst("/tmp/conversations.json");
+      expect(state.state.tab).toBe("score");
+      expect(state.state.view).toBe("overview");
+      expect(state.state.reading).toBe("reading");
+    });
+
+    it("stays in Settings when the picker was cancelled", async () => {
+      await importFirst(null);
+      expect(state.state.tab).toBe("settings");
+      expect(state.state.reading).toBe("off");
+    });
+
+    it("stays in Settings when there was history already", async () => {
+      await importFirst("/tmp/conversations.json", 400);
+      expect(state.state.tab).toBe("settings");
+      expect(state.state.reading).toBe("off");
+    });
+  });
+
   it("puts a failed Allow back and says why, instead of leaving it on Allowing…", async () => {
     await toTab("settings");
     api.allow.mockRejectedValueOnce("permission denied");
@@ -447,7 +527,7 @@ describe("delegated actions", () => {
   it("switches scorecard sections", async () => {
     expect(root.querySelector('[data-action="view"][aria-current="page"]')?.textContent).toBe("Overview");
     await click('[data-action="view"][data-id="prompts"]');
-    expect(root.querySelector('[data-action="view"][aria-current="page"]')?.textContent).toBe("Prompting");
+    expect(root.querySelector('[data-action="view"][aria-current="page"]')?.textContent).toBe("Prompts");
     expect(root.textContent).toContain("Why you followed up");
   });
 
@@ -557,14 +637,38 @@ describe("delegated actions", () => {
     it("asks once more, naming what goes, before keeping less", async () => {
       holdClock();
       await open();
-      field("#full-days", "5");
+      field("#snippet-days", "5");
       await click('[data-action="save-privacy"]');
       expect(api.setRetention).not.toHaveBeenCalled();
       expect(btn('[data-action="save-privacy"]').textContent).toBe("Click again to delete older text for good");
       later();
       await click('[data-action="save-privacy"]');
-      expect(api.setRetention).toHaveBeenCalledWith({ level: "snippet", full_days: 5, snippet_days: 365 });
+      expect(api.setRetention).toHaveBeenCalledWith({ level: "snippet", full_days: 30, snippet_days: 5 });
       expect(root.querySelector("#privacy-status")?.textContent).toBe("Saved. Older text was trimmed to match.");
+    });
+
+    it("shows only the day fields the chosen level uses, and saves without a confirm for a field it doesn't use", async () => {
+      await open();
+      const hidden = (id: string) => root.querySelector<HTMLElement>(id)?.hasAttribute("hidden");
+      // Snippet (the saved level) keeps no full text, so only the snippet days show.
+      expect(hidden("#full-days-row")).toBe(true);
+      expect(hidden("#snippet-days-row")).toBe(false);
+      const radio = (v: string) => root.querySelector<HTMLInputElement>(`input[name="level"][value="${v}"]`);
+      const pick = (v: string) => {
+        const r = radio(v);
+        if (r) r.checked = true;
+        r?.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+      pick("full");
+      expect(hidden("#full-days-row")).toBe(false);
+      expect(hidden("#snippet-days-row")).toBe(false);
+      pick("category");
+      expect(hidden("#full-days-row")).toBe(true);
+      expect(hidden("#snippet-days-row")).toBe(true);
+      pick("snippet");
+      field("#full-days", "5");
+      await click('[data-action="save-privacy"]');
+      expect(api.setRetention).toHaveBeenCalledWith({ level: "snippet", full_days: 5, snippet_days: 365 });
     });
 
     it("counts the corrections that lose their text when nothing is kept but the category", async () => {
@@ -707,6 +811,81 @@ describe("the log", () => {
     // The line carries the stack too.
     expect(api.logError).toHaveBeenCalledWith(expect.stringContaining("Pick a goal first"));
     shout.mockRestore();
+  });
+});
+
+describe("delete everything", () => {
+  const del = '[data-action="delete-everything"]';
+  const open = async () => {
+    state.setDeleteAll({ busy: false, error: "" });
+    state.setSettingsPane("privacy");
+    state.setTab("settings");
+    await render();
+  };
+  const again = async () => {
+    later();
+    await click(del);
+  };
+  beforeEach(() => {
+    holdClock();
+  });
+
+  it("takes a second click, and says plainly that it can't be undone", async () => {
+    await open();
+    api.deleteEverything.mockReturnValueOnce(new Promise(() => {}));
+    await click(del);
+    expect(api.deleteEverything).not.toHaveBeenCalled();
+    expect(btn(del).textContent).toBe("Click again to delete everything. This can't be undone");
+    await again();
+    expect(api.deleteEverything).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a double-click", async () => {
+    await open();
+    await click(del);
+    await click(del);
+    expect(api.deleteEverything).not.toHaveBeenCalled();
+    expect(btn(del).dataset.confirm).toBe("yes");
+  });
+
+  it("does nothing if the second click never comes", async () => {
+    await open();
+    await click(del);
+    btn(del).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await settle();
+    expect(btn(del).textContent).toBe("Delete everything");
+    await click(del);
+    expect(api.deleteEverything).not.toHaveBeenCalled();
+    btn(del).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+
+  it("stays on Deleting… until the app quits, and can't be run twice", async () => {
+    await open();
+    api.deleteEverything.mockResolvedValueOnce(null);
+    await click(del);
+    await again();
+    expect(btn(del).textContent).toBe("Deleting…");
+    expect(btn(del).getAttribute("aria-disabled")).toBe("true");
+    await again();
+    await again();
+    expect(api.deleteEverything).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows why it stopped, and the button comes back to try again", async () => {
+    await open();
+    api.deleteEverything.mockRejectedValueOnce("Nothing was deleted. Report cards couldn't be turned off in Codex.");
+    await click(del);
+    await again();
+    expect(root.querySelector('[role="alert"]')?.textContent).toBe("Nothing was deleted. Report cards couldn't be turned off in Codex.");
+    expect(btn(del).textContent).toBe("Delete everything");
+    expect(btn(del).hasAttribute("aria-disabled")).toBe(false);
+
+    api.deleteEverything.mockReturnValueOnce(new Promise(() => {}));
+    await click(del);
+    await again();
+    expect(api.deleteEverything).toHaveBeenCalledTimes(2);
+    expect(root.querySelector('[role="alert"]')).toBeNull();
+    state.setDeleteAll({ busy: false, error: "" });
   });
 });
 

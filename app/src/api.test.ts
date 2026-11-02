@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import pkg from "../package.json";
 import { api, demo, isLevel } from "./api";
 import { meta, progress, stats } from "./test/fixtures";
 
@@ -22,7 +23,7 @@ describe("api outside Tauri", () => {
     expect(await api.recentReportCards({})).toEqual([]);
     expect(await api.retention()).toEqual({ level: "snippet", full_days: 30, snippet_days: 365 });
     expect(await api.getAutostart()).toBe(false);
-    expect((await api.updateStatus()).current).toBe("0.1.0");
+    expect((await api.updateStatus()).current).toBe(pkg.version);
     expect((await api.syncStatus()).last_error).toBeNull();
     const writes = [
       api.allow("codex", null, true),

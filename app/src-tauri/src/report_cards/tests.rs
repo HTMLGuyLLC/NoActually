@@ -2385,6 +2385,56 @@ fn a_claude_that_only_the_login_shell_knows_is_saved_and_then_found_without_it()
     assert_eq!(asked.get(), before, "the saved path is used before anyone is asked");
 }
 
+// ---- Delete everything ----
+
+#[test]
+fn every_tool_is_turned_off_with_the_usual_code() {
+    let lab = Lab::with_claude();
+    codex::turn_on(&lab.env).unwrap();
+    set_tips(&lab.env, true).unwrap();
+    turn_off_everywhere(&lab.env).unwrap();
+    assert!(lab.calls().iter().any(|c| c.starts_with("plugin uninstall")), "{:?}", lab.calls());
+    assert!(lab.calls().iter().any(|c| c.starts_with("plugin marketplace remove")), "{:?}", lab.calls());
+    assert!(!codex::is_on(&lab.env));
+    assert!(!fs::read_to_string(lab.hooks()).unwrap_or_default().contains(HOOK_MARK));
+    assert!(!lab.env.tips_file().exists());
+}
+
+#[test]
+fn nothing_installed_has_nothing_to_turn_off() {
+    let lab = Lab::new();
+    turn_off_everywhere(&lab.env).unwrap();
+    // Nor does it need Codex to be here at all.
+    fs::remove_dir_all(lab.env.home.join(".codex")).unwrap();
+    turn_off_everywhere(&lab.env).unwrap();
+}
+
+#[test]
+fn a_tool_that_fails_to_turn_off_is_named_and_stops_the_rest() {
+    let lab = Lab::with_claude();
+    lab.fake("fail-uninstall", "EACCES: permission denied");
+    codex::turn_on(&lab.env).unwrap();
+    let why = turn_off_everywhere(&lab.env).unwrap_err();
+    assert!(why.starts_with("Report cards couldn't be turned off in Claude Code."), "{why}");
+    assert!(codex::is_on(&lab.env), "it stopped there");
+}
+
+#[test]
+fn a_plugin_with_no_command_to_remove_it_is_reported_and_does_not_block() {
+    let lab = Lab::new();
+    let file = lab.env.home.join(".claude/plugins/installed_plugins.json");
+    fs::create_dir_all(file.parent().unwrap()).unwrap();
+    fs::write(&file, format!(r#"{{"plugins":{{"{PLUGIN}":[]}}}}"#)).unwrap();
+    let note = turn_off_everywhere(&lab.env).unwrap().unwrap();
+    assert!(note.contains("Claude Code") && note.contains("wasn't found"), "{note}");
+}
+
+#[test]
+fn work_is_refused_once_the_app_is_shut() {
+    assert!(refuse_if(false).is_ok());
+    assert!(refuse_if(true).is_err());
+}
+
 // ---- Codex: the skill ----
 
 #[test]
@@ -2394,7 +2444,9 @@ fn the_shipped_skill_becomes_a_codex_skill() {
     let front = out.split("\n---\n").next().unwrap();
     assert!(front.contains("$grade-me") && !front.contains("/grade:me"), "{front}");
     assert!(!front.contains("allowed-tools") && !front.contains("argument-hint"), "{front}");
-    assert!(out.contains("Look for the chat summary No, Actually... added to this request; it starts with \"noactually digest v1\". If there isn't one, the app isn't running.\n"));
+    assert!(out.contains("Look for the chat summary No, Actually... added to this request; it starts with \"noactually digest v1\". If there isn't one, the summary is empty, even if the app is off or not installed: in Codex it never reads `no-app`.\n"));
+    // No summary has to land on the skill's "stop" case, not its "grade by eye" one.
+    assert!(out.contains("- Empty: report cards are paused or turned off, or the helper timed out. Stop:"));
     assert!(out.contains("Request: whatever the person typed after $grade-me"));
     assert!(
         !out.contains("!`") && !out.contains("${CLAUDE_") && !out.contains("$ARGUMENTS") && !out.contains("/grade:me")

@@ -182,10 +182,10 @@ describe("corrections share", () => {
     );
     expect(correctionLines({ corrections: 1, humbled: 0, judgment: 96 }, tier, "across all time")).toEqual([
       "I corrected it 1 time across all time. It corrected me 0.",
-      "Judgment 96 of 100. You catch AI slipping nearly every time.",
+      "Who corrects whom: 96 of 100. You catch AI slipping nearly every time.",
     ]);
     const low = { ...tier, blurb: "Most of its slips get past you." };
-    expect(correctionLines({ corrections: 1, humbled: 4, judgment: 20 }, low)[1]).toBe("Judgment 20 of 100. Most of its slips get past you.");
+    expect(correctionLines({ corrections: 1, humbled: 4, judgment: 20 }, low)[1]).toBe("Who corrects whom: 20 of 100. Most of its slips get past you.");
   });
 });
 

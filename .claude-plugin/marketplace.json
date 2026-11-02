@@ -11,7 +11,7 @@
     {
       "name": "grade",
       "source": "./plugins/grade",
-      "description": "Report cards on how you prompt: type /grade:me for a letter grade, why, and how to ask so it lands the first time."
+      "description": "Report cards on how you prompt: type /grade:me for a letter grade, why, and how to ask so it's clear the first time."
     }
   ]
 }

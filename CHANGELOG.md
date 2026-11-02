@@ -4,6 +4,38 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-11-01
+
+### Added
+
+- **Delete everything** in Settings → Privacy. It turns off report cards and Launch at login, deletes your data and logs, and quits.
+- `noactually retention` asks first when a change keeps less, or takes `--yes`.
+
+### Changed
+
+- "Follow-up" now only means a message that redirects the task. What a score needs is "tasks with more than one message".
+- Prompts come before corrections everywhere in the app, and the **Prompting** tab is now **Prompts**.
+- The first import ends on your scorecard, as the first Allow does.
+- With only imported history, Improve explains that goals need a live AI tool.
+- Privacy settings show only the day limits that apply to the level you picked, and unused ones no longer trigger a delete warning.
+- Delete buttons stay armed longer under keyboard focus, so a screen reader can finish reading them. Esc cancels.
+- The rescored notice links to what changed.
+- Removed from `noactually stats --json`: `hall_of_fame[].category_title`. Use `category`.
+- The demo no longer ships inside the app.
+
+### Fixed
+
+- Report cards work again without the app. v0.5.5 stopped them by mistake. They're graded by eye, with no history or cost figures.
+- The space between sections on every screen, lost in v0.5.5.
+- `noactually forget` no longer says it deleted everything: finished goal weeks and trophies stay.
+- A mistyped `noactually` command now fails instead of printing help and succeeding, which hid typos in scripts.
+- `noactually stats --since` no longer labels its totals "All time".
+- **Counted wrong?** moved to the end of the row, away from the card's actions.
+
+### Removed
+
+- Two stored columns nothing read, the raw model name and matched rule ids on each correction. The database updates itself on launch.
+
 ## [0.5.5] - 2026-11-01
 
 ### Added
@@ -241,7 +273,8 @@ First release.
 - Per-source consent: nothing is read until you allow it, and Forget deletes a source's data
 - `noactually` command-line tool (`sources`, `allow`, `sync`, `stats`)
 
-[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.5...HEAD
+[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.6...HEAD
+[0.5.6]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.2...v0.5.3

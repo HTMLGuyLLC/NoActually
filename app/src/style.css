@@ -43,6 +43,7 @@ h1, h2 { font-family: var(--display); text-wrap: balance; margin: 0 }
 h2 { font-size: 22px; font-weight: 800 }
 p { margin: 0 }
 .wrap { max-width: 1000px; margin: 0 auto; padding: 20px 24px 56px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 36px }
+main { display: grid; grid-template-columns: minmax(0, 1fr); gap: inherit }
 .eyebrow { font: 600 11px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted) }
 .muted { color: var(--muted) }
 .small { font-size: 13px }
@@ -141,7 +142,7 @@ nav { display: flex; gap: 6px }
   .sync-text[data-tip]:hover:not(:focus-visible):not([aria-expanded="true"])::after { display: none }
 }
 /* A long hint under a control wraps rather than running off the window. */
-.correction-actions [data-tip]::after { left: 0; right: auto; width: max-content; white-space: normal; max-width: min(300px, calc(100vw - 48px)) }
+.correction-actions [data-tip]::after { left: auto; right: 0; width: max-content; white-space: normal; max-width: min(300px, calc(100vw - 48px)) }
 /* Marks with a breakdown look clickable; the pinned one stays lit. */
 svg [data-tip] { cursor: pointer }
 svg .tip-pinned, svg [data-tip]:hover { opacity: 1; filter: brightness(1.12) }
@@ -304,7 +305,9 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .you-said { font: 400 21px/1.2 var(--hand); color: var(--ink); overflow-wrap: anywhere }
 .ai-said { font-size: 14px; color: var(--muted); border-left: 2px solid var(--rule); padding: 2px 0 2px 12px; overflow-wrap: anywhere }
 .ai-said b { color: var(--ink); font-weight: 600 }
-.correction-actions { display: flex; gap: 8px; flex-wrap: wrap }
+.correction-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap }
+.correction-actions .link { margin-left: auto; color: var(--muted); font-size: 13px; font-weight: 500 }
+.correction-actions .link:hover { color: var(--ink) }
 /* Hall of fame: one award per kind of correction, its best snippet up front. */
 .awards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start }
 .award { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--rule); border-radius: 16px; background: var(--surface) }
@@ -350,6 +353,7 @@ table.models { width: 100%; border-collapse: collapse; font-size: 14px }
 .level input { margin-top: 4px; accent-color: var(--pen) }
 .ttl { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin-bottom: 10px }
 .ttl label { display: flex; align-items: center; gap: 10px; flex-wrap: wrap }
+.ttl label[hidden] { display: none }
 .ttl input { width: 5em }
 
 .empty { display: grid; gap: 16px; justify-items: start; padding: 48px 0; max-width: 56ch }
@@ -428,6 +432,7 @@ dialog.modal-fallback:not([open]) { display: none }
 .confirm-list { margin: 0; padding-left: 20px; display: grid; gap: 8px }
 
 /* Learn: the prompt checker, tracks of lessons, and the lesson page. */
+.checker .share + p { margin-top: 10px }
 .checker textarea { width: 100%; min-height: 9em; resize: vertical; margin: 14px 0 10px; font: 400 15px/1.5 var(--body); color: var(--ink);
   background: var(--paper); border: 1px solid var(--muted); border-radius: 12px; padding: 12px 14px }
 .check-result { display: grid; gap: 12px; align-content: start }

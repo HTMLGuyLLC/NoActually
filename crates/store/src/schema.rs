@@ -198,6 +198,15 @@ ALTER TABLE seen ADD COLUMN session TEXT;
 ALTER TABLE kept_seen ADD COLUMN session TEXT;
 CREATE INDEX kept_events_seen_key ON kept_events (seen_key);
 ",
+    // 13: `events.model_raw` and `events.rules` were written but never read. `kept_events` holds the
+    // same columns in the same order, because a rebuild copies rows across with `SELECT *`, so both
+    // lose them together, and a rebuild that was cut short still finishes.
+    r"
+ALTER TABLE events DROP COLUMN model_raw;
+ALTER TABLE events DROP COLUMN rules;
+ALTER TABLE kept_events DROP COLUMN model_raw;
+ALTER TABLE kept_events DROP COLUMN rules;
+",
 ];
 
 /// Sets connection pragmas and applies any migrations the database hasn't had. Each migration
@@ -327,6 +336,72 @@ mod tests {
             })
             .unwrap();
         assert_eq!((grade.as_str(), minutes), ("B", 2), "the view works again, on the same rows");
+    }
+
+    /// One row as version 12 stored it, for `events` or `kept_events`.
+    fn old_event(conn: &Connection, table: &str, id: i64, session: &str, level: &str, pinned: i64, seen_key: &str) {
+        conn.execute(
+            &format!(
+                "INSERT INTO {table} VALUES (?1, '2026-10-05T10:00:00+00:00', '2026-10-05', 'claude-code', ?2,
+                   'Anthropic', 'Claude Opus', '5.5', 'claude-opus-5-5', 'confirmed', 'made_it_up', 'ai.youre_right',
+                   ?3, 'all of it', 'the reply', 'part of it', 'part of the reply', ?4, ?5)"
+            ),
+            rusqlite::params![id, session, level, pinned, seen_key],
+        )
+        .unwrap();
+    }
+
+    /// What `events` holds for one key: id, label, level, full text and whether it's pinned.
+    fn row(store: &crate::Store, key: &str) -> (i64, String, String, Option<String>, i64) {
+        let sql = "SELECT id, label, level, human_full, pinned FROM events WHERE seen_key = ?1";
+        let read = |r: &rusqlite::Row| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?));
+        store.conn().query_row(sql, [key], read).unwrap()
+    }
+
+    #[test]
+    fn version_12_loses_the_unread_event_columns_and_keeps_every_row() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(crate::DB_FILE);
+        let conn = Connection::open(&path).unwrap();
+        for sql in &MIGRATIONS[..12] {
+            conn.execute_batch(sql).unwrap();
+        }
+        conn.pragma_update(None, "user_version", 12).unwrap();
+        old_event(&conn, "events", 7, "kept-chat", "full", 1, "pinned");
+        old_event(&conn, "events", 8, "kept-chat", "snippet", 0, "plain");
+        // A rebuild cut short: one row set aside, from a chat that won't be read again.
+        old_event(&conn, "kept_events", 9, "gone-chat", "full", 0, "set-aside");
+        conn.execute("INSERT INTO settings VALUES ('rules_rebuild.pending', '1')", []).unwrap();
+        drop(conn);
+
+        let mut store = crate::Store::open(&path).unwrap();
+        assert_eq!(store.schema_version().unwrap(), MIGRATIONS.len());
+        for table in ["events", "kept_events"] {
+            let columns: Vec<String> = store
+                .conn()
+                .prepare(&format!("SELECT name FROM pragma_table_info('{table}')"))
+                .unwrap()
+                .query_map([], |r| r.get(0))
+                .unwrap()
+                .collect::<rusqlite::Result<_>>()
+                .unwrap();
+            assert_eq!(
+                columns.join(" "),
+                "id ts day source session provider family version label category level human_full ai_full \
+                 human_snip ai_snip pinned seen_key",
+                "{table}"
+            );
+        }
+        assert_eq!(row(&store, "pinned"), (7, "confirmed".into(), "full".into(), Some("all of it".into()), 1));
+        assert_eq!(row(&store, "plain").0, 8, "ids stay, so a pin still finds its row");
+
+        // The rebuild that was cut short still finishes, on the rows it set aside.
+        store.finish_rebuild().unwrap();
+        assert_eq!(row(&store, "set-aside").3.as_deref(), Some("all of it"));
+        let count = |table: &str| -> i64 {
+            store.conn().query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap()
+        };
+        assert_eq!((count("events"), count("kept_events")), (3, 0));
     }
 
     #[test]

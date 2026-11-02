@@ -10,7 +10,7 @@ default:
 install:
     pnpm --dir app install --frozen-lockfile
 
-# The checks CI runs on every change. CI also checks the MSRV, coverage and workflows (actionlint).
+# Most of the checks CI runs on every change. CI also runs the MSRV check, the coverage summary, actionlint and the app self-check.
 ci: install build fmt-check clippy test-rust test-frontend test-scripts wasm versions audit
 
 # Build the frontend. The app crate reads app/dist at compile time, so cargo needs this first.
@@ -25,8 +25,9 @@ fmt:
 fmt-check:
     cargo fmt --all --check
 
-clippy:
-    cargo clippy --workspace --all-targets -- -D warnings
+# Needs app/dist, which `build` makes.
+clippy: build
+    cargo clippy --locked --workspace --all-targets -- -D warnings
 
 # Lint everything: clippy and Biome.
 lint: clippy
@@ -35,8 +36,9 @@ lint: clippy
 # All tests.
 test: test-rust test-frontend test-scripts
 
-test-rust:
-    cargo test --workspace
+# Needs app/dist, which `build` makes.
+test-rust: build
+    cargo test --locked --workspace
 
 test-frontend:
     pnpm --dir app check
@@ -49,7 +51,7 @@ test-scripts:
 
 # The engine has no I/O, so it builds for the web too.
 wasm:
-    cargo check -p noactually-engine --target wasm32-unknown-unknown
+    cargo check --locked -p noactually-engine --target wasm32-unknown-unknown
 
 # Cargo.toml, app/package.json and tauri.conf.json must agree on the version.
 versions:
@@ -71,6 +73,10 @@ bump VERSION:
 # Create the draft release, tag the merged commit and push the tag (main, CI green): just start-release v0.2.0
 start-release TAG:
     scripts/start-release.sh {{TAG}}
+
+# Finish the draft after release-mac: rename the files, upload the Mac build, write latest.json and SHA256SUMS.txt: just finish-release v0.2.0
+finish-release TAG *ARGS:
+    scripts/finish-release.sh {{TAG}} {{ARGS}}
 
 # Publish a finished draft to beta, or a beta to everyone: just publish v0.2.0 beta
 publish TAG CHANNEL:

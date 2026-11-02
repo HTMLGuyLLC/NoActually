@@ -5,7 +5,7 @@
 use crate::cards::{current, gradable_ids, local_day};
 use crate::goals::{longest_streak, options, suggest, Goal, GoalStatus, Trophy, WeekState};
 use crate::insights::{bests, card_best, insights, Bests, Insights};
-use crate::stats::{monday_of, tally, View, CONTINUED, CORRECTION_KINDS, LANDED};
+use crate::stats::{day_counts, monday_of, tally, View, CONTINUED, LANDED};
 use crate::tips::{self, TipWeek};
 use crate::{Error, Filter, Result, Store};
 use chrono::{Duration, NaiveDate};
@@ -233,14 +233,7 @@ pub(crate) fn task_weeks(v: &View, since: Option<NaiveDate>) -> Result<BTreeMap<
 /// Every week from the first with any data to `today`'s, oldest first.
 fn history(v: &View, today: NaiveDate) -> Result<Vec<HistoryWeek>> {
     let mut weeks = task_weeks(v, None)?;
-    let sql = format!(
-        "SELECT day, SUM(CASE WHEN kind = 'message' THEN n ELSE 0 END), SUM(CASE WHEN kind IN {} THEN n ELSE 0 END),
-            SUM(CASE WHEN kind = 'humbled' THEN n ELSE 0 END)
-         FROM daily WHERE 1=1 {} GROUP BY day",
-        *CORRECTION_KINDS, v.clause
-    );
-    let days: Vec<(String, i64, i64, i64)> = v.rows(&sql, &[], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
-    for (day, messages, corrections, humbled) in days {
+    for (day, messages, corrections, humbled) in day_counts(v)? {
         let Ok(d) = day.parse::<NaiveDate>() else { continue };
         let w =
             weeks.entry(monday_of(d)).or_insert_with(|| HistoryWeek { week: monday_of(d), ..HistoryWeek::default() });

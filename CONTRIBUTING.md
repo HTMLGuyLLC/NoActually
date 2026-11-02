@@ -16,7 +16,7 @@ Run the app:
 just dev    # same as: cd app && pnpm install && pnpm tauri dev
 ```
 
-The app crate reads `app/dist` at compile time. If clippy or tests fail on it, run `pnpm --dir app build` first.
+`pnpm dev` (in `app/`) runs the UI in a browser at http://localhost:1420 on sample data. It is for development only and is not in release builds.
 
 ## CLI
 
@@ -50,7 +50,7 @@ Only add a source you have real files for. Format notes alone are not enough.
 
 - Rules live in `crates/engine/src/rules.rs`.
 - Every rule change needs a test in `crates/engine/src/tests.rs`. Cover the case you add and one near-miss that must not match.
-- Rule ids are stable. Don't rename or reuse one. Stored events refer to them.
+- Rule ids are stable. Don't rename or reuse one. Tests check rules by id, and a changed id makes those tests (and any report that names it) point at the wrong rule.
 - Keep rules deterministic: no network, no model calls.
 - Prompt grading rules (what counts as a Target, Evidence, Finish line, Guardrails or Purpose) live in `crates/engine/src/prompt.rs`, with tests in `crates/engine/src/prompt_tests.rs`.
 - Every lesson example in `app/src/learn/lessons.json` is graded by the engine's lessons test (`crates/engine/tests/lessons.rs`), so a rule change can fail a lesson. If it does, fix the rule or the example.
@@ -63,7 +63,7 @@ Before pushing, run everything CI runs:
 just ci
 ```
 
-It's the same as running these by hand (build the frontend first; the app crate reads `app/dist` at compile time):
+It's the same as running these by hand (build the frontend first; the app crate reads `app/dist` at compile time, which is why the `just` recipes build it for you):
 
 ```bash
 pnpm --dir app install --frozen-lockfile
@@ -73,10 +73,16 @@ cargo clippy --locked --workspace --all-targets -- -D warnings
 cargo test --locked --workspace
 pnpm --dir app check
 pnpm --dir app lint
-pnpm --dir app test
+pnpm --dir app test:coverage
 node --test scripts/*.test.mjs
+shellcheck scripts/*.sh plugins/grade/bin/na
+cargo check --locked -p noactually-engine --target wasm32-unknown-unknown
+scripts/version.sh check
+cargo deny check
+pnpm --dir app audit --prod
 ```
 
+`just ci` skips these CI jobs: the MSRV check, the Rust coverage summary, actionlint and the app self-check (`cargo build --locked -p noactually-app`, then `target/debug/noactually-app --self-check`). It also skips ShellCheck and cargo-deny when they aren't installed.
 - **Rust** is formatted with `cargo fmt`; clippy warnings fail the build.
 - **TypeScript, CSS and JSON in `app/`** are formatted and linted by [Biome](https://biomejs.dev). `just fmt` formats both Rust and TypeScript.
 - `.editorconfig` sets indentation: 4 spaces for Rust, 2 for everything else.
@@ -95,7 +101,7 @@ CI also runs cargo-deny, an MSRV check, a wasm32 build of the engine and a pnpm 
 ## Privacy rules for contributors
 
 - No raw chat data in commits, issues, tests or screenshots.
-- No new network calls or telemetry. The update check is the one exception, and it sends nothing about the user. See [PRIVACY.md](PRIVACY.md).
+- No telemetry, and no new network calls. The app's network use is only what [PRIVACY.md](PRIVACY.md) lists (the update check, a share link the user clicks, and the report card plugin's version check). None of it sends anything about the user's chats.
 
 ## Releasing (maintainers)
 
@@ -132,7 +138,7 @@ If something goes wrong after a tag is pushed, release the next patch version ra
 2. Run `just bump 0.2.0` (`scripts/bump-version.sh 0.2.0`). It sets the version in `Cargo.toml` (the source of truth), `app/package.json`, the report card plugin's `plugins/grade/.claude-plugin/plugin.json` and `app/src-tauri/tauri.conf.json`, refreshes `Cargo.lock`, and moves the Unreleased notes under a dated `## [0.2.0]` heading with updated compare links. Commit it on a branch (`git switch -c release-0.2.0 && git commit -am "release: v0.2.0"`) and merge it with a pull request once CI is green (`main` only takes pull requests).
 3. Wait for CI on the merged commit, then run `git switch main && git pull && just start-release v0.2.0` (`scripts/start-release.sh`). It checks the commit, CI and the version, creates the draft, then tags and pushes. The workflow's token can no longer create a release ("Resource not accessible by integration", first seen on v0.5.3), but it finds this draft and uploads to it. The Release workflow checks that the tagged commit is on `main` and has a passing `ci-ok` check (if the merge's CI is still running, wait and re-run the workflow), checks the tag against the Cargo version, then builds Windows and Linux into a draft release, with signed update files and a `latest.json` for them.
 4. On a Mac with the Developer ID certificate and the updater key, check out the tag and run `just release-mac` (`scripts/release-macos.sh`). It refuses to run on a dirty tree or when HEAD isn't the tagged commit (`--force` skips the tag check). It builds a universal app, signs it, notarizes and staples both the app and the DMG, and makes the signed update file (`No-Actually-0.2.0-Mac-Update-universal.app.tar.gz` + `.sig`).
-5. Run `scripts/finish-release.sh v0.2.0`. It renames the files to plain names people can pick from ("No-Actually-0.2.0-Mac-universal.dmg", "-Windows-Setup-x64.exe", "-x86_64.AppImage"…), setting both the asset name and the label tauri-action v1 adds; uploads the Mac DMG and update file; rewrites `latest.json` so every entry points at the renamed files and adds the Mac entries (`darwin-universal`, `darwin-aarch64`, `darwin-x86_64`); and writes `SHA256SUMS.txt`. It refuses to write a `latest.json` that points at a file missing from the release.
+5. Run `just finish-release v0.2.0` (`scripts/finish-release.sh`). It renames the files to plain names people can pick from ("No-Actually-0.2.0-Mac-universal.dmg", "-Windows-Setup-x64.exe", "-x86_64.AppImage"…), setting both the asset name and the label tauri-action v1 adds; uploads the Mac DMG and update file; rewrites `latest.json` so every entry points at the renamed files and adds the Mac entries (`darwin-universal`, `darwin-aarch64`, `darwin-x86_64`); and writes `SHA256SUMS.txt`. It refuses to write a `latest.json` that points at a file missing from the release.
 6. Check the draft and publish it as a beta: `scripts/publish-release.sh v0.2.0 beta` (or `just publish v0.2.0 beta`). Only apps on the Beta channel are offered it, because the script copies its `latest.json` to the `beta-channel` release. Everyone else keeps reading `releases/latest/download/latest.json`, which skips prereleases. The `beta-channel` tag isn't a version, so the `v*` tag rules don't lock it; it holds only that one file.
 7. Smoke-test the beta on one machine. On the previous release, set Settings → General → Update channel to Beta, with report cards on, and update through the app. Also update one Windows or Linux machine through the app. Then go to Settings → Report cards → Turn on for Claude Code, start a new chat, do a small task, type `/grade:me`, and check the card and that it appears under Improve. Leave the chat open, quit and reopen the app, and check Report cards shows no error. Turn it off again.
 8. Release it to everyone: `scripts/publish-release.sh v0.2.0 stable`. The same files go out, with no rebuild. If the beta has a problem, leave it as a beta and fix it in the next patch release.

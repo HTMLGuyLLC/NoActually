@@ -5,7 +5,7 @@ Goals, in order: **private by default, reliable, fast, deterministic.**
 ```
 crates/engine    noactually-engine:  pure rules: classify a turn, grade a prompt, score and tier, normalize model ids, redact, build snippets. No I/O. Compiles to WASM.
 crates/sources   noactually-sources: one adapter per AI tool: detect, backfill, tail. Turns files into `Turn`s.
-crates/store     noactually-store:   SQLite: consent + settings, file checkpoints, daily aggregates, correction events, tasks (prompts), goals and goal weeks, trophies, lessons done, retention sweeps, rules versioning.
+crates/store     noactually-store:   SQLite: consent + settings, file checkpoints, daily aggregates, correction events, tasks, goals and goal weeks, trophies, lessons done, retention sweeps, rules versioning.
 crates/cli       noactually-cli:     the `noactually` binary. Same code path as the app.
 app/             noactually-app:     Tauri 2: tray quick-glance, full window, notifications, update checks. Thin shell over the crates.
 ```
@@ -14,7 +14,7 @@ The crate directories keep short import names (`engine`, `sources`, `store`); th
 
 ### One source of truth
 
-Rust owns every table the UI needs. The app asks for them once through the `meta` Tauri command (tiers and their floors, categories and titles, sources and display names), and `Stats` carries the computed `verdict` and a tier id. The TypeScript side formats and draws; it doesn't re-derive tiers, verdicts or labels. The CLI uses the same values.
+Rust owns every table the UI needs. The app asks for them once through the `meta` Tauri command (tiers and their floors, categories and titles, sources and display names), and `Stats` carries the computed `verdict` and a tier id. The TypeScript side formats and draws; it doesn't re-derive tiers, verdicts or labels. The CLI uses the same values. The one exception is the sample-data demo (`pnpm dev`, `app/src/api.demo.ts`): its `judge()` re-derives scores in TypeScript, and a table of score cases shared with the Rust tests checks that it agrees.
 
 ## Data flow
 
@@ -36,7 +36,7 @@ Nothing is read until the user allows it.
 - First launch lists every **detected** source with the exact path it would read and what it reads ("your messages and the AI's replies, to count corrections"). Each is off until the user taps **Allow**.
 - Per source: allow/revoke, backfill window (everything, since a date, or none), pause.
 - **Revoke** stops reading and keeps scores. **Forget** also deletes that source's events, aggregates and checkpoints.
-- Nothing leaves the machine. Share cards render locally. The app's only network use is the update check (see [Updates](#updates)) and opening a share URL the user taps. (With report cards on, Claude Code itself downloads the plugin from GitHub; see [Report cards](#report-cards).) A future global board is a separate opt-in that sends numbers only.
+- Nothing leaves the machine. Share cards render locally. The app's only network use is the update check (see [Updates](#updates)), opening a share URL the user taps and, with report cards on, asking GitHub with `git` whether a new plugin version exists before moving to it. (With report cards on, Claude Code itself downloads the plugin from GitHub; see [Report cards](#report-cards).) [PRIVACY.md](../PRIVACY.md) has the full list. A future global board is a separate opt-in that sends numbers only.
 - macOS may show its own "access data from other apps" prompt for some sources. Declining it only means that source can't be read.
 
 ## Updates
@@ -58,13 +58,17 @@ The `noactually` binary shares the engine and database with the app:
 | `sources` | List sources, where they read from, and whether they're allowed |
 | `allow <source> [--since YYYY-MM-DD \| --from-now]` | Allow a source, optionally limiting the backfill |
 | `revoke <source>` | Stop reading, keep scores |
-| `forget <source> [--yes]` | Stop reading and delete everything from that source. Asks first, and needs `--yes` when nobody can answer |
+| `pause <source>` | Stop reading for now. Keeps consent and scores. Only for an allowed source |
+| `resume <source>` | Start reading again after a pause. Never allows a source |
+| `forget <source> [--yes]` | Stop reading and delete what that source produced (events, scores, checkpoints, pins, report cards, tips). Finished goal weeks and trophies stay, as totals. Asks first, and needs `--yes` when nobody can answer |
 | `import <source> <path>` | Add an export file or folder (`chatgpt-export`, `claude-ai-export`) |
 | `sync` | Read anything new from allowed sources |
 | `stats [--source S] [--provider P] [--family F] [--version V] [--since YYYY-MM-DD] [--json]` | Print the scorecard, optionally from a start date instead of the last 28 days |
 | `stats --report-cards [--source S] [--provider P] [--family F] [--version V] [--since YYYY-MM-DD] [--json]` | Report cards instead of the scorecard, with the same filters (all history unless `--since`): graded tasks and their grades, % A or B, redone work per graded task, extra cost (priced tasks only, with the date the prices were last checked), extra minutes, the habit left out most, and the last 5 cards. `--json` prints one object with a fixed set of keys; a number that can't be worked out is `null` |
 | `check "<prompt>"` | Grade a draft prompt with the same rules as your history. Nothing is saved |
-| `retention <full\|snippet\|category> [--full-days N] [--snippet-days N]` | Set how correction text is kept |
+| `retention <full\|snippet\|category> [--full-days N] [--snippet-days N] [--yes]` | Set how correction text is kept. Asks first when the change would delete text, and needs `--yes` when nobody can answer |
+
+An unknown command prints the help and exits 1 (`--help` exits 0).
 
 `digest --session <id>` (or `--transcript <path>`) and `hook <session-start\|stop\|codex-prompt\|codex-stop>` are hidden helper commands, left out of `--help`: the `grade` plugin and the Codex hooks run them to give the model a chat summary and to say a word after a reply. They print nothing and succeed on any error, and the desktop app runs them from its own executable.
 
@@ -76,12 +80,12 @@ The `noactually` binary shares the engine and database with the app:
 |---|---|---|---|
 | Ordinary messages (not corrections) | Counts only, per day × source × model | Never | Forever (just numbers) |
 | Sessions | Hashed id, source, day range, message and correction counts | Never | Forever |
-| Tasks (prompts) | Day, source, hashed chat id, model, a 5-bit mask of the signals the prompt carried, message and follow-up counts | Never | Forever |
+| Tasks | Day, source, hashed chat id, model, a 5-bit mask of the signals the prompt carried, message and follow-up counts | Never | Forever |
 | Your goal | What it asks for (a signal, a kind of follow-up or a tier), its target percent and start day. Stored as a setting | Never | Until you drop it |
 | Goal weeks, trophies | A goal's finished weeks (count, percent, met/missed/paused), frozen; finished goals. Not score tables: rebuilds and Forget leave them | Never | Forever |
 | Lessons done | The ids of lessons marked done | Never | Forever |
 | Settings and milestones | Retention, update and menu bar choices, and the tiers already announced | Never | Forever |
-| Correction / humbled events | Time, source, model, label, category, matched rule ids | Per retention level | Per TTL |
+| Correction / humbled events | Time, source, model, label, category | Per retention level | Until it steps down (see Retention levels) |
 | Report cards | Day, start and end time, source, hashed chat id, model, letter grade, follow-up counts, which habits were missing (bitmask), tokens, minutes. Not a score table: rebuilds keep it | Never | Until the source is forgotten or the user clears report card history |
 | Tips, chats that got the rules | `tips`: day, time, source, hashed chat id, model, habit (bitmask), `redid` (25 to 100, or 0 for "had to ask"). `tip_chats`: hashed chat id, source, day. Score tables, so a rebuild keeps them in step with tasks | Never | Until the source is forgotten or the history is deleted |
 | File checkpoints | Path, byte offset, size, modified time | Never | Until the source is forgotten |
@@ -113,13 +117,13 @@ The command line has `stats --report-cards` for these numbers, and the helper co
 
 ### Retention levels for correction text
 
-| Level | What's kept | Default TTL, then… |
+| Level | What's kept | Kept for (default), then… |
 |---|---|---|
 | **Full** | Your whole message and the start of the AI's reply (secrets still redacted) | 30 days → Snippet |
 | **Snippet** (default) | The matched sentence from each side, ≤140 chars, redacted (emails, URLs, keys, numbers, home paths) | 365 days → Category |
 | **Category only** | No text at all | Forever |
 
-Levels only ever step down (Full → Snippet → Category), on a sweep after every sync. The user picks the starting level and both TTLs. **Pinning** a correction to the Hall of Fame keeps its text until unpinned.
+Levels only ever step down (Full → Snippet → Category), on a sweep after every sync. The user picks the starting level and both time limits. **Pinning** a correction to the Hall of fame keeps its text until unpinned.
 
 Snippets are cut deterministically from the matched sentence. Summaries would need a model, so they aren't in the scoring path. An optional local-model summary (Ollama / LM Studio) can come later as an explicit opt-in.
 
@@ -187,7 +191,7 @@ Adding a source means implementing the `Source` trait in `crates/sources`: `root
 | `version` | Cargo workspace, `app/package.json` and `tauri.conf.json` versions agree |
 | `ci-ok` | The only required check: fails if any job above failed or was cancelled |
 
-Run the same checks locally with `just ci` (see [CONTRIBUTING.md](../CONTRIBUTING.md)). `.github/workflows/release.yml` builds draft releases from `v*` tags; the macOS build is signed and notarized locally (see Releasing in CONTRIBUTING.md).
+Run most of the same checks locally with `just ci` (see [CONTRIBUTING.md](../CONTRIBUTING.md) for what it leaves out). `.github/workflows/release.yml` builds draft releases from `v*` tags; the macOS build is signed and notarized locally (see Releasing in CONTRIBUTING.md).
 
 ## Speed
 

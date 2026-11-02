@@ -1,7 +1,8 @@
 //! Background tracking: one thread owns syncing. File events and a timer only ever ask it
 //! to sync; the timer is the safety net for anything the OS watcher misses.
 
-use crate::{home_short, lock, milestones, shorten_home_in, App, SyncStatus};
+use crate::logging::{home_short, shorten_home_in};
+use crate::{lock, milestones, App, SyncStatus};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use sources::Kind;
 use std::path::{Path, PathBuf};
@@ -13,6 +14,8 @@ pub enum Msg {
     SyncNow,
     FilesChanged,
     SourcesChanged,
+    /// Ends tracking for good. Sent back on once no pass is running and none will start.
+    Stop(mpsc::Sender<()>),
 }
 
 const SAFETY_NET: Duration = Duration::from_secs(5 * 60);
@@ -191,6 +194,17 @@ fn update_tray(handle: &AppHandle, app: &App) {
 /// What the window shows when a pass panics. The panic itself goes to the log.
 const PANIC_MESSAGE: &str = "Couldn't finish checking your chats. It will try again.";
 
+/// Asks the tracking thread to end and waits up to `wait` for it. A pass can't be cut short, so this
+/// waits for the one running. True once it has stopped. A thread that's already gone counts: it can
+/// never write again. When the wait runs out it still stops after its pass, so asking again is safe.
+pub fn stop(tracker: &mpsc::Sender<Msg>, wait: Duration) -> bool {
+    let (done, stopped) = mpsc::channel();
+    if tracker.send(Msg::Stop(done)).is_err() {
+        return true;
+    }
+    !matches!(stopped.recv_timeout(wait), Err(mpsc::RecvTimeoutError::Timeout))
+}
+
 pub fn spawn(handle: AppHandle, app: Arc<App>, tx: mpsc::Sender<Msg>, rx: mpsc::Receiver<Msg>) {
     std::thread::Builder::new()
         .name("tracker".into())
@@ -226,11 +240,19 @@ pub fn spawn(handle: AppHandle, app: Arc<App>, tx: mpsc::Sender<Msg>, rx: mpsc::
                                     break;
                                 }
                                 Ok(Msg::SyncNow) | Err(mpsc::RecvTimeoutError::Timeout) => break,
+                                Ok(Msg::Stop(done)) => {
+                                    let _ = done.send(());
+                                    return;
+                                }
                                 Err(mpsc::RecvTimeoutError::Disconnected) => return,
                             }
                         }
                     }
                     Ok(Msg::SyncNow) | Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    Ok(Msg::Stop(done)) => {
+                        let _ = done.send(());
+                        break;
+                    }
                     Err(mpsc::RecvTimeoutError::Disconnected) => break,
                 }
                 if sources_changed {
@@ -251,6 +273,31 @@ mod tests {
 
     fn at() -> chrono::DateTime<Utc> {
         Utc.with_ymd_and_hms(2026, 11, 1, 12, 0, 0).unwrap()
+    }
+
+    /// A stand-in for the tracking thread, which answers `Stop` after `pass`.
+    fn tracker_busy_for(pass: Duration) -> mpsc::Sender<Msg> {
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            while let Ok(msg) = rx.recv() {
+                if let Msg::Stop(done) = msg {
+                    std::thread::sleep(pass);
+                    let _ = done.send(());
+                    return;
+                }
+            }
+        });
+        tx
+    }
+
+    #[test]
+    fn stopping_waits_for_the_tracking_thread_and_says_if_it_ran_out_of_time() {
+        assert!(stop(&tracker_busy_for(Duration::ZERO), Duration::from_secs(5)));
+        let busy = tracker_busy_for(Duration::from_millis(300));
+        assert!(!stop(&busy, Duration::from_millis(10)), "a pass still running means not stopped");
+        let (gone, rx) = mpsc::channel();
+        drop(rx);
+        assert!(stop(&gone, Duration::ZERO), "a thread that's gone can't write");
     }
 
     #[test]

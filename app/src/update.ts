@@ -24,8 +24,8 @@ export function updateLine(u: UpdateStatus): string {
 
 /** Under the update banner, once scores were recounted (`stamp` names the rebuild, so a later one shows again). */
 export function rescoredNotice(stamp: string): Html {
-  return html`<div class="update-banner" role="status"><span>We recounted your history with updated rules, so your score may have moved.</span>
-    <button class="small ghost" data-action="dismiss-rescored" data-id="${stamp}">Got it</button></div>`;
+  return html`<div class="update-banner" role="status"><span>This update changed how chats are scored, so we recounted your history and your score may have moved.</span>
+    <button class="small" data-action="open-changelog">See what changed</button><button class="small ghost" data-action="dismiss-rescored" data-id="${stamp}">Got it</button></div>`;
 }
 
 /** The first read of a history finished while the person was somewhere else. */

@@ -486,19 +486,22 @@ fn marketplace_verdict(env: &Env, exe: &Path) -> Verdict {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             log::warn!(
                 "report cards: couldn't find the marketplace file at {}, so it wasn't checked",
-                crate::home_short(&file)
+                crate::logging::home_short(&file)
             );
             return Verdict::Unchecked;
         }
         Err(e) => {
-            log::warn!("report cards: couldn't look at the marketplace file {}: {e}", crate::home_short(&file));
+            log::warn!(
+                "report cards: couldn't look at the marketplace file {}: {e}",
+                crate::logging::home_short(&file)
+            );
             return Verdict::Different;
         }
     };
     if !meta.is_file() || meta.len() > MARKETPLACE_FILE_LIMIT {
         log::warn!(
             "report cards: the downloaded marketplace file {} isn't a small plain file",
-            crate::home_short(&file)
+            crate::logging::home_short(&file)
         );
         return Verdict::Different;
     }
@@ -508,7 +511,7 @@ fn marketplace_verdict(env: &Env, exe: &Path) -> Verdict {
     } else {
         log::warn!(
             "report cards: the downloaded marketplace file {} doesn't list this app's plugin",
-            crate::home_short(&file)
+            crate::logging::home_short(&file)
         );
         Verdict::Different
     }
@@ -545,6 +548,14 @@ pub(super) fn turn_off(env: &Env) -> Res<()> {
     Pending::clear(env);
     forget_problem(env);
     Ok(())
+}
+
+/// What's left when the `claude` command can't be found: nothing unless Claude Code's own files say
+/// the plugin is still there, since only that command can take it out. It does nothing without the app.
+pub(super) fn left_without_command(env: &Env) -> Option<String> {
+    recorded_on(env).then(|| {
+        "Claude Code's files still list the report card plugin, and its command wasn't found. The plugin does nothing without the app. If you use Claude Code again, remove it with /plugin uninstall grade@noactually.".to_string()
+    })
 }
 
 // ---- moving to a new release -------------------------------------------------------------------

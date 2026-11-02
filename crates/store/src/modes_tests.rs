@@ -1,4 +1,4 @@
-//! Tests for the small fixes from the full-repo audit: file modes and the left-out count.
+//! File modes, and the count of report cards left out.
 
 use super::*;
 

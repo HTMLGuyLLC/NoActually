@@ -16,7 +16,6 @@ pub use helper::{QUIET_FILE, TIPS_FILE, TIPS_OFF_FILE};
 
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{Local, NaiveDate};
-use engine::Answer;
 use std::ffi::OsString;
 use std::io::{BufRead, IsTerminal, Write};
 use std::path::PathBuf;
@@ -31,7 +30,8 @@ USAGE
   noactually pause <source>              Stop reading for now (keeps consent and scores)
   noactually resume <source>             Start reading again after a pause (never allows a source)
   noactually revoke <source>             Stop reading (keeps scores)
-  noactually forget <source> [--yes]     Stop reading and delete everything from it. Asks first; --yes skips the question
+  noactually forget <source> [--yes]     Stop reading and delete what it produced. Finished goal weeks
+                                         and trophies stay, as totals. Asks first; --yes skips the question
   noactually import <source> <path>      Import an export file or folder (chatgpt-export, claude-ai-export)
   noactually sync [--json]               Read anything new from allowed sources. Exits 1 if any file was skipped
   noactually stats [filters] [--json]    Scorecard. Filters: --source --provider --family --version --since
@@ -39,18 +39,25 @@ USAGE
                                          Report cards instead: graded tasks, % A or B, extra rounds, cost and minutes,
                                          the habit left out most, and the last 5 cards. Same filters
   noactually check <prompt> [--json]     What a draft prompt includes, graded like your history (nothing is saved)
-  noactually retention <full|snippet|category> [--full-days N] [--snippet-days N]
+  noactually retention <full|snippet|category> [--full-days N] [--snippet-days N] [--yes]
+                                         Keeping less deletes older text. Asks first; --yes skips the question
 
   noactually --help | --version          This text, or the version. `<command> --help` prints this text too
 
 Data lives in NOACTUALLY_DB, or app.noactually/noactually.db in your app data folder (shared with the desktop app).
 Nothing is read until you allow a source. Nothing leaves this machine.";
 
-/// One parsed command line.
+/// What a command line asks for.
 #[derive(Debug, PartialEq)]
-enum Command {
+enum Parsed {
     Help,
     Version,
+    Run(Command),
+}
+
+/// A command that does something.
+#[derive(Debug, PartialEq)]
+enum Command {
     Sources { json: bool },
     Allow { id: String, since: Option<NaiveDate>, from_now: bool },
     Pause { id: String },
@@ -61,7 +68,7 @@ enum Command {
     Sync { json: bool },
     Stats { filter: Filter, json: bool, report_cards: bool },
     Check { text: String, json: bool },
-    Retention { level: Level, full_days: Option<u32>, snippet_days: Option<u32> },
+    Retention { level: Level, full_days: Option<u32>, snippet_days: Option<u32>, yes: bool },
 }
 
 /// The arguments after the command, split into positionals and `--flag [value]` pairs.
@@ -116,18 +123,18 @@ fn no_positional(a: Args<'_>) -> Result<Args<'_>> {
 }
 
 /// Parses the arguments after the program name.
-fn parse_args(args: &[String]) -> Result<Command> {
-    let Some((cmd, rest)) = args.split_first() else { return Ok(Command::Help) };
+fn parse_args(args: &[String]) -> Result<Parsed> {
+    let Some((cmd, rest)) = args.split_first() else { return Ok(Parsed::Help) };
     // Asking for help must never run anything. `check` takes the whole rest as its prompt, so only
     // its first word can ask.
     let asks_help = |a: &String| a == "--help" || a == "-h";
     if matches!(cmd.as_str(), "--help" | "-h" | "help") || (cmd.as_str() != "check" && rest.iter().any(asks_help)) {
-        return Ok(Command::Help);
+        return Ok(Parsed::Help);
     }
     if matches!(cmd.as_str(), "--version" | "-V" | "version") {
-        return Ok(Command::Version);
+        return Ok(Parsed::Version);
     }
-    Ok(match cmd.as_str() {
+    Ok(Parsed::Run(match cmd.as_str() {
         "sources" => Command::Sources { json: no_positional(Args::split(rest, &[], &["--json"])?)?.has("--json") },
         "sync" => Command::Sync { json: no_positional(Args::split(rest, &[], &["--json"])?)?.has("--json") },
         "allow" => {
@@ -175,15 +182,16 @@ fn parse_args(args: &[String]) -> Result<Command> {
         "check" if !rest.is_empty() => Command::Check { text: rest.join(" "), json: false },
         "check" => bail!("missing prompt: noactually check \"Fix the crash in checkout.ts…\""),
         "retention" => {
-            let a = Args::split(rest, &["--full-days", "--snippet-days"], &[])?;
+            let a = Args::split(rest, &["--full-days", "--snippet-days"], &["--yes", "-y"])?;
             Command::Retention {
                 level: a.arg(0, "level")?.parse()?,
                 full_days: a.number("--full-days")?,
                 snippet_days: a.number("--snippet-days")?,
+                yes: a.has("--yes") || a.has("-y"),
             }
         }
-        _ => Command::Help,
-    })
+        other => bail!("unknown command '{other}'\n\n{HELP}"),
+    }))
 }
 
 /// The helper command in `args` (everything after the program name), as text, or `None` when the
@@ -234,15 +242,17 @@ pub fn run(args: impl IntoIterator<Item = String>) -> ExitCode {
 
 /// Parses and runs `args`. `Ok(false)` means it ran but only in part.
 fn command(args: &[String]) -> Result<bool> {
-    let cmd = parse_args(args)?;
-    if cmd == Command::Help {
-        println!("{HELP}");
-        return Ok(true);
-    }
-    if cmd == Command::Version {
-        println!("noactually {}", env!("CARGO_PKG_VERSION"));
-        return Ok(true);
-    }
+    let cmd = match parse_args(args)? {
+        Parsed::Help => {
+            println!("{HELP}");
+            return Ok(true);
+        }
+        Parsed::Version => {
+            println!("noactually {}", env!("CARGO_PKG_VERSION"));
+            return Ok(true);
+        }
+        Parsed::Run(cmd) => cmd,
+    };
     if store::legacy_db_env_in_use() {
         eprintln!("note: {} is deprecated; set {} instead.", store::LEGACY_DB_ENV, store::DB_ENV);
     }
@@ -259,20 +269,55 @@ fn forget(store: &mut Store, all: &[Box<dyn sources::Source>], id: &str, yes: bo
         return Ok(());
     }
     store.forget(id)?;
-    println!("Deleted everything from that source.");
+    println!("Deleted what this source produced. Finished goal weeks and trophies stay, as totals.");
     Ok(())
 }
 
-/// True when the person agreed to delete everything from `id`: `--yes`, or a "y" at the prompt.
-/// With neither (input isn't a terminal and no `--yes`) it refuses rather than guess.
+/// Saves new retention settings. Keeping less deletes older text for good, so that needs a yes.
+fn set_retention(store: &Store, r: Retention, yes: bool) -> Result<()> {
+    r.validate()?;
+    let trims = r.keeps_less_than(&store.retention()?);
+    if trims {
+        let stdin = std::io::stdin();
+        if !confirm_retention(yes, stdin.is_terminal(), &mut stdin.lock())? {
+            println!("Cancelled. Nothing was changed.");
+            return Ok(());
+        }
+    }
+    store.set_retention(r)?;
+    println!("Keeping {:?} text; full text {} days, snippets {} days.", r.level, r.full_days, r.snippet_days);
+    if trims {
+        println!("Deleted any older text past these limits. Pinned corrections keep theirs.");
+    }
+    Ok(())
+}
+
+/// True when the person agreed to delete what `id` produced.
 fn confirm_forget(id: &str, yes: bool, interactive: bool, input: &mut impl BufRead) -> Result<bool> {
+    let question = format!(
+        "Delete what {id} produced, including its scores? Finished goal weeks and trophies stay, as totals. \
+         This can't be undone."
+    );
+    confirm(&question, &format!("delete what {id} produced"), yes, interactive, input)
+}
+
+/// True when the person agreed to delete older text.
+fn confirm_retention(yes: bool, interactive: bool, input: &mut impl BufRead) -> Result<bool> {
+    let question = "Keep less text? Older text past the new limits is deleted, except on pinned corrections. \
+                    This can't be undone.";
+    confirm(question, "delete older text", yes, interactive, input)
+}
+
+/// True on `--yes`, or a "y" at the prompt. With neither (input isn't a terminal and no `--yes`) it
+/// refuses to `what` rather than guess.
+fn confirm(question: &str, what: &str, yes: bool, interactive: bool, input: &mut impl BufRead) -> Result<bool> {
     if yes {
         return Ok(true);
     }
     if !interactive {
-        bail!("refusing to delete everything from {id} without confirmation. Run it in a terminal, or add --yes.");
+        bail!("refusing to {what} without confirmation. Run it in a terminal, or add --yes.");
     }
-    eprint!("Delete everything from {id}, including its scores? This can't be undone. [y/N] ");
+    eprint!("{question} [y/N] ");
     let _ = std::io::stderr().flush();
     let mut line = String::new();
     input.read_line(&mut line).context("couldn't read your answer")?;
@@ -283,8 +328,6 @@ fn confirm_forget(id: &str, yes: bool, interactive: bool, input: &mut impl BufRe
 fn execute(cmd: Command, store: &mut Store, all: &[Box<dyn sources::Source>]) -> Result<bool> {
     let mut complete = true;
     match cmd {
-        Command::Help => println!("{HELP}"),
-        Command::Version => println!("noactually {}", env!("CARGO_PKG_VERSION")),
         Command::Sources { json } => print_sources(store, all, json)?,
         Command::Allow { id, since, from_now } => {
             let src = known(all, &id)?;
@@ -364,15 +407,14 @@ fn execute(cmd: Command, store: &mut Store, all: &[Box<dyn sources::Source>]) ->
                 }
             }
         }
-        Command::Retention { level, full_days, snippet_days } => {
+        Command::Retention { level, full_days, snippet_days, yes } => {
             let old = store.retention()?;
             let r = Retention {
                 level,
                 full_days: full_days.unwrap_or(old.full_days),
                 snippet_days: snippet_days.unwrap_or(old.snippet_days),
             };
-            store.set_retention(r)?;
-            println!("Keeping {:?} text; full text {} days, snippets {} days.", r.level, r.full_days, r.snippet_days);
+            set_retention(store, r, yes)?;
         }
     }
     Ok(complete)
@@ -451,7 +493,7 @@ fn print_card(s: &store::Stats, since: Option<NaiveDate>) {
     for line in overall_lines(&s.overall, &window) {
         println!("{line}");
     }
-    println!("  All time        you corrected it {} · it corrected you {}", s.corrections, s.humbled);
+    println!("{}", totals_line(s.corrections, s.humbled, since));
     println!(
         "  Messages        {}  ({} to {})",
         s.messages,
@@ -482,17 +524,20 @@ fn print_card(s: &store::Stats, since: Option<NaiveDate>) {
     }
 }
 
+/// Who corrected whom across all the stats cover: all time, or from `--since`.
+fn totals_line(corrections: i64, humbled: i64, since: Option<NaiveDate>) -> String {
+    let span = since.map_or("All time".to_string(), |d| window_label(Some(d)));
+    format!("  {span:<15} you corrected it {corrections} · it corrected you {humbled}")
+}
+
 /// The span the score looks at: from `--since` when given, else the last [`engine::WINDOW_DAYS`] days.
 fn window_label(since: Option<NaiveDate>) -> String {
-    since.map_or_else(|| format!("in {} days", engine::WINDOW_DAYS), |d| format!("since {d}"))
+    since.map_or_else(|| format!("in the last {} days", engine::WINDOW_DAYS), |d| format!("since {d}"))
 }
 
 /// "Could AI replace you?": the overall score and what it's made of, over `window`.
 fn overall_lines(o: &store::Overall, window: &str) -> Vec<String> {
-    let verdict = match o.verdict {
-        Answer::No => "No.",
-        Answer::Hmm => "Hmm.",
-    };
+    let verdict = o.verdict.label();
     match (o.score, o.tier, o.direction, o.judgment) {
         (Some(score), Some(tier), Some(direction), Some(judgment)) => vec![
             format!(
@@ -513,7 +558,7 @@ fn overall_lines(o: &store::Overall, window: &str) -> Vec<String> {
             ),
         ],
         _ => vec![format!(
-            "Could AI replace you? {verdict} Not scored yet: {} more tasks with a follow-up {window}.\n",
+            "Could AI replace you? {verdict} Not scored yet. Give it {} more tasks with more than one message {window}.\n",
             o.to_rank
         )],
     }
@@ -565,13 +610,13 @@ fn prompt_lines(p: &store::Prompts, window: &str) -> Vec<String> {
             t.name(),
             p.next_tier.map_or(String::new(), |n| format!("; {} at {}%", n.name(), n.floor()))
         ),
-        None => format!("Hmm. {} more tasks with a follow-up to get ranked", p.to_rank),
+        None => format!("Hmm. Give it {} more tasks with more than one message to get ranked", p.to_rank),
     };
     let mut out = vec![
         String::new(),
         format!("Do you make it guess? {tier}"),
         format!(
-            "  Clear first time {}% of {} prompts with a follow-up needed no adding, clarifying or redoing",
+            "  Clear first time {}% of {} tasks with more than one message needed no adding, clarifying or redoing",
             pct(p.landed, p.continued),
             p.continued
         ),
@@ -597,10 +642,18 @@ fn prompt_lines(p: &store::Prompts, window: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use engine::Answer;
 
-    fn parse(line: &str) -> Result<Command> {
+    fn parsed(line: &str) -> Result<Parsed> {
         let args: Vec<String> = line.split_whitespace().map(String::from).collect();
         parse_args(&args)
+    }
+
+    fn parse(line: &str) -> Result<Command> {
+        parsed(line).map(|p| match p {
+            Parsed::Run(cmd) => cmd,
+            other => panic!("{line}: {other:?}"),
+        })
     }
 
     fn err(line: &str) -> String {
@@ -609,8 +662,8 @@ mod tests {
 
     #[test]
     fn commands_and_flags() {
-        assert_eq!(parse("").unwrap(), Command::Help);
-        assert_eq!(parse("frobnicate").unwrap(), Command::Help);
+        assert_eq!(parsed("").unwrap(), Parsed::Help, "bare `noactually` is help");
+        assert!(err("frobnicate").starts_with("unknown command 'frobnicate'"));
         assert_eq!(parse("sync").unwrap(), Command::Sync { json: false });
         assert_eq!(parse("sync --json").unwrap(), Command::Sync { json: true });
         assert_eq!(parse("sources --json").unwrap(), Command::Sources { json: true });
@@ -647,7 +700,11 @@ mod tests {
         assert_eq!((filter.source.as_deref(), json, report_cards), (Some("codex"), false, true));
         assert_eq!(
             parse("retention full --snippet-days 90").unwrap(),
-            Command::Retention { level: Level::Full, full_days: None, snippet_days: Some(90) }
+            Command::Retention { level: Level::Full, full_days: None, snippet_days: Some(90), yes: false }
+        );
+        assert_eq!(
+            parse("retention category -y").unwrap(),
+            Command::Retention { level: Level::Category, full_days: None, snippet_days: None, yes: true }
         );
     }
 
@@ -686,10 +743,10 @@ mod tests {
         for line in
             ["--help", "-h", "help", "sync --help", "sync -h", "sync --json --help", "forget codex --help", "stats -h"]
         {
-            assert_eq!(parse(line).unwrap(), Command::Help, "{line}");
+            assert_eq!(parsed(line).unwrap(), Parsed::Help, "{line}");
         }
         for line in ["--version", "-V", "version"] {
-            assert_eq!(parse(line).unwrap(), Command::Version, "{line}");
+            assert_eq!(parsed(line).unwrap(), Parsed::Version, "{line}");
         }
         assert_eq!(
             parse("check --help me").unwrap(),
@@ -713,7 +770,41 @@ mod tests {
         assert!(!ask(false, true, "\n").unwrap(), "enter alone is no");
         assert!(!ask(false, true, "").unwrap(), "closed input is no");
         let e = ask(false, false, "y\n").unwrap_err().to_string();
+        assert!(e.starts_with("refusing to delete what codex produced"), "{e}");
         assert!(e.contains("--yes"), "{e}");
+    }
+
+    #[test]
+    fn retention_that_keeps_less_needs_a_yes() {
+        let ask = |yes, tty, typed: &str| confirm_retention(yes, tty, &mut typed.as_bytes());
+        assert!(ask(true, false, "").unwrap(), "--yes needs no terminal");
+        assert!(ask(false, true, "y\n").unwrap());
+        assert!(!ask(false, true, "\n").unwrap(), "enter alone is no");
+        let e = ask(false, false, "y\n").unwrap_err().to_string();
+        assert!(e.starts_with("refusing to delete older text"), "{e}");
+        assert!(e.contains("--yes"), "{e}");
+
+        let mut s = Store::open_in_memory().unwrap();
+        let all = sources::all();
+        let run = |s: &mut Store, level, full_days, yes| {
+            execute(Command::Retention { level, full_days, snippet_days: None, yes }, s, &all)
+        };
+        // The test's stdin isn't a terminal, so without --yes anything that keeps less is refused.
+        let refused = run(&mut s, Level::Category, None, false).unwrap_err();
+        assert!(refused.to_string().contains("--yes"), "{refused}");
+        assert_eq!(s.retention().unwrap(), Retention::default(), "nothing changed");
+        run(&mut s, Level::Full, Some(60), false).unwrap();
+        assert_eq!(s.retention().unwrap().level, Level::Full, "keeping more deletes nothing, so it just saves");
+        assert!(run(&mut s, Level::Full, Some(7), false).is_err(), "fewer days keep less too");
+        run(&mut s, Level::Category, None, true).unwrap();
+        assert_eq!(s.retention().unwrap().level, Level::Category, "--yes saves it");
+    }
+
+    #[test]
+    fn the_totals_line_names_its_span() {
+        assert_eq!(totals_line(7, 2, None), "  All time        you corrected it 7 · it corrected you 2");
+        let since = "2026-09-01".parse().unwrap();
+        assert_eq!(totals_line(7, 2, Some(since)), "  since 2026-09-01 you corrected it 7 · it corrected you 2");
     }
 
     #[test]
@@ -762,15 +853,16 @@ mod tests {
         };
         let text = overall_lines(&o, &window_label(None)).join("\n");
         assert!(text.starts_with("Could AI replace you? No. Sharp-eyed · score 86  (Irreplaceable at 90)"), "{text}");
-        assert!(text.contains("you 41 · it 2 in 28 days → 95, Hawk-eyed (30% of the score)"), "{text}");
+        assert!(text.contains("you 41 · it 2 in the last 28 days → 95, Hawk-eyed (30% of the score)"), "{text}");
         let unranked = store::Overall { score: None, tier: None, verdict: Answer::Hmm, to_rank: 4, ..o };
-        assert!(overall_lines(&unranked, &window_label(None))[0].contains("Not scored yet: 4 more tasks"));
+        assert!(overall_lines(&unranked, &window_label(None))[0]
+            .contains("Not scored yet. Give it 4 more tasks with more than one message in the last 28 days."));
         let since = window_label(Some("2026-09-01".parse().unwrap()));
         let text = overall_lines(&o, &since).join("\n");
         assert!(text.contains("83% clear the first time since 2026-09-01"), "{text}");
         assert!(text.contains("you 41 · it 2 since 2026-09-01 →"), "{text}");
         assert!(!text.contains("28 days"), "{text}");
-        assert!(overall_lines(&unranked, &since)[0].contains("with a follow-up since 2026-09-01"));
+        assert!(overall_lines(&unranked, &since)[0].contains("with more than one message since 2026-09-01"));
     }
 
     #[test]
@@ -801,8 +893,11 @@ mod tests {
         b.signals.insert("why".into(), 5);
         b.steering.insert("added".into(), 1);
         let text = prompt_lines(&b, &window_label(None)).join("\n");
-        assert!(text.contains("Do you make it guess? Hmm. 2 more tasks with a follow-up to get ranked"), "{text}");
-        assert!(text.contains("Clear first time 75% of 8 prompts with a follow-up"), "{text}");
+        assert!(
+            text.contains("Do you make it guess? Hmm. Give it 2 more tasks with more than one message to get ranked"),
+            "{text}"
+        );
+        assert!(text.contains("Clear first time 75% of 8 tasks with more than one message"), "{text}");
         assert!(text.contains("Specific prompts 30%"), "{text}");
         assert!(text.contains("Purpose               50%"), "{text}");
         assert!(text.contains("You added more       1"), "{text}");
@@ -810,7 +905,7 @@ mod tests {
         b.next_tier = Some(engine::PromptTier::Architect);
         (b.window_tasks, b.window_landed) = (40, 34);
         assert!(prompt_lines(&b, &window_label(None))[1]
-            .ends_with("Sometimes. Tech lead  (85% clear the first time in 28 days; Architect at 90%)"));
+            .ends_with("Sometimes. Tech lead  (85% clear the first time in the last 28 days; Architect at 90%)"));
         let since = window_label(Some("2026-09-01".parse().unwrap()));
         assert!(prompt_lines(&b, &since)[1]
             .ends_with("Sometimes. Tech lead  (85% clear the first time since 2026-09-01; Architect at 90%)"));
@@ -824,8 +919,8 @@ mod tests {
         assert_eq!(unknown.to_string(), "unknown source 'nope'. Run `noactually sources` to see them.");
         execute(Command::Allow { id: "codex".into(), since: None, from_now: false }, &mut s, &all).unwrap();
         assert!(s.source_state("codex").unwrap().unwrap().allowed);
-        let zero = Command::Retention { level: Level::Full, full_days: Some(0), snippet_days: None };
-        assert!(execute(zero, &mut s, &all).is_err());
+        let zero = Command::Retention { level: Level::Full, full_days: Some(0), snippet_days: None, yes: false };
+        assert_eq!(execute(zero, &mut s, &all).unwrap_err().to_string(), "Keep text for at least 1 day.");
         assert_eq!(s.retention().unwrap(), Retention::default());
 
         let dir = tempfile::tempdir().unwrap();

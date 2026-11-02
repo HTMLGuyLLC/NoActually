@@ -1,0 +1,862 @@
+{
+  "cases": [
+    {
+      "name": "an empty window is not scored",
+      "window": {
+        "continued": 0,
+        "landed": 0,
+        "corrections": 0,
+        "humbled": 0,
+        "days": 28
+      },
+      "expected": {
+        "score": null,
+        "direction": null,
+        "judgment": null,
+        "tier": null,
+        "next_tier": null,
+        "verdict": "hmm",
+        "verdict_label": "Hmm.",
+        "correction_tier": null,
+        "next_correction_tier": null,
+        "to_rank": 10
+      }
+    },
+    {
+      "name": "one task short of ranked",
+      "window": {
+        "continued": 9,
+        "landed": 9,
+        "corrections": 50,
+        "humbled": 0,
+        "days": 28
+      },
+      "expected": {
+        "score": null,
+        "direction": null,
+        "judgment": null,
+        "tier": null,
+        "next_tier": null,
+        "verdict": "hmm",
+        "verdict_label": "Hmm.",
+        "correction_tier": null,
+        "next_correction_tier": null,
+        "to_rank": 1
+      }
+    },
+    {
+      "name": "fewest tasks that rank",
+      "window": {
+        "continued": 10,
+        "landed": 5,
+        "corrections": 3,
+        "humbled": 0,
+        "days": 28
+      },
+      "expected": {
+        "score": 65,
+        "direction": 50,
+        "judgment": 100,
+        "tier": "coworker",
+        "next_tier": "sharp_eyed",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "hawk_eyed",
+        "next_correction_tier": null,
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "a thin month counts humbled against 30 tasks",
+      "window": {
+        "continued": 10,
+        "landed": 10,
+        "corrections": 3,
+        "humbled": 2,
+        "days": 28
+      },
+      "expected": {
+        "score": 90,
+        "direction": 100,
+        "judgment": 66,
+        "tier": "irreplaceable",
+        "next_tier": null,
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "spot_checker",
+        "next_correction_tier": "reviewer",
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "no corrections leaves no judgment",
+      "window": {
+        "continued": 50,
+        "landed": 50,
+        "corrections": 0,
+        "humbled": 0,
+        "days": 28
+      },
+      "expected": {
+        "score": 70,
+        "direction": 100,
+        "judgment": 0,
+        "tier": "coworker",
+        "next_tier": "sharp_eyed",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "autopilot",
+        "next_correction_tier": "spot_checker",
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "nothing landed and nothing checked",
+      "window": {
+        "continued": 100,
+        "landed": 0,
+        "corrections": 0,
+        "humbled": 0,
+        "days": 28
+      },
+      "expected": {
+        "score": 0,
+        "direction": 0,
+        "judgment": 0,
+        "tier": "rubber_stamp",
+        "next_tier": "coworker",
+        "verdict": "hmm",
+        "verdict_label": "Hmm.",
+        "correction_tier": "autopilot",
+        "next_correction_tier": "spot_checker",
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "low score, one correction",
+      "window": {
+        "continued": 100,
+        "landed": 50,
+        "corrections": 1,
+        "humbled": 0,
+        "days": 28
+      },
+      "expected": {
+        "score": 44,
+        "direction": 50,
+        "judgment": 33,
+        "tier": "rubber_stamp",
+        "next_tier": "coworker",
+        "verdict": "hmm",
+        "verdict_label": "Hmm.",
+        "correction_tier": "autopilot",
+        "next_correction_tier": "spot_checker",
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "score 64, just under Coworker",
+      "window": {
+        "continued": 100,
+        "landed": 49,
+        "corrections": 3,
+        "humbled": 0,
+        "days": 28
+      },
+      "expected": {
+        "score": 64,
+        "direction": 49,
+        "judgment": 100,
+        "tier": "rubber_stamp",
+        "next_tier": "coworker",
+        "verdict": "hmm",
+        "verdict_label": "Hmm.",
+        "correction_tier": "hawk_eyed",
+        "next_correction_tier": null,
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "score 65, Coworker floor",
+      "window": {
+        "continued": 100,
+        "landed": 50,
+        "corrections": 3,
+        "humbled": 0,
+        "days": 28
+      },
+      "expected": {
+        "score": 65,
+        "direction": 50,
+        "judgment": 100,
+        "tier": "coworker",
+        "next_tier": "sharp_eyed",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "hawk_eyed",
+        "next_correction_tier": null,
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "score 79, just under Sharp-eyed",
+      "window": {
+        "continued": 100,
+        "landed": 71,
+        "corrections": 3,
+        "humbled": 0,
+        "days": 28
+      },
+      "expected": {
+        "score": 79,
+        "direction": 71,
+        "judgment": 100,
+        "tier": "coworker",
+        "next_tier": "sharp_eyed",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "hawk_eyed",
+        "next_correction_tier": null,
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "score 80, Sharp-eyed floor",
+      "window": {
+        "continued": 100,
+        "landed": 72,
+        "corrections": 3,
+        "humbled": 0,
+        "days": 28
+      },
+      "expected": {
+        "score": 80,
+        "direction": 72,
+        "judgment": 100,
+        "tier": "sharp_eyed",
+        "next_tier": "irreplaceable",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "hawk_eyed",
+        "next_correction_tier": null,
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "score 89, just under Irreplaceable",
+      "window": {
+        "continued": 100,
+        "landed": 85,
+        "corrections": 3,
+        "humbled": 0,
+        "days": 28
+      },
+      "expected": {
+        "score": 89,
+        "direction": 85,
+        "judgment": 100,
+        "tier": "sharp_eyed",
+        "next_tier": "irreplaceable",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "hawk_eyed",
+        "next_correction_tier": null,
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "score 90, Irreplaceable floor",
+      "window": {
+        "continued": 100,
+        "landed": 86,
+        "corrections": 3,
+        "humbled": 0,
+        "days": 28
+      },
+      "expected": {
+        "score": 90,
+        "direction": 86,
+        "judgment": 100,
+        "tier": "irreplaceable",
+        "next_tier": null,
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "hawk_eyed",
+        "next_correction_tier": null,
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "a perfect window",
+      "window": {
+        "continued": 100,
+        "landed": 100,
+        "corrections": 3,
+        "humbled": 0,
+        "days": 28
+      },
+      "expected": {
+        "score": 100,
+        "direction": 100,
+        "judgment": 100,
+        "tier": "irreplaceable",
+        "next_tier": null,
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "hawk_eyed",
+        "next_correction_tier": null,
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "the author's month",
+      "window": {
+        "continued": 150,
+        "landed": 125,
+        "corrections": 41,
+        "humbled": 2,
+        "days": 28
+      },
+      "expected": {
+        "score": 86,
+        "direction": 83,
+        "judgment": 93,
+        "tier": "sharp_eyed",
+        "next_tier": "irreplaceable",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "hawk_eyed",
+        "next_correction_tier": null,
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "many corrections add nothing past the proof",
+      "window": {
+        "continued": 100,
+        "landed": 85,
+        "corrections": 40,
+        "humbled": 1,
+        "days": 28
+      },
+      "expected": {
+        "score": 88,
+        "direction": 85,
+        "judgment": 95,
+        "tier": "sharp_eyed",
+        "next_tier": "irreplaceable",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "hawk_eyed",
+        "next_correction_tier": null,
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "one of three corrections",
+      "window": {
+        "continued": 100,
+        "landed": 85,
+        "corrections": 1,
+        "humbled": 0,
+        "days": 28
+      },
+      "expected": {
+        "score": 69,
+        "direction": 85,
+        "judgment": 33,
+        "tier": "coworker",
+        "next_tier": "sharp_eyed",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "autopilot",
+        "next_correction_tier": "spot_checker",
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "two of three corrections",
+      "window": {
+        "continued": 100,
+        "landed": 85,
+        "corrections": 2,
+        "humbled": 0,
+        "days": 28
+      },
+      "expected": {
+        "score": 79,
+        "direction": 85,
+        "judgment": 66,
+        "tier": "coworker",
+        "next_tier": "sharp_eyed",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "spot_checker",
+        "next_correction_tier": "reviewer",
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "judgment 95, one humbled in 100",
+      "window": {
+        "continued": 100,
+        "landed": 85,
+        "corrections": 3,
+        "humbled": 1,
+        "days": 28
+      },
+      "expected": {
+        "score": 88,
+        "direction": 85,
+        "judgment": 95,
+        "tier": "sharp_eyed",
+        "next_tier": "irreplaceable",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "hawk_eyed",
+        "next_correction_tier": null,
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "judgment 90, Hawk-eyed floor",
+      "window": {
+        "continued": 100,
+        "landed": 85,
+        "corrections": 3,
+        "humbled": 2,
+        "days": 28
+      },
+      "expected": {
+        "score": 86,
+        "direction": 85,
+        "judgment": 90,
+        "tier": "sharp_eyed",
+        "next_tier": "irreplaceable",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "hawk_eyed",
+        "next_correction_tier": null,
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "judgment 85, Reviewer",
+      "window": {
+        "continued": 100,
+        "landed": 85,
+        "corrections": 3,
+        "humbled": 3,
+        "days": 28
+      },
+      "expected": {
+        "score": 85,
+        "direction": 85,
+        "judgment": 85,
+        "tier": "sharp_eyed",
+        "next_tier": "irreplaceable",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "reviewer",
+        "next_correction_tier": "hawk_eyed",
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "judgment 75, Reviewer floor",
+      "window": {
+        "continued": 100,
+        "landed": 85,
+        "corrections": 3,
+        "humbled": 5,
+        "days": 28
+      },
+      "expected": {
+        "score": 82,
+        "direction": 85,
+        "judgment": 75,
+        "tier": "sharp_eyed",
+        "next_tier": "irreplaceable",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "reviewer",
+        "next_correction_tier": "hawk_eyed",
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "judgment 70, Spot-checker",
+      "window": {
+        "continued": 100,
+        "landed": 85,
+        "corrections": 3,
+        "humbled": 6,
+        "days": 28
+      },
+      "expected": {
+        "score": 80,
+        "direction": 85,
+        "judgment": 70,
+        "tier": "sharp_eyed",
+        "next_tier": "irreplaceable",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "spot_checker",
+        "next_correction_tier": "reviewer",
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "judgment 50, Spot-checker floor",
+      "window": {
+        "continued": 100,
+        "landed": 85,
+        "corrections": 3,
+        "humbled": 10,
+        "days": 28
+      },
+      "expected": {
+        "score": 74,
+        "direction": 85,
+        "judgment": 50,
+        "tier": "coworker",
+        "next_tier": "sharp_eyed",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "spot_checker",
+        "next_correction_tier": "reviewer",
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "judgment 45, Autopilot",
+      "window": {
+        "continued": 100,
+        "landed": 85,
+        "corrections": 3,
+        "humbled": 11,
+        "days": 28
+      },
+      "expected": {
+        "score": 73,
+        "direction": 85,
+        "judgment": 45,
+        "tier": "coworker",
+        "next_tier": "sharp_eyed",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "autopilot",
+        "next_correction_tier": "spot_checker",
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "judgment 0, humbled on a fifth of tasks",
+      "window": {
+        "continued": 100,
+        "landed": 85,
+        "corrections": 3,
+        "humbled": 20,
+        "days": 28
+      },
+      "expected": {
+        "score": 59,
+        "direction": 85,
+        "judgment": 0,
+        "tier": "rubber_stamp",
+        "next_tier": "coworker",
+        "verdict": "hmm",
+        "verdict_label": "Hmm.",
+        "correction_tier": "autopilot",
+        "next_correction_tier": "spot_checker",
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "judgment stays at 0 past a fifth",
+      "window": {
+        "continued": 100,
+        "landed": 85,
+        "corrections": 3,
+        "humbled": 25,
+        "days": 28
+      },
+      "expected": {
+        "score": 59,
+        "direction": 85,
+        "judgment": 0,
+        "tier": "rubber_stamp",
+        "next_tier": "coworker",
+        "verdict": "hmm",
+        "verdict_label": "Hmm.",
+        "correction_tier": "autopilot",
+        "next_correction_tier": "spot_checker",
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "landed past continued is clamped",
+      "window": {
+        "continued": 10,
+        "landed": 99,
+        "corrections": 3,
+        "humbled": 0,
+        "days": 28
+      },
+      "expected": {
+        "score": 100,
+        "direction": 100,
+        "judgment": 100,
+        "tier": "irreplaceable",
+        "next_tier": null,
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "hawk_eyed",
+        "next_correction_tier": null,
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "negative humbled counts as none",
+      "window": {
+        "continued": 50,
+        "landed": 40,
+        "corrections": 3,
+        "humbled": -1,
+        "days": 28
+      },
+      "expected": {
+        "score": 86,
+        "direction": 80,
+        "judgment": 100,
+        "tier": "sharp_eyed",
+        "next_tier": "irreplaceable",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "hawk_eyed",
+        "next_correction_tier": null,
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "negative corrections count as none",
+      "window": {
+        "continued": 50,
+        "landed": 40,
+        "corrections": -1,
+        "humbled": 0,
+        "days": 28
+      },
+      "expected": {
+        "score": 56,
+        "direction": 80,
+        "judgment": 0,
+        "tier": "rubber_stamp",
+        "next_tier": "coworker",
+        "verdict": "hmm",
+        "verdict_label": "Hmm.",
+        "correction_tier": "autopilot",
+        "next_correction_tier": "spot_checker",
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "a week needs one correction",
+      "window": {
+        "continued": 20,
+        "landed": 16,
+        "corrections": 1,
+        "humbled": 0,
+        "days": 7
+      },
+      "expected": {
+        "score": 86,
+        "direction": 80,
+        "judgment": 100,
+        "tier": "sharp_eyed",
+        "next_tier": "irreplaceable",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "hawk_eyed",
+        "next_correction_tier": null,
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "ten days need two corrections",
+      "window": {
+        "continued": 20,
+        "landed": 16,
+        "corrections": 1,
+        "humbled": 0,
+        "days": 10
+      },
+      "expected": {
+        "score": 71,
+        "direction": 80,
+        "judgment": 50,
+        "tier": "coworker",
+        "next_tier": "sharp_eyed",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "spot_checker",
+        "next_correction_tier": "reviewer",
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "nineteen days need all three",
+      "window": {
+        "continued": 20,
+        "landed": 16,
+        "corrections": 2,
+        "humbled": 0,
+        "days": 19
+      },
+      "expected": {
+        "score": 75,
+        "direction": 80,
+        "judgment": 66,
+        "tier": "coworker",
+        "next_tier": "sharp_eyed",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "spot_checker",
+        "next_correction_tier": "reviewer",
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "one day",
+      "window": {
+        "continued": 10,
+        "landed": 8,
+        "corrections": 1,
+        "humbled": 0,
+        "days": 1
+      },
+      "expected": {
+        "score": 86,
+        "direction": 80,
+        "judgment": 100,
+        "tier": "sharp_eyed",
+        "next_tier": "irreplaceable",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "hawk_eyed",
+        "next_correction_tier": null,
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "zero days still need one",
+      "window": {
+        "continued": 10,
+        "landed": 8,
+        "corrections": 1,
+        "humbled": 0,
+        "days": 0
+      },
+      "expected": {
+        "score": 86,
+        "direction": 80,
+        "judgment": 100,
+        "tier": "sharp_eyed",
+        "next_tier": "irreplaceable",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "hawk_eyed",
+        "next_correction_tier": null,
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "longer windows ask for the same three",
+      "window": {
+        "continued": 100,
+        "landed": 80,
+        "corrections": 3,
+        "humbled": 0,
+        "days": 90
+      },
+      "expected": {
+        "score": 86,
+        "direction": 80,
+        "judgment": 100,
+        "tier": "sharp_eyed",
+        "next_tier": "irreplaceable",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "hawk_eyed",
+        "next_correction_tier": null,
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "a very long window",
+      "window": {
+        "continued": 100,
+        "landed": 80,
+        "corrections": 2,
+        "humbled": 1,
+        "days": 4000
+      },
+      "expected": {
+        "score": 74,
+        "direction": 80,
+        "judgment": 63,
+        "tier": "coworker",
+        "next_tier": "sharp_eyed",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "spot_checker",
+        "next_correction_tier": "reviewer",
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "thousandths don't round twice",
+      "window": {
+        "continued": 153,
+        "landed": 127,
+        "corrections": 2,
+        "humbled": 1,
+        "days": 28
+      },
+      "expected": {
+        "score": 77,
+        "direction": 83,
+        "judgment": 64,
+        "tier": "coworker",
+        "next_tier": "sharp_eyed",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "spot_checker",
+        "next_correction_tier": "reviewer",
+        "to_rank": 0
+      }
+    },
+    {
+      "name": "thirds land on a floor boundary",
+      "window": {
+        "continued": 300,
+        "landed": 210,
+        "corrections": 3,
+        "humbled": 7,
+        "days": 28
+      },
+      "expected": {
+        "score": 75,
+        "direction": 70,
+        "judgment": 88,
+        "tier": "coworker",
+        "next_tier": "sharp_eyed",
+        "verdict": "no",
+        "verdict_label": "No.",
+        "correction_tier": "reviewer",
+        "next_correction_tier": "hawk_eyed",
+        "to_rank": 0
+      }
+    }
+  ]
+}

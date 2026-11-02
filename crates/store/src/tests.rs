@@ -125,10 +125,7 @@ fn stats_json_matches_the_ui_contract() {
         "every task is under some model"
     );
     let entry = &v["hall_of_fame"][0];
-    assert_eq!(
-        (entry["category"].as_str(), entry["category_title"].as_str()),
-        (Some("made_it_up"), Some("Made it up"))
-    );
+    assert_eq!(entry["category"], "made_it_up");
     assert_eq!(entry["source_name"], "test", "unknown sources fall back to their id");
 }
 
@@ -268,6 +265,25 @@ fn retention_is_validated() {
     assert_eq!(s.sweep(Utc::now()).unwrap(), 0);
     assert_eq!("snippet".parse::<Level>().unwrap(), Level::Snippet);
     assert!("everything".parse::<Level>().is_err());
+}
+
+#[test]
+fn keeping_less_is_a_lower_level_or_fewer_days() {
+    let saved = Retention { level: Level::Full, ..Retention::default() };
+    let less = |r: Retention| r.keeps_less_than(&saved);
+    assert!(!less(saved), "the same settings");
+    assert!(!less(Retention { level: Level::Full, full_days: 60, snippet_days: 400 }));
+    assert!(less(Retention { level: Level::Category, ..saved }));
+    assert!(less(Retention { full_days: 29, ..saved }));
+    assert!(less(Retention { snippet_days: 364, ..saved }));
+    assert!(less(Retention { level: Level::Full, full_days: 7, ..saved }), "more of one, less of another");
+    let snippet = Retention { level: Level::Snippet, full_days: 30, ..saved };
+    assert!(
+        !Retention { level: Level::Full, full_days: 7, ..snippet }.keeps_less_than(&snippet),
+        "full days weren't in use"
+    );
+    let none = Retention { level: Level::Category, snippet_days: 365, ..saved };
+    assert!(!Retention { level: Level::Category, snippet_days: 7, ..none }.keeps_less_than(&none), "no days in use");
 }
 
 #[test]
@@ -945,23 +961,18 @@ fn a_window_moves_the_counts_and_the_score() {
 #[test]
 fn the_hall_of_fame_keeps_the_best_few_per_award() {
     let s = Store::open_in_memory().unwrap();
-    let event = |id: i64,
-                 label: &str,
-                 category: &str,
-                 human: Option<&str>,
-                 ai: Option<&str>,
-                 pinned: bool,
-                 ts: &str| {
-        s.conn()
+    let event =
+        |id: i64, label: &str, category: &str, human: Option<&str>, ai: Option<&str>, pinned: bool, ts: &str| {
+            s.conn()
             .execute(
-                "INSERT INTO events (id, ts, day, source, session, provider, family, version, label, category, rules, level,
+                "INSERT INTO events (id, ts, day, source, session, provider, family, version, label, category, level,
                    human_snip, ai_snip, pinned, seen_key)
-                 VALUES (?1, ?2, substr(?2, 1, 10), 'claude-code', 's', 'Anthropic', 'Claude Opus', '5.5', ?3, ?4, '[]',
+                 VALUES (?1, ?2, substr(?2, 1, 10), 'claude-code', 's', 'Anthropic', 'Claude Opus', '5.5', ?3, ?4,
                    'snippet', ?5, ?6, ?7, ?1)",
                 rusqlite::params![id, ts, label, category, human, ai, pinned],
             )
             .unwrap();
-    };
+        };
     let punchy = "that endpoint doesn't exist, you made it up out of thin air";
     event(1, "claimed", "made_it_up", Some(punchy), Some("Let me check."), false, "2026-10-20T10:00:00Z");
     event(2, "confirmed", "made_it_up", Some(punchy), Some("You're right."), false, "2026-10-01T10:00:00Z");

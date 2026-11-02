@@ -1,6 +1,6 @@
 //! Static tables the UI needs (tiers, categories, sources), so it never hard-codes them.
 
-use crate::{GOAL_WEEKS, MIN_CARD_BEST, MIN_CARD_HALF, MIN_CARD_WEEK, MIN_WEEK};
+use crate::{GOAL_WEEKS, MIN_CARD_HALF, MIN_CARD_WEEK, MIN_WEEK};
 use engine::{
     habit_plain, Category, CorrectionTier, Grade, PromptTier, Signal, Steer, Tier, CORRECTION_PROOF, DIRECTION_WEIGHT,
     HABITS, HUMBLED_BASE, HUMBLED_COST, MIN_PROMPTS, TIP_RULES, WINDOW_DAYS,
@@ -49,8 +49,6 @@ pub struct Meta {
     pub goal_weeks: i64,
     /// Graded tasks a week needs to be a solid point on the report card charts.
     pub min_card_week: i64,
-    /// Graded tasks a week needs to be a personal best.
-    pub min_card_best: i64,
     /// Graded tasks on each side of the "since you started" comparison.
     pub min_card_half: i64,
     /// What your AI is told when tips are on, word for word.
@@ -195,7 +193,6 @@ pub fn meta(sources: &[Box<dyn Source>]) -> Meta {
         min_week: MIN_WEEK,
         goal_weeks: GOAL_WEEKS,
         min_card_week: MIN_CARD_WEEK,
-        min_card_best: MIN_CARD_BEST,
         min_card_half: MIN_CARD_HALF,
         tip_rules: TIP_RULES,
     }
@@ -245,7 +242,7 @@ mod tests {
         assert_eq!(m["prompt_window_days"], 28);
         assert_eq!((m["direction_weight"].as_i64(), m["correction_proof"].as_i64()), (Some(70), Some(3)));
         assert_eq!((m["min_week"].as_i64(), m["goal_weeks"].as_i64()), (Some(5), Some(4)));
-        let cards = ["min_card_week", "min_card_best", "min_card_half"].map(|k| m[k].as_i64());
-        assert_eq!(cards, [Some(3), Some(5), Some(20)]);
+        let cards = ["min_card_week", "min_card_half"].map(|k| m[k].as_i64());
+        assert_eq!(cards, [Some(3), Some(20)]);
     }
 }

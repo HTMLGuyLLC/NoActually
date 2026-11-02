@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/engine", "crates/sources", "crates/store", "crates/cli", "app/src-tauri"]
 
 [workspace.package]
-version = "0.5.5"
+version = "0.5.6"
 edition = "2021"
 # Oldest Rust that builds the whole workspace, app included. CI's `msrv` job checks it.
 rust-version = "1.90"
