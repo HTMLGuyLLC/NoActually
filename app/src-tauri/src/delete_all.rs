@@ -359,37 +359,42 @@ mod tests {
         assert!(!text.to_lowercase().contains("everything"), "it must not claim all of it went: {text}");
     }
 
+    /// An absolute path on this system: a path from the root isn't one on Windows without a drive.
+    fn abs(path: &str) -> PathBuf {
+        PathBuf::from(if cfg!(windows) { format!("C:{path}") } else { path.to_string() })
+    }
+
     #[test]
     fn only_the_apps_own_folders_can_be_deleted() {
         let id = store::APP_ID;
-        let home = Path::new("/Users/me");
+        let home = abs("/Users/me");
         let good = [format!("/Users/me/Library/Application Support/{id}"), format!("/Users/me/Library/Logs/{id}")];
         for folder in &good {
-            assert!(own_folder(Path::new(folder), home), "{folder}");
+            assert!(own_folder(&abs(folder), &home), "{folder}");
         }
-        assert!(own_folder(Path::new(&format!("/home/me/.local/share/{id}/logs")), Path::new("/home/me")));
+        assert!(own_folder(&abs(&format!("/home/me/.local/share/{id}/logs")), &abs("/home/me")));
 
         let bad = [
-            String::new(),
-            "/".into(),
-            ".".into(),
-            "..".into(),
-            "/Users".into(),
-            "/Users/me".into(),
-            "/Users/me/Documents".into(),
-            "/Users/me/logs".into(),
-            id.to_string(),
-            format!("relative/{id}"),
-            format!("/Users/me/{id}/../{id}"),
-            format!("/Users/me/{id}-other"),
-            format!("/Users/me/{id}/other"),
+            abs("/"),
+            abs("/Users"),
+            abs("/Users/me"),
+            abs("/Users/me/Documents"),
+            abs("/Users/me/logs"),
+            abs(&format!("/Users/me/{id}/../{id}")),
+            abs(&format!("/Users/me/{id}-other")),
+            abs(&format!("/Users/me/{id}/other")),
+            PathBuf::new(),
+            PathBuf::from("."),
+            PathBuf::from(".."),
+            PathBuf::from(id),
+            PathBuf::from(format!("relative/{id}")),
         ];
         for folder in &bad {
-            assert!(!own_folder(Path::new(folder), home), "{folder:?}");
+            assert!(!own_folder(folder, &home), "{folder:?}");
         }
         // A home folder that happens to be named for the app, and one inside such a folder.
-        assert!(!own_folder(Path::new(&format!("/home/{id}")), Path::new(&format!("/home/{id}"))));
-        assert!(!own_folder(Path::new(&format!("/home/{id}")), Path::new(&format!("/home/{id}/me"))));
+        assert!(!own_folder(&abs(&format!("/home/{id}")), &abs(&format!("/home/{id}"))));
+        assert!(!own_folder(&abs(&format!("/home/{id}")), &abs(&format!("/home/{id}/me"))));
     }
 
     #[cfg(unix)]
@@ -433,16 +438,17 @@ mod tests {
     #[test]
     fn a_database_outside_the_apps_folder_is_refused_before_anything_changes() {
         let id = store::APP_ID;
-        let own = PathBuf::from(format!("/Users/me/Library/Application Support/{id}"));
-        let logs = || PathBuf::from(format!("/Users/me/Library/Logs/{id}"));
-        let home = || PathBuf::from("/Users/me");
+        let own = abs(&format!("/Users/me/Library/Application Support/{id}"));
+        let logs = || abs(&format!("/Users/me/Library/Logs/{id}"));
+        let home = || abs("/Users/me");
         let check = |db: &Path, logs: PathBuf| Folders::check(db, &own, logs, home()).map(|f| f.data);
         assert_eq!(check(&own.join(store::DB_FILE), logs()), Ok(own.clone()));
-        for db in ["/Users/me/Documents/noactually.db", "/Users/me/noactually.db", "noactually.db", "/noactually.db"] {
-            assert_eq!(check(Path::new(db), logs()), Err(NOT_OURS.to_string()), "{db}");
+        for db in ["/Users/me/Documents/noactually.db", "/Users/me/noactually.db", "/noactually.db"] {
+            assert_eq!(check(&abs(db), logs()), Err(NOT_OURS.to_string()), "{db}");
         }
+        assert_eq!(check(Path::new("noactually.db"), logs()), Err(NOT_OURS.to_string()), "a relative path");
         assert_eq!(
-            check(Path::new("/tmp/app.noactually/noactually.db"), logs()),
+            check(&abs("/tmp/app.noactually/noactually.db"), logs()),
             Err(NOT_OURS.to_string()),
             "same name, wrong place"
         );
