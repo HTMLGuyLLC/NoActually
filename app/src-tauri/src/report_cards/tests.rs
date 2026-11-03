@@ -85,7 +85,17 @@ impl Lab {
         fs::create_dir_all(home.join(".codex")).unwrap();
         fs::create_dir_all(&data).unwrap();
         Lab {
-            env: Env { home, data, claude: None, codex: None, exe: None, windows: false, git_bash: None, git: None },
+            env: Env {
+                home,
+                data,
+                claude: None,
+                codex: None,
+                exe: None,
+                windows: false,
+                git_bash: None,
+                git: None,
+                codex_home: None,
+            },
             dir,
         }
     }
@@ -154,6 +164,7 @@ impl Lab {
             windows: e.windows,
             git_bash: e.git_bash.clone(),
             git: e.git.clone(),
+            codex_home: e.codex_home.clone(),
         }
     }
 

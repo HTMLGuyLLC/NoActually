@@ -105,6 +105,9 @@ pub struct SourceTurn {
 pub struct FileScan {
     /// Complete turns, in file order.
     pub turns: Vec<SourceTurn>,
+    /// Every chat this pass read, turns or not. A chat whose only messages weren't the person's has
+    /// no turns, but it was still read, so a rebuild mustn't put back what older rules counted in it.
+    pub sessions: Vec<String>,
     /// Where the next pass should resume. Only ever past turns that are complete.
     pub checkpoint: u64,
     /// Record blocks found in AI replies, in file order. A pass that re-reads a reply (after a

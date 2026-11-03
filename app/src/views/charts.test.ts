@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { HOSTILE } from "../test/fixtures";
+import { HOSTILE, safe } from "../test/fixtures";
 import { chartBox, lineChart, type Point, sparkline, stackChart } from "./charts";
 
-const safe = (markup: string) => {
-  expect(markup).not.toContain("<img");
-  expect(markup).not.toContain('onerror="');
-};
 const count = (m: string, needle: string) => m.split(needle).length - 1;
 
 const line = (points: Point[], over: Partial<Parameters<typeof lineChart>[0]> = {}) =>

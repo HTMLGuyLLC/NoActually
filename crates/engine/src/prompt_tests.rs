@@ -125,11 +125,25 @@ const EXAMPLES: &[(&str, &[Signal])] = &[
     ("Don't work on main, use a branch", &[Limits]),
     // Purpose.
     ("cache the results because the API is rate limited", &[Why]),
+    ("cache the results because we're launching it on Friday", &[Why]),
     ("our users can't find the export button", &[Why]),
     ("cache it since we rely on a slow API", &[Why]),
     ("I'm trying to cut the bundle size for the launch", &[Why]),
     ("Goal: one place to see every invoice", &[Why]),
-    ("currently the report takes a minute to open", &[Why]),
+    ("currently we're moving the reports to Postgres", &[Why]),
+    // Saying what's wrong or how it is now isn't saying what it's for.
+    ("the login fails because the cache is stale", &[]),
+    ("the page is blank because the query times out", &[]),
+    ("it doesn't load, because the token expired", &[]),
+    ("Currently the button is red", &[]),
+    ("currently the report takes a minute to open", &[]),
+    // A framework's name isn't a file, a list isn't an example, and "can't be opened" isn't a rule.
+    ("move the site to Next.js", &[]),
+    ("the Node.js and Vue.js versions are old", &[]),
+    ("fix App.js", &[Spot]),
+    ("add social sign-in, such as login with email", &[]),
+    ("the PDF can't be opened on Windows", &[]),
+    ("this can't break the import", &[Limits]),
     // Specific: several at once.
     (
         "In src/checkout.ts the total should include tax. Don't touch the cart API, our customers depend on it.",
@@ -226,6 +240,8 @@ fn hellos_questions_and_payloads_are_not_prompts() {
         "is there a way to skip the hook?",
         "explain the retention levels",
         "can you explain what this regex matches",
+        "summarize the retention docs",
+        "summarize the changes in 2.0",
         "<command-name>/clear</command-name>",
         "/review",
         "   ",
@@ -240,6 +256,9 @@ fn hellos_questions_and_payloads_are_not_prompts() {
         "Can I get a script that renames files?",
         "Is it possible to add dark mode?",
         "/Users/me/app/src/a.ts is broken",
+        // Summing up into a file writes something.
+        "Summarize the changes into CHANGELOG.md",
+        "could you summarize the thread into a new issue",
     ] {
         assert!(matches!(first_message(p), Prompt::Task { .. }), "{p:?}");
     }
@@ -288,6 +307,10 @@ fn steering_that_is_on_you() {
         ("Done.", "let's try a different approach", Steer::Redo),
         ("Done.", "go back to the old version", Steer::Redo),
         ("Done.", "also make it work offline", Steer::Added),
+        ("Done.", "By the way, we deploy on Vercel", Steer::Added),
+        ("Done.", "oh, also the dates are in UTC", Steer::Added),
+        ("Done.", "p.s. it has to run on Node 18", Steer::Added),
+        ("Done.", "I should have mentioned it's for mobile", Steer::Added),
     ];
     for (prev, human, want) in cases {
         assert_eq!(steer(prev, human), Some(want), "{human:?}");

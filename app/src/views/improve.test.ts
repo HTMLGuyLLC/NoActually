@@ -1,13 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Goal, GoalStatus, GoalWeek, HistoryWeek, Progress, ReportCardWeek, SourceInfo } from "../api";
 import { fmtDay } from "../format";
-import { cards, HOSTILE, meta, noCards, progress, recentCard, source, stats, week } from "../test/fixtures";
+import { cards, HOSTILE, meta, noCards, progress, recentCard, safe, source, stats, week } from "../test/fixtures";
 import { buckets, canGrade, goalTitle, improveView } from "./improve";
 
-const safe = (markup: string) => {
-  expect(markup).not.toContain("<img");
-  expect(markup).not.toContain('onerror="');
-};
 const count = (m: string, needle: string) => m.split(needle).length - 1;
 
 /** `n` Mondays starting 2026-08-03, each with `tasks` tasks, and the report cards `report(i)` gives week `i`. */

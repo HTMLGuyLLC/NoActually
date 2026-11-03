@@ -59,8 +59,9 @@ impl Store {
     }
 
     /// Ends a rebuild once history has been read again. A chat that wasn't read again comes back as
-    /// it was counted: its file is gone, or its source is stopped. Counts per day have no chat on
-    /// them, so a day with nothing read again comes back whole, and a day that a missing chat
+    /// it was counted: its file is gone, or its source is stopped. A chat read again with nothing of
+    /// the person's left in it stays gone. Counts per day have no chat on them, so a day with nothing
+    /// read again comes back whole if a missing chat (or no known chat) touched it, and a day that a missing chat
     /// touched keeps the larger message count and adds back that chat's corrections. Other days take
     /// the new count. Message keys of missing chats come back too, so a file that returns can't
     /// count twice. A correction that a fork already brought back isn't restored a second time.
@@ -96,7 +97,16 @@ impl Store {
             ),
             [],
         )?;
-        tx.execute(&format!("INSERT INTO daily SELECT k.* FROM kept_daily k WHERE NOT {READ_DAY}"), [])?;
+        // A day with nothing read again comes back whole, unless every chat known on it was read again
+        // and simply holds nothing of the person's under the new rules.
+        tx.execute(
+            &format!(
+                "INSERT INTO daily SELECT k.* FROM kept_daily k WHERE NOT {READ_DAY} AND ({MISSING_CHAT_DAY}
+                   OR NOT EXISTS (SELECT 1 FROM kept_sessions s WHERE s.source = k.source
+                     AND k.day BETWEEN s.first_day AND s.last_day))"
+            ),
+            [],
+        )?;
         tx.execute(
             &format!(
                 "INSERT INTO events SELECT NULL, ts, day, source, session, provider, family, version,

@@ -1,4 +1,5 @@
 // Shared test data, shaped like the Rust side's output.
+import { expect } from "vitest";
 import type { HallEntry, Meta, ModelRow, Overall, Progress, Prompts, RecentReportCard, ReportCardWeek, SourceInfo, Stats } from "../api";
 
 export const meta: Meta = {
@@ -86,6 +87,13 @@ export const prompts = (over: Partial<Prompts> = {}): Prompts => ({
 });
 
 export const HOSTILE = `<img src=x onerror="alert(1)">&'"`;
+
+/** Hostile markup must come out escaped: not live, and not silently dropped either. */
+export const safe = (markup: string) => {
+  expect(markup).not.toContain("<img");
+  expect(markup).not.toContain('onerror="');
+  expect(markup).toContain("&lt;img");
+};
 
 export const row = (provider: string, family: string, version: string, corrections: number, messages = 100, tasks = 20): ModelRow => ({
   provider,

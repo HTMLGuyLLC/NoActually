@@ -5,7 +5,7 @@ use regex::{Captures, Regex};
 use std::sync::LazyLock;
 
 /// Bump when [`redact`] catches more, so text stored under older rules is cleaned once.
-pub const REDACTION_VERSION: u32 = 2;
+pub const REDACTION_VERSION: u32 = 3;
 
 /// The longest snippet kept, in chars.
 pub const SNIPPET_CHARS: usize = 140;
@@ -13,6 +13,14 @@ pub const SNIPPET_CHARS: usize = 140;
 /// A value after a secret's name: escaped-quoted (in JSON inside a string), quoted (it may hold
 /// spaces), already redacted (so a second pass changes nothing), or bare.
 const VALUE: &str = r#"(?P<v>\\"[^"]*?\\"|"[^"]*"|'[^']*'|\[secret\]|\S+)"#;
+/// A value that only counts when [`looks_secret`] agrees: quoted, or long with a digit in it.
+const SECRET_LIKE: &str = r#"(?P<s>"[^"\s]{6,}"|'[^'\s]{6,}'|[A-Za-z0-9_+/=.-]+)"#;
+
+/// True for a quoted value, or a bare one of 8 or more characters with a digit (`abc123def456`). Plain
+/// words and short ids (`id`, `users.id`, `5`) are code or prose.
+fn looks_secret(value: &str) -> bool {
+    value.starts_with(['"', '\'']) || (value.len() >= 8 && value.contains(|c: char| c.is_ascii_digit()))
+}
 
 /// What follows a home folder: more path, up to where prose or a list takes over again.
 /// A folder's name can hold a few spaces or commas when another folder follows it.
@@ -91,6 +99,7 @@ const NOT_A_VALUE: &[&str] = &[
     "please",
     "required",
     "reset",
+    "see",
     "should",
     "so",
     "some",
@@ -164,7 +173,7 @@ static REDACTIONS: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         (r(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "[email]"),
         (
             r(
-                r"\b(sk-[A-Za-z0-9_-]{16,}|(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|glpat-[A-Za-z0-9_-]{10,}|npm_[A-Za-z0-9]{20,}|xox[abpr]-[A-Za-z0-9-]{10,}|(?:AKIA|ASIA)[0-9A-Z]{16}|hf_[A-Za-z0-9]{20,}|gsk_[A-Za-z0-9]{20,}|whsec_[A-Za-z0-9]{16,}|SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}|AIza[0-9A-Za-z_-]{30,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})",
+                r"\b(sk-[A-Za-z0-9_-]{16,}|(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|glpat-[A-Za-z0-9_-]{10,}|npm_[A-Za-z0-9]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|xapp-\d-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]{20,}|GOCSPX-[A-Za-z0-9_-]{10,}|(?:AKIA|ASIA)[0-9A-Z]{16}|hf_[A-Za-z0-9]{20,}|gsk_[A-Za-z0-9]{20,}|whsec_[A-Za-z0-9]{16,}|SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}|AIza[0-9A-Za-z_-]{30,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})",
             ),
             "[secret]",
         ),
@@ -196,9 +205,14 @@ static REDACTIONS: LazyLock<Vec<Rule>> = LazyLock::new(|| {
             )),
             "$1=[secret]",
         ),
+        // Any other key name (OPENAI_KEY, license_key) only when the value looks like a key, so code such as
+        // `primary_key: id` is left alone.
+        (r(&format!(r#"(?i)\b([A-Za-z0-9_.-]*_key)(?:\\?["'])?\s*[:=]\s*{SECRET_LIKE}"#)), "$1=[secret]"),
         // Short names only count whole (`pw:`, `DB_PASS=`), so "bypass" and "compass" are left alone.
         (r(&format!(r#"(?i)\b((?:[A-Za-z0-9]+[_.-])*pw)(?:\\?["'])?\s*[:=]\s*{VALUE}"#)), "$1=[secret]"),
         (r(&format!(r#"(?i)\b((?:[A-Za-z0-9]+[_.-])*pass)(?:\\?["'])?\s*=\s*{VALUE}"#)), "$1=[secret]"),
+        // `pass:` is also a test count ("Pass: 5"), so it needs a value that looks like a password.
+        (r(&format!(r#"(?i)\b((?:[A-Za-z0-9]+[_.-])*pass)(?:\\?["'])?\s*:\s*{SECRET_LIKE}"#)), "$1=[secret]"),
         // "my password is hunter2" takes the next word, even when it is only "too" (better lost than leaked).
         (r(r"(?i)\b(passwd|pass(?:word|code|phrase))\s+(?:is|was)\s+\S+"), "$1 [secret]"),
         (r(&format!(r"(/Users|/home)/[^/\s]+{UNDER}")), "~/[path]"),
@@ -208,7 +222,9 @@ static REDACTIONS: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         (r(r"(^|[^\w/.-])/root(?:/\S*|\b)"), "${1}~"),
         (r(r"/(private|var|tmp|Volumes|opt|mnt)/\S+"), "[path]"),
         (r(r"\b\d{1,3}(\.\d{1,3}){3}\b"), "[ip]"),
-        (r(r"\+?\d[\d\s().-]{8,}\d"), "[number]"),
+        // An ISO date ("2026-11-15") is not a phone number: the `keep` branch matches it first and leaves it be.
+        // It must end there, so a number that only starts like one ("0466-12-3456") is still caught.
+        (r(r"(?P<keep>\b\d{4}-\d{2}-\d{2})(?:[^\d-]|$)|\+?\d[\d\s().-]{8,}\d"), "[number]"),
     ];
     rules.into_iter().map(|(re, with)| Rule { re, with }).collect()
 });
@@ -218,7 +234,10 @@ pub fn redact(text: &str) -> String {
     REDACTIONS.iter().fold(text.to_string(), |acc, rule| {
         rule.re
             .replace_all(&acc, |c: &Captures<'_>| {
-                if c.name("v").is_some_and(|v| not_a_value(v.as_str())) {
+                if c.name("keep").is_some()
+                    || c.name("v").is_some_and(|v| not_a_value(v.as_str()))
+                    || c.name("s").is_some_and(|s| !looks_secret(s.as_str()))
+                {
                     return c[0].to_string();
                 }
                 let mut out = String::new();
@@ -457,6 +476,44 @@ mod tests {
         assert_eq!(redact("pw: abc123 ok"), "pw=[secret] ok");
         let prose = "the key to this is simple, pass the test, keyboard=us, bypass=true, compass: north, a turkey=1";
         assert_eq!(redact(prose), prose);
+    }
+
+    #[test]
+    fn any_key_name_pass_colon_and_more_tokens_are_caught() {
+        // Split so secret scanners don't take these made-up samples for real keys.
+        for (name, value) in
+            [("OPENAI", "abc123def4"), ("STRIPE", concat!("rk_", "live_abc123def456")), ("LICENSE", "ABCD-1234-IJKL")]
+        {
+            assert_eq!(redact(&format!("{name}_KEY={value}")), format!("{name}_KEY=[secret]"), "{name}");
+        }
+        assert_eq!(redact("license_key: 'ABCD-EFGH'"), "license_key=[secret]");
+        assert_eq!(redact("pass: swordfish99"), "pass=[secret]");
+        // Code and test output that only look like secrets.
+        for code in ["primary_key: id", "foreign_key: users.id", "sort_key=name", "Pass: 5", "pass: true, fail: 0"] {
+            assert_eq!(redact(code), code);
+        }
+        assert_eq!(redact("pass: 'hunter22'"), "pass=[secret]");
+        // Split or built at runtime so secret scanners don't take these made-up samples for real tokens.
+        let ya29 = format!("ya29.{}", "a0AfH6SMBxabcdefghij0123456789");
+        let gocspx = format!("GOCSPX-{}", "abcdefghijklmnop");
+        let xoxs = format!("xox{}", "s-123456789012-abcdefghijkl");
+        let xapp = format!("xapp-{}", "1-A0123456789-abcdefghijkl");
+        for key in [ya29, gocspx, xoxs, xapp] {
+            assert_eq!(redact(&format!("key {key} end")), "key [secret] end", "{key}");
+        }
+        // Near misses: prose after a key name, and a pass that is a verdict.
+        let prose = "the API_KEY: see docs, LICENSE_KEY is required, pass the test, a monkey=1";
+        assert_eq!(redact(prose), prose);
+    }
+
+    #[test]
+    fn iso_dates_stay_but_phone_numbers_go() {
+        assert_eq!(redact("due 2026-11-15 and 2026-11-16."), "due 2026-11-15 and 2026-11-16.");
+        assert_eq!(redact("at 2026-11-15T10:00:00Z"), "at 2026-11-15T10:00:00Z");
+        assert_eq!(redact("call 555-123-4567 on 2026-11-15"), "call [number] on 2026-11-15");
+        assert_eq!(redact("call 0466-12-3456 now"), "call [number] now");
+        assert_eq!(redact("ref 2026-11-15-1234"), "ref [number]");
+        assert_eq!(redact("card 4111 1111 1111 1111"), "card [number]");
     }
 
     #[test]

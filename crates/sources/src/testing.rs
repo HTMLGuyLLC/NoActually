@@ -15,6 +15,27 @@ pub fn cc_user(uuid: &str, ts: &str, text: &str) -> String {
     line(&json!({"type":"user","uuid":uuid,"timestamp":ts,"message":{"content":text}}))
 }
 
+/// A Claude Code record the person typed, with the `promptId` the app's hooks and report cards go by.
+pub fn cc_prompt(uuid: &str, prompt_id: &str, ts: &str, text: &str) -> String {
+    line(&json!({"type":"user","uuid":uuid,"promptId":prompt_id,"timestamp":ts,"message":{"content":text}}))
+}
+
+/// A Claude Code reply from `model` with its own uuid and message id, and its token counts as
+/// (new input, cache write, cache read, output).
+pub fn cc_reply_with_usage(
+    model: &str,
+    uuid: &str,
+    message_id: &str,
+    ts: &str,
+    text: &str,
+    (input, cache_write, cache_read, output): (u64, u64, u64, u64),
+) -> String {
+    line(&json!({"type":"assistant","uuid":uuid,"timestamp":ts,"message":{"id":message_id,"model":model,
+        "content":[{"type":"text","text":text}],
+        "usage":{"input_tokens":input,"cache_creation_input_tokens":cache_write,"cache_read_input_tokens":cache_read,
+            "output_tokens":output}}}))
+}
+
 /// A Claude Code reply from `model`.
 pub fn cc_ai(model: &str, ts: &str, text: &str) -> String {
     line(&json!({"type":"assistant","timestamp":ts,"message":{"model":model,"content":[{"type":"text","text":text}]}}))

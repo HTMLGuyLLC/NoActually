@@ -139,6 +139,15 @@ impl Store {
         let rebuilding = self.rebuild_pending()?;
         let tx = self.conn.transaction()?;
         let (mut messages, mut corrections) = (0, 0);
+        if rebuilding {
+            // Read again, even with no turns of the person's in it: what older rules counted there goes.
+            for chat in &scan.sessions {
+                tx.execute(
+                    "INSERT OR IGNORE INTO rebuild_read (id, source) VALUES (?1, ?2)",
+                    params![hash(&[source, chat]), source],
+                )?;
+            }
+        }
         for st in scan.turns.iter().filter(|st| state.wants(st.ts)) {
             if let Some(corrected) = count_turn(&tx, source, st, level, rebuilding)? {
                 messages += 1;

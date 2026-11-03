@@ -29,6 +29,8 @@ impl Model {
 
 static DATE_SUFFIX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"[-@](20\d{6}|\d{4}-\d{2}-\d{2}|latest|preview.*|exp.*)$").unwrap());
+static BEDROCK_PREFIX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(?:[a-z]{2,6}\.)?anthropic\.").unwrap());
+static BEDROCK_REVISION: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"-v\d+(?::\d+)?$").unwrap());
 static CLAUDE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^claude-(?:(\d+)(?:[-.](\d))?-)?([a-z]+)(?:-(\d+)(?:[-.](\d+))?)?").unwrap());
 static GPT: LazyLock<Regex> =
@@ -49,7 +51,10 @@ pub fn normalize_model(raw: &str) -> Option<Model> {
     // Local runners prefix ids with an org or path ("lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF").
     let base = raw.rsplit('/').next().unwrap_or(raw).to_ascii_lowercase();
     let base = base.trim_start_matches("meta-");
-    let id = DATE_SUFFIX.replace(base, "");
+    // Bedrock ids: "us.anthropic.claude-sonnet-4-5-20250929-v1:0" is the plain id plus a region/vendor prefix and a revision.
+    let base = BEDROCK_PREFIX.replace(base, "");
+    let base = BEDROCK_REVISION.replace(&base, "");
+    let id = DATE_SUFFIX.replace(&base, "");
     let id = id.as_ref();
     let m =
         |provider: &str, family: String, version: String| Some(Model { provider: provider.into(), family, version });
@@ -63,6 +68,7 @@ pub fn normalize_model(raw: &str) -> Option<Model> {
             (None, None) => return m("Anthropic", format!("Claude {tier}"), String::new()),
         };
         let version = match minor {
+            Some("0") => major.to_string(), // "claude-opus-4-0" is "claude-opus-4-20250514": version 4
             Some(min) if min.len() < 3 => format!("{major}.{min}"),
             _ => major.to_string(),
         };
@@ -133,6 +139,20 @@ mod tests {
         assert_eq!(n("claude-sonnet-4-20250514"), t("Anthropic", "Claude Sonnet", "4"));
         assert_eq!(n("claude-3-5-sonnet-20241022"), t("Anthropic", "Claude Sonnet", "3.5"));
         assert_eq!(n("claude-3-opus-20240229"), t("Anthropic", "Claude Opus", "3"));
+    }
+
+    #[test]
+    fn bedrock_ids_match_their_plain_forms() {
+        assert_eq!(n("us.anthropic.claude-sonnet-4-5-20250929-v1:0"), t("Anthropic", "Claude Sonnet", "4.5"));
+        assert_eq!(n("anthropic.claude-opus-5-5"), t("Anthropic", "Claude Opus", "5.5"));
+        assert_eq!(n("global.anthropic.claude-opus-4-6-v1"), t("Anthropic", "Claude Opus", "4.6"));
+        assert_eq!(n("eu.anthropic.claude-3-5-sonnet-20241022-v2:0"), t("Anthropic", "Claude Sonnet", "3.5"));
+    }
+
+    #[test]
+    fn opus_4_has_one_version_name() {
+        assert_eq!(n("claude-opus-4-0"), t("Anthropic", "Claude Opus", "4"));
+        assert_eq!(n("claude-opus-4-20250514"), t("Anthropic", "Claude Opus", "4"));
     }
 
     #[test]
