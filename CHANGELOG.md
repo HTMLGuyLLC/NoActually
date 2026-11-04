@@ -4,6 +4,8 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.5.7] - 2026-11-04
+
 ### Changed
 
 - Your history is scored again once, under the fixed rules below.
@@ -292,7 +294,8 @@ First release.
 - Per-source consent: nothing is read until you allow it, and Forget deletes a source's data
 - `noactually` command-line tool (`sources`, `allow`, `sync`, `stats`)
 
-[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.6...HEAD
+[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.7...HEAD
+[0.5.7]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.3...v0.5.4
