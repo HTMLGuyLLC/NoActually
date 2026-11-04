@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptyReportCards } from "../state";
-import { HOSTILE, hallEntry, meta, overall, row, source, stats } from "../test/fixtures";
+import { HOSTILE, hallEntry, meta, overall, row, safe, source, stats } from "../test/fixtures";
 import { headerView, statusPillView } from "./chrome";
 import { emptyGlanceView, glanceErrorView, glanceRebuildingView, glanceView } from "./glance";
 import { chartSummary, chartView, hallView, noChatsView, onboardingView, rebuildingView, scorecardView } from "./scorecard";
@@ -8,11 +8,6 @@ import { goneByCount, parseRetention, settingsView, tightens } from "./settings"
 import { allowArgs, sourcesView, watchingNames } from "./sources";
 
 const ctx = { meta, filter: {}, still: false };
-/** No hostile markup made it through as markup. */
-const safe = (markup: string) => {
-  expect(markup).not.toContain("<img");
-  expect(markup).not.toContain('onerror="');
-};
 
 describe("verdict text for screen readers", () => {
   it("matches the Hmm. on screen", () => {

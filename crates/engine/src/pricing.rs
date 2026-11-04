@@ -104,7 +104,10 @@ pub fn price(model: &Model) -> Option<Price> {
         ("Claude Opus", "5" | "4.8" | "4.7" | "4.6" | "4.5") => (5.0, 25.0, 0.50),
         ("Claude Sonnet", "5.5" | "5") => (2.0, 10.0, 0.20),
         ("Claude Sonnet", "4.6" | "4.5" | "4") => (3.0, 15.0, 0.30),
-        // The rate for prompts up to 100K tokens; longer prompts cost 5x, so this can undercount.
+        ("Claude Opus", "4.1" | "4") => (15.0, 75.0, 1.50),
+        // The rate for requests up to 100K input tokens; larger ones cost 5x ($0.50 / $2.50). `Usage` is
+        // summed over many requests (a task, a session), so the size of each request is unknown here:
+        // we keep the low rate, and this can undercount.
         ("Claude Haiku", "5.5") => (0.10, 0.50, 0.01),
         ("Claude Haiku", "4.5") => (1.0, 5.0, 0.10),
         _ => return None,
@@ -140,6 +143,16 @@ mod tests {
         assert_eq!(p, Price { input: 4.0, cache_write: 5.0, cache_read: 0.20, output: 20.0 });
         // 1k × $4 + 2k × $5 + 100k × $0.20 + 3k × $20, per million.
         assert!((usage().cost(&p) - 0.094).abs() < 1e-9);
+    }
+
+    #[test]
+    fn opus_4_and_4_1_cost_fifteen_and_seventy_five() {
+        for id in ["claude-opus-4-20250514", "claude-opus-4-0", "claude-opus-4-1-20250805", "claude-opus-4-1"] {
+            let p = price(&normalize_model(id).unwrap()).unwrap_or_else(|| panic!("{id} has no price"));
+            assert_eq!(p, Price { input: 15.0, cache_write: 18.75, cache_read: 1.50, output: 75.0 }, "{id}");
+        }
+        let bedrock = price(&normalize_model("us.anthropic.claude-opus-4-1-20250805-v1:0").unwrap());
+        assert_eq!(bedrock.map(|p| p.input), Some(15.0));
     }
 
     #[test]

@@ -76,6 +76,19 @@ jobs:
       - name: Test
         run: cargo test --locked --workspace --no-fail-fast
 
+      # Days and weeks follow the local zone, so run the tests again in the two zones furthest from UTC.
+      - name: Test in UTC+14
+        if: runner.os == 'Linux'
+        env:
+          TZ: Pacific/Kiritimati
+        run: cargo test --locked --workspace --no-fail-fast
+
+      - name: Test in UTC-11
+        if: runner.os == 'Linux'
+        env:
+          TZ: Pacific/Pago_Pago
+        run: cargo test --locked --workspace --no-fail-fast
+
   frontend:
     name: frontend
     runs-on: ubuntu-24.04
@@ -104,6 +117,17 @@ jobs:
 
       - name: Tests with coverage
         run: pnpm --dir app test:coverage
+
+      # app/vitest.config.ts honors TZ; the default run above is pinned to UTC.
+      - name: Tests in UTC+14
+        env:
+          TZ: Pacific/Kiritimati
+        run: pnpm --dir app exec vitest run
+
+      - name: Tests in UTC-11
+        env:
+          TZ: Pacific/Pago_Pago
+        run: pnpm --dir app exec vitest run
 
       - name: Build
         run: pnpm --dir app build
@@ -288,7 +312,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2
+      - uses: taiki-e/install-action@1919c4a95903d2c33e4a221102edca87309fc14b # v2
         with:
           tool: cargo-llvm-cov
 

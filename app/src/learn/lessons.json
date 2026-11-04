@@ -1,7 +1,7 @@
 {
   "signal_hints": {
     "spot": "Target: name the file, function or page. 'In checkout.ts, the total is wrong.'",
-    "proof": "Evidence: paste the error, the output or an example. 'It says: Card declined.'",
+    "proof": "Evidence: paste the error, the output or an example. 'It says: TypeError: total is undefined.'",
     "done": "Finish line: say what done looks like. 'Done when the tests pass.'",
     "limits": "Guardrails: say what to leave alone. 'Don't change the API.'",
     "why": "Purpose: say who it's for or what it's part of. 'Our customers need this before tax season.'"
@@ -30,7 +30,7 @@
           "tips": [
             "Use the real name of the file, the function or the doc.",
             "Wrap exact names in backticks so they stand out.",
-            "If it's on a screen, say which page and which button."
+            "If it's on a screen, paste the page's link and name the button."
           ],
           "quiz": [
             {
@@ -64,7 +64,7 @@
             "text": "Checkout fails when I click Pay. The console says: TypeError: total is undefined. Please fix it in checkout.ts.",
             "signals": ["spot", "proof"]
           },
-          "template": "When I <do this>, I get <the exact error or output>. Here it is: <paste it>.",
+          "template": "When I <do this>, I get this: \"<paste the exact error or output>\".",
           "tips": [
             "Paste the exact error. Don't retell it from memory.",
             "Show what you got and what you expected.",
@@ -215,8 +215,8 @@
           "template": "<the task>. I already know <what you found>. I already tried <what didn't work>.",
           "tips": [
             "Say what you already tried and ruled out, and what happened, so nobody checks it twice.",
-            "Share facts the code can't show: what changed, and when it started.",
-            "Say facts about your setup and taste: “it's a Squarespace site”, “we use Tailwind”."
+            "The checker can't spot this one, so it won't light up. Say it anyway.",
+            "Say facts about your setup and taste: 'it's a small online shop', 'we use plain CSS'."
           ],
           "quiz": [
             {
@@ -321,7 +321,7 @@
           "title": "Plan big tasks first",
           "reviewed": "2026-10",
           "teaches": { "steer": "redo" },
-          "why": "A plan you can read in a minute corrections a wrong turn before hours of work get thrown away.",
+          "why": "A plan you can read in a minute catches a wrong turn before hours of work get thrown away.",
           "before": {
             "text": "Move the app from the old payment system to the new one.",
             "signals": []

@@ -42,6 +42,7 @@ pub use tier::{
 pub use tip::{is_tip_rules, is_tip_stop, parse_tip, strip_tip, Tip, HAD_TO_ASK, TIP_RULES, TIP_STOP};
 
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
 
 /// One AI message: its text and the raw model id that wrote it, when the source records one.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -213,7 +214,12 @@ impl Verdict {
 /// 11: a chat's first message follows no AI reply, so it is never a correction and keeps its task.
 /// 12: "I didn't catch the bug" admits again, but "I didn't catch that" (didn't hear you) doesn't;
 ///     "I should have enough context now" and "my error handling" aren't admissions.
-pub const RULES_VERSION: u32 = 12;
+/// 13: polite closers ("No, that's all for now", "That's not needed") and "same thing for…" aren't
+///     pushback; "you're right" after a plain question isn't an admission; "by the way" and the
+///     prompt grader's other openers add context; a '?' in code isn't the AI asking; the AI's own
+///     "I said" or "there is no" no longer picks the category; "because", "currently", "such as"
+///     and "Next.js" no longer tick a signal on their own.
+pub const RULES_VERSION: u32 = 13;
 
 /// Tools write placeholder ids for replies no model wrote (Claude Code's "<synthetic>" for errors,
 /// interruptions and "No response requested").
@@ -246,20 +252,24 @@ pub fn classify(turn: &Turn) -> Verdict {
     let ai_admit = rules::first(&rules::AI_ADMIT, next);
     let later = if ai_admit.is_none() { said_later(turn) } else { None };
     let (ai_admit, admit_text) = match &later {
-        Some((_, text, m)) => (Some(*m), text.as_str()),
+        Some((_, text, m)) => (Some(*m), head_chars(text, AI_HEAD)),
         None => (ai_admit, next),
     };
     let user_open = if pasted { None } else { rules::first(&rules::USER_OPEN, head) };
     let user_any = if pasted { None } else { rules::first(&rules::USER_ANY, body) };
     let context = rules::first(&rules::CONTEXT, head);
-    let answering = tail_chars(prev, ANSWER_TAIL).contains('?');
+    let answering = asks_you(prev);
+    // "Is the default port 5432?" then "You're correct": it confirmed what you asked, it didn't
+    // own a mistake. "Are you sure?", "Can you fix it?" and a statement before the question still count.
+    let only_asked = rules::plain_question(t);
+    let agreed = ai_admit.is_some_and(|m| rules::YOU_WERE_RIGHT.contains(&m.rule));
 
     // A chat's first message follows no AI reply, so there is nothing for it to correct: "still
     // broken: fix the login page" is a task, and keeps it.
     let label = match (ai_admit, user_open.or(user_any)) {
         _ if turn.prev_ai.is_none() => None,
         (Some(_), Some(_)) => Some(Label::Confirmed),
-        (Some(_), None) if context.is_none() => Some(Label::Admitted),
+        (Some(_), None) if context.is_none() && !(only_asked && agreed) => Some(Label::Admitted),
         (None, _) if user_open.is_some() && context.is_none() && !answering => Some(Label::Claimed),
         _ => None,
     };
@@ -292,6 +302,23 @@ pub fn classify(turn: &Turn) -> Verdict {
         }
     }
     Verdict::default()
+}
+
+/// Code in a reply: fenced blocks (an unclosed fence runs to the end) and inline spans.
+static CODE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"(?s)```.*?(?:```|$)|`[^`\n]*`").expect("code"));
+
+/// A '?' that ends a sentence: after a word, before a space or the end (closing quotes, brackets
+/// and emoji allowed). Not `read()?;`, `user?.name`, `?page=2` or `a ? b : c`.
+static ASKS: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r#"[^\s?]\?+(?:["')\]*_]|\p{So}|\p{Sk}|\x{FE0F}|\x{200D})*(?:\s|$)"#).expect("asks")
+});
+
+/// True when the AI's reply ends by asking you something, so your "no" answers it. Code becomes a
+/// word, so "Want me to run `cargo test`?" still asks.
+fn asks_you(prev: &str) -> bool {
+    let prose = CODE.replace_all(prev, "code");
+    ASKS.is_match(tail_chars(&prose, ANSWER_TAIL))
 }
 
 /// The first later message that says the person was right: its index, its normalized text, and

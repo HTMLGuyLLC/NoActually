@@ -51,7 +51,7 @@ fn shim_file(env: &Env) -> PathBuf {
 
 /// Codex's own folder: `$CODEX_HOME`, else `~/.codex`. A variable that isn't an absolute path counts as unset.
 pub(super) fn codex_dir(env: &Env) -> PathBuf {
-    codex_dir_in(std::env::var_os("CODEX_HOME"), &env.home)
+    codex_dir_in(env.codex_home.clone(), &env.home)
 }
 
 fn codex_dir_in(var: Option<std::ffi::OsString>, home: &Path) -> PathBuf {

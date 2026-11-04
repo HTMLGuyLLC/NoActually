@@ -24,6 +24,8 @@ const NOISE: &[&str] = &[
     "<user_instructions",
     "<permissions",
     "<turn_aborted",
+    "<skill",
+    "<hook_prompt",
 ];
 
 /// Codex's folder: `$CODEX_HOME`, else `~/.codex`. A variable that isn't an absolute path counts as
@@ -40,14 +42,20 @@ fn is_zst(p: &Path) -> bool {
     p.extension().is_some_and(|e| e == "zst")
 }
 
+/// How a message with attachments begins.
+const PREAMBLES: &[&str] = &["# Files mentioned by the user", "# Files pasted by the user", "Image attachment"];
+
 /// Drops the attachment preamble Codex puts before what you actually typed.
 fn strip_preamble(text: &str) -> &str {
     // "## My request for Codex:" in older builds, "## My request:" in newer ones.
     let mut t = text.trim_start();
-    if let Some(i) = t.find("## My request") {
-        let rest = &t[i..];
-        t = rest.find(':').map_or(rest, |c| &rest[c + 1..]).trim_start();
-        return t;
+    // Only when the message opens with an attachment preamble: a person can write that heading too.
+    if PREAMBLES.iter().any(|p| t.starts_with(p)) {
+        if let Some(i) = t.find("## My request") {
+            let rest = &t[i..];
+            t = rest.find(':').map_or(rest, |c| &rest[c + 1..]).trim_start();
+            return t;
+        }
     }
     t = t.strip_prefix("# Files mentioned by the user:").unwrap_or(t).trim_start();
     // Attachment lines look like "## Screenshot 1.png: /path" or "## repo: ~/code/repo/".
@@ -85,12 +93,13 @@ fn strip_images(text: &str) -> String {
     out.trim().to_string()
 }
 
-/// Only threads a person started. Guardian / subagent threads are model-to-model.
+/// Only threads a person is in. Guardian / subagent threads are model-to-model.
 fn human_thread(meta: &Value) -> bool {
     if meta.get("source").is_some_and(|s| s.get("subagent").is_some()) {
         return false;
     }
-    meta.get("thread_source").and_then(Value::as_str).is_none_or(|s| s == "user")
+    // Handoffs from ChatGPT and voice chats are a person talking; only model-to-model threads are skipped.
+    meta.get("thread_source").and_then(Value::as_str).is_none_or(|s| !matches!(s, "guardian_review" | "subagent"))
 }
 
 impl Source for Codex {
@@ -274,6 +283,10 @@ impl Rollout {
 
     fn line(&mut self, pos: u64, buf: &[u8]) {
         let fresh = pos >= self.from;
+        if buf.is_empty() {
+            self.skipped += usize::from(fresh); // a line over the cap (see `for_each_line`)
+            return;
+        }
         let meta = contains(buf, b"session_meta") || contains(buf, b"turn_context");
         let counts = self.usage && contains(buf, b"token_count");
         if !(meta || counts || (fresh && contains(buf, b"\"message\""))) {
@@ -358,13 +371,48 @@ mod tests {
         );
         assert_eq!(strip_images("poorly reviewed <image name=x path=\"/a.png\"> </image>"), "poorly reviewed");
         assert_eq!(strip_preamble("hello"), "hello");
+        assert_eq!(strip_preamble("# Files pasted by the user:\n- a.png\n\n## My request:\nfix it"), "fix it");
+    }
+
+    #[test]
+    fn a_heading_a_person_wrote_keeps_their_full_text() {
+        let text = "no, that's wrong. Put it under the ## My request: heading";
+        assert_eq!(strip_preamble(text), text);
+    }
+
+    #[test]
+    fn skill_and_hook_bodies_are_not_the_persons_messages() {
+        let body = opening()
+            + &msg("assistant", "output_text", "Done.", "a2")
+            + &msg("user", "input_text", "<skill>\n<name>x</name>\nbody\n</skill>", "s1")
+            + &msg("user", "input_text", "<hook_prompt hook_run_id=\"1\">keep going</hook_prompt>", "h1")
+            + &msg("assistant", "output_text", "ok", "a3");
+        let (_d, p) = rollout(&body);
+        let scan = Codex.scan(&p, 0, true).unwrap();
+        assert_eq!(scan.turns.len(), 1);
+    }
+
+    #[test]
+    fn handoff_and_voice_threads_are_read() {
+        for source in ["chatgpt_handoff", "voice_chat"] {
+            let body = line(&json!({"type":"session_meta","payload":{"id":"x","thread_source":source}}))
+                + &msg("assistant", "output_text", "Plan.", "a")
+                + &msg("user", "input_text", "no, that's wrong", "u")
+                + &msg("assistant", "output_text", "You're right.", "b");
+            let (_d, p) = rollout(&body);
+            assert_eq!(Codex.scan(&p, 0, true).unwrap().turns.len(), 1, "{source}");
+        }
     }
 
     #[test]
     fn skips_guardian_threads() {
         assert!(!human_thread(&serde_json::json!({"source":{"subagent":{"other":"guardian"}}})));
         assert!(human_thread(&serde_json::json!({"source":"vscode","thread_source":"user"})));
-        assert!(!human_thread(&serde_json::json!({"thread_source":"agent"})));
+        assert!(!human_thread(&serde_json::json!({"thread_source":"guardian_review"})));
+        assert!(!human_thread(&serde_json::json!({"thread_source":"subagent"})));
+        for s in ["chatgpt_handoff", "voice_chat"] {
+            assert!(human_thread(&serde_json::json!({"thread_source":s})), "{s}");
+        }
     }
 
     fn msg(role: &str, kind: &str, text: &str, id: &str) -> String {
@@ -556,7 +604,7 @@ mod tests {
         assert_eq!((light.session.as_str(), light.prompts.len()), ("rollout-2026-10-20-abc", 1));
         assert_eq!(light.prompts[0].key, whole.prompts[1].key);
         assert_eq!(light.prompts[0].usage, Usage::default());
-        let guardian = line(&json!({"type":"session_meta","payload":{"id":"abc","thread_source":"agent"}}));
+        let guardian = line(&json!({"type":"session_meta","payload":{"id":"abc","thread_source":"guardian_review"}}));
         let (_d2, p2) = rollout(&(guardian.clone() + &early + &late));
         let skipped = Codex.view_from(&p2, (guardian.len() + early.len()) as u64, false).unwrap().unwrap();
         assert!(skipped.prompts.is_empty(), "a model-to-model thread has no person's prompts");

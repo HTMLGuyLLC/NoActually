@@ -4,6 +4,27 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.5.7] - 2026-11-04
+
+### Changed
+
+- Your history is scored again once, under the fixed rules below.
+- Stored correction text is cleaned again once, with the wider redaction below.
+- Lessons: clearer hints and examples for Evidence and Target, and the Context lesson says the checker can't spot it.
+
+### Fixed
+
+- Messages from other agents and scheduled tasks in Claude Code no longer count as yours.
+- "No, that's all, thanks", "Nah, it's cool" and similar no longer count as corrections.
+- "You're right" after you ask a question is no longer a correction.
+- Adding context ("by the way…", "one other thing…") no longer counts against the AI.
+- Messages typed while Claude was busy are counted even when they include an image.
+- ChatGPT messages with an attachment are counted.
+- Codex handoff and voice chats are counted.
+- Large exports no longer use many times their size in memory.
+- Redaction catches more secrets, such as `*_KEY=` values, `pass:`, and Google and Slack tokens. Dates are no longer hidden.
+- Bedrock model names are recognized, and Opus 4 and 4.1 have prices.
+
 ## [0.5.6] - 2026-11-01
 
 ### Added
@@ -273,7 +294,8 @@ First release.
 - Per-source consent: nothing is read until you allow it, and Forget deletes a source's data
 - `noactually` command-line tool (`sources`, `allow`, `sync`, `stats`)
 
-[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.6...HEAD
+[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.7...HEAD
+[0.5.7]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.3...v0.5.4

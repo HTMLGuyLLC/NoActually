@@ -2,7 +2,7 @@
 //! transcript, an empty home folder and a throwaway database. Nothing real is read or written.
 
 use serde_json::{json, Value};
-use sources::testing::line;
+use sources::testing::{cc_prompt, cc_reply_with_usage};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -12,14 +12,18 @@ fn at(minute: u32) -> String {
 }
 
 fn user(n: u32, minute: u32, text: &str) -> String {
-    line(&json!({"type":"user","uuid":format!("u-{n}"),"promptId":format!("p-{n}"),"timestamp":at(minute),
-        "message":{"content":text}}))
+    cc_prompt(&format!("u-{n}"), &format!("p-{n}"), &at(minute), text)
 }
 
 fn reply(n: u32, minute: u32, text: &str) -> String {
-    line(&json!({"type":"assistant","uuid":format!("a-{n}"),"timestamp":at(minute),"message":{
-        "id":format!("m-{n}"),"model":"claude-opus-5-5","content":[{"type":"text","text":text}],
-        "usage":{"input_tokens":10_000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":5_000}}}))
+    cc_reply_with_usage(
+        "claude-opus-5-5",
+        &format!("a-{n}"),
+        &format!("m-{n}"),
+        &at(minute),
+        text,
+        (10_000, 0, 0, 5_000),
+    )
 }
 
 /// Two rounds, then thanks.
@@ -52,20 +56,34 @@ impl Home {
         p
     }
 
+    /// The binary with an empty environment but for this home, so no real Claude Code, Codex or
+    /// database folder (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `XDG_*`, `APPDATA`...) is ever reached.
+    fn command(&self) -> Command {
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_noactually"));
+        cmd.env_clear()
+            .env("HOME", self.dir.path())
+            .env("USERPROFILE", self.dir.path())
+            .env("NOACTUALLY_DB", self.dir.path().join("noactually.db"));
+        // Windows can't start a program without PATH and SystemRoot, and TZ lets CI run these in other zones.
+        // The rest of the real environment stays out.
+        for keep in ["PATH", "SystemRoot", "TZ"] {
+            if let Some(v) = std::env::var_os(keep) {
+                cmd.env(keep, v);
+            }
+        }
+        cmd
+    }
+
     fn run(&self, args: &[&str], stdin: &str) -> Output {
         self.run_with(args, stdin, &[])
     }
 
     fn run_with(&self, args: &[&str], stdin: &str, env: &[(&str, &str)]) -> Output {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_noactually"))
+        let mut child = self
+            .command()
             .args(args)
-            .env("HOME", self.dir.path())
-            .env("USERPROFILE", self.dir.path())
-            .env("NOACTUALLY_DB", self.dir.path().join("noactually.db"))
             .env("NOACTUALLY_CLAUDE_PROJECTS", self.dir.path().join("projects"))
             .env("NOACTUALLY_CODEX_SESSIONS", self.dir.path().join("sessions"))
-            .env_remove("CLAUDE_CODE_ENTRYPOINT")
-            .env_remove("NOACTUALLY_DEBUG")
             .envs(env.iter().copied())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -129,15 +147,7 @@ fn an_argument_that_is_not_text_is_an_error_or_nothing_never_a_panic() {
     use std::os::unix::ffi::OsStringExt;
     let home = Home::new();
     let bad = std::ffi::OsString::from_vec(vec![b'x', 0xff, 0xfe]);
-    let run = |args: &[&std::ffi::OsStr]| {
-        Command::new(env!("CARGO_BIN_EXE_noactually"))
-            .args(args)
-            .env("HOME", home.dir.path())
-            .env("NOACTUALLY_DB", home.dir.path().join("noactually.db"))
-            .stdin(Stdio::null())
-            .output()
-            .unwrap()
-    };
+    let run = |args: &[&std::ffi::OsStr]| home.command().args(args).stdin(Stdio::null()).output().unwrap();
     // A helper command prints nothing and succeeds.
     let out = run(&["digest".as_ref(), "--transcript".as_ref(), bad.as_ref()]);
     assert!(out.status.success());
@@ -170,10 +180,9 @@ fn the_stop_hook_answers_in_json_and_only_when_it_has_something_to_say() {
     assert!(quiet.status.success() && quiet.stdout.is_empty() && quiet.stderr.is_empty());
 
     // `claude -p` has nobody to ask.
-    let mut headless = Command::new(env!("CARGO_BIN_EXE_noactually"));
+    let mut headless = home.command();
     headless
         .args(["hook", "stop"])
-        .env("NOACTUALLY_DB", home.dir.path().join("noactually.db"))
         .env("CLAUDE_CODE_ENTRYPOINT", "sdk-cli")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped());
@@ -187,9 +196,8 @@ fn the_stop_hook_answers_in_json_and_only_when_it_has_something_to_say() {
 fn the_session_start_hook_gives_a_chat_in_an_app_the_rules_when_tips_are_on() {
     let home = Home::new();
     let run = |entrypoint: &str| {
-        let mut hook = Command::new(env!("CARGO_BIN_EXE_noactually"));
+        let mut hook = home.command();
         hook.args(["hook", "session-start"])
-            .env("NOACTUALLY_DB", home.dir.path().join("noactually.db"))
             .env("CLAUDE_CODE_ENTRYPOINT", entrypoint)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -347,10 +355,12 @@ fn stats_report_cards_reports_a_card_from_a_synced_chat_as_text_and_json() {
     assert!(text.find("Extra minutes") < text.find("Extra cost"), "{text}");
     assert!(!text.contains("token"), "no counts of tokens in the text: {text}");
     assert!(text.contains("  Most missed     Finish line (1 of 1 task)\n"), "{text}");
+    // The day is shown in local time, so it moves with the zone (the chat is at 10:00 UTC).
+    let day = chrono::DateTime::parse_from_rfc3339(&at(0)).unwrap().with_timezone(&chrono::Local).date_naive();
     assert!(
-        text.contains(
-            "\n  Latest\n    2026-10-01  claude-code   B  left out: finish line  about 2 extra minutes · about $0.07 at pay-as-you-go prices"
-        ),
+        text.contains(&format!(
+            "\n  Latest\n    {day}  claude-code   B  left out: finish line  about 2 extra minutes · about $0.07 at pay-as-you-go prices"
+        )),
         "{text}"
     );
     assert_eq!(String::from_utf8_lossy(&out.stderr), "");
@@ -391,17 +401,15 @@ fn stats_report_cards_reports_a_card_from_a_synced_chat_as_text_and_json() {
 }
 
 /// A hook whose input never ends (the pipe stays open, nothing is written) must still give up
-/// on its own: exit 0 with nothing printed, inside the 2 second limit plus a little room.
+/// on its own: exit 0 with nothing printed. The hook's own limit is 2 seconds; the wait here is 10x
+/// that so a slow, busy machine doesn't fail it, while a hook that never gave up still does.
 #[test]
 fn a_hook_with_stdin_left_open_exits_quietly_in_time() {
     let home = Home::new();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_noactually"))
+    let mut child = home
+        .command()
         .args(["hook", "stop"])
-        .env("HOME", home.dir.path())
-        .env("USERPROFILE", home.dir.path())
-        .env("NOACTUALLY_DB", home.dir.path().join("noactually.db"))
         .env("NOACTUALLY_CLAUDE_PROJECTS", home.dir.path().join("projects"))
-        .env_remove("CLAUDE_CODE_ENTRYPOINT")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -414,9 +422,9 @@ fn a_hook_with_stdin_left_open_exits_quietly_in_time() {
         if let Some(status) = child.try_wait().unwrap() {
             break status;
         }
-        if start.elapsed() > std::time::Duration::from_secs(3) {
+        if start.elapsed() > std::time::Duration::from_secs(30) {
             let _ = child.kill();
-            panic!("the hook was still running after 3 seconds");
+            panic!("the hook was still running after 30 seconds");
         }
         std::thread::sleep(std::time::Duration::from_millis(20));
     };

@@ -10,7 +10,8 @@ pub struct ChatGptExport;
 
 fn text_parts(msg: &Value) -> Option<String> {
     let content = &msg["content"];
-    if content["content_type"].as_str() != Some("text") {
+    // "multimodal_text" is a message with an attachment: its parts mix text with image records.
+    if !matches!(content["content_type"].as_str(), Some("text" | "multimodal_text")) {
         return None;
     }
     let parts: Vec<&str> = content["parts"].as_array()?.iter().filter_map(Value::as_str).collect();
@@ -126,6 +127,27 @@ mod tests {
 
         std::fs::write(&p, "{not json").unwrap();
         assert!(ChatGptExport.scan(&p, 0, false).err().unwrap().to_string().contains("not a valid export"));
+    }
+
+    #[test]
+    fn messages_with_an_attachment_keep_their_text_parts() {
+        let multimodal = |role: &str, parts: Value| {
+            json!({"id":role,"author":{"role":role},"create_time":1.0,
+                "content":{"content_type":"multimodal_text","parts":parts},"metadata":{}})
+        };
+        let conv = json!({"conversation_id":"c1","current_node":"b","mapping":{
+            "a": {"parent": null, "message": multimodal("user", json!([
+                {"content_type":"image_asset_pointer","asset_pointer":"file-service://x","size_bytes":10},
+                "no, that's the wrong button"]))},
+            "b": {"parent": "a", "message": multimodal("assistant", json!(["You're right."]))}
+        }});
+        let ev = events(&conv);
+        assert_eq!(ev.len(), 2);
+        assert!(matches!(&ev[0], Event::Human { text, .. } if text == "no, that's the wrong button"));
+        let image_only =
+            json!({"content":{"content_type":"multimodal_text","parts":[{"content_type":"image_asset_pointer"}]}});
+        assert_eq!(text_parts(&image_only), None);
+        assert_eq!(text_parts(&json!({"content":{"content_type":"code","parts":["x"]}})), None);
     }
 
     #[test]

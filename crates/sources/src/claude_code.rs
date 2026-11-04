@@ -57,6 +57,11 @@ const NOISE: &[&str] = &[
     "<side-sessions-event",
     "<ci-monitor-event",
     "[Artifact comment",
+    // Other agents and scheduled tasks. Newer files say so in `origin`; older ones only in the text.
+    "<agent-message",
+    "<cross-session-message",
+    "<scheduled-task",
+    "Another Claude session sent a message",
 ];
 
 #[derive(Deserialize)]
@@ -71,6 +76,19 @@ struct Line {
     meta: bool,
     message: Option<Message>,
     attachment: Option<Attachment>,
+    origin: Option<Origin>,
+}
+
+/// Who a record came from: `human`, `peer` (another agent), `task-notification`. Older files have none.
+#[derive(Deserialize)]
+struct Origin {
+    kind: Option<String>,
+}
+
+/// True when the record says another agent, a scheduled task or a coordinator wrote it. Kinds not
+/// listed are kept: a new way for the person to type (voice, a phone) mustn't vanish from their history.
+fn not_human(origin: Option<&Origin>) -> bool {
+    origin.and_then(|o| o.kind.as_deref()).is_some_and(|k| matches!(k, "peer" | "task-notification" | "coordinator"))
 }
 
 #[derive(Deserialize)]
@@ -111,6 +129,7 @@ struct Attachment {
     kind: Option<String>,
     prompt: Option<serde_json::Value>,
     content: Option<serde_json::Value>,
+    origin: Option<Origin>,
 }
 
 fn text_of(content: &Content) -> Option<String> {
@@ -135,6 +154,25 @@ fn text_of(content: &Content) -> Option<String> {
 fn is_noise(s: &str) -> bool {
     let t = s.trim_start();
     NOISE.iter().any(|n| t.starts_with(n))
+}
+
+/// Removes `<pasted_content …>…</pasted_content …>` blocks, keeping what was typed around them.
+/// A block with no closing tag is left alone.
+fn strip_pasted(text: &str) -> String {
+    const OPEN: &str = "<pasted_content";
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(i) = rest.find(OPEN) {
+        let after = &rest[i..];
+        // The block ends at the closing tag with the same id, so a pasted tag inside it can't end it early.
+        let Some(open_end) = after.find('>') else { break };
+        let close = format!("</{}", &after[1..=open_end]);
+        let Some(end) = after[open_end..].find(&close).map(|c| open_end + c + close.len()) else { break };
+        out.push_str(&rest[..i]);
+        rest = &after[end..];
+    }
+    out.push_str(rest);
+    out.trim().to_string()
 }
 
 impl Source for ClaudeCode {
@@ -238,6 +276,9 @@ struct Read {
 const SKILL: &str = "grade:me";
 
 fn read_line(buf: &[u8], pos: u64, usage: bool) -> Read {
+    if buf.is_empty() {
+        return Read { skipped: true, ..Read::default() }; // a line over the cap (see `for_each_line`)
+    }
     // Cheap filters before any JSON work. Tool results are user-role records too.
     let is_user = contains(buf, br#""type":"user""#);
     let is_ai = contains(buf, br#""type":"assistant""#);
@@ -333,6 +374,15 @@ fn sample(line: &Line, pos: u64) -> Option<(Option<String>, Sample)> {
     Some((m.id.clone(), Sample { pos, ts, model: m.model.clone(), usage }))
 }
 
+/// A person's message, unless it is injected context or only a pasted block.
+fn human(text: String, ts: DateTime<Utc>, line: &Line, pos: u64) -> Option<Event> {
+    if is_noise(&text) {
+        return None;
+    }
+    let text = if text.contains("<pasted_content") { strip_pasted(&text) } else { text };
+    (!text.trim().is_empty() && !is_noise(&text)).then(|| Event::Human { text, ts, key: line.uuid.clone(), pos })
+}
+
 /// The event one transcript line holds, if it's a message a person typed or a model wrote.
 fn event(line: &Line, pos: u64) -> Option<Event> {
     if line.sidechain || line.meta {
@@ -341,17 +391,24 @@ fn event(line: &Line, pos: u64) -> Option<Event> {
     let ts = line.timestamp.as_deref().and_then(parse_ts);
     match line.kind.as_deref()? {
         "user" => {
-            let text = line.message.as_ref().and_then(|m| m.content.as_ref()).and_then(text_of)?;
-            (!is_noise(&text)).then_some(Event::Human { text, ts: ts?, key: line.uuid.clone(), pos })
-        }
-        // A message typed while Claude was busy, delivered later as an attachment.
-        "attachment" => {
-            let a = line.attachment.as_ref()?;
-            let Some(serde_json::Value::String(text)) = &a.prompt else { return None };
-            if a.kind.as_deref() != Some("queued_command") || is_noise(text) {
+            if not_human(line.origin.as_ref()) {
                 return None;
             }
-            Some(Event::Human { text: text.clone(), ts: ts?, key: line.uuid.clone(), pos })
+            let text = line.message.as_ref().and_then(|m| m.content.as_ref()).and_then(text_of)?;
+            human(text, ts?, line, pos)
+        }
+        // A message typed while Claude was busy, delivered later as an attachment. The prompt is
+        // text, or content blocks when an image came with it.
+        "attachment" => {
+            let a = line.attachment.as_ref()?;
+            if a.kind.as_deref() != Some("queued_command") || not_human(line.origin.as_ref().or(a.origin.as_ref())) {
+                return None;
+            }
+            let text = match a.prompt.as_ref()? {
+                serde_json::Value::String(t) => t.clone(),
+                other => Content::deserialize(other).ok().as_ref().and_then(text_of)?,
+            };
+            human(text, ts?, line, pos)
         }
         "assistant" => {
             let m = line.message.as_ref()?;
@@ -410,6 +467,12 @@ mod tests {
             + "unrelated noise\n";
         let scan = scan_str(&body, true);
         assert_eq!((scan.turns.len(), scan.skipped_lines), (1, 2), "noise that no rule wants isn't counted");
+    }
+
+    #[test]
+    fn a_line_over_the_cap_is_counted_as_skipped() {
+        assert!(read_line(b"", 0, false).skipped);
+        assert!(!read_line(b"unrelated\n", 0, false).skipped);
     }
 
     #[test]
@@ -505,6 +568,97 @@ mod tests {
         assert_eq!(scan.turns.len(), 1);
         assert_eq!(scan.turns[0].turn.human, "you missed the tests");
         assert_eq!(scan.turns[0].key.as_deref(), Some("q1"));
+    }
+
+    #[test]
+    fn queued_commands_with_an_image_are_read_by_their_text() {
+        let queued = line(&json!({"type":"attachment","uuid":"q1","timestamp":TS,"attachment":{
+            "type":"queued_command","prompt":[{"type":"text","text":"this looks off"},
+            {"type":"image","source":{"type":"base64","media_type":"image/png","data":"AAAA"}}]}}));
+        let image_only = line(&json!({"type":"attachment","uuid":"q2","timestamp":TS,"attachment":{
+            "type":"queued_command","prompt":[{"type":"image","source":{"type":"base64","data":"AAAA"}}]}}));
+        let body =
+            cc_ai("claude-opus-5-5", TS, "Done.") + &image_only + &queued + &cc_ai("claude-opus-5-5", TS, "Fixing it.");
+        let scan = scan_str(&body, true);
+        assert_eq!(scan.turns.len(), 1);
+        assert_eq!(scan.turns[0].turn.human, "this looks off");
+        assert_eq!(scan.turns[0].key.as_deref(), Some("q1"));
+    }
+
+    #[test]
+    fn messages_from_other_agents_and_tasks_are_not_the_persons() {
+        let peer_text = "Another Claude session sent a message:\nYou're right, it broke.";
+        let peer_queued = line(&json!({"type":"attachment","uuid":"q1","timestamp":TS,"origin":{"kind":"peer"},
+            "attachment":{"type":"queued_command","prompt":"<agent-message from=\"x\">hi</agent-message>"}}));
+        let nested = line(&json!({"type":"attachment","uuid":"q2","timestamp":TS,"attachment":{
+            "type":"queued_command","origin":{"kind":"task-notification"},"prompt":"anything at all"}}));
+        let tagged = line(&json!({"type":"user","uuid":"p1","timestamp":TS,"origin":{"kind":"peer"},
+            "message":{"content":"plain text, tagged by origin"}}));
+        let human_tagged = line(&json!({"type":"user","uuid":"h1","timestamp":TS,"origin":{"kind":"human"},
+            "message":{"content":"no, that's wrong"}}));
+        for body in [
+            cc_user("p", TS, peer_text),
+            cc_user("p", TS, "<scheduled-task name=\"x\">run</scheduled-task>"),
+            line(&json!({"type":"attachment","uuid":"q","timestamp":TS,"attachment":{
+                "type":"queued_command","prompt":"<cross-session-message>hi</cross-session-message>"}})),
+            peer_queued,
+            nested,
+            tagged,
+        ] {
+            let scan = scan_str(&(body.clone() + &cc_ai("claude-opus-5-5", TS, "ok")), true);
+            assert!(scan.turns.is_empty(), "{body}");
+        }
+        let scan = scan_str(&(human_tagged + &cc_ai("claude-opus-5-5", TS, "You're right.")), true);
+        assert_eq!(scan.turns.len(), 1, "origin human is kept");
+        let new_kind = line(&json!({"type":"user","uuid":"v1","timestamp":TS,"origin":{"kind":"voice"},
+            "message":{"content":"no, that's wrong"}}));
+        let scan = scan_str(&(new_kind + &cc_ai("claude-opus-5-5", TS, "You're right.")), true);
+        assert_eq!(scan.turns.len(), 1, "a kind not known to be another writer is kept");
+    }
+
+    #[test]
+    fn a_chat_with_no_turns_is_still_listed_as_read() {
+        let body = cc_user("p", TS, "Another Claude session sent a message:\nhi") + &cc_ai("claude-opus-5-5", TS, "ok");
+        let scan = scan_str(&body, true);
+        assert!(scan.turns.is_empty());
+        assert_eq!(scan.sessions.len(), 1, "a rebuild must know this chat was read");
+    }
+
+    #[test]
+    fn a_peer_message_does_not_cut_the_replies_short() {
+        let peer = line(&json!({"type":"attachment","uuid":"q1","timestamp":TS,"origin":{"kind":"peer"},
+            "attachment":{"type":"queued_command","prompt":"<agent-message from=\"x\">status</agent-message>"}}));
+        let body = cc_ai("claude-opus-5-5", TS, "I moved the header.")
+            + &cc_user("u1", TS, "the header still overlaps the menu")
+            + &cc_ai("claude-opus-5-5", TS, "Let me look.")
+            + &peer
+            + &cc_ai("claude-opus-5-5", TS, "You're right, my fix was wrong. Sorry about that.");
+        let scan = scan_str(&body, true);
+        assert_eq!(scan.turns.len(), 1);
+        let t = &scan.turns[0].turn;
+        assert_eq!(t.human, "the header still overlaps the menu");
+        assert!(t.later_ai.iter().any(|r| r.contains("my fix was wrong")), "{:?}", t.later_ai);
+        assert_eq!(engine::classify(t).label, Some(engine::Label::Admitted));
+    }
+
+    #[test]
+    fn pasted_blocks_are_dropped_and_the_typed_text_kept() {
+        let pasted = |body: &str| format!("<pasted_content id=\"1\">{body}</pasted_content id=\"1\">");
+        let humans = |text: String| {
+            let body =
+                cc_ai("claude-opus-5-5", TS, "Done.") + &cc_user("u1", TS, &text) + &cc_ai("claude-opus-5-5", TS, "ok");
+            scan_str(&body, true).turns.iter().map(|t| t.turn.human.clone()).collect::<Vec<_>>()
+        };
+        assert_eq!(humans(pasted("error: x") + "\nno, that's wrong"), ["no, that's wrong"]);
+        assert_eq!(humans(format!("{}\n{}\nwhy?", pasted("a"), pasted("b"))), ["why?"]);
+        assert_eq!(humans(pasted("only a paste")).len(), 0);
+        let open = "<pasted_content id=\"1\">never closed no, wrong";
+        assert_eq!(humans(open.to_string()), [open]);
+        assert_eq!(strip_pasted("see <pasted_content>x</pasted_content> now"), "see  now");
+        // A paste that quotes another paste's closing tag ends only at its own.
+        let nested =
+            "<pasted_content id=\"2\">log </pasted_content id=\"9\"> more</pasted_content id=\"2\">still wrong";
+        assert_eq!(strip_pasted(nested), "still wrong");
     }
 
     #[test]

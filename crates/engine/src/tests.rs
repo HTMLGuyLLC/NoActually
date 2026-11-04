@@ -246,6 +246,7 @@ const EXAMPLES: &[(&str, &str, &str)] = &[
     ("ai.incorrectly", "I incorrectly assumed v2.", "It was incorrectly set upstream."),
     ("ai.that_was_wrong", "That was wrong of me.", "That was the wrong branch?"),
     ("ai.didnt_check", "I didn't check the logs.", "I didn't change the logs."),
+    ("you.unneeded", "No, that's not needed, remove it", "No, that's not needed, thanks"),
     ("you.no_that", "no, that's the wrong file", "no, that's fine, ship it"),
     ("you.no", "nope.", "no problem"),
     ("you.wrong", "not quite, the year is off", "that's not a problem"),
@@ -256,7 +257,7 @@ const EXAMPLES: &[(&str, &str, &str)] = &[
     ("you.i_asked", "I asked for a list", "I asked around and nobody knows"),
     ("you.why_did_you", "why did you delete that?", "why does this need a key?"),
     ("you.doesnt_work", "doesn't work on firefox", "doesn't matter, keep going"),
-    ("you.same_error", "same error as before", "same here"),
+    ("you.same_error", "same thing, it still crashes", "same thing for the footer please"),
     ("you.actually", "actually, that's the old API", "actually, that works now"),
     ("you.any.doesnt_exist", "the flag doesn't exist in v2", "the flag didn't exit cleanly"),
     ("you.any.not_working", "the login is not working", "I'm not worried about it"),
@@ -463,4 +464,164 @@ fn expecting_to_have_something_is_not_an_admission() {
     for reply in ["I should have checked the config.", "I should have asked first.", "My bad, fixing it."] {
         assert!(rules::first(&rules::AI_ADMIT, reply).is_some(), "{reply}");
     }
+}
+
+#[test]
+fn should_have_it_ready_is_a_promise_not_an_admission() {
+    for reply in
+        ["I should have a fix ready in a minute.", "I should have this done shortly.", "I should have that now."]
+    {
+        assert_eq!(rules::first(&rules::AI_ADMIT, reply).map(|m| m.rule), None, "{reply}");
+    }
+    for reply in ["I should have fixed this first.", "I should have tested that."] {
+        assert_eq!(rules::first(&rules::AI_ADMIT, reply).map(|m| m.rule), Some("ai.should_have"), "{reply}");
+    }
+}
+
+#[test]
+fn polite_closers_and_routine_requests_are_not_claims() {
+    for h in [
+        "No, that's not necessary.",
+        "No, that's all for now, thanks",
+        "No, that's all.",
+        "Nah, it's cool",
+        "No, that's alright",
+        "Nope, good to go",
+        "nope, not needed",
+        "That's not needed",
+        "that's not really necessary right now",
+        "Actually, that's not necessary",
+        "Same thing for the footer please",
+        "Not working on the API today, focus on the UI",
+    ] {
+        assert_eq!(label("Done. Anything else", h, "Sounds good."), None, "{h}");
+    }
+    // Real corrections still count.
+    for h in [
+        "No, that's wrong",
+        "No, that's not what I asked",
+        "No, that's all wrong",
+        "That's not right",
+        "same error",
+        "still the same issue",
+        "doesn't work",
+        "not working",
+        "not working at all",
+        "Not working on Safari",
+        "not working on my phone, the menu won't open",
+        "Not working on Safari anymore",
+        "Not working on mobile now",
+        "Not working on my machine right now either",
+        "Same thing",
+        "Same thing happens",
+        "Same thing, it still crashes",
+        // "Not needed" plus undoing the work is pushback.
+        "No, that's not needed, remove it",
+        "That's not needed, revert it",
+        "That's not necessary, I said only change the header",
+    ] {
+        assert_eq!(label("Done. Anything else", h, "Checking."), Some(Label::Claimed), "{h}");
+    }
+}
+
+#[test]
+fn agreeing_with_a_plain_question_is_not_an_admission() {
+    for (h, reply) in [
+        ("Is the default port 5432?", "You're correct, the default is 5432."),
+        ("does it run on node 20?", "You're right, it does."),
+        ("So I need to restart after editing .env?", "You're right, a restart is needed."),
+    ] {
+        assert_eq!(label("Set it to 5432.", h, reply), None, "{h}");
+    }
+    // Doubt and pushback still make it a correction.
+    assert_eq!(
+        label("Set it to 5433.", "No, that's wrong. Why did you use 5433?", "You're right, it's 5432."),
+        Some(Label::Confirmed)
+    );
+    assert_eq!(label("Set it to 5433.", "are you sure?", "You're right, it's 5432."), Some(Label::Admitted));
+    assert_eq!(label("Set it to 5433.", "isn't it 5432?", "You're correct, it's 5432."), Some(Label::Admitted));
+    // Owning a mistake after a question still counts: only agreement is ruled out.
+    assert_eq!(label("Set it to 5433.", "Is the default port 5432?", "My mistake, it is."), Some(Label::Admitted));
+    // A statement before the question, a request, or doubt: still an admission.
+    for h in [
+        "The function returns null when the list is empty. Can you fix it?",
+        "This crashes on empty input, can you fix that?",
+        "Shouldn't we handle errors here?",
+        "Shouldn't you check for null first?",
+        "Won't that break the build?",
+        "Can't you just use a map?",
+        "Isn't 5432 the default port?",
+        "Hold on, what about the empty case?",
+        "explain why you used 5432, it should be 5433",
+    ] {
+        assert_eq!(label("Set it to 5433.", h, "You're right, fixing it."), Some(Label::Admitted), "{h}");
+    }
+    // Later messages follow the same rule.
+    assert_eq!(after_checking("Is it Globex?", &["You're right, it's Globex."]).label, None);
+}
+
+#[test]
+fn added_context_never_counts_against_the_ai() {
+    for h in [
+        "By the way, we deploy on Vercel",
+        "oh, also we use pnpm",
+        "one other thing: it runs on Windows",
+        "Another thing, the API is v2",
+        "p.s. the dates are UTC",
+        "In addition, it must support Safari",
+        "I should have mentioned we use Postgres",
+        "I didn't mention it, but we deploy on Fly",
+    ] {
+        assert_eq!(label("Here's the config.", h, "Good catch! I'll add a vercel.json."), None, "{h}");
+    }
+    // Pastes and pushback that only look like context.
+    for h in [
+        "PS C:\\proj> npm run dev\nError: Cannot find module 'x'",
+        "ps aux shows it's still running",
+        "Why did you add a footer? I didn't mention a footer.",
+    ] {
+        assert!(rules::first(&rules::CONTEXT, h).is_none(), "{h}");
+    }
+    assert_eq!(
+        label("Added a footer.", "Why did you add a footer? I didn't mention a footer.", "Removing it."),
+        Some(Label::Claimed)
+    );
+}
+
+#[test]
+fn a_question_mark_in_code_is_not_the_ai_asking() {
+    for prev in [
+        "Done:\n```rust\nlet f = File::open(p)?;\n```",
+        "It reads `user?.name` now.",
+        "It now calls `read()?` before parsing.",
+        "See https://example.com/docs?page=2 for the flags.",
+        "It returns ok ? a : b now.",
+    ] {
+        assert_eq!(label(prev, "no, that's the wrong file", "Switching."), Some(Label::Claimed), "{prev}");
+    }
+    assert_eq!(label("Want me to run `cargo test`?", "No, the header is wrong", "Okay."), None);
+    for prev in [
+        "Want me to ship it?",
+        "Should I keep `read()?` here?",
+        "Use \"v2\"?\n\nOr v3?",
+        "Want me to run `cargo test`?",
+        "Should I proceed?🙂",
+        "Should I proceed? 🙂 ",
+    ] {
+        assert_eq!(label(prev, "no, that's the wrong file", "Switching."), None, "{prev}");
+    }
+}
+
+#[test]
+fn the_ais_incidental_words_do_not_pick_the_category() {
+    let cat = |h: &str, n: &str| classify(&turn("x", h, n)).category;
+    assert_eq!(cat("that's wrong", "You're right. There is no reason to keep that branch."), Some(Category::JustWrong));
+    assert_eq!(cat("that's wrong", "You're right, I already changed the wrong file."), Some(Category::JustWrong));
+    assert_eq!(cat("that's wrong", "You're right, let me re-read it."), Some(Category::JustWrong));
+    // Your side still picks it.
+    assert_eq!(cat("there is no such page", "You're right."), Some(Category::MadeItUp));
+    assert_eq!(cat("I already told you to keep it", "You're right."), Some(Category::IgnoredInstructions));
+    // Only the start of a later message is read for the category too.
+    let late = format!("You're right. {} I said it doesn't exist.", "x".repeat(300));
+    assert_eq!(after_checking("that's wrong", &[&late]).category, Some(Category::JustWrong));
 }

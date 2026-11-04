@@ -5,7 +5,7 @@
 //! A prompt's grade counts its [`Signal`]s, never its length, so padding a prompt earns nothing.
 //! Questions aren't prompts: asking how something works is not handing over a task.
 
-use crate::rules::{first, rule, rule_unless, Rule};
+use crate::rules::{first, rule, rule_not_after, rule_unless, Rule, ADDED_FORGOT, ADDED_OPENER};
 use crate::{head_chars, normalize_quotes, Label, Turn, Verdict};
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
@@ -368,9 +368,11 @@ static QUESTION: LazyLock<Vec<Rule>> = LazyLock::new(|| {
 });
 
 static EXPLAIN: LazyLock<Vec<Rule>> = LazyLock::new(|| {
-    vec![rule(
+    vec![rule_unless(
         "chat.explain",
         r"^(?:explain|tell me (?:about|what|why|how)|describe|define|summari[sz]e|tldr|eli5|(?:can|could|would) you (?:explain|tell me|help me understand|walk me through|describe|summari[sz]e|clarify))\b",
+        // "Summarize the changes into CHANGELOG.md" writes something: a task, not a question.
+        r"(?:(?:can|could|would) you )?summari[sz]e\b[^.?!\n]{0,80}\b(?:into|to|in|as)\s+(?:(?:a|an|the|my|our)\s+)?(?:[\w-]+\.[a-z]\w{0,4}\b|`|(?:new\s+)?(?:file|doc|document|changelog|readme|pr|commit|comment|issue|ticket|email|message|note|notes|table|list)\b)",
     )]
 });
 
@@ -409,15 +411,10 @@ static ADDED: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![
         rule_unless(
             "steer.added.also",
-            &format!(
-                r"{ACK}(?:also|oh,? and|ah,? and|and also|btw|by the way|fyi|one more thing|one other thing|another thing|additionally|in addition|plus,|p\.?s\.?)(?:\W|$)"
-            ),
+            &format!(r"{ACK}(?:{ADDED_OPENER})(?:\W|$)"),
             &format!(r"{ACK}(?:also|and also|plus,)\W*{WORKFLOW}"),
         ),
-        rule(
-            "steer.added.forgot",
-            r"\bi (?:forgot|neglected) to (?:mention|say|tell|add|include|note|specify)\b|\bforgot to mention\b|\bi should have (?:mentioned|said|told|added|specified)\b|\bi didn'?t mention\b",
-        ),
+        rule("steer.added.forgot", ADDED_FORGOT),
         rule_unless(
             "steer.added.make_sure",
             &format!(
@@ -457,9 +454,11 @@ static NEW_TASK: LazyLock<Vec<Rule>> = LazyLock::new(|| {
 /// Names the place.
 static SPOT: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![
-        rule(
+        rule_unless(
             "prompt.spot.file",
             r"\b[\w-]+\.(?:rs|ts|tsx|js|jsx|mjs|cjs|py|go|java|kt|kts|swift|rb|php|cs|cpp|cc|c|h|hpp|css|scss|sass|less|html?|md|mdx|json|jsonl|ya?ml|toml|ini|cfg|conf|sql|sh|bash|zsh|ps1|vue|svelte|astro|lock|env|txt|csv|tsv|xml|gradle|tf|proto|graphql|gql|ipynb|plist|xcconfig|dart|lua|ex|exs|scala)\b|(?:^|[\s(`'])\.(?:env|gitignore|npmrc|nvmrc|eslintrc|prettierrc|editorconfig|github|vscode)\b|(?-i:\b(?:Dockerfile|Makefile|Justfile|justfile|Gemfile|Procfile|README|CHANGELOG)\b)",
+            // A framework's name ("Next.js", "Node.js") is a word, not a file.
+            r"(?:next|node|nuxt|nest|vue|react|preact|angular|ember|backbone|express|three|chart|d3|alpine|solid|knockout|meteor|moment|p5|pixi|leaflet|electron)\.js\b",
         ),
         rule("prompt.spot.dir", r"(?:^|[\s(\[`'])(?:~|\.{1,2})?/?[A-Za-z_][\w.-]*/[\w.-]+/"),
         rule("prompt.spot.mention", r"(?:^|\s)@[\w-]*[/.][\w./-]+"),
@@ -499,7 +498,8 @@ static PROOF: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         ),
         rule(
             "prompt.proof.example",
-            r"\be\.g\.|\b(?:for example|for instance|such as|like this|example:|sample:|here'?s (?:an|the|my) (?:example|output|error|log|screenshot|trace)|here is (?:an|the|my) (?:example|output|error|log|screenshot|trace))",
+            // "such as login" lists, it doesn't show anything.
+            r"\be\.g\.|\b(?:for example|for instance|like this|example:|sample:|here'?s (?:an|the|my) (?:example|output|error|log|screenshot|trace)|here is (?:an|the|my) (?:example|output|error|log|screenshot|trace))",
         ),
         rule("prompt.proof.quote", r#""[^"\n]{6,200}""#),
         rule(
@@ -575,7 +575,7 @@ static LIMITS: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         ),
         rule(
             "prompt.limits.no",
-            r"\bno (?:new |extra |additional |external |third[- ]party )?(?:dependencies|deps|packages|libraries|libs|frameworks|breaking changes|migrations|comments|emojis?|placeholders|mocks|todos?)\b|\b(?:must not|mustn'?t|should not|shouldn'?t|cannot|can'?t|may not) (?:change|break|touch|use|add|remove|affect|modify|rely|depend|exceed|call|import|be)\b|\b(?:out of scope|scope (?:it|this) to|limit(?:ed)? (?:it |this |the change )?to|stick (?:to|with)|stay within|no more than)\b",
+            r"\bno (?:new |extra |additional |external |third[- ]party )?(?:dependencies|deps|packages|libraries|libs|frameworks|breaking changes|migrations|comments|emojis?|placeholders|mocks|todos?)\b|\b(?:must not|mustn'?t|should not|shouldn'?t|cannot|can'?t|may not) (?:change|break|touch|use|add|remove|affect|modify|rely|depend|exceed|call|import)\b|\b(?:out of scope|scope (?:it|this) to|limit(?:ed)? (?:it |this |the change )?to|stick (?:to|with)|stay within|no more than)\b",
         ),
     ]
 });
@@ -583,9 +583,11 @@ static LIMITS: LazyLock<Vec<Rule>> = LazyLock::new(|| {
 /// Gives the purpose.
 static WHY: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![
-        rule(
+        rule_not_after(
             "prompt.why.because",
             r"\b(?:because|since (?:we|i|they|users?|our \w+) (?:need|want|can'?t|cannot|don'?t|use|have|rely|depend|ship|support)|so that|in order to|that way)\b",
+            // "it fails because the cache is stale" says what's wrong, not what the work is for.
+            r"\b(?:fails?|failing|failed|breaks|broke|broken|crash(?:es|ed|ing)?|errors? out|hangs?|freezes|times? out|stuck|slow|empty|blank|stale|missing|wrong|(?:doesn'?t|does not|didn'?t|won'?t|can'?t) (?:work|load|show|run|build|start|open|compile)|(?:isn'?t|is not|not) (?:working|loading|showing|running|building|starting))\b(?:\s+(?:again|now|anymore|sometimes|often|randomly|here|there))?[\s,]*",
         ),
         rule(
             "prompt.why.goal",
@@ -595,7 +597,12 @@ static WHY: LazyLock<Vec<Rule>> = LazyLock::new(|| {
             "prompt.why.who",
             r"\b(?:our|my) (?:users?|customers?|clients?|team|boss|manager|designer|pm|stakeholders?|visitors|readers|audience)\b|\b(?:users?|customers?|people) (?:need|want|can'?t|cannot|keep|report|complain|expect)\b|\bfor (?:the|our|a|my) (?:demo|launch|release|client|customer|presentation|meeting|deadline|portfolio|interview)\b",
         ),
-        rule("prompt.why.now", r"\b(?:currently|at the moment|as of now)\b"),
+        // "Currently we're moving to Postgres" says what it's part of; "currently the button is
+        // red" only describes it.
+        rule(
+            "prompt.why.now",
+            r"\b(?:currently|at the moment|as of now|right now),? (?:i|we|they)(?:'?re|'?m| are| am)? (?:\w+ing|about to|in the middle of)\b",
+        ),
     ]
 });
 

@@ -3,17 +3,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Check } from "../api";
 import { last } from "../format";
 import { LESSONS, TRACKS } from "../learn/lessons";
-import { HOSTILE, meta, prompts } from "../test/fixtures";
+import { HOSTILE, meta, prompts, safe } from "../test/fixtures";
 import { checkResultView, judgeQuiz, type LearnContext, learnView } from "./learn";
 
 const ctx = (over: Partial<LearnContext> = {}): LearnContext => ({ meta, prompts: null, done: [], lesson: null, draft: "", demo: false, ...over });
 const home = (over: Partial<LearnContext> = {}) => learnView(ctx(over)).value;
 const lesson = (id = "point-at-it", over: Partial<LearnContext> = {}) => learnView(ctx({ lesson: id, ...over })).value;
-
-const safe = (markup: string) => {
-  expect(markup).not.toContain("<img");
-  expect(markup).not.toContain('onerror="');
-};
 
 describe("learnView home", () => {
   it("lists every track with its lessons and the lesson count", () => {
@@ -113,7 +108,7 @@ describe("learnView lesson", () => {
     const m = lesson("say-what-you-know");
     expect(m).toContain('<h1 class="q">Context</h1>');
     expect(m).toContain("I already tried");
-    expect(m).toContain("Say facts about your setup and taste: “it&#39;s a Squarespace site”, “we use Tailwind”.");
+    expect(m).toContain("Say facts about your setup and taste: &#39;it&#39;s a small online shop&#39;, &#39;we use plain CSS&#39;.");
     expect(m).toContain('<span class="chip sig-on">Target</span>'); // only the signals the checker can see are chipped
     expect(m.split("<fieldset").length - 1).toBe(2);
   });

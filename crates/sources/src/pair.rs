@@ -112,7 +112,7 @@ fn pair_at(
     let tips = read_tips(session, &events);
     // A tip on its own is no reply: what came before it is still what the person answered.
     events.retain(|e| !matches!(e, Event::Ai { text, .. } if only_a_tip(text)));
-    let mut scan = FileScan { checkpoint: end, tips, ..FileScan::default() };
+    let mut scan = FileScan { checkpoint: end, tips, sessions: vec![session.to_string()], ..FileScan::default() };
     // The chat's model near each message: the last real one before it, else the first after it.
     let real = |e: &Event| match e {
         Event::Ai { model: Some(m), .. } if engine::is_real_model(m) => Some(m.clone()),

@@ -7,7 +7,7 @@ use crate::rebuild::SCORE_TABLES;
 use chrono::{NaiveDate, SecondsFormat, TimeZone, Utc};
 use engine::{habit_bit, seal, Usage};
 use serde_json::{json, Value};
-use sources::testing::{cc_user, line, set_mtime_ago};
+use sources::testing::{cc_reply_with_usage, cc_user, line, set_mtime_ago};
 use sources::{ChatView, Kind, Source};
 use std::io::Write;
 use std::path::PathBuf;
@@ -43,9 +43,7 @@ fn reply(uuid: &str, ts: &str, text: &str, usage: (u64, u64, u64, u64)) -> Strin
 
 /// The same, from `model`.
 fn reply_on(model: &str, uuid: &str, ts: &str, text: &str, usage: (u64, u64, u64, u64)) -> String {
-    line(&json!({"type":"assistant","uuid":uuid,"timestamp":ts,"message":{"id":format!("m-{uuid}"),
-        "model":model,"content":[{"type":"text","text":text}],"usage":{"input_tokens":usage.0,
-        "cache_creation_input_tokens":usage.1,"cache_read_input_tokens":usage.2,"output_tokens":usage.3}}}))
+    cc_reply_with_usage(model, uuid, &format!("m-{uuid}"), ts, text, usage)
 }
 
 /// Four prompts ten minutes apart, `p1` to `p4`: a request, two follow-ups and a sign-off.

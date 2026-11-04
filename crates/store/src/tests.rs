@@ -595,6 +595,29 @@ fn a_rebuild_keeps_what_it_cant_read_again() {
 }
 
 #[test]
+fn a_rebuild_drops_a_chat_that_no_longer_has_any_of_your_messages() {
+    let dir = tempfile::tempdir().unwrap();
+    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let file = dir.path().join("a.jsonl");
+    write_settled(&file, cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts));
+    let all = claude_code(&dir);
+    let mut s = Store::open_in_memory().unwrap();
+    s.allow("claude-code", None).unwrap();
+    sync(&mut s, &all).unwrap();
+    assert_eq!(kept_counts(&s).1, 1);
+
+    // Newer rules see the same chat's only message as another agent's, not the person's.
+    let agent = "Another Claude session sent a message:\nNo, that's wrong.";
+    write_settled(
+        &file,
+        cc_ai("claude-opus-5-5", &ts, "hi") + &cc_user("u1", &ts, agent) + &cc_ai("claude-opus-5-5", &ts, "ok"),
+    );
+    s.set_setting("rules_version", "1").unwrap();
+    assert!(sync(&mut s, &all).unwrap().rescored);
+    assert_eq!(kept_counts(&s), (0, 0, 0, 0), "the chat was read again, so what older rules counted goes");
+}
+
+#[test]
 fn a_day_with_some_of_its_chats_gone_keeps_them() {
     let dir = tempfile::tempdir().unwrap();
     let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
@@ -1275,4 +1298,184 @@ fn a_file_that_cant_be_read_is_tried_again_only_when_it_changes() {
     assert_eq!(sync(&mut s, &all).unwrap().errors.len(), 0, "the same bytes fail the same way");
     std::fs::write(&file, "still not json!").unwrap();
     assert_eq!(sync(&mut s, &all).unwrap().errors.len(), 1);
+}
+
+// ---- the privacy steps PRIVACY.md promises ----------------------------------------------------
+
+#[test]
+fn a_sync_steps_old_text_down_in_the_same_pass() {
+    let dir = tempfile::tempdir().unwrap();
+    let ts = (Utc::now() - Duration::days(40)).to_rfc3339();
+    write_settled(&dir.path().join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts));
+    let all = claude_code(&dir);
+    let mut s = Store::open_in_memory().unwrap();
+    s.set_retention(Retention { level: Level::Full, full_days: 30, snippet_days: 365 }).unwrap();
+    s.allow("claude-code", None).unwrap();
+    assert_eq!(sync(&mut s, &all).unwrap().corrections, 1);
+    // Ingested at Full, so only the sweep at the end of the sync can have taken the full text away.
+    let (level, full, snip): (String, Option<String>, Option<String>) = s
+        .conn
+        .query_row("SELECT level, human_full, human_snip FROM events", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .unwrap();
+    assert_eq!(level, "snippet");
+    assert_eq!(full, None, "the full text is gone");
+    assert!(snip.is_some(), "the snippet stays until it is older than its own limit");
+}
+
+#[test]
+fn a_sweep_that_deletes_text_empties_the_write_ahead_log() {
+    let dir = tempfile::tempdir().unwrap();
+    let wal_path = dir.path().join("t.db-wal");
+    let wal = || std::fs::metadata(&wal_path).map_or(0, |m| m.len());
+    let mut s = Store::open(&dir.path().join("t.db")).unwrap();
+    s.set_retention(Retention { level: Level::Full, full_days: 30, snippet_days: 365 }).unwrap();
+    ingest(&mut s, "f", vec![turn("no, that's wrong", "You're right.", "m", &now_ts(60), "old")]);
+    assert!(wal() > 0, "the text is in the log before the sweep");
+    assert_eq!(s.sweep(Utc::now()).unwrap(), 1, "the full text was stepped down");
+    assert_eq!(wal(), 0, "and no copy of it lingers in the log");
+}
+
+#[test]
+fn redaction_runs_again_over_the_corrections_a_rebuild_set_aside() {
+    let mut s = Store::open_in_memory().unwrap();
+    s.set_retention(Retention { level: Level::Full, ..Retention::default() }).unwrap();
+    ingest(&mut s, "f", vec![turn("no, that's wrong", "You're right.", "m", &now_ts(1), "k")]);
+    // A rebuild's set-aside copy, written with an older, weaker redaction.
+    s.conn.execute("INSERT INTO kept_events SELECT * FROM events", []).unwrap();
+    s.conn.execute("DELETE FROM events", []).unwrap();
+    s.conn
+        .execute("UPDATE kept_events SET human_full = 'mail pat@example.com', human_snip = 'mail pat@example.com'", [])
+        .unwrap();
+    s.set_setting(REDACTION_KEY, "1").unwrap();
+    s.redact_stored_text().unwrap();
+    let (full, snip): (String, String) =
+        s.conn.query_row("SELECT human_full, human_snip FROM kept_events", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+    assert_eq!((full.as_str(), snip.as_str()), ("mail [email]", "mail [email]"));
+}
+
+// ---- Forget touches only its own source -------------------------------------------------------
+
+/// Every table with a `source` column (the sources table itself keeps it as `id`), with its columns
+/// and declared types, read from the schema so a table added later is covered too.
+fn tables_with_a_source(s: &Store) -> Vec<(String, Vec<(String, String)>)> {
+    let names: Vec<String> = {
+        let mut q = s
+            .conn
+            .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+            .unwrap();
+        q.query_map([], |r| r.get(0)).unwrap().collect::<rusqlite::Result<_>>().unwrap()
+    };
+    names
+        .into_iter()
+        .filter_map(|name| {
+            let mut q = s.conn.prepare(&format!("PRAGMA table_info({name})")).unwrap();
+            let cols: Vec<(String, String)> = q
+                .query_map([], |r| Ok((r.get(1)?, r.get::<_, String>(2)?.to_uppercase())))
+                .unwrap()
+                .collect::<rusqlite::Result<_>>()
+                .unwrap();
+            cols.iter().any(|(c, _)| c == "source").then_some((name, cols))
+        })
+        .collect()
+}
+
+/// One made-up row for `source` in every table that has a `source` column, each value different.
+fn seed_every_source_table(s: &Store, source: &str) {
+    for (n, (table, cols)) in tables_with_a_source(s).into_iter().enumerate() {
+        let values: Vec<String> = cols
+            .iter()
+            .map(|(col, ty)| match (col.as_str(), ty.contains("INT")) {
+                ("source", _) => format!("'{source}'"),
+                (_, true) => format!("{}", 1000 + n * 10 + usize::from(source == "b")),
+                _ => format!("'{col}-{table}-{source}'"),
+            })
+            .collect();
+        s.conn.execute(&format!("INSERT INTO {table} VALUES ({})", values.join(", ")), []).unwrap();
+    }
+}
+
+fn rows_of(s: &Store, table: &str, source: &str) -> i64 {
+    s.conn.query_row(&format!("SELECT COUNT(*) FROM {table} WHERE source = ?1"), [source], |r| r.get(0)).unwrap()
+}
+
+#[test]
+fn forgetting_one_source_leaves_every_row_of_the_other() {
+    let mut s = Store::open_in_memory().unwrap();
+    for id in ["a", "b"] {
+        s.allow(id, None).unwrap();
+        seed_every_source_table(&s, id);
+    }
+    let named = [
+        "events",
+        "daily",
+        "sessions",
+        "tasks",
+        "seen",
+        "tips",
+        "tip_chats",
+        "report_cards",
+        "files",
+        "rebuild_read",
+        "kept_events",
+        "kept_daily",
+        "kept_sessions",
+        "kept_tasks",
+        "kept_seen",
+        "kept_tips",
+        "kept_tip_chats",
+    ];
+    for table in named {
+        assert_eq!((rows_of(&s, table, "a"), rows_of(&s, table, "b")), (1, 1), "{table} was seeded");
+    }
+    s.forget("a").unwrap();
+    for table in named {
+        assert_eq!((rows_of(&s, table, "a"), rows_of(&s, table, "b")), (0, 1), "{table}");
+    }
+    let ids: Vec<String> = {
+        let mut q = s.conn.prepare("SELECT id FROM sources").unwrap();
+        q.query_map([], |r| r.get(0)).unwrap().collect::<rusqlite::Result<_>>().unwrap()
+    };
+    assert_eq!(ids, ["b"], "b's consent stays");
+}
+
+#[test]
+fn forget_clears_the_source_in_every_table_that_has_one_and_nothing_else() {
+    let mut s = Store::open_in_memory().unwrap();
+    for id in ["a", "b"] {
+        s.allow(id, None).unwrap();
+        seed_every_source_table(&s, id);
+    }
+    let tables = tables_with_a_source(&s);
+    assert!(
+        tables.len() >= 15,
+        "the schema has many tables with a source: {:?}",
+        tables.iter().map(|t| &t.0).collect::<Vec<_>>()
+    );
+    s.forget("a").unwrap();
+    for (table, _) in &tables {
+        assert_eq!(rows_of(&s, table, "a"), 0, "{table} still has rows from the forgotten source");
+        assert_eq!(rows_of(&s, table, "b"), 1, "{table} lost rows from the other source");
+    }
+}
+
+// ---- consent cutoffs ----------------------------------------------------------------------------
+
+#[test]
+fn a_message_on_the_backfill_day_is_kept_and_one_just_before_it_is_not() {
+    let day = NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
+    let midnight =
+        Local.from_local_datetime(&day.and_hms_opt(0, 0, 0).unwrap()).earliest().unwrap().with_timezone(&Utc);
+    let state = SourceState { backfill_since: Some(day), ..test_source() };
+    assert!(state.wants(midnight), "the first moment of the day counts");
+    assert!(state.wants(midnight + Duration::hours(12)));
+    assert!(!state.wants(midnight - Duration::seconds(1)), "the last moment of the day before does not");
+}
+
+#[test]
+fn a_message_at_the_from_now_on_moment_is_kept_and_one_just_before_it_is_not() {
+    let at = Utc.with_ymd_and_hms(2026, 6, 15, 12, 0, 0).unwrap();
+    let state = SourceState { start_after: Some(at), ..test_source() };
+    assert!(!state.wants(at - Duration::seconds(1)));
+    assert!(state.wants(at), "exactly at the moment counts");
+    assert!(state.wants(at + Duration::seconds(1)));
 }

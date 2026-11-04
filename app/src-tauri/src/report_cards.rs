@@ -111,6 +111,9 @@ pub struct Env {
     /// The `git` command, if there is one. Only used to look that a release tag is there before the
     /// plugin is moved to it; without git that look is skipped.
     pub git: Option<PathBuf>,
+    /// `$CODEX_HOME`, as the process had it (read once, in [`Env::folders`]). Tests leave it `None`
+    /// so they never reach the real Codex folder.
+    pub codex_home: Option<std::ffi::OsString>,
 }
 
 impl Env {
@@ -138,7 +141,17 @@ impl Env {
         let windows = cfg!(windows);
         let git_bash = if windows { platform::git_bash_here() } else { None };
         let exe = std::env::current_exe().ok();
-        Ok(Env { home, data, claude: None, codex: None, exe, windows, git_bash, git: None })
+        Ok(Env {
+            home,
+            data,
+            claude: None,
+            codex: None,
+            exe,
+            windows,
+            git_bash,
+            git: None,
+            codex_home: std::env::var_os("CODEX_HOME"),
+        })
     }
 
     /// The file whose presence turns tips on (the session-start hook looks for it).
