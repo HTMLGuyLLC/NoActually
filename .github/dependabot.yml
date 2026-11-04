@@ -9,6 +9,15 @@ updates:
     commit-message:
       prefix: "deps(rust)"
     labels: [dependencies, rust]
+    # Tauri's plugins pin these to an older major, so bumping ours alone only adds a second copy.
+    # Drop each once Tauri moves.
+    ignore:
+      - dependency-name: zbus
+        update-types: [version-update:semver-major]
+      - dependency-name: dirs
+        update-types: [version-update:semver-major]
+      - dependency-name: sha2
+        update-types: [version-update:semver-minor]
     # Groups match in the order listed, so `tauri` claims its crates before `rust-minor`.
     groups:
       tauri:
