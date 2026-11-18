@@ -8,8 +8,8 @@ use crate::insights::{bests, card_best, insights, Bests, Insights};
 use crate::stats::{day_counts, monday_of, tally, View, CONTINUED, LANDED};
 use crate::tips::{self, TipWeek};
 use crate::{Error, Filter, Result, Store};
-use chrono::{Duration, NaiveDate};
 use engine::{habit_bits, LetterGrade, Signals, Steer};
+use jiff::{civil::Date, ToSpan};
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -35,7 +35,7 @@ const LESSONS_MAX: usize = 200;
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct HistoryWeek {
     /// The week's Monday.
-    pub week: NaiveDate,
+    pub week: Date,
     /// Messages sent.
     pub messages: i64,
     /// Times you corrected it.
@@ -141,7 +141,7 @@ pub struct RecentReportCard {
     pub day: String,
     /// The day the card was written, in the local time zone: when it is "from". Settings shows the
     /// last card by this day.
-    pub graded_day: NaiveDate,
+    pub graded_day: Date,
     /// Source id.
     pub source: String,
     /// "A" to "F".
@@ -182,7 +182,7 @@ type PerSteer = [i64; Steer::ALL.len()];
 type TaskRow = (String, Signals, bool, bool, i64, PerSteer, PerSteer);
 
 /// Tasks per week (from `since`, when given), plus messages and corrections from `daily`.
-pub(crate) fn task_weeks(v: &View, since: Option<NaiveDate>) -> Result<BTreeMap<NaiveDate, HistoryWeek>> {
+pub(crate) fn task_weeks(v: &View, since: Option<Date>) -> Result<BTreeMap<Date, HistoryWeek>> {
     let sums: Vec<String> = Steer::ALL.iter().map(|c| format!("SUM({})", c.as_str())).collect();
     let any: Vec<String> = Steer::ALL.iter().map(|c| format!("SUM({} > 0)", c.as_str())).collect();
     let after = if since.is_some() { " AND day >= ?" } else { "" };
@@ -213,9 +213,9 @@ pub(crate) fn task_weeks(v: &View, since: Option<NaiveDate>) -> Result<BTreeMap<
             per_steer(5 + Steer::ALL.len())?,
         ))
     })?;
-    let mut weeks: BTreeMap<NaiveDate, HistoryWeek> = BTreeMap::new();
+    let mut weeks: BTreeMap<Date, HistoryWeek> = BTreeMap::new();
     for (day, signals, continued, landed, n, steering, steered) in rows {
-        let Ok(d) = day.parse::<NaiveDate>() else { continue };
+        let Ok(d) = day.parse::<Date>() else { continue };
         let w =
             weeks.entry(monday_of(d)).or_insert_with(|| HistoryWeek { week: monday_of(d), ..HistoryWeek::default() });
         w.tasks += n;
@@ -231,10 +231,10 @@ pub(crate) fn task_weeks(v: &View, since: Option<NaiveDate>) -> Result<BTreeMap<
 }
 
 /// Every week from the first with any data to `today`'s, oldest first.
-fn history(v: &View, today: NaiveDate) -> Result<Vec<HistoryWeek>> {
+fn history(v: &View, today: Date) -> Result<Vec<HistoryWeek>> {
     let mut weeks = task_weeks(v, None)?;
     for (day, messages, corrections, humbled) in day_counts(v)? {
-        let Ok(d) = day.parse::<NaiveDate>() else { continue };
+        let Ok(d) = day.parse::<Date>() else { continue };
         let w =
             weeks.entry(monday_of(d)).or_insert_with(|| HistoryWeek { week: monday_of(d), ..HistoryWeek::default() });
         w.messages += messages;
@@ -255,18 +255,18 @@ fn history(v: &View, today: NaiveDate) -> Result<Vec<HistoryWeek>> {
     let mut w = first;
     while w <= this_week {
         out.push(weeks.remove(&w).unwrap_or_else(|| HistoryWeek { week: w, ..HistoryWeek::default() }));
-        w += Duration::days(7);
+        w += 7.days();
     }
     Ok(out)
 }
 
 /// Report cards per week from the cards that still count, plus the tasks that could have one.
-pub(crate) fn card_weeks(v: &View) -> Result<BTreeMap<NaiveDate, ReportCardWeek>> {
-    let mut weeks: BTreeMap<NaiveDate, ReportCardWeek> = BTreeMap::new();
+pub(crate) fn card_weeks(v: &View) -> Result<BTreeMap<Date, ReportCardWeek>> {
+    let mut weeks: BTreeMap<Date, ReportCardWeek> = BTreeMap::new();
     let habits = habit_bits();
     // In a fixed order, so the cost adds up the same way every time.
     for c in current(v, "ORDER BY start_ts, key")? {
-        let Ok(day) = c.day.parse::<NaiveDate>() else { continue };
+        let Ok(day) = c.day.parse::<Date>() else { continue };
         let w = weeks.entry(monday_of(day)).or_insert_with(ReportCardWeek::with_keys);
         w.graded += 1;
         *w.grades.entry(c.grade.as_str().to_string()).or_insert(0) += 1;
@@ -287,7 +287,7 @@ pub(crate) fn card_weeks(v: &View) -> Result<BTreeMap<NaiveDate, ReportCardWeek>
     let sql =
         format!("SELECT day, COUNT(*) FROM tasks WHERE source IN ({}) {} GROUP BY day", sources.join(","), v.clause);
     for (day, n) in v.rows(&sql, &[], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))? {
-        if let Ok(day) = day.parse::<NaiveDate>() {
+        if let Ok(day) = day.parse::<Date>() {
             weeks.entry(monday_of(day)).or_default().gradable_tasks += n; // no keys until a task is graded
         }
     }
@@ -312,7 +312,7 @@ fn valid_lesson_id(id: &str) -> bool {
 impl Store {
     /// Everything the Improve tab shows. History and insights follow `f`; the goal and personal
     /// bests are across all AI.
-    pub fn progress(&self, f: &Filter, today: NaiveDate) -> Result<Progress> {
+    pub fn progress(&self, f: &Filter, today: Date) -> Result<Progress> {
         let (clause, args) = f.sql();
         let v = View { conn: self.conn(), clause, args };
         let weeks = history(&v, today)?;
@@ -379,7 +379,7 @@ impl Store {
 
     /// When each source last had a report card written, as the local day, by source id. Sources with
     /// no card aren't listed. Whatever the model filter, and counting every card kept, replaced or not.
-    pub fn last_report_card_days(&self) -> Result<Vec<(String, NaiveDate)>> {
+    pub fn last_report_card_days(&self) -> Result<Vec<(String, Date)>> {
         let mut stmt =
             self.conn().prepare("SELECT source, MAX(graded_at) FROM report_cards GROUP BY source ORDER BY source")?;
         let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
@@ -454,7 +454,7 @@ mod tests {
         assert_eq!(ReportCardWeek::default().count(LetterGrade::A), 0, "a missing key is zero");
     }
 
-    fn d(s: &str) -> NaiveDate {
+    fn d(s: &str) -> Date {
         s.parse().unwrap()
     }
 

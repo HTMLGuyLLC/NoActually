@@ -109,7 +109,7 @@ pub fn sync(store: &mut Store, all: &[Box<dyn Source>]) -> Result<SyncReport> {
         }
     }
     store.finish_rebuild()?;
-    store.sweep(chrono::Utc::now())?;
+    store.sweep(jiff::Timestamp::now())?;
     Ok(report)
 }
 
@@ -170,7 +170,7 @@ mod tests {
         let seen = TipSeen {
             session: "s".into(),
             key: None,
-            ts: chrono::Utc::now(),
+            ts: jiff::Timestamp::now(),
             pos: 0,
             model: None,
             tip: engine::parse_tip("Tip from No, Actually...: say more. [target, redid 50%]").unwrap(),

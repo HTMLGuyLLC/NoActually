@@ -3083,14 +3083,14 @@ fn what_an_app_update_writes_is_written_like_a_fresh_turn_on() {
     assert_eq!(names, ["na"], "written through a temporary file that is gone");
 }
 
-fn day(text: &str) -> NaiveDate {
+fn day(text: &str) -> Date {
     text.parse().unwrap()
 }
 
 #[test]
 fn the_latest_card_is_per_tool() {
     let lab = Lab::with_claude();
-    let last: Vec<(String, NaiveDate)> = [
+    let last: Vec<(String, Date)> = [
         ("claude-code", "2026-10-28"),
         ("codex", "2026-10-20"),
         ("claude-cowork", "2026-10-29"),
@@ -3162,7 +3162,7 @@ fn tips_since_is_the_day_they_went_on_only_while_claude_code_is_on() {
     };
     assert_eq!(tips_since(&lab.env, &shown(true)), None, "tips are off");
     set_tips(&lab.env, true).unwrap();
-    assert_eq!(tips_since(&lab.env, &shown(true)), Some(Local::now().date_naive()));
+    assert_eq!(tips_since(&lab.env, &shown(true)), Some(sources::time::today()));
     assert_eq!(tips_since(&lab.env, &shown(false)), None, "the hook isn't there to give the rules");
 }
 

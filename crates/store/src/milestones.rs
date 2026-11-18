@@ -5,8 +5,8 @@
 use crate::progress::{card_weeks, floor_pct};
 use crate::stats::{monday_of, View};
 use crate::{put_setting, GoalWeek, Result, Stats, Store, GOAL_WEEKS, MIN_CARD_BEST};
-use chrono::{Duration, NaiveDate};
 use engine::{LetterGrade, PromptTier, Tier, WINDOW_DAYS};
+use jiff::{civil::Date, ToSpan};
 
 /// Correction totals worth announcing.
 pub const COUNTS: [i64; 9] = [1, 10, 25, 50, 100, 250, 500, 1000, 2500];
@@ -133,12 +133,12 @@ pub fn goal_milestones(newly_met: &[GoalWeek], met: i64, finished: bool) -> Vec<
 /// The popup for a first straight-A's week. `prev` is how many there were at the last check and
 /// `weeks` all there are now (Monday and graded tasks, oldest first). Only the first ever is news.
 /// It says "last week" when that's the week, which it nearly always is: a sync follows each week's end.
-pub fn straight_as(prev: i64, weeks: &[(NaiveDate, i64)], today: NaiveDate) -> Option<Milestone> {
+pub fn straight_as(prev: i64, weeks: &[(Date, i64)], today: Date) -> Option<Milestone> {
     let (week, _) = weeks.last().filter(|_| prev == 0)?;
-    let when = if *week + Duration::days(7) == monday_of(today) {
+    let when = if *week + 7.days() == monday_of(today) {
         "last week".to_string()
     } else {
-        format!("the week of {}", week.format("%b %-d"))
+        format!("the week of {}", week.strftime("%b %-d"))
     };
     Some(Milestone { title: "Straight A's!".into(), body: format!("Every report card {when} was an A.") })
 }
@@ -166,7 +166,7 @@ fn best_tier<T: Copy + Ord + std::str::FromStr>(
 impl Store {
     /// Finished weeks (before `today`'s) with enough graded tasks, all of them an A, oldest first, as
     /// (Monday, graded tasks). Across all AI, since the milestone is about you.
-    pub fn straight_a_weeks(&self, today: NaiveDate) -> Result<Vec<(NaiveDate, i64)>> {
+    pub fn straight_a_weeks(&self, today: Date) -> Result<Vec<(Date, i64)>> {
         let this_week = monday_of(today);
         Ok(card_weeks(&View::all(self.conn()))?
             .into_iter()
@@ -182,7 +182,7 @@ impl Store {
     /// the history was just read in bulk (a first sync, a source just allowed, a rebuild): the
     /// baseline still moves, so the old weeks that came in are never news later, but nothing is
     /// returned.
-    pub fn advance_card_milestones(&self, today: NaiveDate, announce: bool) -> Result<Vec<Milestone>> {
+    pub fn advance_card_milestones(&self, today: Date, announce: bool) -> Result<Vec<Milestone>> {
         let weeks = self.straight_a_weeks(today)?;
         let saved: Option<i64> = self.get_setting(STRAIGHT_AS_KEY)?.and_then(|v| v.parse().ok());
         let now = weeks.len() as i64;

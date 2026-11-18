@@ -2,11 +2,11 @@
 
 use crate::pair::holds_card;
 use crate::{pair, CardSeen, Event};
-use chrono::{DateTime, Utc};
 use engine::{
     classify, is_signoff, message_key, parse_card, read_prompt, seal, short_id, AiMsg, CardError, CardTask, Prompt,
     Turn, Usage,
 };
+use jiff::Timestamp;
 use std::collections::{BTreeMap, HashMap};
 use std::slice::SliceIndex;
 
@@ -127,7 +127,7 @@ pub struct PromptView {
     /// The short form of `key` a report card names it by.
     pub id: String,
     /// When it was sent.
-    pub ts: DateTime<Utc>,
+    pub ts: Timestamp,
     /// The whole message.
     pub text: String,
     /// The message is only a sign-off ("thanks", "lgtm"): it closes a task and is not a round of work.
@@ -149,7 +149,7 @@ pub struct PromptView {
 #[derive(Debug, Clone)]
 pub(crate) struct Sample {
     pub pos: u64,
-    pub ts: Option<DateTime<Utc>>,
+    pub ts: Option<Timestamp>,
     pub model: Option<String>,
     /// Tokens used here alone, not a running total.
     pub usage: Usage,
@@ -160,7 +160,7 @@ pub(crate) struct Sample {
 #[derive(Debug, Clone)]
 pub(crate) struct Cut {
     pub pos: u64,
-    pub ts: Option<DateTime<Utc>>,
+    pub ts: Option<Timestamp>,
 }
 
 /// What one round gathers: tokens, the answering model and the time of its last record.
@@ -168,11 +168,11 @@ pub(crate) struct Cut {
 struct Round {
     usage: Usage,
     model: Option<String>,
-    last: Option<DateTime<Utc>>,
+    last: Option<Timestamp>,
 }
 
 impl Round {
-    fn see(&mut self, ts: Option<DateTime<Utc>>, model: Option<&String>) {
+    fn see(&mut self, ts: Option<Timestamp>, model: Option<&String>) {
         self.last = self.last.max(ts);
         if let Some(m) = model.filter(|m| engine::is_real_model(m)) {
             self.model = Some(m.clone());
@@ -240,7 +240,7 @@ pub(crate) fn build(
     let mut has_task = mid_chat;
     let mut prompts = Vec::with_capacity(scan.turns.len());
     for (i, st) in scan.turns.iter().enumerate() {
-        let key = message_key(source, &st.session, st.key.as_deref(), &st.ts.to_rfc3339(), &st.turn.human);
+        let key = message_key(source, &st.session, st.key.as_deref(), &crate::time::rfc3339(st.ts), &st.turn.human);
         let after_reply;
         let turn = if mid_chat && i == 0 && st.turn.prev_ai.is_none() {
             after_reply = Turn { prev_ai: Some(AiMsg::default()), ..st.turn.clone() };
@@ -256,7 +256,7 @@ pub(crate) fn build(
             None => scan.turns.get(i + 1).map(|n| n.ts).or(r.last),
         };
         let stop = stop.unwrap_or(st.ts);
-        let seconds = (stop - st.ts).num_seconds().clamp(0, MAX_SECONDS);
+        let seconds = stop.duration_since(st.ts).as_secs().clamp(0, MAX_SECONDS);
         prompts.push(PromptView {
             id: short_id(&key).to_string(),
             key,

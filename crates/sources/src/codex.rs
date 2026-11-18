@@ -576,8 +576,13 @@ mod tests {
         assert_eq!(v.prompts[1].seconds, 120);
         let scan = Codex.scan(&p, 0, true).unwrap();
         for (pv, st) in v.prompts.iter().zip(&scan.turns) {
-            let want =
-                engine::message_key("codex", &st.session, st.key.as_deref(), &st.ts.to_rfc3339(), &st.turn.human);
+            let want = engine::message_key(
+                "codex",
+                &st.session,
+                st.key.as_deref(),
+                &crate::time::rfc3339(st.ts),
+                &st.turn.human,
+            );
             assert_eq!(pv.key, want);
         }
     }

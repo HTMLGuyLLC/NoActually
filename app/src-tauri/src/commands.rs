@@ -6,7 +6,7 @@
 
 use crate::updater::{self, UpdateStatus, Updates};
 use crate::{lock, tracker::Msg, App, SyncStatus};
-use chrono::{Local, NaiveDate};
+use jiff::civil::Date;
 use serde::Serialize;
 use sources::{Kind, Source};
 use std::path::Path;
@@ -99,14 +99,14 @@ pub fn meta(app: State<Arc<App>>) -> Meta {
 
 #[tauri::command(async)]
 pub fn stats(app: State<Arc<App>>, filter: Filter) -> Res<Stats> {
-    lock(&app.reader).stats(&filter, Local::now().date_naive()).map_err(err)
+    lock(&app.reader).stats(&filter, sources::time::today()).map_err(err)
 }
 
 /// The Improve tab: history for the filter, plus your goal, trophies and bests. Off the main
 /// thread: it reads every week of history.
 #[tauri::command(async)]
 pub fn progress(app: State<Arc<App>>, filter: Filter) -> Res<Progress> {
-    lock(&app.reader).progress(&filter, Local::now().date_naive()).map_err(err)
+    lock(&app.reader).progress(&filter, sources::time::today()).map_err(err)
 }
 
 /// The latest report cards under the model filter, newest first, for Improve's recent list.
@@ -117,8 +117,8 @@ pub fn recent_report_cards(app: State<Arc<App>>, filter: Filter) -> Res<Vec<Rece
 
 #[tauri::command(async)]
 pub fn set_goal(app: State<Arc<App>>, kind: GoalKind, target: i64) -> Res<Goal> {
-    let now = chrono::Local::now();
-    lock(&app.writer).set_goal(kind, target, now.date_naive(), now.timestamp_millis()).map_err(err)
+    let now = jiff::Zoned::now();
+    lock(&app.writer).set_goal(kind, target, now.date(), now.timestamp().as_millisecond()).map_err(err)
 }
 
 #[tauri::command(async)]
@@ -197,7 +197,7 @@ pub fn allow_source(
     handle: AppHandle,
     app: State<Arc<App>>,
     id: String,
-    since: Option<NaiveDate>,
+    since: Option<Date>,
     from_now: Option<bool>,
 ) -> Res<()> {
     only_main(window.label())?;
@@ -671,7 +671,7 @@ mod tests {
         assert_eq!(demo["meta"], meta, "demo.json `meta` differs from the `meta` command");
 
         let db = store::Store::open_in_memory().unwrap();
-        let stats = serde_json::to_value(db.stats(&Filter::default(), Local::now().date_naive()).unwrap()).unwrap();
+        let stats = serde_json::to_value(db.stats(&Filter::default(), sources::time::today()).unwrap()).unwrap();
         let keys = |v: &serde_json::Value| -> Vec<String> {
             let mut k: Vec<String> = v.as_object().unwrap().keys().cloned().collect();
             k.sort();
@@ -692,8 +692,7 @@ mod tests {
             "demo.json `prompts.tip` keys differ"
         );
         assert_eq!(keys(&demo["stats"]["overall"]), keys(&stats["overall"]), "demo.json `overall` keys differ");
-        let progress =
-            serde_json::to_value(db.progress(&Filter::default(), Local::now().date_naive()).unwrap()).unwrap();
+        let progress = serde_json::to_value(db.progress(&Filter::default(), sources::time::today()).unwrap()).unwrap();
         assert_eq!(keys(&demo["progress"]), keys(&progress), "demo.json `progress` keys differ from `Progress`");
         let week = serde_json::to_value(store::HistoryWeek::default()).unwrap();
         for w in demo["progress"]["weeks"].as_array().unwrap() {
@@ -730,7 +729,7 @@ mod tests {
         assert_eq!(keys(&shown["habit"]), keys(&trend["habit"]), "demo.json `insights.report_cards.habit` keys differ");
         let recent = serde_json::to_value(store::RecentReportCard {
             day: String::new(),
-            graded_day: chrono::NaiveDate::default(),
+            graded_day: jiff::civil::Date::default(),
             source: String::new(),
             grade: String::new(),
             missing: Some(String::new()),

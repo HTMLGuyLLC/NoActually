@@ -16,7 +16,7 @@ use helper::{is_helper, is_helper_command};
 pub use helper::{QUIET_FILE, TIPS_FILE, TIPS_OFF_FILE};
 
 use anyhow::{anyhow, bail, Context, Result};
-use chrono::{Local, NaiveDate};
+use jiff::civil::Date;
 use std::ffi::OsString;
 use std::io::{BufRead, IsTerminal, Write};
 use std::path::PathBuf;
@@ -63,7 +63,7 @@ enum Parsed {
 #[derive(Debug, PartialEq)]
 enum Command {
     Sources { json: bool },
-    Allow { id: String, since: Option<NaiveDate>, from_now: bool },
+    Allow { id: String, since: Option<Date>, from_now: bool },
     Pause { id: String },
     Resume { id: String },
     Revoke { id: String },
@@ -128,6 +128,11 @@ fn no_positional(a: Args<'_>) -> Result<Args<'_>> {
 }
 
 /// Parses the arguments after the program name.
+/// `--since`, as a date.
+fn since(a: &Args<'_>) -> Result<Option<Date>> {
+    a.value("--since").map(|d| d.parse().map_err(|_| anyhow!("--since wants a date like 2026-10-01"))).transpose()
+}
+
 fn parse_args(args: &[String]) -> Result<Parsed> {
     let Some((cmd, rest)) = args.split_first() else { return Ok(Parsed::Help) };
     // Asking for help must never run anything. `check` takes the whole rest as its prompt, so only
@@ -144,8 +149,7 @@ fn parse_args(args: &[String]) -> Result<Parsed> {
         "sync" => Command::Sync { json: no_positional(Args::split(rest, &[], &["--json"])?)?.has("--json") },
         "allow" => {
             let a = Args::split(rest, &["--since"], &["--from-now"])?;
-            let since =
-                a.value("--since").map(|d| d.parse::<NaiveDate>()).transpose().context("--since wants YYYY-MM-DD")?;
+            let since = since(&a)?;
             let from_now = a.has("--from-now");
             if since.is_some() && from_now {
                 bail!("use --since or --from-now, not both");
@@ -169,8 +173,7 @@ fn parse_args(args: &[String]) -> Result<Parsed> {
                 &["--source", "--provider", "--family", "--version", "--since"],
                 &["--json", "--report-cards"],
             )?;
-            let since =
-                a.value("--since").map(|d| d.parse::<NaiveDate>()).transpose().context("--since wants YYYY-MM-DD")?;
+            let since = since(&a)?;
             let filter = Filter {
                 source: a.value("--source"),
                 provider: a.value("--provider"),
@@ -411,7 +414,7 @@ fn execute(cmd: Command, store: &mut Store, all: &[Box<dyn sources::Source>]) ->
         }
         Command::Stats { filter, json, report_cards: true } => print_report_cards(store, all, &filter, json)?,
         Command::Stats { filter, json, report_cards: false } => {
-            let s = store.stats(&filter, Local::now().date_naive())?;
+            let s = store.stats(&filter, sources::time::today())?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&s)?);
             } else {
@@ -455,7 +458,7 @@ fn allowed_only(store: &Store, id: &str, what: &str) -> Result<()> {
 fn print_report_cards(store: &Store, all: &[Box<dyn sources::Source>], filter: &Filter, json: bool) -> Result<()> {
     let habits = store::meta(all).habits;
     let totals = store.report_card_totals(filter)?;
-    let (tip_trend, top_tip) = store.tip_summary(filter, Local::now().date_naive())?;
+    let (tip_trend, top_tip) = store.tip_summary(filter, sources::time::today())?;
     let left_out = all.iter().map(|src| store.report_cards_left_out(src.id())).sum::<store::Result<i64>>()?;
     let s = report_cards::Summary {
         tip_trend,
@@ -505,7 +508,7 @@ fn print_sources(store: &Store, all: &[Box<dyn sources::Source>], json: bool) ->
     Ok(())
 }
 
-fn print_card(s: &store::Stats, since: Option<NaiveDate>) {
+fn print_card(s: &store::Stats, since: Option<Date>) {
     if s.messages == 0 {
         println!("No messages yet. Allow a source and run `noactually sync`.");
         return;
@@ -546,13 +549,13 @@ fn print_card(s: &store::Stats, since: Option<NaiveDate>) {
 }
 
 /// Who corrected whom across all the stats cover: all time, or from `--since`.
-fn totals_line(corrections: i64, humbled: i64, since: Option<NaiveDate>) -> String {
+fn totals_line(corrections: i64, humbled: i64, since: Option<Date>) -> String {
     let span = since.map_or("All time".to_string(), |d| window_label(Some(d)));
     format!("  {span:<15} you corrected it {corrections} · it corrected you {humbled}")
 }
 
 /// The span the score looks at: from `--since` when given, else the last [`engine::WINDOW_DAYS`] days.
-fn window_label(since: Option<NaiveDate>) -> String {
+fn window_label(since: Option<Date>) -> String {
     since.map_or_else(|| format!("in the last {} days", engine::WINDOW_DAYS), |d| format!("since {d}"))
 }
 
@@ -892,7 +895,7 @@ mod tests {
         assert!(err("import codex").starts_with("missing path"));
         assert!(err("pause").starts_with("missing source"));
         assert!(err("sync --jsno").starts_with("unknown option '--jsno'"));
-        assert_eq!(err("allow codex --since yesterday"), "--since wants YYYY-MM-DD: input contains invalid characters");
+        assert_eq!(err("allow codex --since yesterday"), "--since wants a date like 2026-10-01");
         assert_eq!(err("allow codex --since 2026-10-01 --from-now"), "use --since or --from-now, not both");
         assert_eq!(err("stats --source"), "--source needs a value");
         assert!(err("stats --sorce codex").starts_with("unknown option '--sorce'"));

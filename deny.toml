@@ -12,9 +12,6 @@ ignore = [
   # glib 0.18's VariantStrIter is unsound. Tauri pins gtk-rs 0.18 on Linux, so it can't be
   # upgraded until Tauri moves; nothing here uses VariantStrIter. Drop this once glib >= 0.20.
   { id = "RUSTSEC-2024-0429", reason = "glib 0.18 is pinned by Tauri's GTK stack; VariantStrIter is unused" },
-  # chrono is unmaintained (no known vulnerability). Moving to jiff touches every date in the app,
-  # so it gets its own change. Drop this once chrono is gone.
-  { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained, no vulnerability; jiff migration planned separately" },
 ]
 
 [licenses]

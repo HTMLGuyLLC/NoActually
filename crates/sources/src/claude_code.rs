@@ -6,8 +6,8 @@ use crate::{
     contains, data_dir, home, pair_from, parse_ts, walk, ChatView, Error, Event, FileScan, Kind, Result, RulesSeen,
     Source,
 };
-use chrono::{DateTime, Utc};
 use engine::{head_chars, is_tip_rules, is_tip_stop, Usage};
+use jiff::Timestamp;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -265,7 +265,7 @@ struct Read {
     /// What a reply cost, with its message id (only with `usage`).
     sample: Option<(Option<String>, Sample)>,
     /// When the chat was given the tip rules.
-    rules: Option<DateTime<Utc>>,
+    rules: Option<Timestamp>,
     /// The chat was told to stop giving tips.
     stopped: bool,
     /// The line looked wanted but wasn't JSON.
@@ -326,7 +326,7 @@ fn hook_said(line: &Line, is_it: fn(&str) -> bool) -> Option<bool> {
 }
 
 /// When this record gave the chat the tip rules, if it did.
-fn rules_at(line: &Line) -> Option<DateTime<Utc>> {
+fn rules_at(line: &Line) -> Option<Timestamp> {
     hook_said(line, is_tip_rules)?.then(|| line.timestamp.as_deref().and_then(parse_ts)).flatten()
 }
 
@@ -375,7 +375,7 @@ fn sample(line: &Line, pos: u64) -> Option<(Option<String>, Sample)> {
 }
 
 /// A person's message, unless it is injected context or only a pasted block.
-fn human(text: String, ts: DateTime<Utc>, line: &Line, pos: u64) -> Option<Event> {
+fn human(text: String, ts: Timestamp, line: &Line, pos: u64) -> Option<Event> {
     if is_noise(&text) {
         return None;
     }
@@ -784,14 +784,19 @@ mod tests {
         let v = view_str(&body);
         let scan = scan_str(&body, true);
         for (p, st) in v.prompts.iter().zip(&scan.turns) {
-            let want =
-                engine::message_key("claude-code", "abc", st.key.as_deref(), &st.ts.to_rfc3339(), &st.turn.human);
+            let want = engine::message_key(
+                "claude-code",
+                "abc",
+                st.key.as_deref(),
+                &crate::time::rfc3339(st.ts),
+                &st.turn.human,
+            );
             assert_eq!(p.key, want);
         }
         assert_eq!(v.prompts.len(), 2, "the trailing unanswered message is included");
         assert_eq!(
             v.prompts[1].key,
-            engine::message_key("claude-code", "abc", None, &v.prompts[1].ts.to_rfc3339(), "second, no uuid")
+            engine::message_key("claude-code", "abc", None, &crate::time::rfc3339(v.prompts[1].ts), "second, no uuid")
         );
     }
 

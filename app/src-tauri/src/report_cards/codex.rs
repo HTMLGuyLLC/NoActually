@@ -416,7 +416,7 @@ fn read_hooks(path: &Path) -> Res<Option<Json>> {
 /// Copies the hooks file as it is to `hooks.json.bak-YYYYMMDD-HHMMSS` beside it, never over an
 /// earlier copy (a second one in the same second gets `-1`, `-2`...).
 fn back_up(real: &Path) -> std::io::Result<()> {
-    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let stamp = jiff::Zoned::now().strftime("%Y%m%d-%H%M%S");
     let mut src = std::fs::File::open(real)?;
     for n in 0.. {
         let name = if n == 0 { format!("hooks.json.bak-{stamp}") } else { format!("hooks.json.bak-{stamp}-{n}") };

@@ -5,9 +5,10 @@ use crate::cards::clear_left_out;
 use crate::ingest::{source_files, upsert_file, FileMeta, Pass};
 use crate::rebuild::{KEPT_TABLES, SCORE_TABLES};
 use crate::{files, Result, Store};
-use chrono::{DateTime, Local, NaiveDate, Utc};
+use jiff::{civil::Date, Timestamp};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
+use sources::time::{local_day, rfc3339};
 use sources::Source;
 use std::path::{Path, PathBuf};
 
@@ -38,12 +39,12 @@ pub struct SourceState {
     /// Allowed, but not read for now.
     pub paused: bool,
     /// Ignore history before this day. `None` means everything.
-    pub backfill_since: Option<NaiveDate>,
+    pub backfill_since: Option<Date>,
     /// When the user allowed it.
-    pub granted_at: Option<DateTime<Utc>>,
+    pub granted_at: Option<Timestamp>,
     /// "From now on": ignore every message written before this moment.
     #[serde(default)]
-    pub start_after: Option<DateTime<Utc>>,
+    pub start_after: Option<Timestamp>,
     /// Extra files or folders the user pointed this source at (exports live here).
     pub paths: Vec<String>,
 }
@@ -64,8 +65,8 @@ impl SourceState {
 
     /// False for a message this source's consent says to skip (before the backfill day, or
     /// before "From now on").
-    pub(crate) fn wants(&self, ts: DateTime<Utc>) -> bool {
-        let day = ts.with_timezone(&Local).date_naive();
+    pub(crate) fn wants(&self, ts: Timestamp) -> bool {
+        let day = local_day(ts);
         !(self.backfill_since.is_some_and(|s| day < s) || self.start_after.is_some_and(|t| ts < t))
     }
 }
@@ -96,15 +97,16 @@ impl Store {
     }
 
     /// The user allowed reading this source. Nothing is read before this.
-    pub fn allow(&self, id: &str, backfill_since: Option<NaiveDate>) -> Result<()> {
+    pub fn allow(&self, id: &str, backfill_since: Option<Date>) -> Result<()> {
         // Reaching further back than before (say "All history" after "From now on") can't use
         // the old checkpoints: they sit at the end of files whose older messages were skipped.
         // The `seen` keys keep re-read messages from counting twice.
         if let Some(prev) = self.source_state(id)? {
-            let before = prev.start_after.map(|t| t.date_naive()).or(prev.backfill_since);
-            let reaches_back = match (backfill_since, before) {
-                (None, Some(_)) => true,
-                (Some(new), Some(old)) => new < old,
+            let reaches_back = match (backfill_since, prev.start_after, prev.backfill_since) {
+                (None, Some(_), _) | (None, None, Some(_)) => true,
+                // "From now on" skipped the earlier part of its own day too.
+                (Some(new), Some(at), _) => new <= local_day(at),
+                (Some(new), None, Some(old)) => new < old,
                 _ => false,
             };
             if reaches_back {
@@ -115,7 +117,7 @@ impl Store {
             "INSERT INTO sources (id, allowed, paused, backfill_since, granted_at, paths) VALUES (?1, 1, 0, ?2, ?3, '[]')
              ON CONFLICT(id) DO UPDATE SET allowed = 1, paused = 0, backfill_since = excluded.backfill_since,
                granted_at = excluded.granted_at, start_after = NULL",
-            params![id, backfill_since.map(|d| d.to_string()), Utc::now().to_rfc3339()],
+            params![id, backfill_since.map(|d| d.to_string()), rfc3339(Timestamp::now())],
         )?;
         self.mark_stopped(id, false);
         Ok(())
@@ -159,8 +161,10 @@ impl Store {
     /// written after this moment count. Returns how many files were marked.
     pub fn start_from_now(&mut self, src: &dyn Source) -> Result<usize> {
         // The cutoff is what guarantees it; the checkpoints just save re-reading old bytes.
-        self.conn
-            .execute("UPDATE sources SET start_after = ?2 WHERE id = ?1", params![src.id(), Utc::now().to_rfc3339()])?;
+        self.conn.execute(
+            "UPDATE sources SET start_after = ?2 WHERE id = ?1",
+            params![src.id(), rfc3339(Timestamp::now())],
+        )?;
         let extra = self.source_state(src.id())?.map(|s| s.paths).unwrap_or_default();
         let tx = self.conn.transaction()?;
         let mut marked = 0;

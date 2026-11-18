@@ -100,7 +100,7 @@ fn pass_started(status: &mut SyncStatus, rebuilding: bool) {
 }
 
 /// A pass ended well, with `errors` files skipped.
-fn pass_succeeded(status: &mut SyncStatus, errors: usize, now: chrono::DateTime<chrono::Utc>) {
+fn pass_succeeded(status: &mut SyncStatus, errors: usize, now: jiff::Timestamp) {
     status.syncing = false;
     status.rebuilding = false;
     status.last_sync = Some(now);
@@ -109,7 +109,7 @@ fn pass_succeeded(status: &mut SyncStatus, errors: usize, now: chrono::DateTime<
 }
 
 /// A pass failed: the last sync time still moves, so the window says when it last tried.
-fn pass_failed(status: &mut SyncStatus, message: String, now: chrono::DateTime<chrono::Utc>) {
+fn pass_failed(status: &mut SyncStatus, message: String, now: jiff::Timestamp) {
     status.syncing = false;
     status.rebuilding = false;
     status.last_sync = Some(now);
@@ -153,11 +153,11 @@ fn sync_once(handle: &AppHandle, app: &App, quiet: bool) {
                 log::warn!("{line}");
             }
             let changed = pass_changed(r.files_read, r.rescored, r.errors.len(), &status, rebuilding);
-            pass_succeeded(&mut status, r.errors.len(), chrono::Utc::now());
+            pass_succeeded(&mut status, r.errors.len(), jiff::Timestamp::now());
             drop(status);
             if r.rescored {
                 // Kept so the window can say so after the popup is gone, or if popups are off.
-                let when = chrono::Utc::now().to_rfc3339();
+                let when = sources::time::rfc3339(jiff::Timestamp::now());
                 if let Err(e) = lock(&app.writer).set_setting(crate::RESCORED_NOTICE_KEY, &when) {
                     log::warn!("couldn't note that scores were rebuilt: {e}");
                 }
@@ -172,7 +172,7 @@ fn sync_once(handle: &AppHandle, app: &App, quiet: bool) {
         }
         Err(e) => {
             log::error!("sync failed: {}", shorten_home_in(&format!("{e:#}"), std::env::home_dir().as_deref()));
-            pass_failed(&mut status, e.to_string(), chrono::Utc::now());
+            pass_failed(&mut status, e.to_string(), jiff::Timestamp::now());
             drop(status);
             let _ = handle.emit("sync-failed", e.to_string());
         }
@@ -181,7 +181,7 @@ fn sync_once(handle: &AppHandle, app: &App, quiet: bool) {
 
 /// Hovering the menu bar icon shows the score without opening anything.
 fn update_tray(handle: &AppHandle, app: &App) {
-    let Ok(o) = lock(&app.reader).overall(chrono::Local::now().date_naive()) else { return };
+    let Ok(o) = lock(&app.reader).overall(sources::time::today()) else { return };
     if let Some(tray) = handle.tray_by_id("tray") {
         let tip = match (o.score, o.tier) {
             (Some(score), Some(tier)) => format!("No, Actually... · {} · score {score}", tier.name()),
@@ -269,10 +269,9 @@ pub fn spawn(handle: AppHandle, app: Arc<App>, tx: mpsc::Sender<Msg>, rx: mpsc::
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{TimeZone, Utc};
 
-    fn at() -> chrono::DateTime<Utc> {
-        Utc.with_ymd_and_hms(2026, 11, 1, 12, 0, 0).unwrap()
+    fn at() -> jiff::Timestamp {
+        "2026-11-01T12:00:00Z".parse().unwrap()
     }
 
     /// A stand-in for the tracking thread, which answers `Stop` after `pass`.

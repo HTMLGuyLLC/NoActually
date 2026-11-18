@@ -4,9 +4,10 @@ use super::*;
 use crate::paths::resolve_db_path;
 use crate::rebuild::REBUILDING_KEY;
 use crate::retention::REDACTION_KEY;
-use chrono::{Duration, Local, NaiveDate, TimeZone, Utc};
 use engine::{Answer, PromptTier, Signal, Signals};
+use jiff::{civil::Date, SignedDuration, Timestamp, ToSpan};
 use sources::testing::{cc_ai, cc_correction, cc_user, set_mtime_ago};
+use sources::time::rfc3339;
 use sources::{FileScan, Source, SourceTurn};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -43,12 +44,12 @@ fn ingest(s: &mut Store, path: &str, turns: Vec<SourceTurn>) {
     s.ingest(&test_source(), path, &scan(turns), None, Pass::new(FileMeta { size: 100, mtime: 1 }, false)).unwrap();
 }
 
-fn today() -> NaiveDate {
-    Local::now().date_naive()
+fn today() -> Date {
+    sources::time::today()
 }
 
 fn now_ts(days_ago: i64) -> String {
-    (Utc::now() - Duration::days(days_ago)).to_rfc3339()
+    rfc3339(Timestamp::now() - SignedDuration::from_hours(24 * days_ago))
 }
 
 fn stats(s: &Store) -> Stats {
@@ -147,7 +148,11 @@ fn hall_names_known_sources() {
 fn weekly_buckets_split_on_monday() {
     let mut s = Store::open_in_memory().unwrap();
     // Local noon is the same day in every timezone; a fixed UTC hour isn't.
-    let noon = |day: u32| Local.with_ymd_and_hms(2026, 10, day, 12, 0, 0).unwrap().with_timezone(&Utc).to_rfc3339();
+    let noon = |day: i8| {
+        rfc3339(
+            jiff::civil::date(2026, 10, day).at(12, 0, 0, 0).to_zoned(sources::time::local_zone()).unwrap().timestamp(),
+        )
+    };
     let (sunday, monday) = (noon(25), noon(26));
     ingest(
         &mut s,
@@ -155,7 +160,7 @@ fn weekly_buckets_split_on_monday() {
         vec![turn("no, that's wrong", "You're right.", "m", &sunday, "a"), turn("thanks", "Sure.", "m", &monday, "b")],
     );
     let w = s.stats(&Filter::default(), "2026-10-27".parse().unwrap()).unwrap().weekly;
-    let d = |s: &str| s.parse::<NaiveDate>().unwrap();
+    let d = |s: &str| s.parse::<Date>().unwrap();
     let row = |w: &WeekRow| (w.week, w.messages, w.corrections);
     assert_eq!(w.iter().map(row).collect::<Vec<_>>(), vec![(d("2026-10-19"), 1, 1), (d("2026-10-26"), 1, 0)]);
     // The week's breakdown: which kind of correction it was, and steering on that week's tasks.
@@ -167,7 +172,7 @@ fn weekly_buckets_split_on_monday() {
 #[test]
 fn streaks_count_days_you_used_ai_and_peak_hour_comes_from_corrections() {
     let mut s = Store::open_in_memory().unwrap();
-    let at = |days_ago: i64| (Utc::now() - Duration::days(days_ago)).to_rfc3339();
+    let at = |days_ago: i64| rfc3339(Timestamp::now() - SignedDuration::from_hours(24 * days_ago));
     let corrections = [0, 2, 5].map(|d| turn("no, that's wrong", "You're right.", "m", &at(d), &d.to_string()));
     ingest(&mut s, "f", corrections.into());
     // A day with nothing to correct is a good day: it keeps the streak instead of breaking it.
@@ -191,7 +196,7 @@ fn copies_are_never_counted_twice() {
 #[test]
 fn backfill_window_is_respected() {
     let mut s = Store::open_in_memory().unwrap();
-    let state = SourceState { backfill_since: Some(today() - Duration::days(7)), ..test_source() };
+    let state = SourceState { backfill_since: Some(today() - 7.days()), ..test_source() };
     let old = turn("no, that's wrong", "You're right.", "m", &now_ts(40), "x");
     s.ingest(&state, "f", &scan(vec![old.clone()]), None, Pass::new(FileMeta::default(), false)).unwrap();
     assert_eq!(stats(&s).messages, 0);
@@ -218,7 +223,7 @@ fn retention_steps_down_and_pins_hold() {
     let pinned_id: i64 =
         s.conn.query_row("SELECT id FROM events WHERE human_full LIKE '%docs%'", [], |r| r.get(0)).unwrap();
     s.pin(pinned_id, true).unwrap();
-    s.sweep(Utc::now()).unwrap();
+    s.sweep(Timestamp::now()).unwrap();
 
     let level = |needle: &str| -> (String, Option<String>, Option<String>) {
         s.conn
@@ -241,7 +246,7 @@ fn retention_steps_down_and_pins_hold() {
     assert_eq!(level("new"), ("category".into(), None, None));
     assert_eq!(level("pinned").0, "full", "pins still hold");
     s.pin(pinned_id, false).unwrap();
-    s.sweep(Utc::now()).unwrap();
+    s.sweep(Timestamp::now()).unwrap();
     assert_eq!(level("pinned"), ("category".into(), None, None), "unpinned text steps down on the next sweep");
     assert!(stats(&s).hall_of_fame.is_empty(), "no text left to show");
 }
@@ -269,7 +274,7 @@ fn retention_is_validated() {
     assert!(Retention { full_days: 36_500, snippet_days: 36_500, ..Retention::default() }.validate().is_ok());
     // A bad value already on disk skips the sweep instead of panicking.
     s.set_setting("retention", r#"{"level":"snippet","full_days":30,"snippet_days":4000000000}"#).unwrap();
-    assert_eq!(s.sweep(Utc::now()).unwrap(), 0);
+    assert_eq!(s.sweep(Timestamp::now()).unwrap(), 0);
     assert_eq!("snippet".parse::<Level>().unwrap(), Level::Snippet);
     assert!("everything".parse::<Level>().is_err());
 }
@@ -348,7 +353,7 @@ fn imports_are_read_from_their_paths() {
 fn nothing_is_read_without_consent_and_live_appends_count_once() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("abc.jsonl");
-    let ts = Utc::now().to_rfc3339();
+    let ts = rfc3339(Timestamp::now());
     std::fs::write(&path, cc_ai("claude-opus-5-5", &ts, "Use /admin.") + &cc_user("u1", &ts, "that's not a real page"))
         .unwrap();
 
@@ -373,7 +378,7 @@ fn nothing_is_read_without_consent_and_live_appends_count_once() {
 fn quiet_files_count_their_last_unanswered_message() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("abc.jsonl");
-    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let ts = rfc3339(Timestamp::now() - SignedDuration::from_hours(1));
     std::fs::write(&path, cc_ai("claude-opus-5-5", &ts, "Done.") + &cc_user("u1", &ts, "you missed the tests"))
         .unwrap();
     let mut s = Store::open_in_memory().unwrap();
@@ -390,7 +395,7 @@ fn quiet_files_count_their_last_unanswered_message() {
 fn rewritten_or_shrunk_files_never_double_count() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("abc.jsonl");
-    let ts = (Utc::now() - Duration::hours(2)).to_rfc3339();
+    let ts = rfc3339(Timestamp::now() - SignedDuration::from_hours(2));
     let body = cc_ai("claude-opus-5-5", &ts, "Use /admin.")
         + &cc_user("u1", &ts, "that's not a real page")
         + &cc_ai("claude-opus-5-5", &ts, "You're right.");
@@ -415,7 +420,7 @@ fn rewritten_or_shrunk_files_never_double_count() {
 #[test]
 fn unreadable_files_are_reported_not_fatal() {
     let dir = tempfile::tempdir().unwrap();
-    let ts = Utc::now().to_rfc3339();
+    let ts = rfc3339(Timestamp::now());
     write_settled(&dir.path().join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u", &ts));
     let mut s = Store::open_in_memory().unwrap();
     s.import("chatgpt-export", &dir.path().join("conversations.json").to_string_lossy()).unwrap();
@@ -432,7 +437,7 @@ fn unreadable_files_are_reported_not_fatal() {
 #[test]
 fn paused_and_revoked_sources_are_not_read() {
     let dir = tempfile::tempdir().unwrap();
-    let ts = Utc::now().to_rfc3339();
+    let ts = rfc3339(Timestamp::now());
     write_settled(&dir.path().join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u", &ts));
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
@@ -449,7 +454,7 @@ fn paused_and_revoked_sources_are_not_read() {
 #[test]
 fn rule_changes_rebuild_scores_but_keep_consent() {
     let dir = tempfile::tempdir().unwrap();
-    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let ts = rfc3339(Timestamp::now() - SignedDuration::from_hours(1));
     let body = cc_ai("claude-opus-5-5", &ts, "hi") + &cc_ai("<synthetic>", &ts, "API Error");
     write_settled(&dir.path().join("a.jsonl"), body + &cc_correction("u", &ts));
     let all = claude_code(&dir);
@@ -478,14 +483,14 @@ fn from_now_on_skips_existing_history_but_counts_new_messages() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("a.jsonl");
     // Written earlier today: must not count when the person picks "From now on".
-    std::fs::write(&path, cc_correction("old", &(Utc::now() - Duration::minutes(30)).to_rfc3339())).unwrap();
+    std::fs::write(&path, cc_correction("old", &rfc3339(Timestamp::now() - SignedDuration::from_mins(30)))).unwrap();
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
     s.allow("claude-code", None).unwrap();
     assert_eq!(s.start_from_now(all[0].as_ref()).unwrap(), 1);
     assert_eq!(sync(&mut s, &all).unwrap().messages, 0);
 
-    append(&path, &cc_correction("new", &Utc::now().to_rfc3339()));
+    append(&path, &cc_correction("new", &rfc3339(Timestamp::now())));
     let r = sync(&mut s, &all).unwrap();
     assert_eq!((r.messages, r.corrections), (1, 1), "only the new message counts");
 }
@@ -494,7 +499,7 @@ fn from_now_on_skips_existing_history_but_counts_new_messages() {
 fn allowing_more_history_re_reads_old_files() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("a.jsonl");
-    write_settled(&path, cc_correction("old", &(Utc::now() - Duration::hours(3)).to_rfc3339()));
+    write_settled(&path, cc_correction("old", &rfc3339(Timestamp::now() - SignedDuration::from_hours(3))));
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
     s.allow("claude-code", None).unwrap();
@@ -511,15 +516,33 @@ fn allowing_more_history_re_reads_old_files() {
 }
 
 #[test]
-fn from_now_on_survives_a_rules_rebuild() {
+fn history_from_the_from_now_on_day_re_reads_that_day() {
+    // "From now on" skipped the part of today before it, so "since today" reaches back.
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("a.jsonl");
-    write_settled(&path, cc_correction("old", &(Utc::now() - Duration::hours(3)).to_rfc3339()));
+    let midnight = today().to_zoned(sources::time::local_zone()).unwrap().timestamp();
+    let earlier_today = (Timestamp::now() - SignedDuration::from_mins(1)).max(midnight);
+    write_settled(&path, cc_correction("old", &rfc3339(earlier_today)));
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
     s.allow("claude-code", None).unwrap();
     s.start_from_now(all[0].as_ref()).unwrap();
-    append(&path, &cc_correction("new", &Utc::now().to_rfc3339()));
+    assert_eq!(sync(&mut s, &all).unwrap().messages, 0);
+
+    s.allow("claude-code", Some(today())).unwrap();
+    assert_eq!(sync(&mut s, &all).unwrap().messages, 1);
+}
+
+#[test]
+fn from_now_on_survives_a_rules_rebuild() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("a.jsonl");
+    write_settled(&path, cc_correction("old", &rfc3339(Timestamp::now() - SignedDuration::from_hours(3))));
+    let all = claude_code(&dir);
+    let mut s = Store::open_in_memory().unwrap();
+    s.allow("claude-code", None).unwrap();
+    s.start_from_now(all[0].as_ref()).unwrap();
+    append(&path, &cc_correction("new", &rfc3339(Timestamp::now())));
     sync(&mut s, &all).unwrap();
     assert_eq!(stats(&s).messages, 1);
 
@@ -566,7 +589,7 @@ fn kept_counts(s: &Store) -> (i64, i64, i64, i64) {
 #[test]
 fn a_rebuild_keeps_what_it_cant_read_again() {
     let dir = tempfile::tempdir().unwrap();
-    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let ts = rfc3339(Timestamp::now() - SignedDuration::from_hours(1));
     let file = dir.path().join("a.jsonl");
     write_settled(&file, cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts));
     let all = claude_code(&dir);
@@ -599,7 +622,7 @@ fn a_rebuild_keeps_what_it_cant_read_again() {
 #[test]
 fn a_rebuild_drops_a_chat_that_no_longer_has_any_of_your_messages() {
     let dir = tempfile::tempdir().unwrap();
-    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let ts = rfc3339(Timestamp::now() - SignedDuration::from_hours(1));
     let file = dir.path().join("a.jsonl");
     write_settled(&file, cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts));
     let all = claude_code(&dir);
@@ -622,7 +645,7 @@ fn a_rebuild_drops_a_chat_that_no_longer_has_any_of_your_messages() {
 #[test]
 fn a_day_with_some_of_its_chats_gone_keeps_them() {
     let dir = tempfile::tempdir().unwrap();
-    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let ts = rfc3339(Timestamp::now() - SignedDuration::from_hours(1));
     let chat = |n: &str| cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction(n, &ts);
     let (stays, goes) = (dir.path().join("stays.jsonl"), dir.path().join("goes.jsonl"));
     write_settled(&stays, chat("u1"));
@@ -653,7 +676,7 @@ fn a_day_with_some_of_its_chats_gone_keeps_them() {
 #[test]
 fn a_rebuild_cut_short_loses_nothing_and_forget_reaches_what_it_set_aside() {
     let dir = tempfile::tempdir().unwrap();
-    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let ts = rfc3339(Timestamp::now() - SignedDuration::from_hours(1));
     write_settled(&dir.path().join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts));
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
@@ -677,7 +700,7 @@ fn a_rebuild_cut_short_loses_nothing_and_forget_reaches_what_it_set_aside() {
 #[test]
 fn scores_from_newer_rules_are_left_alone() {
     let dir = tempfile::tempdir().unwrap();
-    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let ts = rfc3339(Timestamp::now() - SignedDuration::from_hours(1));
     write_settled(&dir.path().join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts));
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
@@ -692,7 +715,7 @@ fn scores_from_newer_rules_are_left_alone() {
 #[test]
 fn pins_survive_a_rules_rebuild() {
     let dir = tempfile::tempdir().unwrap();
-    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let ts = rfc3339(Timestamp::now() - SignedDuration::from_hours(1));
     let file = dir.path().join("a.jsonl");
     let correction = |n: &str| cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction(n, &ts);
     write_settled(&file, correction("u1") + &correction("u2"));
@@ -745,7 +768,7 @@ fn an_unreadable_retention_setting_never_deletes_stored_text() {
     s.set_retention(Retention { level: Level::Full, ..Retention::default() }).unwrap();
     ingest(&mut s, "f", vec![turn("no, that's wrong", "You're right.", "m", &now_ts(1), "k")]);
     s.set_setting("retention", r#"{"level":"everything"}"#).unwrap(); // e.g. saved by a newer version
-    assert_eq!(s.sweep(Utc::now()).unwrap(), 0);
+    assert_eq!(s.sweep(Timestamp::now()).unwrap(), 0);
     let (level, text): (String, Option<String>) =
         s.conn.query_row("SELECT level, human_full FROM events", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
     assert_eq!(level, "full");
@@ -906,7 +929,7 @@ fn live_tracking_reads_prompts_like_a_full_rebuild() {
     // Synced after every reply, as the app does: each follow-up must still know what it answered.
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("live.jsonl");
-    let ts = Utc::now().to_rfc3339();
+    let ts = rfc3339(Timestamp::now());
     let steps = [
         cc_user("u1", &ts, "add a CSV export to src/report.ts") + &cc_ai("claude-opus-5-5", &ts, "Done."),
         cc_user("u2", &ts, "still not working") + &cc_ai("claude-opus-5-5", &ts, "Fixed the header row."),
@@ -945,8 +968,8 @@ fn no_tip_once_every_signal_is_common() {
 fn a_window_moves_the_counts_and_the_score() {
     let s = Store::open_in_memory().unwrap();
     // A fixed Sunday, so the rows 1-3 days back stay in one Monday week whatever day the test runs.
-    let today = || "2026-11-01".parse::<NaiveDate>().unwrap();
-    let day = |ago: i64| (today() - chrono::Duration::days(ago)).to_string();
+    let today = || "2026-11-01".parse::<Date>().unwrap();
+    let day = |ago: i64| (today() - ago.days()).to_string();
     let count = |ago: i64, kind: &str, n: i64| {
         s.conn()
             .execute(
@@ -970,8 +993,7 @@ fn a_window_moves_the_counts_and_the_score() {
             .unwrap();
     }
     let all = s.stats(&Filter::default(), today()).unwrap();
-    let week =
-        s.stats(&Filter { since: Some(today() - chrono::Duration::days(6)), ..Default::default() }, today()).unwrap();
+    let week = s.stats(&Filter { since: Some(today() - 6.days()), ..Default::default() }, today()).unwrap();
     assert_eq!((all.messages, all.corrections, all.prompts.tasks), (30, 6, 12));
     assert_eq!((week.messages, week.corrections, week.prompts.tasks), (10, 2, 2), "counts follow the window");
     assert_eq!(week.weekly.len(), 1);
@@ -982,8 +1004,7 @@ fn a_window_moves_the_counts_and_the_score() {
     // The score follows the window too: 2 tasks this week, too few to score.
     assert_eq!((week.prompts.window_tasks, week.overall.score, week.overall.corrections), (2, None, 2));
     assert_eq!(all.prompts.window_tasks, 11, "no window: the last 28 days");
-    let year =
-        s.stats(&Filter { since: Some(today() - chrono::Duration::days(364)), ..Default::default() }, today()).unwrap();
+    let year = s.stats(&Filter { since: Some(today() - 364.days()), ..Default::default() }, today()).unwrap();
     assert_eq!((year.prompts.window_tasks, year.overall.corrections), (12, 6));
     assert_eq!(week.corrections_last_7d, all.corrections_last_7d, "this week never moves");
 }
@@ -1103,7 +1124,7 @@ fn a_later_admission_is_the_text_kept() {
 fn a_message_waits_for_the_ai_to_finish_and_gets_its_later_admission() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("a.jsonl");
-    let ts = Utc::now().to_rfc3339();
+    let ts = rfc3339(Timestamp::now());
     let body = cc_ai("claude-opus-5-5", &ts, "It's fixed.")
         + &cc_user("u1", &ts, "are you sure?")
         + &cc_ai("claude-opus-5-5", &ts, "Let me check.");
@@ -1129,7 +1150,7 @@ fn corrections_in_daily(s: &Store) -> i64 {
 #[test]
 fn a_rebuild_doesnt_count_a_forked_chat_twice() {
     let dir = tempfile::tempdir().unwrap();
-    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let ts = rfc3339(Timestamp::now() - SignedDuration::from_hours(1));
     let opening = cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts);
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
@@ -1158,7 +1179,7 @@ fn a_rebuild_doesnt_count_a_forked_chat_twice() {
 #[test]
 fn a_day_read_again_takes_the_new_message_count() {
     let dir = tempfile::tempdir().unwrap();
-    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let ts = rfc3339(Timestamp::now() - SignedDuration::from_hours(1));
     write_settled(&dir.path().join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts));
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
@@ -1178,7 +1199,7 @@ fn a_day_read_again_takes_the_new_message_count() {
 #[test]
 fn a_rebuild_never_keeps_more_text_than_a_correction_had() {
     let dir = tempfile::tempdir().unwrap();
-    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let ts = rfc3339(Timestamp::now() - SignedDuration::from_hours(1));
     write_settled(&dir.path().join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts));
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
@@ -1197,7 +1218,7 @@ fn a_rebuild_never_keeps_more_text_than_a_correction_had() {
 #[test]
 fn stored_text_is_redacted_again_once_when_redaction_improves() {
     let dir = tempfile::tempdir().unwrap();
-    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let ts = rfc3339(Timestamp::now() - SignedDuration::from_hours(1));
     write_settled(&dir.path().join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts));
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
@@ -1250,7 +1271,7 @@ fn a_backup_is_made_daily_and_goes_when_text_is_deleted() {
 #[test]
 fn a_pinned_correction_a_fork_read_again_counts_once() {
     let dir = tempfile::tempdir().unwrap();
-    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let ts = rfc3339(Timestamp::now() - SignedDuration::from_hours(1));
     let opening = cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts);
     let (original, fork) = (dir.path().join("z-original.jsonl"), dir.path().join("a-fork.jsonl"));
     let all = claude_code(&dir);
@@ -1272,7 +1293,7 @@ fn a_pinned_correction_a_fork_read_again_counts_once() {
 #[test]
 fn the_backup_outlives_the_cleaning_of_stored_text_before_a_rebuild() {
     let dir = tempfile::tempdir().unwrap();
-    let ts = (Utc::now() - Duration::hours(1)).to_rfc3339();
+    let ts = rfc3339(Timestamp::now() - SignedDuration::from_hours(1));
     let chats = dir.path().join("chats");
     std::fs::create_dir(&chats).unwrap();
     write_settled(&chats.join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts));
@@ -1307,7 +1328,7 @@ fn a_file_that_cant_be_read_is_tried_again_only_when_it_changes() {
 #[test]
 fn a_sync_steps_old_text_down_in_the_same_pass() {
     let dir = tempfile::tempdir().unwrap();
-    let ts = (Utc::now() - Duration::days(40)).to_rfc3339();
+    let ts = rfc3339(Timestamp::now() - SignedDuration::from_hours(24 * 40));
     write_settled(&dir.path().join("a.jsonl"), cc_ai("claude-opus-5-5", &ts, "hi") + &cc_correction("u1", &ts));
     let all = claude_code(&dir);
     let mut s = Store::open_in_memory().unwrap();
@@ -1333,7 +1354,7 @@ fn a_sweep_that_deletes_text_empties_the_write_ahead_log() {
     s.set_retention(Retention { level: Level::Full, full_days: 30, snippet_days: 365 }).unwrap();
     ingest(&mut s, "f", vec![turn("no, that's wrong", "You're right.", "m", &now_ts(60), "old")]);
     assert!(wal() > 0, "the text is in the log before the sweep");
-    assert_eq!(s.sweep(Utc::now()).unwrap(), 1, "the full text was stepped down");
+    assert_eq!(s.sweep(Timestamp::now()).unwrap(), 1, "the full text was stepped down");
     assert_eq!(wal(), 0, "and no copy of it lingers in the log");
 }
 
@@ -1464,20 +1485,19 @@ fn forget_clears_the_source_in_every_table_that_has_one_and_nothing_else() {
 
 #[test]
 fn a_message_on_the_backfill_day_is_kept_and_one_just_before_it_is_not() {
-    let day = NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
-    let midnight =
-        Local.from_local_datetime(&day.and_hms_opt(0, 0, 0).unwrap()).earliest().unwrap().with_timezone(&Utc);
+    let day = jiff::civil::date(2026, 6, 15);
+    let midnight = day.to_zoned(sources::time::local_zone()).unwrap().timestamp();
     let state = SourceState { backfill_since: Some(day), ..test_source() };
     assert!(state.wants(midnight), "the first moment of the day counts");
-    assert!(state.wants(midnight + Duration::hours(12)));
-    assert!(!state.wants(midnight - Duration::seconds(1)), "the last moment of the day before does not");
+    assert!(state.wants(midnight + SignedDuration::from_hours(12)));
+    assert!(!state.wants(midnight - SignedDuration::from_secs(1)), "the last moment of the day before does not");
 }
 
 #[test]
 fn a_message_at_the_from_now_on_moment_is_kept_and_one_just_before_it_is_not() {
-    let at = Utc.with_ymd_and_hms(2026, 6, 15, 12, 0, 0).unwrap();
+    let at = "2026-06-15T12:00:00Z".parse::<Timestamp>().unwrap();
     let state = SourceState { start_after: Some(at), ..test_source() };
-    assert!(!state.wants(at - Duration::seconds(1)));
+    assert!(!state.wants(at - SignedDuration::from_secs(1)));
     assert!(state.wants(at), "exactly at the moment counts");
-    assert!(state.wants(at + Duration::seconds(1)));
+    assert!(state.wants(at + SignedDuration::from_secs(1)));
 }

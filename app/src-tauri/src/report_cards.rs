@@ -15,7 +15,7 @@ mod plugin_files;
 mod tests;
 
 use crate::{lock, App};
-use chrono::{DateTime, Local, NaiveDate};
+use jiff::civil::Date;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{ErrorKind, Read};
@@ -422,7 +422,7 @@ fn plugin_source() -> String {
 /// anything. After that come a check that couldn't be made now, what an earlier check found wrong with the
 /// downloaded plugin (`claude::saved_problem`), and a move it left unfinished (`claude::Pending`), until
 /// a launch finishes it.
-fn status(env: &Env, last_cards: &[(String, NaiveDate)], problem: Option<String>) -> Status {
+fn status(env: &Env, last_cards: &[(String, Date)], problem: Option<String>) -> Status {
     let last = |tool: Tool| last_cards.iter().find(|(s, _)| s == tool.source()).map(|(_, day)| day.to_string());
     let claude_installed = env.claude.is_some();
     let codex_installed = codex::installed(env);
@@ -621,7 +621,7 @@ pub async fn report_cards_status(window: tauri::Window, app: State<'_, Arc<App>>
         let reader = lock(&app.reader);
         let state = reader.source_state(Tool::ClaudeCode.source()).ok().flatten();
         let since = tips_since(&env, &shown).filter(|_| state.is_some_and(|s| s.allowed && !s.paused));
-        let tip_activity = reader.tip_activity(Local::now().date_naive(), since).unwrap_or_else(|e| {
+        let tip_activity = reader.tip_activity(sources::time::today(), since).unwrap_or_else(|e| {
             log::warn!("report cards: couldn't read how tips are doing: {e}");
             TipActivity::default()
         });
@@ -634,9 +634,9 @@ pub async fn report_cards_status(window: tauri::Window, app: State<'_, Arc<App>>
 }
 
 /// The day tips were turned on, when they're on and able to reach a chat.
-fn tips_since(env: &Env, shown: &Status) -> Option<NaiveDate> {
+fn tips_since(env: &Env, shown: &Status) -> Option<Date> {
     let on = fs::metadata(env.tips_file()).and_then(|m| m.modified()).ok();
-    on.filter(|_| shown.claude_code.on).map(|t| DateTime::<Local>::from(t).date_naive())
+    on.filter(|_| shown.claude_code.on).and_then(|t| jiff::Timestamp::try_from(t).ok()).map(sources::time::local_day)
 }
 
 #[tauri::command]

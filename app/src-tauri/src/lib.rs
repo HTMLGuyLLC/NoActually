@@ -76,7 +76,8 @@ pub fn apply_menu_bar(handle: &AppHandle, app: &App, enabled: bool) {
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct SyncStatus {
     pub syncing: bool,
-    pub last_sync: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(with = "sources::time::json")]
+    pub last_sync: Option<jiff::Timestamp>,
     pub last_error: Option<String>,
     pub files_with_errors: usize,
     /// The pass in progress reads history again, so the numbers are partial until it ends.
