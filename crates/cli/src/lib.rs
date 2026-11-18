@@ -7,6 +7,7 @@
 //! `digest` and `hook` are not for people. The report-card plugin and the Codex hooks call them
 //! (see [`helper`]); they are left out of the help text.
 
+mod delete_all;
 mod helper;
 mod report_cards;
 mod stderr_log;
@@ -41,6 +42,9 @@ USAGE
   noactually check <prompt> [--json]     What a draft prompt includes, graded like your history (nothing is saved)
   noactually retention <full|snippet|category> [--full-days N] [--snippet-days N] [--yes]
                                          Keeping less deletes older text. Asks first; --yes skips the question
+  noactually delete-everything [--yes]   Delete the app's data and logs and turn off Launch at login, as
+                                         Settings → Delete everything does. Quit the app and turn off report
+                                         cards first. Asks first; --yes skips the question
 
   noactually --help | --version          This text, or the version. `<command> --help` prints this text too
 
@@ -69,6 +73,7 @@ enum Command {
     Stats { filter: Filter, json: bool, report_cards: bool },
     Check { text: String, json: bool },
     Retention { level: Level, full_days: Option<u32>, snippet_days: Option<u32>, yes: bool },
+    DeleteEverything { yes: bool },
 }
 
 /// The arguments after the command, split into positionals and `--flag [value]` pairs.
@@ -190,6 +195,10 @@ fn parse_args(args: &[String]) -> Result<Parsed> {
                 yes: a.has("--yes") || a.has("-y"),
             }
         }
+        "delete-everything" => {
+            let a = no_positional(Args::split(rest, &[], &["--yes", "-y"])?)?;
+            Command::DeleteEverything { yes: a.has("--yes") || a.has("-y") }
+        }
         other => bail!("unknown command '{other}'\n\n{HELP}"),
     }))
 }
@@ -253,6 +262,11 @@ fn command(args: &[String]) -> Result<bool> {
         }
         Parsed::Run(cmd) => cmd,
     };
+    // Before the database is opened, which would make it again.
+    if let Command::DeleteEverything { yes } = cmd {
+        delete_all::run(yes)?;
+        return Ok(true);
+    }
     if store::legacy_db_env_in_use() {
         eprintln!("note: {} is deprecated; set {} instead.", store::LEGACY_DB_ENV, store::DB_ENV);
     }
@@ -310,7 +324,13 @@ fn confirm_retention(yes: bool, interactive: bool, input: &mut impl BufRead) -> 
 
 /// True on `--yes`, or a "y" at the prompt. With neither (input isn't a terminal and no `--yes`) it
 /// refuses to `what` rather than guess.
-fn confirm(question: &str, what: &str, yes: bool, interactive: bool, input: &mut impl BufRead) -> Result<bool> {
+pub(crate) fn confirm(
+    question: &str,
+    what: &str,
+    yes: bool,
+    interactive: bool,
+    input: &mut impl BufRead,
+) -> Result<bool> {
     if yes {
         return Ok(true);
     }
@@ -407,6 +427,7 @@ fn execute(cmd: Command, store: &mut Store, all: &[Box<dyn sources::Source>]) ->
                 }
             }
         }
+        Command::DeleteEverything { yes } => delete_all::run(yes)?,
         Command::Retention { level, full_days, snippet_days, yes } => {
             let old = store.retention()?;
             let r = Retention {
@@ -506,7 +527,7 @@ fn print_card(s: &store::Stats, since: Option<NaiveDate>) {
     if let Some(p) = s.pct_real_chats_with_correction {
         println!("  Real chats      {p}% of {} had a correction", s.real_chats);
     }
-    println!("  Streak          {} days now, best {}", s.current_streak_days, s.best_streak_days);
+    println!("  Streak          {} days using AI now, best {}", s.current_streak_days, s.best_streak_days);
     println!("\n  By model");
     for m in s.models.iter().filter(|m| m.messages > 0).take(10) {
         let name = if m.version.is_empty() { m.family.clone() } else { format!("{} {}", m.family, m.version) };

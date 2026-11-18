@@ -197,7 +197,7 @@ pub struct Stats {
     pub real_chats: i64,
     /// Share of real chats with at least one correction, one decimal.
     pub pct_real_chats_with_correction: Option<f64>,
-    /// Longest run of days with a correction.
+    /// Longest run of days you used an AI tool.
     pub best_streak_days: i64,
     /// The run ending today or yesterday.
     pub current_streak_days: i64,
@@ -369,9 +369,10 @@ fn real_chats(conn: &Connection, source: Option<&str>, since: Option<NaiveDate>)
     )?)
 }
 
-/// Sorted days that had at least one correction.
-fn correction_days(v: &View) -> Result<Vec<NaiveDate>> {
-    let sql = format!("SELECT DISTINCT day FROM daily WHERE kind IN {} {} ORDER BY day", *CORRECTION_KINDS, v.clause);
+/// Sorted days you sent at least one message. A day with no corrections is a good day, so it
+/// keeps the streak going instead of breaking it.
+fn active_days(v: &View) -> Result<Vec<NaiveDate>> {
+    let sql = format!("SELECT DISTINCT day FROM daily WHERE kind = 'message' {} ORDER BY day", v.clause);
     let mut days: Vec<NaiveDate> =
         v.rows(&sql, &[], |r| r.get::<_, String>(0))?.into_iter().filter_map(|d| d.parse().ok()).collect();
     days.dedup();
@@ -722,7 +723,7 @@ impl Store {
         let (first_day, last_day) = day_range(&v)?;
         let (labels, categories) = labels_and_categories(&v)?;
         let (real_chats, real_with_correction) = real_chats(self.conn(), f.source.as_deref(), f.since)?;
-        let (best_streak_days, current_streak_days) = streaks(&correction_days(&v)?, today);
+        let (best_streak_days, current_streak_days) = streaks(&active_days(&v)?, today);
         let prompts = prompts(&v, &scope, start)?;
         Ok(Stats {
             first_day,

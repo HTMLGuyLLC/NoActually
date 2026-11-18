@@ -265,7 +265,7 @@ function statsView(s: Stats): Html {
   return html`<section class="stats">
       <div class="stat"><span class="v">${num(s.corrections)}</span><span class="l">corrections</span></div>
       <div class="stat"><span class="v">${s.pct_real_chats_with_correction != null ? `${Math.round(s.pct_real_chats_with_correction)}%` : "–"}</span><span class="l">of chats of 10+ messages had a correction</span></div>
-      <div class="stat"><span class="v">${plural(s.best_streak_days, "day")}</span><span class="l">best streak · now ${s.current_streak_days}</span></div>
+      <div class="stat"><span class="v">${plural(s.best_streak_days, "day")}</span><span class="l">best streak of days using AI · now ${s.current_streak_days}</span></div>
       <div class="stat"><span class="v">${s.messages_per_correction ? `1 in ${s.messages_per_correction}` : "–"}</span><span class="l">messages is a correction · peak ${peak}</span></div>
     </section>`;
 }

@@ -27,6 +27,7 @@ mod schema;
 mod stats;
 mod sync;
 mod tips;
+pub mod wipe;
 
 pub use consent::{source_stopped, SourceState};
 pub use error::{Error, Result};
