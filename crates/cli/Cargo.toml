@@ -30,6 +30,8 @@ chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
+auto-launch.workspace = true
+dirs.workspace = true
 log.workspace = true
 memchr.workspace = true
 

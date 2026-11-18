@@ -165,11 +165,13 @@ fn weekly_buckets_split_on_monday() {
 }
 
 #[test]
-fn streaks_and_peak_hour_come_from_stored_corrections() {
+fn streaks_count_days_you_used_ai_and_peak_hour_comes_from_corrections() {
     let mut s = Store::open_in_memory().unwrap();
     let at = |days_ago: i64| (Utc::now() - Duration::days(days_ago)).to_rfc3339();
-    let corrections = [0, 1, 2, 5].map(|d| turn("no, that's wrong", "You're right.", "m", &at(d), &d.to_string()));
+    let corrections = [0, 2, 5].map(|d| turn("no, that's wrong", "You're right.", "m", &at(d), &d.to_string()));
     ingest(&mut s, "f", corrections.into());
+    // A day with nothing to correct is a good day: it keeps the streak instead of breaking it.
+    ingest(&mut s, "g", vec![turn("thanks, looks great", "Glad it helped.", "m", &at(1), "clean")]);
     let st = stats(&s);
     assert_eq!((st.current_streak_days, st.best_streak_days), (3, 3));
     assert!(st.peak_hour.is_some());

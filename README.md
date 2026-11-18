@@ -188,7 +188,7 @@ The app keeps each report card's numbers, so you can see how you're trending. Th
 <details>
 <summary><b>How do I delete everything?</b></summary>
 
-Click **Forget** on a source to delete what was read from it, including its pins, report cards and tips. Finished goal weeks and trophies stay, as totals. **Delete report card and tip history** in Settings clears them all. Or click **Delete everything** in Settings: it turns off report cards and Launch at login, deletes the data and logs, and quits. If the app is already gone, the manual steps are in [PRIVACY.md](PRIVACY.md#how-to-delete-your-data). Uninstalling alone leaves the data behind.
+Click **Forget** on a source to delete what was read from it, including its pins, report cards and tips. Finished goal weeks and trophies stay, as totals. **Delete report card and tip history** in Settings clears them all. Or click **Delete everything** in Settings: it turns off report cards and Launch at login, deletes the data and logs, and quits. From the command line, `noactually delete-everything` does the same once the app is quit and report cards are off. If the app is already gone, the manual steps are in [PRIVACY.md](PRIVACY.md#how-to-delete-your-data). Uninstalling alone leaves the data behind.
 </details>
 
 <details>

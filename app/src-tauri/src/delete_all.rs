@@ -17,10 +17,9 @@
 use crate::logging::{shorten_home_in, LOG_LEVEL};
 use crate::updater::{Updates, INSTALLING};
 use crate::{lock, report_cards, tracker, App};
-use std::fs;
-use std::io::ErrorKind;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::time::Duration;
+use store::wipe::{self, own_folder};
 use store::Store;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_autostart::ManagerExt as _;
@@ -30,9 +29,6 @@ type Res<T> = Result<T, String>;
 
 /// How long to wait for a sync pass to finish. A pass can't be cut short, and a big one takes minutes.
 const STOP_WAIT: Duration = Duration::from_secs(120);
-/// The folder inside the app's own folder that holds the log on Windows and Linux. (On macOS the log
-/// folder is named after the app, in `~/Library/Logs`.)
-const LOG_FOLDER: &str = "logs";
 
 /// Starts every message from a step that runs before the delete.
 const NOTHING_DELETED: &str = "Nothing was deleted.";
@@ -68,46 +64,24 @@ impl Folders {
     }
 }
 
-/// Whether `folder` can be deleted whole: an absolute path to a real folder named for this app, or its
-/// `logs` folder, that isn't the home folder or a folder around it. Everything else is refused, an
-/// empty path and a root included.
-fn own_folder(folder: &Path, home: &Path) -> bool {
-    let named = |p: &Path, name: &str| p.file_name().is_some_and(|n| n == name);
-    let the_app = named(folder, store::APP_ID);
-    let its_logs = named(folder, LOG_FOLDER) && folder.parent().is_some_and(|p| named(p, store::APP_ID));
-    let a_link = fs::symlink_metadata(folder).is_ok_and(|m| m.file_type().is_symlink());
-    folder.is_absolute()
-        && !folder.components().any(|c| c == Component::ParentDir)
-        && !home.starts_with(folder)
-        && (the_app || its_logs)
-        && !a_link
+/// The lock on [`wipe::APP_LOCK`] while the app is open, so `noactually delete-everything` waits for it to
+/// quit. Let go before the folders are deleted: Windows won't delete a file that's open.
+static APP_LOCK: std::sync::Mutex<Option<std::fs::File>> = std::sync::Mutex::new(None);
+
+/// Takes the app lock beside the database at `db`. Only logged if it can't: the lock guards the command
+/// line, not the app.
+pub(crate) fn hold_app_lock(db: &Path) {
+    let Some(data) = db.parent() else { return };
+    match wipe::lock_app(data) {
+        Ok(Some(file)) => *lock(&APP_LOCK) = Some(file),
+        Ok(None) => log::warn!("another copy holds the app lock"),
+        Err(e) => log::warn!("couldn't take the app lock: {e}"),
+    }
 }
 
-/// Deletes `folder` as far as it can, after checking it once more. Returns what's still there: one
-/// open file mustn't keep the rest (Windows won't delete a file that's in use).
+/// [`wipe::remove_own_folder`], with this window's message for a folder that isn't the app's.
 fn remove_own_folder(folder: &Path, home: &Path) -> Res<Vec<PathBuf>> {
-    if !own_folder(folder, home) {
-        return Err(NOT_OURS.into());
-    }
-    let failed = |r: std::io::Result<()>| r.is_err_and(|e| e.kind() != ErrorKind::NotFound);
-    let entries = match fs::read_dir(folder) {
-        Ok(entries) => entries,
-        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(_) => return Ok(vec![folder.to_path_buf()]),
-    };
-    let mut left = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        // Links are removed, never followed.
-        let is_dir = entry.file_type().is_ok_and(|t| t.is_dir());
-        if failed(if is_dir { fs::remove_dir_all(&path) } else { fs::remove_file(&path) }) {
-            left.push(path);
-        }
-    }
-    if left.is_empty() && failed(fs::remove_dir(folder)) {
-        left.push(folder.to_path_buf());
-    }
-    Ok(left)
+    wipe::remove_own_folder(folder, home).ok_or_else(|| NOT_OURS.into())
 }
 
 /// Closes both connections, leaving in-memory ones behind so the rest of the app has something to
@@ -203,7 +177,9 @@ impl Steps for Real<'_> {
 
     fn close_database(&mut self) -> Res<()> {
         report_cards::shut();
-        close_stores(self.app)
+        close_stores(self.app)?;
+        lock(&APP_LOCK).take();
+        Ok(())
     }
 
     fn logging(&mut self, on: bool) {
@@ -259,8 +235,10 @@ pub fn run(handle: &AppHandle, app: &App) -> Res<()> {
 mod tests {
     use super::*;
     use crate::SyncStatus;
+    use std::fs;
     use std::sync::atomic::AtomicBool;
     use std::sync::{mpsc, Mutex};
+    use store::wipe::LOG_FOLDER;
     use tempfile::TempDir;
 
     /// Records the steps, and fails or leaves things behind on request.

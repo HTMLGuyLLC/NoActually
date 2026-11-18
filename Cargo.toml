@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/engine", "crates/sources", "crates/store", "crates/cli", "app/src-tauri"]
 
 [workspace.package]
-version = "0.5.7"
+version = "0.5.8"
 edition = "2021"
 # Oldest Rust that builds the whole workspace, app included. CI's `msrv` job checks it.
 rust-version = "1.90"
@@ -31,6 +31,7 @@ rusqlite = { version = "0.43", features = ["bundled", "fallible_uint"] }
 sha2 = "0.10"
 getrandom = "0.4"
 anyhow = "1"
+auto-launch = "0.6"
 thiserror = "2"
 memchr = "2"
 ruzstd = "0.9.1"

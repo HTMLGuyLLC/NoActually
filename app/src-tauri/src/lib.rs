@@ -316,6 +316,9 @@ fn setup(tauri_app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         writer.schema_version()?,
         writer.get_setting(store::RULES_KEY)?.as_deref().unwrap_or("none")
     );
+    if !self_check {
+        delete_all::hold_app_lock(&db);
+    }
     match report_cards::cli_path::publish(&db) {
         Ok(report_cards::cli_path::Published::Translocated) => {
             log::warn!("running from a temporary copy; not recording where the report-card helper is");

@@ -4,6 +4,17 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.5.8] - 2026-11-18
+
+### Added
+
+- `noactually delete-everything` deletes the app's data and logs and turns off Launch at login, as **Delete everything** in Settings does. It waits for the app to quit, and for report cards to be turned off in the app.
+
+### Changed
+
+- Your streak now counts days you used an AI tool. A day with nothing to correct used to break it.
+- Updated dependencies: rusqlite 0.43, Tauri plugins, notify, Biome and Vite.
+
 ## [0.5.7] - 2026-11-04
 
 ### Changed
@@ -294,7 +305,8 @@ First release.
 - Per-source consent: nothing is read until you allow it, and Forget deletes a source's data
 - `noactually` command-line tool (`sources`, `allow`, `sync`, `stats`)
 
-[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.7...HEAD
+[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.8...HEAD
+[0.5.8]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.7...v0.5.8
 [0.5.7]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.4...v0.5.5
