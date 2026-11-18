@@ -4,9 +4,10 @@
 
 use crate::stats::View;
 use crate::{hash, put_setting, Result, SourceState, Store, NO_MODEL};
-use chrono::{DateTime, Local, NaiveDate, SecondsFormat, Utc};
 use engine::{normalize_model, price, tasks_overlap, LetterGrade, Model, Usage};
+use jiff::{civil::Date, Timestamp};
 use rusqlite::{params, Connection};
+use sources::time;
 use sources::{CardSeen, ChatView, SealedTask};
 use std::collections::BTreeMap;
 
@@ -25,14 +26,14 @@ pub(crate) const CLEARED_KEY: &str = "report_cards.cleared";
 pub(crate) type Tokens = BTreeMap<String, Usage>;
 
 /// A time as stored. A fixed shape, so comparing the text compares the times.
-pub(crate) fn ts_str(ts: DateTime<Utc>) -> String {
-    ts.to_rfc3339_opts(SecondsFormat::Millis, true)
+pub(crate) fn ts_str(ts: Timestamp) -> String {
+    time::rfc3339_millis(ts)
 }
 
 /// The local day of a stored time.
-pub(crate) fn local_day(stored: &str) -> Option<NaiveDate> {
-    let ts: DateTime<Utc> = stored.parse().ok()?;
-    Some(ts.with_timezone(&Local).date_naive())
+pub(crate) fn local_day(stored: &str) -> Option<Date> {
+    let ts: Timestamp = stored.parse().ok()?;
+    Some(time::local_day(ts))
 }
 
 /// One graded task, as stored.
@@ -204,7 +205,7 @@ fn row(state: &SourceState, view: &ChatView, block: &Block, st: &SealedTask) -> 
         source: source.to_string(),
         session: hash(&[source, &view.session]),
         first: first.key.clone(),
-        day: first.ts.with_timezone(&Local).date_naive().to_string(),
+        day: time::local_day(first.ts).to_string(),
         start_ts: ts_str(first.ts),
         end_ts: ts_str(prompts[to].ts),
         provider: provider.to_string(),
@@ -372,7 +373,7 @@ impl Store {
         tx.execute("DELETE FROM kept_tips", [])?;
         tx.execute("DELETE FROM kept_tip_chats", [])?;
         clear_left_out(&tx, None)?;
-        put_setting(&tx, CLEARED_KEY, &ts_str(Utc::now()))?;
+        put_setting(&tx, CLEARED_KEY, &ts_str(Timestamp::now()))?;
         tx.commit()?;
         self.flush_deleted()?;
         Ok(n + tips)

@@ -4,9 +4,9 @@
 use crate::cards::{self, set_left_out};
 use crate::rebuild::level_after_rebuild;
 use crate::{card_secret, hash, tips, Level, Result, SourceState, Store, NO_MODEL};
-use chrono::Local;
 use engine::{classify, normalize_model, read_prompt, snippet, Label, Prompt};
 use rusqlite::{params, Connection, OptionalExtension};
+use sources::time::{local_day, rfc3339};
 use sources::{ChatView, Kind, Source, SourceTurn};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -219,7 +219,7 @@ fn count_turn(
     if rebuilding {
         tx.execute("INSERT OR IGNORE INTO rebuild_read (id, source) VALUES (?1, ?2)", params![session, source])?;
     }
-    let key = engine::message_key(source, &st.session, st.key.as_deref(), &st.ts.to_rfc3339(), &st.turn.human);
+    let key = engine::message_key(source, &st.session, st.key.as_deref(), &rfc3339(st.ts), &st.turn.human);
     let new = "INSERT OR IGNORE INTO seen (key, source, session) VALUES (?1, ?2, ?3)";
     if tx.execute(new, params![key, source, session])? == 0 {
         return Ok(None); // a copy we've already counted (resumed or forked session, re-import)
@@ -229,7 +229,7 @@ fn count_turn(
     let (provider, family, version) = model
         .as_ref()
         .map_or((NO_MODEL, NO_MODEL, ""), |m| (m.provider.as_str(), m.family.as_str(), m.version.as_str()));
-    let day = st.ts.with_timezone(&Local).date_naive().to_string();
+    let day = local_day(st.ts).to_string();
     let bump = |kind: &str, category: &str| {
         tx.execute(
             "INSERT INTO daily (day, source, provider, family, version, kind, category, n) VALUES (?1,?2,?3,?4,?5,?6,?7,1)
@@ -259,7 +259,7 @@ fn count_turn(
          SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15
          WHERE NOT EXISTS (SELECT 1 FROM events WHERE seen_key = ?15)",
         params![
-            st.ts.to_rfc3339(),
+            rfc3339(st.ts),
             day,
             source,
             session,

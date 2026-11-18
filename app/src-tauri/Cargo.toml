@@ -29,7 +29,7 @@ cli = { path = "../../crates/cli", package = "noactually-cli" }
 serde.workspace = true
 # Used by the code `tauri::generate_context!` expands to.
 serde_json.workspace = true
-chrono.workspace = true
+jiff.workspace = true
 # The home folder, for the Codex files report cards add.
 dirs.workspace = true
 log.workspace = true

@@ -88,7 +88,7 @@ mod tests {
     }
 
     fn events(c: &Value) -> Vec<Event> {
-        let ts = chrono::DateTime::from_timestamp(1, 0).unwrap();
+        let ts = jiff::Timestamp::from_second(1).unwrap();
         let text = |k: &str| c[k].as_str().unwrap_or_default().to_string();
         vec![
             Event::Ai { text: text("ai"), model: None, ts: Some(ts), key: None, pos: 0 },

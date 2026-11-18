@@ -4,10 +4,11 @@
 use super::*;
 use crate::milestones::straight_as;
 use crate::rebuild::SCORE_TABLES;
-use chrono::{NaiveDate, SecondsFormat, TimeZone, Utc};
 use engine::{habit_bit, seal, Usage};
+use jiff::civil::Date;
 use serde_json::{json, Value};
 use sources::testing::{cc_reply_with_usage, cc_user, line, set_mtime_ago};
+use sources::time::today;
 use sources::{ChatView, Kind, Source};
 use std::io::Write;
 use std::path::PathBuf;
@@ -20,11 +21,12 @@ use std::time::Duration as StdDuration;
 /// `m` minutes past local noon on October `day` 2026 (the 5th is a Monday), as a UTC time. Noon
 /// local is the same day in every timezone, which a fixed UTC hour isn't.
 fn at(day: u32, m: u32) -> String {
-    chrono::Local
-        .with_ymd_and_hms(2026, 10, day, 12, m, 0)
+    jiff::civil::date(2026, 10, day as i8)
+        .at(12, m as i8, 0, 0)
+        .to_zoned(sources::time::local_zone())
         .unwrap()
-        .with_timezone(&Utc)
-        .to_rfc3339_opts(SecondsFormat::Secs, true)
+        .timestamp()
+        .to_string()
 }
 
 /// `at`, as the store keeps it.
@@ -965,7 +967,7 @@ fn the_view_and_the_engine_agree_on_what_overlaps() {
 
 // ---- the numbers the Improve tab reads ---------------------------------------------------------
 
-fn d(s: &str) -> NaiveDate {
+fn d(s: &str) -> Date {
     s.parse().unwrap()
 }
 
@@ -1881,13 +1883,13 @@ fn a_tip_where_the_ai_had_to_ask_is_kept_as_zero() {
 #[test]
 fn deleting_the_history_counts_tips_and_isnt_read_as_blocked_chats() {
     let s = Store::open_in_memory().unwrap();
-    let today = chrono::Local::now().date_naive();
-    let yesterday = today.pred_opt().unwrap();
+    let today = today();
+    let yesterday = today.yesterday().unwrap();
     for id in ["a", "b", "c"] {
         seed_chat(&s, id, "claude-code", &yesterday.to_string(), &yesterday.to_string(), true);
     }
     seed_tip(&s, 0, "finish");
     assert_eq!(s.delete_report_cards().unwrap(), 1, "tips count");
-    let on = yesterday.pred_opt().unwrap();
+    let on = yesterday.yesterday().ok().unwrap();
     assert!(!s.tip_activity(today, Some(on)).unwrap().blocked, "their rules were deleted, not missing");
 }

@@ -4,6 +4,17 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.5.9] - 2026-11-18
+
+### Changed
+
+- Dates and times are handled by jiff instead of chrono, which is no longer maintained. Your numbers don't change.
+- `--since` explains itself plainly when it can't read a date.
+
+### Fixed
+
+- After **From now on**, choosing history that starts that same day now reads that day's earlier messages.
+
 ## [0.5.8] - 2026-11-18
 
 ### Added
@@ -305,7 +316,8 @@ First release.
 - Per-source consent: nothing is read until you allow it, and Forget deletes a source's data
 - `noactually` command-line tool (`sources`, `allow`, `sync`, `stats`)
 
-[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.8...HEAD
+[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.9...HEAD
+[0.5.9]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.8...v0.5.9
 [0.5.8]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.7...v0.5.8
 [0.5.7]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.5...v0.5.6

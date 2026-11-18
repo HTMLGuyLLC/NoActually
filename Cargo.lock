@@ -2423,10 +2423,10 @@ dependencies = [
 
 [[package]]
 name = "noactually-app"
-version = "0.5.8"
+version = "0.5.9"
 dependencies = [
- "chrono",
  "dirs 6.0.0",
+ "jiff",
  "log",
  "noactually-cli",
  "noactually-engine",
@@ -2451,12 +2451,12 @@ dependencies = [
 
 [[package]]
 name = "noactually-cli"
-version = "0.5.8"
+version = "0.5.9"
 dependencies = [
  "anyhow",
  "auto-launch",
- "chrono",
  "dirs 6.0.0",
+ "jiff",
  "log",
  "memchr",
  "noactually-engine",
@@ -2469,7 +2469,7 @@ dependencies = [
 
 [[package]]
 name = "noactually-engine"
-version = "0.5.8"
+version = "0.5.9"
 dependencies = [
  "regex",
  "serde",
@@ -2479,10 +2479,10 @@ dependencies = [
 
 [[package]]
 name = "noactually-sources"
-version = "0.5.8"
+version = "0.5.9"
 dependencies = [
- "chrono",
  "dirs 6.0.0",
+ "jiff",
  "memchr",
  "noactually-engine",
  "ruzstd",
@@ -2494,11 +2494,11 @@ dependencies = [
 
 [[package]]
 name = "noactually-store"
-version = "0.5.8"
+version = "0.5.9"
 dependencies = [
- "chrono",
  "dirs 6.0.0",
  "getrandom 0.4.3",
+ "jiff",
  "log",
  "noactually-engine",
  "noactually-sources",

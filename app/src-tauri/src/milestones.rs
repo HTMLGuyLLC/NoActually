@@ -4,7 +4,6 @@
 //! so backfilling history never fires a pile of old milestones.
 
 use crate::{lock, App};
-use chrono::Local;
 use store::milestones::{crossed, goal_milestones, Milestone, Snapshot};
 use store::GoalNews;
 use tauri::AppHandle;
@@ -50,13 +49,13 @@ fn due(
 
 pub fn check(handle: &AppHandle, app: &App, quiet: Quiet) {
     let store = lock(&app.writer);
-    let Ok(stats) = store.stats(&store::Filter::default(), Local::now().date_naive()) else { return };
+    let Ok(stats) = store.stats(&store::Filter::default(), sources::time::today()) else { return };
     let now = Snapshot::of(&stats);
     let prev = store.advance_milestones(&now);
     // Like the goal's weeks, the report card baseline moves even on a quiet pass.
-    let cards = store.advance_card_milestones(Local::now().date_naive(), !quiet.goal);
+    let cards = store.advance_card_milestones(sources::time::today(), !quiet.goal);
     // Freeze the goal's finished weeks even on a quiet pass, so they're never re-judged later.
-    let goal = store.close_goal_weeks(Local::now().date_naive());
+    let goal = store.close_goal_weeks(sources::time::today());
     drop(store);
     let goal = goal.unwrap_or_else(|e| {
         log::warn!("couldn't close the goal's weeks: {e}");
@@ -107,7 +106,7 @@ mod tests {
                 id: 1,
                 kind: store::GoalKind::Tier { tier: Tier::Coworker },
                 target: 0,
-                start: chrono::NaiveDate::from_ymd_opt(2026, 10, 1).unwrap(),
+                start: jiff::civil::date(2026, 10, 1),
             }),
         }
     }

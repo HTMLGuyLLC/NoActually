@@ -2,9 +2,10 @@
 //! cleaning it with newer redaction, and clearing it from the write-ahead log and the backup.
 
 use crate::{files, put_setting, Error, Result, Store};
-use chrono::{DateTime, Duration, Utc};
+use jiff::{SignedDuration, Timestamp};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
+use sources::time::rfc3339;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -139,7 +140,7 @@ impl Store {
     pub fn set_retention(&self, r: Retention) -> Result<()> {
         r.validate()?;
         self.set_setting("retention", &serde_json::to_string(&r)?)?;
-        self.sweep(Utc::now())?;
+        self.sweep(Timestamp::now())?;
         Ok(())
     }
 
@@ -216,11 +217,11 @@ impl Store {
     /// Steps aging events down: full → snippet → category. Pinned events keep their text.
     /// An unreadable retention setting skips the sweep: deleting text can't be undone, so it
     /// waits until the user's choice is known again.
-    pub fn sweep(&self, now: DateTime<Utc>) -> Result<usize> {
+    pub fn sweep(&self, now: Timestamp) -> Result<usize> {
         let Some(r) = self.saved_retention()? else { return Ok(0) };
         // A stored value out of range (an older build allowed any number) means nothing is that old.
         let cutoff = |days: u32| {
-            now.checked_sub_signed(Duration::days(i64::from(days))).unwrap_or(DateTime::<Utc>::MIN_UTC).to_rfc3339()
+            rfc3339(now.checked_sub(SignedDuration::from_hours(24 * i64::from(days))).unwrap_or(Timestamp::MIN))
         };
         let (full_cut, snip_cut) = (cutoff(r.full_days), cutoff(r.snippet_days));
         let mut changed = self.conn.execute(

@@ -5,8 +5,8 @@
 use crate::progress::{floor_pct, task_weeks, HistoryWeek, MIN_WEEK};
 use crate::stats::{monday_of, View};
 use crate::{Error, Result, Store};
-use chrono::{Duration, NaiveDate};
 use engine::{Signal, Steer, Tier};
+use jiff::{civil::Date, ToSpan};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -59,7 +59,7 @@ pub struct Goal {
     /// Percent: the floor for a habit, the ceiling for steering. Unused for a tier.
     pub target: i64,
     /// The day it was set. Only tasks from then on count.
-    pub start: NaiveDate,
+    pub start: Date,
 }
 
 impl Goal {
@@ -111,7 +111,7 @@ impl WeekState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct GoalWeek {
     /// The week's Monday.
-    pub week: NaiveDate,
+    pub week: Date,
     /// Prompts (habit) or continued tasks (steering) counted.
     pub count: i64,
     /// Percent of them that carried the signal (habit) or got that steering (steering).
@@ -159,7 +159,7 @@ pub struct Trophy {
     /// The goal.
     pub goal: Goal,
     /// The day it was finished.
-    pub done: NaiveDate,
+    pub done: Date,
 }
 
 /// How a habit or steering goal did in `w`: (count, value).
@@ -277,7 +277,7 @@ fn baseline(weeks: &[HistoryWeek]) -> Baseline {
 
 /// Every goal you could pick now: a habit for each signal, a ceiling for each kind of steering
 /// that's on you, and the tiers above yours. Targets come from your own numbers.
-pub(crate) fn options(weeks: &[HistoryWeek], today: NaiveDate, tier: Option<Tier>) -> Vec<Goal> {
+pub(crate) fn options(weeks: &[HistoryWeek], today: Date, tier: Option<Tier>) -> Vec<Goal> {
     let b = baseline(weeks);
     let goal = |kind, target| Goal { id: 0, kind, target, start: today };
     let habits =
@@ -292,7 +292,7 @@ pub(crate) fn options(weeks: &[HistoryWeek], today: NaiveDate, tier: Option<Tier
 
 /// A goal to try: the habit your prompts carry least (if any has room to grow), else the steering
 /// that's on you most, else the next tier, else saying what done is.
-pub(crate) fn suggest(weeks: &[HistoryWeek], today: NaiveDate, tier: Option<Tier>) -> Goal {
+pub(crate) fn suggest(weeks: &[HistoryWeek], today: Date, tier: Option<Tier>) -> Goal {
     let b = baseline(weeks);
     let goal = |kind, target| Goal { id: 0, kind, target, start: today };
     if b.tasks == 0 {
@@ -318,7 +318,7 @@ impl Store {
 
     /// Sets the goal (replacing any other), starting today. Its id is `now_ms`. A tier you've
     /// already reached isn't a goal.
-    pub fn set_goal(&self, kind: GoalKind, target: i64, today: NaiveDate, now_ms: i64) -> Result<Goal> {
+    pub fn set_goal(&self, kind: GoalKind, target: i64, today: Date, now_ms: i64) -> Result<Goal> {
         let goal = Goal { id: now_ms, kind, target, start: today };
         goal.validate()?;
         if let GoalKind::Tier { tier } = kind {
@@ -337,14 +337,14 @@ impl Store {
     }
 
     /// Weeks of `goal` already frozen, by Monday.
-    fn frozen_weeks(&self, goal: &Goal) -> Result<BTreeMap<NaiveDate, GoalWeek>> {
+    fn frozen_weeks(&self, goal: &Goal) -> Result<BTreeMap<Date, GoalWeek>> {
         let mut stmt = self.conn().prepare("SELECT week, count, value, state FROM goal_weeks WHERE goal = ?1")?;
         let rows =
             stmt.query_map([goal.id], |r| Ok((r.get::<_, String>(0)?, r.get(1)?, r.get(2)?, r.get::<_, String>(3)?)))?;
         let mut out = BTreeMap::new();
         for row in rows {
             let (week, count, value, state) = row?;
-            if let (Ok(week), Some(state)) = (week.parse::<NaiveDate>(), WeekState::parse(&state)) {
+            if let (Ok(week), Some(state)) = (week.parse::<Date>(), WeekState::parse(&state)) {
                 out.insert(week, GoalWeek { week, count, value, state });
             }
         }
@@ -352,7 +352,7 @@ impl Store {
     }
 
     /// Where `goal` stands on `today`: frozen weeks as they were, the rest from current history.
-    pub(crate) fn goal_status(&self, goal: Goal, today: NaiveDate, score: Option<i64>) -> Result<GoalStatus> {
+    pub(crate) fn goal_status(&self, goal: Goal, today: Date, score: Option<i64>) -> Result<GoalStatus> {
         let mut status = GoalStatus {
             goal,
             weeks: vec![],
@@ -384,7 +384,7 @@ impl Store {
                 GoalWeek { week: w, count, value, state: week_state(&goal, count, value, w < this_week) }
             };
             status.weeks.push(week);
-            w += Duration::days(7);
+            w += 7.days();
         }
         status.met = status.weeks.iter().filter(|w| w.state == WeekState::Met).count() as i64;
         status.streak = streak(&status.weeks);
@@ -400,7 +400,7 @@ impl Store {
         Ok(status)
     }
 
-    fn trophy_for(&self, goal: i64) -> Result<Option<NaiveDate>> {
+    fn trophy_for(&self, goal: i64) -> Result<Option<Date>> {
         let day: Option<String> =
             self.conn().query_row("SELECT done FROM trophies WHERE id = ?1", [goal], |r| r.get(0)).optional()?;
         Ok(day.and_then(|d| d.parse().ok()))
@@ -423,7 +423,7 @@ impl Store {
     /// Freezes the goal's finished weeks and records a trophy once it's done. Runs after each
     /// sync; returns what's new (weeks just met, and whether the goal was just finished) for
     /// popups. A finished goal is left alone: nothing more to freeze or announce.
-    pub fn close_goal_weeks(&self, today: NaiveDate) -> Result<GoalNews> {
+    pub fn close_goal_weeks(&self, today: Date) -> Result<GoalNews> {
         let Some(goal) = self.goal()? else { return Ok(GoalNews::default()) };
         if self.trophy_for(goal.id)?.is_some() {
             return Ok(GoalNews::default());

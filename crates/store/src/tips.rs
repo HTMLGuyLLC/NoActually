@@ -5,10 +5,11 @@
 use crate::cards::{ts_str, CLEARED_KEY};
 use crate::stats::{monday_of, View};
 use crate::{hash, Filter, Result, SourceState, Store, NO_MODEL};
-use chrono::{DateTime, Days, Local, NaiveDate, Utc};
 use engine::{habit_bits, normalize_model};
+use jiff::{civil::Date, Timestamp, ToSpan};
 use rusqlite::{params, Connection};
 use serde::Serialize;
+use sources::time;
 use sources::{FileScan, TipSeen};
 use std::collections::BTreeMap;
 
@@ -68,15 +69,15 @@ pub struct TipActivity {
     pub blocked: bool,
 }
 
-fn local_day(ts: DateTime<Utc>) -> String {
-    ts.with_timezone(&Local).date_naive().to_string()
+fn local_day(ts: Timestamp) -> String {
+    time::local_day(ts).to_string()
 }
 
 /// Writes what `scan` found, in the caller's transaction. Reading a reply again writes nothing new,
 /// and neither does a forked chat's copy of one, which keeps its id. Anything this source's consent
 /// skips, or from before the history was last deleted (`cleared`), stays out.
 pub(crate) fn save(conn: &Connection, state: &SourceState, scan: &FileScan, cleared: Option<&str>) -> Result<()> {
-    let counts = |ts: DateTime<Utc>| state.wants(ts) && cleared.is_none_or(|t| ts_str(ts).as_str() > t);
+    let counts = |ts: Timestamp| state.wants(ts) && cleared.is_none_or(|t| ts_str(ts).as_str() > t);
     for seen in scan.tips.iter().filter(|t| counts(t.ts)) {
         save_tip(conn, &state.id, seen)?;
         // A chat can get here without its rules being seen: a scan that began after them, or a tool
@@ -118,7 +119,7 @@ fn save_tip(conn: &Connection, source: &str, seen: &TipSeen) -> Result<()> {
     Ok(())
 }
 
-fn save_chat(conn: &Connection, source: &str, session: &str, ts: DateTime<Utc>) -> Result<()> {
+fn save_chat(conn: &Connection, source: &str, session: &str, ts: Timestamp) -> Result<()> {
     conn.execute(
         "INSERT INTO tip_chats (session, source, day) VALUES (?1,?2,?3)
          ON CONFLICT(session) DO UPDATE SET day = min(day, excluded.day)",
@@ -128,12 +129,12 @@ fn save_chat(conn: &Connection, source: &str, session: &str, ts: DateTime<Utc>) 
 }
 
 /// Tips per week, and the tasks they're out of: those from the day a chat had the rules on.
-pub(crate) fn weeks(v: &View) -> Result<BTreeMap<NaiveDate, TipWeek>> {
-    let mut weeks: BTreeMap<NaiveDate, TipWeek> = BTreeMap::new();
+pub(crate) fn weeks(v: &View) -> Result<BTreeMap<Date, TipWeek>> {
+    let mut weeks: BTreeMap<Date, TipWeek> = BTreeMap::new();
     let by_day = |sql: &str| v.rows(sql, &[], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)));
     let tips = format!("SELECT day, COUNT(*) FROM tips WHERE 1=1 {} GROUP BY day", v.clause);
     for (day, n) in by_day(&tips)? {
-        if let Ok(day) = day.parse::<NaiveDate>() {
+        if let Ok(day) = day.parse::<Date>() {
             weeks.entry(monday_of(day)).or_default().tips += n;
         }
     }
@@ -144,7 +145,7 @@ pub(crate) fn weeks(v: &View) -> Result<BTreeMap<NaiveDate, TipWeek>> {
         v.clause
     );
     for (day, n) in by_day(&tasks)? {
-        if let Ok(day) = day.parse::<NaiveDate>() {
+        if let Ok(day) = day.parse::<Date>() {
             weeks.entry(monday_of(day)).or_default().tasks += n;
         }
     }
@@ -152,10 +153,10 @@ pub(crate) fn weeks(v: &View) -> Result<BTreeMap<NaiveDate, TipWeek>> {
 }
 
 /// Last full week against the week before, once both have enough tasks to say.
-pub(crate) fn trend(v: &View, today: NaiveDate) -> Result<Option<TipTrend>> {
+pub(crate) fn trend(v: &View, today: Date) -> Result<Option<TipTrend>> {
     let weeks = weeks(v)?;
-    let week = |back: u64| {
-        let monday = monday_of(today).checked_sub_days(Days::new(7 * back))?;
+    let week = |back: i64| {
+        let monday = monday_of(today).checked_sub((7 * back).days()).ok()?;
         let w = weeks.get(&monday)?;
         // A task can take two tips, but "7 of 5 tasks" can't be read.
         (w.tasks >= MIN_TIP_WEEK).then(|| TipWeek { tips: w.tips.min(w.tasks), tasks: w.tasks })
@@ -183,7 +184,7 @@ pub(crate) fn top_tip(v: &View) -> Result<Option<TopTip>> {
 
 impl Store {
     /// Whether tips are reaching your chats. `on_since` is the day they were turned on, if they're on.
-    pub fn tip_activity(&self, today: NaiveDate, on_since: Option<NaiveDate>) -> Result<TipActivity> {
+    pub fn tip_activity(&self, today: Date, on_since: Option<Date>) -> Result<TipActivity> {
         let conn = self.conn();
         let active = conn.query_row(
             "SELECT COUNT(*) FROM tip_chats c JOIN sessions s ON s.id = c.session WHERE s.last_day >= ?1",
@@ -193,8 +194,8 @@ impl Store {
         let tips = conn.query_row("SELECT COUNT(*) FROM tips", [], |r| r.get(0))?;
         let Some(on_since) = on_since else { return Ok(TipActivity { active, tips, blocked: false }) };
         // Deleting the history also forgets which chats had the rules, so only what's after it can say.
-        let cleared = self.get_setting(CLEARED_KEY)?.and_then(|ts| ts.parse::<DateTime<Utc>>().ok());
-        let since = cleared.map_or(on_since, |ts| on_since.max(ts.with_timezone(&Local).date_naive()));
+        let cleared = self.get_setting(CLEARED_KEY)?.and_then(|ts| ts.parse::<Timestamp>().ok());
+        let since = cleared.map_or(on_since, |ts| on_since.max(time::local_day(ts)));
         let last_told: Option<String> = conn.query_row(
             "SELECT MAX(s.first_day) FROM sessions s JOIN tip_chats c ON c.session = s.id
              WHERE s.source = ?1 AND s.first_day >= ?2",
@@ -213,7 +214,7 @@ impl Store {
     }
 
     /// The tip lines `stats --report-cards` prints, under `f`'s models and over all your history.
-    pub fn tip_summary(&self, f: &Filter, today: NaiveDate) -> Result<(Option<TipTrend>, Option<TopTip>)> {
+    pub fn tip_summary(&self, f: &Filter, today: Date) -> Result<(Option<TipTrend>, Option<TopTip>)> {
         let (clause, args) = Filter { since: None, ..f.clone() }.sql();
         let v = View { conn: self.conn(), clause, args };
         Ok((trend(&v, today)?, top_tip(&v)?))

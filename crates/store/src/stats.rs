@@ -1,11 +1,11 @@
 //! Read side: everything the scorecard, quick glance and model breakdown show.
 
 use crate::{Result, Store};
-use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, Timelike};
 use engine::{
     Answer, CorrectionTier, Grade, Label, PromptTier, Score, Signal, Signals, Steer, Tier, Window, MIN_PROMPTS,
     WINDOW_DAYS,
 };
+use jiff::{civil::Date, ToSpan};
 use rusqlite::{params_from_iter, Connection};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
@@ -45,7 +45,7 @@ pub struct Filter {
     /// Only days from this one on: counts and the score both follow it. Without it, counts cover
     /// all of history and the score the last [`WINDOW_DAYS`] days. "This week" never moves.
     #[serde(default)]
-    pub since: Option<NaiveDate>,
+    pub since: Option<Date>,
 }
 
 impl Filter {
@@ -130,7 +130,7 @@ pub struct Overall {
 #[derive(Debug, Default, PartialEq, Eq, Serialize)]
 pub struct WeekRow {
     /// The week's Monday.
-    pub week: NaiveDate,
+    pub week: Date,
     /// Messages that week.
     pub messages: i64,
     /// Corrections that week.
@@ -305,15 +305,15 @@ struct Totals {
 }
 
 /// The first day the score looks at: `since` when the view has one, else [`WINDOW_DAYS`] back.
-fn score_start(since: Option<NaiveDate>, today: NaiveDate) -> NaiveDate {
-    since.unwrap_or(today - Duration::days(WINDOW_DAYS - 1))
+fn score_start(since: Option<Date>, today: Date) -> Date {
+    since.unwrap_or(today - (WINDOW_DAYS - 1).days())
 }
 
 /// Counts over `v`; "this week" and the score's window (from `start`) over `scope`, the same
 /// filter without `since`.
-fn totals(v: &View, scope: &View, today: NaiveDate, start: NaiveDate) -> Result<Totals> {
+fn totals(v: &View, scope: &View, today: Date, start: Date) -> Result<Totals> {
     let kinds = CORRECTION_KINDS.as_str();
-    let week_ago = (today - Duration::days(6)).to_string();
+    let week_ago = (today - 6.days()).to_string();
     let (window_corrections, window_humbled) = window_sums(scope, start)?;
     Ok(Totals {
         messages: v.sum("AND kind = 'message'", &[])?,
@@ -326,7 +326,7 @@ fn totals(v: &View, scope: &View, today: NaiveDate, start: NaiveDate) -> Result<
 }
 
 /// (corrections, humbled) from `start` on.
-fn window_sums(v: &View, start: NaiveDate) -> Result<(i64, i64)> {
+fn window_sums(v: &View, start: Date) -> Result<(i64, i64)> {
     let from = start.to_string();
     Ok((
         v.sum(&format!("AND kind IN {} AND day >= ?", *CORRECTION_KINDS), &[&from])?,
@@ -360,7 +360,7 @@ fn labels_and_categories(v: &View) -> Result<(BTreeMap<String, i64>, BTreeMap<St
 
 /// (real chats, real chats with a correction). Chats only know their source, not a model, so this
 /// respects the source filter alone, plus `since` (chats still going on or after it).
-fn real_chats(conn: &Connection, source: Option<&str>, since: Option<NaiveDate>) -> Result<(i64, i64)> {
+fn real_chats(conn: &Connection, source: Option<&str>, since: Option<Date>) -> Result<(i64, i64)> {
     Ok(conn.query_row(
         "SELECT COUNT(*), COALESCE(SUM(corrections > 0), 0) FROM sessions
          WHERE messages >= ?1 AND (?2 IS NULL OR source = ?2) AND (?3 IS NULL OR last_day >= ?3)",
@@ -371,9 +371,9 @@ fn real_chats(conn: &Connection, source: Option<&str>, since: Option<NaiveDate>)
 
 /// Sorted days you sent at least one message. A day with no corrections is a good day, so it
 /// keeps the streak going instead of breaking it.
-fn active_days(v: &View) -> Result<Vec<NaiveDate>> {
+fn active_days(v: &View) -> Result<Vec<Date>> {
     let sql = format!("SELECT DISTINCT day FROM daily WHERE kind = 'message' {} ORDER BY day", v.clause);
-    let mut days: Vec<NaiveDate> =
+    let mut days: Vec<Date> =
         v.rows(&sql, &[], |r| r.get::<_, String>(0))?.into_iter().filter_map(|d| d.parse().ok()).collect();
     days.dedup();
     Ok(days)
@@ -381,14 +381,14 @@ fn active_days(v: &View) -> Result<Vec<NaiveDate>> {
 
 /// (best, current) runs of consecutive days in sorted `days`. The current run still counts if
 /// its last day was yesterday: today isn't over.
-fn streaks(days: &[NaiveDate], today: NaiveDate) -> (i64, i64) {
+fn streaks(days: &[Date], today: Date) -> (i64, i64) {
     let (mut best, mut run) = (0i64, 0i64);
     for (i, d) in days.iter().enumerate() {
-        run = if i > 0 && *d - days[i - 1] == Duration::days(1) { run + 1 } else { 1 };
+        run = if i > 0 && days[i - 1].tomorrow().ok() == Some(*d) { run + 1 } else { 1 };
         best = best.max(run);
     }
     let current = match days.last() {
-        Some(d) if today - *d <= Duration::days(1) => run,
+        Some(d) if (today - *d).get_days() <= 1 => run,
         _ => 0,
     };
     (best, current)
@@ -398,9 +398,10 @@ fn streaks(days: &[NaiveDate], today: NaiveDate) -> (i64, i64) {
 fn correction_hours(v: &View) -> Result<[i64; 24]> {
     let sql = format!("SELECT ts FROM events WHERE label IN {} {}", *CORRECTION_KINDS, v.clause);
     let mut hours = [0i64; 24];
+    let zone = sources::time::local_zone();
     for ts in v.rows(&sql, &[], |r| r.get::<_, String>(0))? {
-        if let Ok(t) = DateTime::parse_from_rfc3339(&ts) {
-            hours[t.with_timezone(&Local).hour() as usize] += 1;
+        if let Some(t) = sources::time::parse(&ts) {
+            hours[t.to_zoned(zone.clone()).hour() as usize] += 1;
         }
     }
     Ok(hours)
@@ -412,8 +413,8 @@ fn peak_hour(hours: &[i64; 24]) -> Option<u32> {
 }
 
 /// The Monday starting `d`'s week.
-pub(crate) fn monday_of(d: NaiveDate) -> NaiveDate {
-    d - Duration::days(i64::from(d.weekday().num_days_from_monday()))
+pub(crate) fn monday_of(d: Date) -> Date {
+    d - i64::from(d.weekday().to_monday_zero_offset()).days()
 }
 
 /// Each day's (day, messages, corrections, humbled moments).
@@ -428,9 +429,9 @@ pub(crate) fn day_counts(v: &View) -> Result<Vec<(String, i64, i64, i64)>> {
 }
 
 fn weekly(v: &View) -> Result<Vec<WeekRow>> {
-    let mut weeks: BTreeMap<NaiveDate, WeekRow> = BTreeMap::new();
+    let mut weeks: BTreeMap<Date, WeekRow> = BTreeMap::new();
     let mut add = |day: String, f: &mut dyn FnMut(&mut WeekRow)| {
-        if let Ok(d) = day.parse::<NaiveDate>() {
+        if let Ok(d) = day.parse::<Date>() {
             let week = monday_of(d);
             f(weeks.entry(week).or_insert_with(|| WeekRow { week, ..WeekRow::default() }));
         }
@@ -580,7 +581,7 @@ pub(crate) static LANDED: LazyLock<String> = LazyLock::new(|| format!("({CONTINU
 pub(crate) type Group = (Signals, bool, bool, i64);
 
 /// Counts over `v`; the tier's window (from `start`) over `scope`, the same filter without `since`.
-fn prompts(v: &View, scope: &View, start: NaiveDate) -> Result<Prompts> {
+fn prompts(v: &View, scope: &View, start: Date) -> Result<Prompts> {
     let groups = task_groups(v)?;
     let mut p = Prompts::default();
     for (signals, continued, landed, n) in &groups {
@@ -637,7 +638,7 @@ pub(crate) fn tally(grades: &mut BTreeMap<String, i64>, carried: &mut BTreeMap<S
 }
 
 /// Continued tasks from `start` on, and how many landed.
-fn window_counts(v: &View, start: NaiveDate) -> Result<(i64, i64)> {
+fn window_counts(v: &View, start: Date) -> Result<(i64, i64)> {
     let since = start.to_string();
     let sql = format!(
         "SELECT COUNT(*), COALESCE(SUM({}), 0) FROM tasks WHERE {CONTINUED} {} AND day >= ?",
@@ -704,7 +705,7 @@ fn overall_of(continued: i64, landed: i64, corrections: i64, humbled: i64, days:
 
 impl Store {
     /// Just the overall score across all AI: a few queries, for goals and the tray.
-    pub fn overall(&self, today: NaiveDate) -> Result<Overall> {
+    pub fn overall(&self, today: Date) -> Result<Overall> {
         let v = View::all(self.conn());
         let start = score_start(None, today);
         let (continued, landed) = window_counts(&v, start)?;
@@ -713,7 +714,7 @@ impl Store {
     }
 
     /// The scorecard for `f`, with "this week" ending on `today`.
-    pub fn stats(&self, f: &Filter, today: NaiveDate) -> Result<Stats> {
+    pub fn stats(&self, f: &Filter, today: Date) -> Result<Stats> {
         let (clause, args) = f.sql();
         let v = View { conn: self.conn(), clause, args };
         let (scope_clause, scope_args) = Filter { since: None, ..f.clone() }.sql();
@@ -733,7 +734,12 @@ impl Store {
             humbled: t.humbled,
             labels,
             corrections_last_7d: t.corrections_last_7d,
-            overall: overall(&prompts, t.window_corrections, t.window_humbled, (today - start).num_days() + 1),
+            overall: overall(
+                &prompts,
+                t.window_corrections,
+                t.window_humbled,
+                i64::from((today - start).get_days()) + 1,
+            ),
             messages_per_correction: (t.corrections > 0)
                 .then(|| (t.messages as f64 / t.corrections as f64).round() as i64),
             real_chats,
@@ -754,7 +760,7 @@ impl Store {
 mod tests {
     use super::*;
 
-    fn d(s: &str) -> NaiveDate {
+    fn d(s: &str) -> Date {
         s.parse().unwrap()
     }
 

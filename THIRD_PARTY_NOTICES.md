@@ -113,9 +113,9 @@ These are the direct runtime dependencies from the `Cargo.toml` files (versions 
 | Crate | License |
 |---|---|
 | `tauri` 2.12.5 and the `tauri-plugin-*` crates (notification, autostart, positioner, dialog, single-instance, log, opener, updater) | Apache-2.0 OR MIT |
-| `regex`, `serde`, `serde_json`, `chrono`, `anyhow`, `dirs`, `rayon`, `sha2`, `log` | MIT OR Apache-2.0 |
+| `regex`, `serde`, `serde_json`, `anyhow`, `dirs`, `rayon`, `sha2`, `log` | MIT OR Apache-2.0 |
 | `thiserror` | MIT OR Apache-2.0 |
-| `memchr` | Unlicense OR MIT |
+| `memchr`, `jiff` | Unlicense OR MIT |
 | `ruzstd`, `rusqlite` | MIT |
 | `notify` | CC0-1.0 |
 

@@ -356,7 +356,7 @@ fn stats_report_cards_reports_a_card_from_a_synced_chat_as_text_and_json() {
     assert!(!text.contains("token"), "no counts of tokens in the text: {text}");
     assert!(text.contains("  Most missed     Finish line (1 of 1 task)\n"), "{text}");
     // The day is shown in local time, so it moves with the zone (the chat is at 10:00 UTC).
-    let day = chrono::DateTime::parse_from_rfc3339(&at(0)).unwrap().with_timezone(&chrono::Local).date_naive();
+    let day = sources::time::local_day(sources::time::parse(&at(0)).unwrap());
     assert!(
         text.contains(&format!(
             "\n  Latest\n    {day}  claude-code   B  left out: finish line  about 2 extra minutes · about $0.07 at pay-as-you-go prices"

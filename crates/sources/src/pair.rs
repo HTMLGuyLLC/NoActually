@@ -1,8 +1,8 @@
 //! Shared pairing: a stream of human / AI events becomes turns, plus a safe resume point.
 
 use crate::{CardSeen, FileScan, SourceTurn, TipSeen};
-use chrono::{DateTime, Utc};
 use engine::{find_cards, has_card, head_chars, parse_card, parse_tip, strip_tip, tail_chars, AiMsg, Turn};
+use jiff::Timestamp;
 
 const KEEP_PREV: usize = 600; // chars from the end of the reply you answered
 const KEEP_NEXT: usize = 2000; // chars from the start of the reply after you
@@ -16,7 +16,7 @@ pub enum Event {
         /// The message.
         text: String,
         /// When it was sent.
-        ts: DateTime<Utc>,
+        ts: Timestamp,
         /// The tool's id for it, for dedupe (see [`SourceTurn::key`]).
         key: Option<String>,
         /// Where it starts.
@@ -29,7 +29,7 @@ pub enum Event {
         /// The raw model id, if the tool recorded one.
         model: Option<String>,
         /// When it was written, if the tool recorded that.
-        ts: Option<DateTime<Utc>>,
+        ts: Option<Timestamp>,
         /// The tool's id for it (see [`CardSeen::key`]).
         key: Option<String>,
         /// Where it starts.
@@ -209,11 +209,11 @@ mod tests {
 
     thread_local! {
         /// One time for every reply here, so a re-read reply compares equal.
-        static TS: DateTime<Utc> = Utc::now();
+        static TS: Timestamp = Timestamp::now();
     }
 
     fn h(text: &str, pos: u64) -> Event {
-        Event::Human { text: text.into(), ts: Utc::now(), key: Some(text.into()), pos }
+        Event::Human { text: text.into(), ts: Timestamp::now(), key: Some(text.into()), pos }
     }
     fn a(text: &str, pos: u64) -> Event {
         Event::Ai { text: text.into(), model: Some("m".into()), ts: Some(TS.with(|t| *t)), key: None, pos }
@@ -259,7 +259,7 @@ mod tests {
 
     #[test]
     fn a_tip_with_no_time_or_on_a_card_is_left_out() {
-        let at = Some(Utc::now());
+        let at = Some(Timestamp::now());
         let timed = |text: &str, ts| Event::Ai { text: text.into(), model: None, ts, key: None, pos: 10 };
         let block = r#"{"v":1,"k":"9c41e0aa","tasks":[{"at":"7f3a9c21","to":"e44a1b90"}]}"#;
         let card = format!("Report card: A\n\n```noactually\n{block}\n```\n\n{TIP}");

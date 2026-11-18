@@ -5,8 +5,8 @@ use crate::progress::{floor_pct, HistoryWeek, MIN_CARD_BEST, MIN_CARD_HALF, MIN_
 use crate::stats::{steer_totals, task_groups, tip_for, View, CONTINUED, LANDED};
 use crate::tips::{self, TipTrend, TopTip};
 use crate::{Result, Tip};
-use chrono::NaiveDate;
 use engine::{habit_bits, Grade, Signal, Steer, MIN_PROMPTS};
+use jiff::civil::Date;
 use serde::Serialize;
 
 /// "What works for you" compares models only when each has this many continued tasks...
@@ -43,13 +43,13 @@ pub struct CardTrend {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct Bests {
     /// Best landed percent over any 4 weeks with enough tasks, and the last Monday of them.
-    pub landed: Option<(i64, NaiveDate)>,
+    pub landed: Option<(i64, Date)>,
     /// Best share of specific prompts in a week with enough of them.
-    pub sharp: Option<(i64, NaiveDate)>,
+    pub sharp: Option<(i64, Date)>,
     /// Longest run of goal weeks met.
     pub goal_streak: i64,
     /// Best share of graded tasks that got an A or B in a week with enough of them.
-    pub report_card: Option<(i64, NaiveDate)>,
+    pub report_card: Option<(i64, Date)>,
 }
 
 /// One model's landed rate, for comparing.
@@ -118,7 +118,7 @@ pub(crate) fn card_best(weeks: &[HistoryWeek]) -> Best {
 }
 
 /// A percent and the week it happened.
-type Best = Option<(i64, NaiveDate)>;
+type Best = Option<(i64, Date)>;
 
 /// Best 4-week landed rate and best specific week.
 pub(crate) fn bests(weeks: &[HistoryWeek]) -> (Best, Best) {
@@ -140,7 +140,7 @@ pub(crate) fn bests(weeks: &[HistoryWeek]) -> (Best, Best) {
 
 /// `cards` is the same filter without the range: the improvement headline and the tips cover all
 /// your history.
-pub(crate) fn insights(v: &View, cards: &View, today: NaiveDate) -> Result<Insights> {
+pub(crate) fn insights(v: &View, cards: &View, today: Date) -> Result<Insights> {
     let groups = task_groups(v)?;
     let signals =
         Signal::ALL.into_iter().map(|s| tip_for(&groups, s)).filter(|t| t.landed_with_without.is_some()).collect();

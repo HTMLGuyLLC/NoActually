@@ -67,7 +67,8 @@ pub struct UpdateStatus {
     pub installing: bool,
     /// The newer version on offer, if any.
     pub available: Option<String>,
-    pub last_check: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(with = "sources::time::json")]
+    pub last_check: Option<jiff::Timestamp>,
     pub last_error: Option<String>,
 }
 
@@ -152,7 +153,7 @@ fn check(handle: &AppHandle, app: &App, updates: &Updates) {
     {
         let mut status = lock(&updates.status);
         status.checking = false;
-        status.last_check = Some(chrono::Utc::now());
+        status.last_check = Some(jiff::Timestamp::now());
         match found {
             Ok(update) => {
                 status.last_error = None;

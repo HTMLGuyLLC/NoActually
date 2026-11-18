@@ -19,13 +19,14 @@ mod jsonl;
 mod pair;
 #[cfg(any(test, feature = "test-support"))]
 pub mod testing;
+pub mod time;
 mod view;
 
 pub use claude_code::has_tip_rules;
 pub use pair::{pair, pair_from, Event};
 pub use view::{ChatView, PromptView, Sealed, SealedTask};
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use std::path::{Path, PathBuf};
 
 /// What can go wrong reading a source. File errors always carry the path.
@@ -88,7 +89,7 @@ pub struct SourceTurn {
     /// The chat this message belongs to, as the tool names it.
     pub session: String,
     /// When the person sent it.
-    pub ts: DateTime<Utc>,
+    pub ts: Timestamp,
     /// Stable id of the human message, used to skip copies (resumed or forked sessions).
     ///
     /// Each adapter keeps the shape it shipped with: Claude Code uses the bare record uuid, Codex
@@ -132,7 +133,7 @@ pub struct CardSeen {
     /// The tool's own id for the reply, if it gave one.
     pub key: Option<String>,
     /// When the reply was written, if the tool said.
-    pub ts: Option<DateTime<Utc>>,
+    pub ts: Option<Timestamp>,
     /// Where the reply starts in the file.
     pub pos: u64,
     /// The text between the fences, as written.
@@ -147,7 +148,7 @@ pub struct TipSeen {
     /// The tool's own id for the reply, if it gave one.
     pub key: Option<String>,
     /// When the reply was written.
-    pub ts: DateTime<Utc>,
+    pub ts: Timestamp,
     /// Where the reply starts in the file.
     pub pos: u64,
     /// The raw model id, if the tool recorded one.
@@ -162,7 +163,7 @@ pub struct RulesSeen {
     /// The chat, as the tool names it.
     pub session: String,
     /// When it got them.
-    pub ts: DateTime<Utc>,
+    pub ts: Timestamp,
 }
 
 /// How a person asks Codex for a report card. Codex's skill is `grade-me`, called with a `$`.
@@ -276,12 +277,12 @@ pub(crate) fn file_name(p: &Path) -> std::borrow::Cow<'_, str> {
     p.file_name().map(|n| n.to_string_lossy()).unwrap_or_default()
 }
 
-pub(crate) fn parse_ts(s: &str) -> Option<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(s).ok().map(|d| d.with_timezone(&Utc))
+pub(crate) fn parse_ts(s: &str) -> Option<Timestamp> {
+    crate::time::parse(s)
 }
 
-pub(crate) fn epoch_ts(secs: f64) -> Option<DateTime<Utc>> {
-    DateTime::from_timestamp_millis((secs * 1000.0) as i64)
+pub(crate) fn epoch_ts(secs: f64) -> Option<Timestamp> {
+    Timestamp::from_millisecond((secs * 1000.0) as i64).ok()
 }
 
 #[cfg(test)]
