@@ -72,3 +72,21 @@ export function restoreFocus(root: HTMLElement, memo: FocusMemo): void {
   if (!target.matches("a[href], button, input, select, textarea, [tabindex]")) target.tabIndex = -1;
   target.focus({ preventScroll: true });
 }
+
+let headerWatch: ResizeObserver | null = null;
+
+/** Keeps `--top-h` at the sticky header's height, so the sticky section tabs sit just under it.
+ * On the Mac the header covers the window's drag strip, so it moves the window too. */
+export function trackHeader(root: ParentNode): void {
+  headerWatch?.disconnect();
+  headerWatch = null;
+  const top = root.querySelector<HTMLElement>(".top");
+  if (!top) return;
+  const html = document.documentElement;
+  top.toggleAttribute("data-tauri-drag-region", html.classList.contains("mac-bar"));
+  const set = () => html.style.setProperty("--top-h", `${top.offsetHeight}px`);
+  set();
+  if (typeof ResizeObserver === "undefined") return;
+  headerWatch = new ResizeObserver(set);
+  headerWatch.observe(top);
+}

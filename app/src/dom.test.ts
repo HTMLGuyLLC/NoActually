@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from "vitest";
-import { captureFocus, data, focusKey, must, restoreFocus, say } from "./dom";
+import { captureFocus, data, focusKey, must, restoreFocus, say, trackHeader } from "./dom";
 
 const page = (body: string) => `<h1>Title</h1>${body}`;
 
@@ -104,5 +104,31 @@ describe("focus across a redraw", () => {
     must<HTMLButtonElement>("#outside").focus();
     redraw(page(""));
     expect(document.activeElement?.id).toBe("outside");
+  });
+});
+
+describe("trackHeader", () => {
+  beforeEach(() => {
+    document.documentElement.className = "";
+    document.documentElement.style.removeProperty("--top-h");
+    document.body.innerHTML = `<div id="app"><header class="top">x</header></div>`;
+  });
+
+  it("sets --top-h for the sticky section tabs", () => {
+    trackHeader(must("#app"));
+    expect(document.documentElement.style.getPropertyValue("--top-h")).toMatch(/^\d+px$/);
+  });
+
+  it("makes the header drag the window only under the Mac's overlay title bar", () => {
+    trackHeader(must("#app"));
+    expect(must(".top").hasAttribute("data-tauri-drag-region")).toBe(false);
+    document.documentElement.classList.add("mac-bar");
+    trackHeader(must("#app"));
+    expect(must(".top").hasAttribute("data-tauri-drag-region")).toBe(true);
+  });
+
+  it("does nothing on a page without a header", () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    expect(() => trackHeader(must("#app"))).not.toThrow();
   });
 });

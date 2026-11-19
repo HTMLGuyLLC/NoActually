@@ -42,7 +42,7 @@ body { background: var(--paper); color: var(--ink); font: 400 15px/1.55 var(--bo
 h1, h2 { font-family: var(--display); text-wrap: balance; margin: 0 }
 h2 { font-size: 22px; font-weight: 800 }
 p { margin: 0 }
-.wrap { max-width: 1000px; margin: 0 auto; padding: 20px 24px 56px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 36px }
+.wrap { max-width: 1000px; margin: 0 auto; padding: 20px 24px 24px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 36px }
 main { display: grid; grid-template-columns: minmax(0, 1fr); gap: inherit }
 .eyebrow { font: 600 11px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted) }
 .muted { color: var(--muted) }
@@ -55,12 +55,12 @@ main { display: grid; grid-template-columns: minmax(0, 1fr); gap: inherit }
 .mac-bar .drag-strip { display: block; position: fixed; inset: 0 0 auto; height: 44px; background: var(--paper); z-index: 30 }
 /* The logo and menu sit level with the window buttons (`trafficLightPosition` in tauri.conf.json). */
 .mac-bar .wrap { padding-top: 12px }
+.mac-bar .top { padding-top: 12px; margin-top: -12px }
 .mac-bar .home { margin-left: 72px }
-.mac-bar .home, .mac-bar .top .sync-pill, .mac-bar .top nav { position: relative; z-index: 31 }
 .mac-bar .top .tab { height: 28px; padding-block: 0 }
 .mac-bar .top .tab.icon-only { width: 28px; height: 28px; padding: 6px }
-/* Keeps a focused control from scrolling under the strip. */
-html.mac-bar { scroll-padding-top: 52px }
+/* Keeps a focused control from scrolling under the sticky header and section tabs. */
+html { scroll-padding-top: calc(var(--top-h, 52px) + 64px) }
 /* Skip link: off the page until it takes focus, then the first thing on it. */
 .skip-link { position: absolute; left: 12px; top: -48px; z-index: 60 }
 .skip-link:focus { top: 8px }
@@ -84,7 +84,9 @@ select:hover, input[type="number"]:hover { border-color: var(--ink) }
 .action-error { flex-basis: 100%; color: var(--pen-text); font-size: 13px }
 .action-note { flex-basis: 100% }
 
-.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: -16px }
+/* The header stays put while the page scrolls under it; it covers the drag strip, so it drags the window too. */
+.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; position: sticky; top: 0; z-index: 32; background: var(--paper);
+  padding: 20px 0 8px; margin: -20px 0 -24px }
 /* One line: the logo with its sync status beside it, then the menu at the far end. */
 .top .sync-pill { font-size: 11.5px; margin-left: 8px }
 .top nav { margin-left: auto }
@@ -166,6 +168,8 @@ svg [data-tip]:focus-visible { outline: 3px solid var(--ai); outline-offset: 2px
 .views.period .tab { padding: 7px 11px; font-size: 12.5px }
 /* Sections on the left, the period on the right, one underlined row; it wraps on narrow windows. */
 .views-row { display: flex; justify-content: space-between; align-items: center; gap: 8px 16px; flex-wrap: wrap; border-bottom: 1px solid var(--rule); padding-bottom: 8px }
+/* The sections and period stay just under the header (`--top-h`, set in dom.ts) while the page scrolls. */
+.views-row { position: sticky; top: var(--top-h, 0px); z-index: 31; background: var(--paper); padding-top: 8px; margin-top: -8px }
 .views-row .views { border: 0; padding: 0; min-width: 0; flex: 0 1 auto }
 .period-select { display: none; min-height: 34px; font-size: 13px }
 /* The model picker and the time range: what the whole page is filtered by. */
