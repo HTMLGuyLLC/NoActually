@@ -1,6 +1,6 @@
 // Draws the current view into #app, keeping keyboard focus where it was.
 import { api, demo, type Meta, REPORT_CARD_TOOLS, type Stats } from "./api";
-import { captureFocus, must, restoreFocus, say } from "./dom";
+import { captureFocus, must, restoreFocus, say, trackHeader } from "./dom";
 import { ago, errorText, isFiltered, listNames, subjectText } from "./format";
 import { isDismissed, rescoredUnseen } from "./hints";
 import { type Html, html } from "./html";
@@ -218,6 +218,7 @@ async function draw(): Promise<void> {
   }
   root.innerHTML = markup.value;
   applyBarWidths(root);
+  trackHeader(root);
   restoreFocus(root, focus);
   announcePage();
   if (state.tab === "learn" && !isGlance) await refreshCheck(root);
