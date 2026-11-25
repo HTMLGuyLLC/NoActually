@@ -4,6 +4,13 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.5.11] - 2026-11-25
+
+### Security
+
+- Updated `url` to 2.5.9 (RUSTSEC-2026-0592) and `cookie` to 0.18.3 (RUSTSEC-2026-0594).
+- Updated Tauri to 2.12.7 and other minor dependencies.
+
 ## [0.5.10] - 2026-11-19
 
 ### Changed
@@ -327,7 +334,8 @@ First release.
 - Per-source consent: nothing is read until you allow it, and Forget deletes a source's data
 - `noactually` command-line tool (`sources`, `allow`, `sync`, `stats`)
 
-[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.10...HEAD
+[Unreleased]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.11...HEAD
+[0.5.11]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.10...v0.5.11
 [0.5.10]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.9...v0.5.10
 [0.5.9]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.8...v0.5.9
 [0.5.8]: https://github.com/HTMLGuyLLC/NoActually/compare/v0.5.7...v0.5.8
